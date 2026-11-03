@@ -461,11 +461,7 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := ih hn
     simp only [Ty.inst] at h
     exact .fst h
-  | toImm _ hd ih =>
-    have h := ih hn
-    have hd' := AtMost.inst hs hd
-    simp only [Ty.inst, Mu.subst] at h hd' ⊢
-    exact .toImm h hd'
+  | toImm _ hd ih => exact .toImm (ih hn) (hd.inst hs)
   | snd _ ih =>
     have h := ih hn
     simp only [Ty.inst] at h

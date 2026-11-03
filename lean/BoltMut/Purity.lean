@@ -33,7 +33,7 @@ def Clean (σ : HeapTy) (n : Nat) (A : Nat → Prop) (e : Expr) : Prop :=
 needn't be: an `imm` one holds only `imm` locations anyway, and the rest
 can't be reached. -/
 def HeapClean (σ : HeapTy) (n : Nat) (A : Nat → Prop) (h : Heap) : Prop :=
-  ∀ l v, (n ≤ l ∨ A l) → h[l]? = some v → Clean σ n A v
+  ∀ l b v, (n ≤ l ∨ A l) → h[l]? = some (b, v) → Clean σ n A v
 
 theorem Clean.extend {σ σ' : HeapTy} {n : Nat} {A : Nat → Prop} {e : Expr}
     (hc : Clean σ n A e) (hx : Extends σ σ') : Clean σ' n A e := by
@@ -45,13 +45,68 @@ theorem Clean.extend {σ σ' : HeapTy} {n : Nat} {A : Nat → Prop} {e : Expr}
 
 theorem HeapClean.extend {σ σ' : HeapTy} {n : Nat} {A : Nat → Prop} {h : Heap}
     (hc : HeapClean σ n A h) (hx : Extends σ σ') : HeapClean σ' n A h :=
-  fun l v hA hv => (hc l v hA hv).extend hx
+  fun l b v hA hv => (hc l b v hA hv).extend hx
 
 /-- A value whose type is `imm` all the way down holds only `imm`
 locations. -/
 theorem clean_of_deepImm {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Prop} {io : Bool} {Γ : Ctx}
     {v : Expr} {t : Ty} (hv : v.IsValue) (ht : HasType fns σ .none io Γ v t) (hd : AtMost .none .immutable t) : Clean σ n A v :=
   fun _ hl => .inr (.inr ((ht.value_imm hv hd).hasLoc_imm rfl hl))
+
+/-- A copy keeps them clean: what it makes is new, and what it shares is
+in the value or in a clean location, which holds what's clean. What it
+copies is `mut`, so it's new or allowed. -/
+theorem Freeze.clean {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Prop} {h₀ : Heap} (hh : HeapOk fns σ h₀)
+    (hn : n ≤ h₀.length) {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
+    (hc : Freeze h m v h' m' v') :
+    (∃ ext, h = h₀ ++ ext) → (∀ l c, m.lookup l = some c → n ≤ c) → Clean σ n A v → HeapClean σ n A h →
+      Clean σ n A v' ∧ HeapClean σ n A h' ∧ ∀ l c, m'.lookup l = some c → n ≤ c := by
+  induction hc with
+  | unit | int | lam | imm => intro _ hm hcv hhc; exact ⟨hcv, hhc, hm⟩
+  | seen _ hlk => intro _ hm _ hhc; exact ⟨fun l' hl' => .inl (hl' ▸ hm _ _ hlk), hhc, hm⟩
+  | @cell h h' m m' l w w' hw _ hc' ih =>
+    intro hpre hm hcv hhc
+    -- What the location holds is clean: it's `mut`, so not `imm`.
+    have hcw : Clean σ n A w := by
+      rcases hcv l rfl with h₁ | h₁ | ⟨t₀, ht₀⟩
+      · exact hhc l true w (.inl h₁) hw
+      · exact hhc l true w (.inr h₁) hw
+      · obtain ⟨_, _, w₀, hw₀, _⟩ := hh.2 _ _ _ ht₀
+        obtain ⟨ext, rfl⟩ := hpre
+        rw [List.getElem?_append_left (hh.lt ht₀), hw₀] at hw
+        cases hw
+    obtain ⟨hcw', hhc', hm'⟩ := ih hpre hm hcw hhc
+    have hlen : n ≤ h'.length := by
+      obtain ⟨ext, rfl⟩ := hpre
+      obtain ⟨ext', rfl⟩ := hc'.prefix
+      simp; omega
+    refine ⟨fun l' hl' => .inl (hl' ▸ hlen), ?_, ?_⟩
+    · intro l' b u hA hu
+      by_cases hlt : l' < h'.length
+      · rw [List.getElem?_append_left hlt] at hu
+        exact hhc' l' b u hA hu
+      · have hl' : l' = h'.length := by
+          have := (List.getElem?_eq_some_iff.mp hu).1
+          simp at this
+          omega
+        subst hl'
+        rw [List.getElem?_concat_length] at hu
+        cases hu
+        exact hcw'
+    · intro k c hk
+      rw [List.lookup_cons] at hk
+      split at hk
+      · cases hk; exact hlen
+      · exact hm' k c hk
+  | @pair _ h₁ _ _ _ _ _ _ _ _ hc₁ _ ih₁ ih₂ =>
+    intro hpre hm hcv hhc
+    obtain ⟨hc₁', hhc₁, hm₁⟩ := ih₁ hpre hm (fun l hl => hcv l (.inl hl)) hhc
+    have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
+      obtain ⟨ext, rfl⟩ := hpre
+      obtain ⟨ext', rfl⟩ := hc₁.prefix
+      exact ⟨ext ++ ext', by simp⟩
+    obtain ⟨hc₂', hhc₂, hm₂⟩ := ih₂ hpre₁ hm₁ (fun l hl => hcv l (.inr hl)) hhc₁
+    exact ⟨fun l hl => hl.elim (hc₁' l) (hc₂' l), hhc₂, hm₂⟩
 
 /-- A step keeps the program and the heap clean, and changes no location
 that's old and not allowed. -/
@@ -69,10 +124,10 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     intro σ t n A hh _ hn hc hhc
     refine ⟨fun l hl _ => List.getElem?_append_left (by omega), by simp; omega,
       fun l hl => .inl (hl ▸ hn), ?_⟩
-    intro l v hA hv
+    intro l b' v hA hv
     by_cases hlt : l < h.length
     · rw [List.getElem?_append_left hlt] at hv
-      exact hhc l v hA hv
+      exact hhc l b' v hA hv
     · have hlen : l = h.length := by
         have := (List.getElem?_eq_some_iff.mp hv).1
         simp at this
@@ -85,12 +140,12 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     intro σ t n A hh ht hn hc hhc
     cases ht with
     | get he => exact ih hh he hn hc hhc
-  | @getLoc l v hl =>
+  | @getLoc l b v hl =>
     intro σ t n A hh ht hn hc hhc
     refine ⟨fun _ _ _ => rfl, hn, ?_, hhc⟩
     rcases hc l rfl with h₁ | h₁ | ⟨t₀, ht₀⟩
-    · exact hhc l v (.inl h₁) hl
-    · exact hhc l v (.inr h₁) hl
+    · exact hhc l b v (.inl h₁) hl
+    · exact hhc l b v (.inr h₁) hl
     · -- An `imm` location holds a value that's `imm` all the way down.
       obtain ⟨_, hd, w, hw, hwv, hwt⟩ := hh.2 _ _ _ ht₀
       rw [hl] at hw
@@ -108,7 +163,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     | set _ he₂ =>
       obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
       exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
-  | @setLoc l₀ v hl _ =>
+  | @setLoc l₀ b w₀ v hl _ =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
     | set he₁ _ =>
@@ -129,14 +184,14 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
             · omega
             · exact hA h₁
           exact List.getElem?_set_ne hne
-        · intro l w hA hw'
+        · intro l b' w hA hw'
           by_cases heq : l₀ = l
           · subst heq
-            rw [List.getElem?_set_self hl] at hw'
+            rw [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hl).1] at hw'
             cases hw'
             exact fun l' hl' => hc l' (.inr hl')
           · rw [List.getElem?_set_ne heq] at hw'
-            exact hhc l w hA hw'
+            exact hhc l b' w hA hw'
   | letCong _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
@@ -203,34 +258,15 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     intro σ t n A hh ht hn hc hhc
     cases ht with
     | toImm he _ => exact ih hh he hn hc hhc
-  | @toImmVal l w hl =>
-    intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | toImm he _ =>
-      -- The copy is new, and holds what the object does, which is clean:
-      -- the object isn't `imm`, so it's new or allowed.
-      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he (by simp)
-      cases hl'
-      have hcw : Clean σ n A w := by
-        rcases hc l rfl with h₁ | h₁ | ⟨t₀, ht₀⟩
-        · exact hhc l w (.inl h₁) hl
-        · exact hhc l w (.inr h₁) hl
-        · rw [hσ] at ht₀; cases ht₀
-      refine ⟨fun l' hl' _ => List.getElem?_append_left (by omega), by simp; omega,
-        fun l' hl' => .inl (hl' ▸ hn), ?_⟩
-      intro l' v hA hv
-      by_cases hlt : l' < h.length
-      · rw [List.getElem?_append_left hlt] at hv
-        exact hhc l' v hA hv
-      · have hlen : l' = h.length := by
-          have := (List.getElem?_eq_some_iff.mp hv).1
-          simp at this
-          omega
-        subst hlen
-        rw [List.getElem?_concat_length] at hv
-        cases hv
-        exact hcw
-  | toImmKeep _ => intro σ t n A hh ht; cases ht
+  | toImmVal _ hc' =>
+    intro σ t n A hh _ hn hc hhc
+    obtain ⟨hcv, hhc', _⟩ := Freeze.clean hh hn hc' ⟨[], by simp⟩ (fun _ _ h => by simp at h) hc hhc
+    refine ⟨fun l hl _ => hc'.keeps (by omega), ?_, hcv, hhc'⟩
+    obtain ⟨ext, he⟩ := hc'.prefix
+    rw [he]
+    simp
+    omega
+  | toImmKeep _ _ => intro σ t n A hh ht; cases ht
 
 /-- However many steps a clean program takes, the locations that are old
 and not allowed keep their values. -/
@@ -260,7 +296,7 @@ theorem imm_fn_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h
     rcases hl' with hl' | hl'
     · exact clean_of_deepImm (n := h.length) (A := fun _ => False) (t := .fn .immutable a r) hfv hft (.refl _) l' hl'
     · exact clean_of_deepImm (n := h.length) (A := fun _ => False) hvv hvt hd l' hl'
-  · intro l' w hA hw
+  · intro l' b w hA hw
     rcases hA with hA | hA
     · have := (List.getElem?_eq_some_iff.mp hw).1
       omega
@@ -269,10 +305,10 @@ theorem imm_fn_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h
 /-- Following a location in what `l` holds extends a path from `l₀` to
 `l`. -/
 theorem Reaches.tail {h : Heap} {l₀ l : Nat} (hr : Reaches h l₀ l) :
-    ∀ {v : Expr} {l₁ : Nat}, h[l]? = some v → v.HasLoc l₁ → Reaches h l₀ l₁ := by
+    ∀ {b : Bool} {v : Expr} {l₁ : Nat}, h[l]? = some (b, v) → v.HasLoc l₁ → Reaches h l₀ l₁ := by
   induction hr with
-  | refl => intro v l₁ hv hl; exact .step hv hl .refl
-  | step hv' hl' _ ih => intro v l₁ hv hl; exact .step hv' hl' (ih hv hl)
+  | refl => intro b v l₁ hv hl; exact .step hv hl .refl
+  | step hv' hl' _ ih => intro b v l₁ hv hl; exact .step hv' hl' (ih hv hl)
 
 /-- With effects: calling an `imm` function with an argument that's `imm`
 all the way down and a handler `k`, as the hidden argument of an effect
@@ -293,7 +329,7 @@ theorem imm_fn_changes_only_through_handler {fns : List Fn} (hf : FnsOk fns) {σ
     · exact clean_of_deepImm (n := h.length) (A := A) (t := .fn .immutable (.prod a kt) r) hfv hft (.refl _) l' hl'
     · exact clean_of_deepImm (n := h.length) (A := A) hvv hvt hd l' hl'
     · exact .inr (.inl ⟨l', hl', .refl⟩)
-  · intro l' w hA' hw
+  · intro l' b w hA' hw
     rcases hA' with hA' | ⟨l₀, hk, hr⟩
     · have := (List.getElem?_eq_some_iff.mp hw).1
       omega

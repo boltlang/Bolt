@@ -98,11 +98,49 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     intro σ t l ty hh ht hl
     cases ht with
     | toImm he _ => exact ih hh he hl
-  | toImmVal _ =>
-    -- A freeze's copy only adds to the heap.
+  | toImmVal _ hc =>
+    -- A copy only adds to the heap.
     intro σ t l ty hh _ hl
-    exact List.getElem?_append_left (hh.lt hl)
-  | toImmKeep _ => intro σ t l ty hh ht hl; cases ht
+    exact hc.keeps (hh.lt hl)
+  | toImmKeep _ _ => intro σ t l ty hh ht hl; cases ht
+
+/-- One step of a well-typed program doesn't change whether an object is
+`mut`: only freezing in place does, which isn't typed. -/
+theorem step_keeps_tag {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fns h e h' e') :
+    ∀ {σ : HeapTy} {t : Ty} {l : Nat} {b : Bool} {w : Expr}, HasType fns σ .none false Ctx.empty e t →
+      h[l]? = some (b, w) → ∃ w', h'[l]? = some (b, w') := by
+  induction hs with
+  | newCong _ ih => intro σ t l b w ht hl; cases ht with | new he _ => exact ih he hl
+  | getCong _ ih => intro σ t l b w ht hl; cases ht with | get he => exact ih he hl
+  | setCong₁ _ ih => intro σ t l b w ht hl; cases ht with | set he _ => exact ih he hl
+  | setCong₂ _ _ ih => intro σ t l b w ht hl; cases ht with | set _ he => exact ih he hl
+  | letCong _ ih => intro σ t l b w ht hl; cases ht with | letE he _ => exact ih he hl
+  | callCong _ ih => intro σ t l b w ht hl; cases ht with | call _ _ he => exact ih he hl
+  | appCong₁ _ ih => intro σ t l b w ht hl; cases ht with | app he _ => exact ih he hl
+  | appCong₂ _ _ ih => intro σ t l b w ht hl; cases ht with | app _ he => exact ih he hl
+  | pairCong₁ _ ih => intro σ t l b w ht hl; cases ht with | pair he _ => exact ih he hl
+  | pairCong₂ _ _ ih => intro σ t l b w ht hl; cases ht with | pair _ he => exact ih he hl
+  | fstCong _ ih => intro σ t l b w ht hl; cases ht with | fst he => exact ih he hl
+  | sndCong _ ih => intro σ t l b w ht hl; cases ht with | snd he => exact ih he hl
+  | toImmCong _ ih => intro σ t l b w ht hl; cases ht with | toImm he _ => exact ih he hl
+  | newVal _ =>
+    intro σ t l b w _ hl
+    exact ⟨w, by rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hl).1]; exact hl⟩
+  | @setLoc l₀ b₀ w₀ v hl₀ _ =>
+    intro σ t l b w _ hl
+    by_cases heq : l₀ = l
+    · subst heq
+      rw [hl₀] at hl
+      cases hl
+      exact ⟨v, List.getElem?_set_self (List.getElem?_eq_some_iff.mp hl₀).1⟩
+    · exact ⟨w, by rw [List.getElem?_set_ne heq]; exact hl⟩
+  | toImmVal _ hc =>
+    intro σ t l b w _ hl
+    exact ⟨w, by rw [hc.keeps (List.getElem?_eq_some_iff.mp hl).1]; exact hl⟩
+  | toImmKeep _ _ => intro σ t l b w ht; cases ht
+  | getLoc _ | letVal _ | callVal _ _ | appVal _ | fstVal _ _ | sndVal _ _ =>
+    intro σ t l b w _ hl
+    exact ⟨w, hl⟩
 
 /-- However many steps a well-typed program takes, an `imm` location holds
 the same value. -/
@@ -123,7 +161,8 @@ from a location in what `l` holds, which is the location itself or what a
 closure captured. -/
 inductive Reaches (h : Heap) : Nat → Nat → Prop where
   | refl {l : Nat} : Reaches h l l
-  | step {l l₁ l₂ : Nat} {v : Expr} : h[l]? = some v → v.HasLoc l₁ → Reaches h l₁ l₂ → Reaches h l l₂
+  | step {l l₁ l₂ : Nat} {b : Bool} {v : Expr} : h[l]? = some (b, v) → v.HasLoc l₁ → Reaches h l₁ l₂ →
+      Reaches h l l₂
 
 /-- `imm` is deep: everything reachable from an `imm` location is `imm`. -/
 theorem reaches_only_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h)

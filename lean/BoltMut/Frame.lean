@@ -44,7 +44,7 @@ theorem changes_only_frame {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' 
     by_cases himm : ∃ t, σ[l₀]? = some (.immutable, t)
     · exact .inr (.inr himm)
     · exact .inr (.inl ⟨l₀, h₀, himm, .refl⟩)
-  · intro l' w hA' hw
+  · intro l' b w hA' hw
     rcases hA' with hA' | ⟨l₀, h₀, himm, hr⟩
     · have := (List.getElem?_eq_some_iff.mp hw).1
       omega

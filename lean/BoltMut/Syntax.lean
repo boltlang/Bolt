@@ -82,11 +82,11 @@ inductive Expr where
   | pair (e₁ e₂ : Expr)
   | fst (e : Expr)
   | snd (e : Expr)
-  /-- Making an `imm` object from a `mut` one, as `array_freeze` does in
-  Bolt (#284): a copy of the object, whose contents are `imm` already, so
-  the copy is shallow. One `inPlace` makes the same copy but goes on with
-  the object itself, which can't be noticed when nothing else has it; only
-  the program that leaves copies out has it, so it isn't typed. -/
+  /-- `imm e` (#335): `e`'s value with each `mut` object it reaches copied
+  into a new `imm` one. One `inPlace` makes the same copy but goes on with
+  the value itself, which can't be noticed when nothing else has what it
+  reaches; only the program that leaves copies out has it, so it isn't
+  typed. -/
   | toImm (inPlace : Bool) (e : Expr)
   deriving Repr
 
@@ -373,6 +373,32 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     split at h
     · exact .inl h
     · exact ih h
+
+/-! ## The type of `imm e` -/
+
+/-- `t'` is the type of `imm e` for an `e` of type `t` (#335): each cell
+becomes `imm`, and a tuple is done part by part. What's `imm` all the way
+down can stay as it is: that's how a closure and a type parameter are
+done, which can't be copied, and it keeps `imm x` of a `T ⊑ imm` a `T`. -/
+inductive ImmTy (Δ : Assume) : Ty → Ty → Prop where
+  | asIs {t : Ty} : AtMost Δ .immutable t → ImmTy Δ t t
+  | cell {m : Mu} {t t' : Ty} : ImmTy Δ t t' → ImmTy Δ (.cell m t) (.cell .immutable t')
+  | prod {a b a' b' : Ty} : ImmTy Δ a a' → ImmTy Δ b b' → ImmTy Δ (.prod a b) (.prod a' b')
+
+/-- What `imm e` gives is `imm` all the way down. -/
+theorem ImmTy.atMost {Δ : Assume} {t t' : Ty} (h : ImmTy Δ t t') : AtMost Δ .immutable t' := by
+  induction h with
+  | asIs h => exact h
+  | cell _ ih => exact ⟨.refl _, ih⟩
+  | prod _ _ iha ihb => exact ⟨iha, ihb⟩
+
+/-- It stays so for arguments that meet the assumptions. -/
+theorem ImmTy.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t t' : Ty}
+    (h : ImmTy Δ t t') : ImmTy Δ' (t.inst ms τs) (t'.inst ms τs) := by
+  induction h with
+  | asIs h => exact .asIs (by simpa [Mu.subst] using AtMost.inst hs h)
+  | cell _ ih => exact .cell ih
+  | prod _ _ iha ihb => exact .prod iha ihb
 
 /-! ## Read-only views
 

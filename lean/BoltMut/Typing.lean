@@ -17,7 +17,8 @@ The rules that matter for mutability:
   locations. Its type is `fn imm a r`, so an `imm` object can hold it. A
   `mut` closure captures anything, and an `imm` object can't hold it.
   Either can be called.
-* `toImm false e` makes an `imm` copy of a `mut` object (#284).
+* `toImm false e`, `imm e`, copies what's `mut` in `e`'s value into new
+  `imm` objects (`ImmTy`).
 * A generic function is typed under what it assumes about its parameters
   (`Fn.assume`, #243), like `T ⊑ imm`, and a call must meet that with its
   arguments (`Sat`). Without an assumption, a value of type `T` can't be put
@@ -103,11 +104,9 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       HasType fns σ Δ io Γ e (.prod a b) → HasType fns σ Δ io Γ (.fst e) a
   | snd {io : Bool} {Γ : Ctx} {e : Expr} {a b : Ty} :
       HasType fns σ Δ io Γ e (.prod a b) → HasType fns σ Δ io Γ (.snd e) b
-  /-- Making an `imm` object from a `mut` one copies it (#284): what it
-  holds must be `imm` all the way down already, as for `array_freeze`. -/
-  | toImm {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} :
-      HasType fns σ Δ io Γ e (.cell .mutable t) → AtMost Δ .immutable t →
-      HasType fns σ Δ io Γ (.toImm false e) (.cell .immutable t)
+  /-- `imm e` copies what's `mut` in `e`'s value (#335). -/
+  | toImm {io : Bool} {Γ : Ctx} {e : Expr} {t t' : Ty} :
+      HasType fns σ Δ io Γ e t → ImmTy Δ t t' → HasType fns σ Δ io Γ (.toImm false e) t'
 
 /-- Each function's body has its declared type, under what the function
 assumes, with its parameters unknown, and no locations. -/

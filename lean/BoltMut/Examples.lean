@@ -375,26 +375,32 @@ example : HasType [both] [] .none false Ctx.empty
     | zero => exact ⟨.top _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
 
-/-! ## Freezing (#284)
+/-! ## Freezing (#335)
 
-`toImm false e` makes an `imm` copy of a `mut` object, as `array_freeze`
-does: what it holds is `imm` already, so the copy is shallow. -/
+`toImm false e` is `imm e`: it copies each `mut` object `e`'s value reaches
+into a new `imm` one. -/
 
-/-- `let xs = mut [1]; xs[0] = 2; array_freeze(xs)`. -/
+/-- `let xs = mut [1]; xs[0] = 2; imm xs`. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.toImm false (.var 0))))
     (.cell .immutable .int) :=
-  .letE (.new .int trivial) (.letE (.set (.var rfl) .int) (.toImm (.var (by simp [Ctx.update, muOf])) trivial))
+  .letE (.new .int trivial)
+    (.letE (.set (.var rfl) .int) (.toImm (.var (t := .cell (muOf true) .int) rfl) (.cell (.asIs trivial))))
 
-/-- `array_freeze(mut [mut [1]])` is rejected: an `imm` copy can't hold the
-`mut` array, which it would share. -/
-example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.toImm false (.new true (.new true (.int 1)))) t := by
+/-- `imm mut [mut [1]]` is deep: it gives `imm [imm [i32]]`. -/
+example : HasType [] [] .none false Ctx.empty (.toImm false (.new true (.new true (.int 1))))
+    (.cell .immutable (.cell .immutable .int)) :=
+  .toImm (.new (.new .int trivial) ⟨.refl _, trivial⟩) (.cell (.cell (.asIs trivial)))
+
+/-- `imm` of a `mut` closure is rejected: a closure can't be copied, so it
+must be `imm` already. -/
+example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.toImm false (.lam true 0 .unit)) t := by
   intro h
   cases h with
   | toImm he hd =>
     cases he with
-    | new hin _ =>
-      cases hin with
-      | new _ _ => exact nomatch Le.none_immutable hd.1
+    | lam _ _ _ =>
+      cases hd with
+      | asIs h => exact nomatch Le.none_immutable h
 
 end BoltMut
