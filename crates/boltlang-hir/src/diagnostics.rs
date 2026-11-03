@@ -13,9 +13,9 @@ use boltlang_base_db::{Db, File, parse_file};
 use boltlang_hir_def::manifest::{manifest, package_manifest};
 use boltlang_hir_def::{
     Name,
-    body::{DefWithBody, DefWithBodyId, body_with_source_map},
+    body::{Body, DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
-    hir::{MutabilityRef, TypeRef, TypeRefId},
+    hir::{Expr, MutabilityRef, TypeRef, TypeRefId},
     ids::{
         ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
         ItemContainerId, StructId, TypeAliasId,
@@ -48,6 +48,7 @@ use boltlang_hir_ty::{
     solve::{ConstraintSource, ExprOrPat, Held, Origin, Reason, TypeError},
     ty::GenericParamId,
 };
+use boltlang_lower::decision::body_decisions;
 use boltlang_syntax::{
     SyntaxKind::{
         self, FIELD_EXPR, FIELD_PATT, GENERIC_PARAM_LIST, NAME, NAME_REF, PATH, PATH_SEGMENT,
@@ -349,6 +350,15 @@ pub enum DiagnosticKind<'db> {
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
+
+    /// A `match` with values that match none of its arms, like `missing`,
+    /// when one can be shown.
+    NonExhaustiveMatch {
+        missing: Option<String>,
+    },
+    /// An arm of a `match` that's never taken: the arms before it match
+    /// every value it does.
+    UnreachableArm,
 }
 
 /// The code that made a type expected, like the annotation of a `let`. It
@@ -1293,6 +1303,29 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),
             };
             self.push(range, kind);
+        }
+        self.matches(id, body, map);
+    }
+
+    /// The `match`es of a body that miss values, and their arms that are
+    /// never taken, from the decisions they compile to. A decision that
+    /// can't be made, after an error that's reported, says nothing.
+    fn matches(&mut self, id: DefWithBodyId<'db>, body: &Body, map: &ExpressionStoreSourceMap) {
+        let db = self.db;
+        for (expr, found) in &body_decisions(db, id).matches {
+            let Ok(decision) = found else { continue };
+            if decision.can_fail() {
+                let missing = decision.missing(db);
+                let range = node_range(map, ExprOrPat::Expr(*expr));
+                self.push(range, DiagnosticKind::NonExhaustiveMatch { missing });
+            }
+            let Expr::Match { arms, .. } = &body[*expr] else { continue };
+            for (arm, reached) in arms.iter().zip(decision.reached_arms()) {
+                if !reached {
+                    let range = node_range(map, ExprOrPat::Pat(arm.pat));
+                    self.push(range, DiagnosticKind::UnreachableArm);
+                }
+            }
         }
     }
 

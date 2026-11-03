@@ -160,6 +160,7 @@ dependencies = [
  "boltlang-base-db",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "boltlang-lower",
  "boltlang-syntax",
  "salsa",
 ]

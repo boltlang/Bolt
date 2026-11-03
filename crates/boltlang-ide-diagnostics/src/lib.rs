@@ -122,6 +122,8 @@ impl DiagnosticCode {
 
     pub const UNSUPPORTED: Self = Self("W0001");
     pub const NO_VALUES: Self = Self("W0002");
+    pub const NON_EXHAUSTIVE_MATCH: Self = Self("W0003");
+    pub const UNREACHABLE_ARM: Self = Self("W0004");
 
     pub fn as_str(self) -> &'static str {
         self.0
@@ -842,6 +844,17 @@ fn describe(
         }
 
         K::Unsupported => (C::UNSUPPORTED, "the type checker doesn't support this yet".into()),
+        K::NonExhaustiveMatch { missing: Some(missing) } => (
+            C::NON_EXHAUSTIVE_MATCH,
+            format!("this match doesn't cover every value: `{missing}` matches none of its arms"),
+        ),
+        K::NonExhaustiveMatch { missing: None } => {
+            (C::NON_EXHAUSTIVE_MATCH, "this match doesn't cover every value".into())
+        }
+        K::UnreachableArm => (
+            C::UNREACHABLE_ARM,
+            "this arm is never taken: the arms before it match every value it does".into(),
+        ),
     }
 }
 

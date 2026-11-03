@@ -1504,3 +1504,19 @@ let y = g(1);
 "#,
     );
 }
+
+#[test]
+fn matches_that_miss_values_and_arms_never_taken() {
+    check_with_std(
+        r#"
+enum Shape { Circle(i32), Dot }
+fn f(s: Shape) -> i32 = match s { Shape.Circle(r) => r };
+                      //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ warning: this match doesn't cover every value: `Shape.Dot` matches none of its arms
+fn g(p: (Bool, i32)) -> i32 = match p { (_, n) => n, (True, 0) => 0 };
+                                                   //^^^^^^^^^ warning: this arm is never taken: the arms before it match every value it does
+fn h(b: Bool) -> i32 = match b { True => 1, False => 0 };
+fn k(s: String) -> i32 = match s { "a" => 1 };
+                       //^^^^^^^^^^^^^^^^^^^^ warning: this match doesn't cover every value: `_` matches none of its arms
+"#,
+    );
+}

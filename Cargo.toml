@@ -36,6 +36,7 @@ boltlang-hir = { version = "0.2.0", path = "crates/boltlang-hir" }
 boltlang-hir-def = { version = "0.2.0", path = "crates/boltlang-hir-def" }
 boltlang-hir-ty = { version = "0.2.0", path = "crates/boltlang-hir-ty" }
 boltlang-ide-diagnostics = { version = "0.2.0", path = "crates/boltlang-ide-diagnostics" }
+boltlang-lower = { version = "0.2.0", path = "crates/boltlang-lower" }
 boltlang-parser = { version = "0.2.0", path = "crates/boltlang-parser" }
 boltlang-std = { version = "0.2.0", path = "crates/boltlang-std" }
 boltlang-syntax = { version = "0.2.0", path = "crates/boltlang-syntax" }

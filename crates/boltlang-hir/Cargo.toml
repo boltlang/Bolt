@@ -8,5 +8,6 @@ publish.workspace = true
 boltlang-base-db.workspace = true
 boltlang-hir-def.workspace = true
 boltlang-hir-ty.workspace = true
+boltlang-lower.workspace = true
 boltlang-syntax.workspace = true
 salsa = "0.28.5"
