@@ -281,20 +281,21 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
       (∀ l c, m₁.lookup l = some c → l < h₁.length) →
       ∃ ρ' h₂' m₂' v₂', Freeze h₂ m₂ v₂ h₂' m₂' v₂' ∧ (∀ a c, ρ a c → ρ' a c) ∧
         Corr (fun a => M a ∨ h₁.length ≤ a) ρ' h₁' h₂' ∧ Rel ρ' v₁' v₂' ∧
-        MemoRel (fun a => M a ∨ h₁.length ≤ a) ρ' m₁' m₂' ∧ (∀ l c, m₁'.lookup l = some c → l < h₁'.length) := by
+        MemoRel (fun a => M a ∨ h₁.length ≤ a) ρ' m₁' m₂' ∧ (∀ l c, m₁'.lookup l = some c → l < h₁'.length) ∧
+        (∀ a c, ρ' a c → ρ a c ∨ (h₁.length ≤ a ∧ h₂.length ≤ c)) := by
   induction hcp with
   | unit =>
     intro M ρ h₂ m₂ v₂ _ hc hr hmr hk
     cases hr
-    exact ⟨ρ, h₂, m₂, _, .unit, fun _ _ h => h, hc.widen, .unit, hmr.widen hc, hk⟩
+    exact ⟨ρ, h₂, m₂, _, .unit, fun _ _ h => h, hc.widen, .unit, hmr.widen hc, hk, fun _ _ h => .inl h⟩
   | int =>
     intro M ρ h₂ m₂ v₂ _ hc hr hmr hk
     cases hr
-    exact ⟨ρ, h₂, m₂, _, .int, fun _ _ h => h, hc.widen, .int, hmr.widen hc, hk⟩
+    exact ⟨ρ, h₂, m₂, _, .int, fun _ _ h => h, hc.widen, .int, hmr.widen hc, hk, fun _ _ h => .inl h⟩
   | lam =>
     intro M ρ h₂ m₂ v₂ _ hc hr hmr hk
     cases hr with
-    | lam hb => exact ⟨ρ, h₂, m₂, _, .lam, fun _ _ h => h, hc.widen, .lam hb, hmr.widen hc, hk⟩
+    | lam hb => exact ⟨ρ, h₂, m₂, _, .lam, fun _ _ h => h, hc.widen, .lam hb, hmr.widen hc, hk, fun _ _ h => .inl h⟩
   | @imm h m l w hw =>
     intro M ρ h₂ m₂ v₂ _ hc hr hmr hk
     cases hr with
@@ -302,7 +303,7 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
       obtain ⟨b, w₁, w₂, hw₁, hw₂, _⟩ := hc.heap l c hlc
       rw [hw] at hw₁
       cases hw₁
-      exact ⟨ρ, h₂, m₂, _, .imm hw₂, fun _ _ h => h, hc.widen, .loc hlc, hmr.widen hc, hk⟩
+      exact ⟨ρ, h₂, m₂, _, .imm hw₂, fun _ _ h => h, hc.widen, .loc hlc, hmr.widen hc, hk, fun _ _ h => .inl h⟩
   | @seen h m l c w hw hlk =>
     intro M ρ h₂ m₂ v₂ hMt hc hr hmr hk
     cases hr with
@@ -314,7 +315,7 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
       · rw [hlk] at hn; cases hn
       · rw [hlk] at h₁
         cases h₁
-        exact ⟨ρ, h₂, m₂, _, .seen hw₂ h₂', fun _ _ h => h, hc.widen, .loc hcc, hmr.widen hc, hk⟩
+        exact ⟨ρ, h₂, m₂, _, .seen hw₂ h₂', fun _ _ h => h, hc.widen, .loc hcc, hmr.widen hc, hk, fun _ _ h => .inl h⟩
   | @cell h h' m m' l w w' hw hnone hcw ih =>
     intro M ρ h₂ m₂ v₂ hMt hc hr hmr hk
     have hMl : M l := hMt l w hw
@@ -327,7 +328,7 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
         rcases hmr.1 l l₂ hlc hMl with ⟨_, h⟩ | ⟨c₁, _, h₁, _, _⟩
         · exact h
         · rw [hnone] at h₁; cases h₁
-      obtain ⟨ρ₁, h₂₁, m₂₁, w₂', hc₂, hρ₁, hcorr₁, hrw', hmr₁, hk₁⟩ := ih hMt hc hrw hmr hk
+      obtain ⟨ρ₁, h₂₁, m₂₁, w₂', hc₂, hρ₁, hcorr₁, hrw', hmr₁, hk₁, hnew⟩ := ih hMt hc hrw hmr hk
       have hlen : h.length ≤ h'.length := by
         obtain ⟨e, rfl⟩ := hcw.prefix
         simp
@@ -354,7 +355,7 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
           omega
       refine ⟨fun a c' => ρ₁ a c' ∨ (a = h'.length ∧ c' = h₂₁.length), h₂₁ ++ [(false, w₂')],
         (l₂, h₂₁.length) :: m₂₁, .loc h₂₁.length, .cell hw₂ hnone₂ hc₂, fun a c' h => .inl (hρ₁ a c' h),
-        (hcorr₁.alloc hrw').weaken fun a ha => .inl ha, .loc (.inr ⟨rfl, rfl⟩), ⟨?_, ?_⟩, ?_⟩
+        (hcorr₁.alloc hrw').weaken fun a ha => .inl ha, .loc (.inr ⟨rfl, rfl⟩), ⟨?_, ?_⟩, ?_, ?_⟩
       · -- The original and its counterpart are copied together; the rest
         -- is as it was.
         intro k₁ k₂ hk₁₂ hMk
@@ -400,11 +401,15 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
           simp; omega
         · have := hk₁ k c hk'
           simp; omega
+      · -- What's related now that wasn't is new on both sides.
+        rintro a c' (h | ⟨rfl, rfl⟩)
+        · exact hnew a c' h
+        · exact .inr ⟨hlen, hlen₂⟩
   | @pair h h₁ h₂ m m₁ m₂ v₁ v₂ v₁' v₂' hc₁ hc₂ ih₁ ih₂ =>
     intro M ρ hh₂ mm₂ e₂ hMt hc hr hmr hk
     cases hr with
     | pair hr₁ hr₂ =>
-      obtain ⟨ρ₁, k₁, n₁, u₁, hk₁, hρ₁, hcorr₁, hru₁, hmr₁, hkk₁⟩ := ih₁ hMt hc hr₁ hmr hk
+      obtain ⟨ρ₁, k₁, n₁, u₁, hk₁, hρ₁, hcorr₁, hru₁, hmr₁, hkk₁, hnew₁⟩ := ih₁ hMt hc hr₁ hmr hk
       have hle : h.length ≤ h₁.length := by
         obtain ⟨e₂, rfl⟩ := hc₁.prefix
         simp
@@ -415,7 +420,7 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
         · rw [hc₁.keeps hlt] at ha
           exact .inl (hMt a w ha)
         · exact .inr (by omega)
-      obtain ⟨ρ₂, k₂, n₂, u₂, hk₂, hρ₂, hcorr₂, hru₂, hmr₂, hkk₂⟩ :=
+      obtain ⟨ρ₂, k₂, n₂, u₂, hk₂, hρ₂, hcorr₂, hru₂, hmr₂, hkk₂, hnew₂⟩ :=
         ih₂ hMt₁ hcorr₁ (hr₂.mono hρ₁) hmr₁ hkk₁
       have hiff : ∀ x, ((M x ∨ h.length ≤ x) ∨ h₁.length ≤ x) ↔ (M x ∨ h.length ≤ x) := by
         intro x
@@ -425,8 +430,12 @@ theorem Freeze.sim {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v�
           · exact .inr hx
           · exact .inr (by omega)
         · exact .inl
-      exact ⟨ρ₂, k₂, n₂, _, .pair hk₁ hk₂, fun a c h => hρ₂ a c (hρ₁ a c h),
-        hcorr₂.weaken fun x hx => .inl hx, .pair (hru₁.mono hρ₂) hru₂, hmr₂.congr hiff, hkk₂⟩
+      refine ⟨ρ₂, k₂, n₂, _, .pair hk₁ hk₂, fun a c h => hρ₂ a c (hρ₁ a c h),
+        hcorr₂.weaken fun x hx => .inl hx, .pair (hru₁.mono hρ₂) hru₂, hmr₂.congr hiff, hkk₂, fun a c h => ?_⟩
+      have hle₂ : hh₂.length ≤ k₁.length := by obtain ⟨e, rfl⟩ := hk₁.prefix; simp
+      rcases hnew₂ a c h with h | ⟨h₁', h₂'⟩
+      · exact hnew₁ a c h
+      · exact .inr ⟨by omega, by omega⟩
 
 /-- One step of the first run is one of the second, and they still
 correspond. -/
