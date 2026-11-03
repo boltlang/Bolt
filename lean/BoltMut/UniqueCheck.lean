@@ -665,15 +665,44 @@ def Inv (B : Nat → Pos → Prop) (h : Heap) (e : Expr) : Prop :=
     ∀ l, L l → l < h.length ∧ (Con B l e ∨ ¬ e.HasLoc l) ∧
       (∀ (a : Nat) (b : Bool) (v : Expr), h[a]? = some (b, v) → ¬ v.HasLoc l) ∧ ∃ w, h[l]? = some (true, w)
 
+/-- Making a location `imm` is making it the value. -/
+theorem Expr.ToImmArg.toImmOf {e : Expr} {l : Nat} (h : e.ToImmArg (.loc l)) : e.ToImmOf l := by
+  induction e with
+  | var | unit | int | loc | lam => exact h.elim
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih h
+  | letE _ _ _ ih₁ _ => exact ih₁ h
+  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ fun h => ⟨h.1, ih₂ h.2⟩
+  | toImm _ e ih => exact h.imp id ih
+
+/-- The region of an object that holds only `imm` objects is the object. -/
+theorem Shallow.region {h : Heap} {v : Expr} (hs : Shallow h v) {x : Nat} (hx : Region h v x) :
+    ∃ l, v = .loc l ∧ x = l := by
+  obtain ⟨l, b, w, rfl, hw, hwi⟩ := hs
+  obtain ⟨l₀, hl₀, hr⟩ := hx
+  simp only [Expr.TopLoc] at hl₀
+  subst hl₀
+  cases hr with
+  | refl => exact ⟨_, rfl, rfl⟩
+  | step hw' ht hr' =>
+    rw [hw] at hw'
+    cases hw'
+    -- What it holds is `imm`, so no path through `mut` objects goes on.
+    obtain ⟨w₂, hw₂⟩ := hr'.of_start
+    obtain ⟨w', hw'⟩ := hwi _ ht.hasLoc
+    rw [hw'] at hw₂
+    cases hw₂
+
 /-- The invariant gives the premise of `toImms_in_place_change_nothing`,
 when what's made `imm` has contents that are `imm` already. -/
 theorem Inv.uniqToImm {h : Heap} {e : Expr} (hi : Inv B h e) (hs : ∀ v, e.ToImmArg v → Shallow h v) :
     e.UniqToImm h := by
   obtain ⟨L, hok, hL⟩ := hi
-  refine ⟨fun l hf => ?_, hs⟩
-  obtain ⟨_, hc, hno, _⟩ := hL l (hok.toImmOf hf)
+  intro v hv x hx
+  obtain ⟨l, rfl, rfl⟩ := (hs v hv).region hx
+  have hf := hv.toImmOf
+  obtain ⟨_, hc, hno, _⟩ := hL _ (hok.toImmOf hf)
   rcases hc with hc | hc
-  · exact ⟨hc.count hf, hno⟩
+  · exact ⟨by rw [hc.count hf]; simp [Expr.count], fun a b w ha hw => (hno a b w ha hw).elim⟩
   · exact (hc hf.hasLoc).elim
 
 /-! ## Instantiating and renaming -/
