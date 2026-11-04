@@ -195,10 +195,12 @@ name = "boltlang-ide-diagnostics"
 version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
+ "boltlang-corpus",
  "boltlang-hir",
  "boltlang-hir-def",
  "boltlang-hir-ty",
  "boltlang-syntax",
+ "libtest-mimic",
 ]
 
 [[package]]

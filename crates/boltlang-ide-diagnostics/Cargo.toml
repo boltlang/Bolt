@@ -10,3 +10,11 @@ boltlang-hir.workspace = true
 boltlang-hir-def.workspace = true
 boltlang-hir-ty.workspace = true
 boltlang-syntax.workspace = true
+
+[dev-dependencies]
+boltlang-corpus.workspace = true
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "diagnostics"
+harness = false

@@ -1,0 +1,41 @@
+================================================================================
+Unresolved name does not cascade
+:test-prelude
+================================================================================
+  foo + 1;
+//^^^ error: cannot find `foo`
+  True == foo;
+        //^^^ error: cannot find `foo`
+
+================================================================================
+Unresolved type is reported without its arguments
+================================================================================
+  let x: List[T, i32] = 1;
+       //^^^^ error: cannot find type `List`
+            //^ error: cannot find type `T`
+
+================================================================================
+Duplicate definitions
+================================================================================
+fn f() {}
+const f: i32 = 1;
+    //^ error: `f` is defined more than once
+
+================================================================================
+The unknown part of a path is reported
+================================================================================
+fn push(x: i32, y: i32) = ();
+fn f(b: i32) { self.chunks.push(1); }
+             //^^^^ error: cannot find `self`
+
+================================================================================
+Unknown fields are reported at their name
+================================================================================
+  struct Point { x: i32, y: i32 }
+  let z = 3;
+  Point { x: 1, y: 2, w: 3 };
+                    //^ error: there is no field `w`
+  Point { x: 1, y: 2, z };
+                    //^ error: there is no field `z`
+  fn f(p: Point) = match p { Point { x, v, .. } => x };
+                                      //^ error: there is no field `v`

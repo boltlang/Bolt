@@ -1,0 +1,174 @@
+================================================================================
+Class instances
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+impl Show[i32] { fn show(x) = 1; }
+  show(True);
+//^^^^ error: there is no instance `Show[Bool]`
+
+================================================================================
+Impls are only for classes
+================================================================================
+struct Counter { n: i32 }
+impl Counter {
+   //^^^^^^^ error: `Counter` is not a class
+  fn get(c) = c.n;
+}
+
+================================================================================
+Methods are functions in scope
+================================================================================
+struct Counter { n: i32 }
+fn get(c: Counter) -> i32 = c.n;
+let c = Counter { n: 1 };
+let n: i32 = c.get();
+  c.size();
+  //^^^^ error: cannot find `size`
+
+================================================================================
+Methods must be declared by the class
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+impl Show[i32] {
+  fn show(x) = 1;
+  fn shwo(x) = x;
+   //^^^^ error: `shwo` is not a method of class `Show`
+}
+struct Dog;
+impl Dog { fn bark(d) = d; }
+   //^^^ error: `Dog` is not a class
+
+================================================================================
+Impls must define the methods of their class
+================================================================================
+class Eq[T] {
+  fn eq(a: T, b: T) -> Bool;
+  fn ne(a: T, b: T) -> Bool = eq(b, a);
+}
+class Ord[T] { fn lt(a: T, b: T) -> Bool; fn gt(a: T, b: T) -> Bool; }
+impl Eq[i32] { fn eq(a, b) = True; }
+impl Eq[Bool] {}
+   //^^^^^^^^ error: missing method `eq` of class `Eq`
+impl Ord[i32];
+   //^^^^^^^^ error: missing methods `lt`, `gt` of class `Ord`
+
+================================================================================
+Impls must define the consts and types of their class
+================================================================================
+class Sized[T] {
+  const SIZE: usize;
+            //^^^^^ label: expected because of the declaration in class `Sized`
+  const ALIGN: usize = 8;
+  type Repr;
+  type Out = T;
+  fn size(x: T) -> usize;
+}
+impl Sized[i32] {
+  const SIZE: usize = 4;
+  type Repr = i32;
+  fn size(x) = 4;
+}
+impl Sized[Bool] {}
+   //^^^^^^^^^^^ error: missing method `size`, constant `SIZE` and type `Repr` of class `Sized`
+impl Sized[u8] {
+   //^^^^^^^^^ error: missing type `Repr` of class `Sized`
+  const SIZE: Bool = True;
+            //^^^^ error: expected `usize`, found `Bool`
+  const SIZ: usize = 1;
+      //^^^ error: `SIZ` is not a constant of class `Sized`
+  type Rep = u8;
+     //^^^ error: `Rep` is not a type of class `Sized`
+  fn size(x) = 1;
+}
+class Default[T] { const VALUE: T; }
+                              //^ label: expected because of the declaration in class `Default`
+impl Default[i32] { const VALUE: i32 = 0; }
+impl Default[Bool] { const VALUE: i32 = 0; }
+                                //^^^ error: expected `Bool`, found `i32`
+
+================================================================================
+Missing items of each kind are listed together
+================================================================================
+class C[T] { fn a(x: T); fn b(x: T); const k: T; const j: T; type U; type V; }
+impl C[i32] { }
+   //^^^^^^ error: missing methods `a`, `b`, constants `k`, `j` and types `U`, `V` of class `C`
+
+================================================================================
+Comparing closures says there is no instance
+:prelude
+================================================================================
+fn same(a, b) = a == b;
+              //^^^^^^ label: needed by this use in `same`
+  same(|x| x + 1, |x| x + 1);
+//^^^^ error: there is no instance `Eq[fn(i32) -> i32]`
+
+================================================================================
+An ambiguous instance
+================================================================================
+class C[T] { fn c() -> T; }
+impl C[i32] { fn c() = 1; }
+impl C[Bool] { fn c() = True; }
+fn f() { c(); }
+       //^ error: cannot tell which instance of `C[a]` to use; add a type annotation
+
+================================================================================
+Overlapping impls
+================================================================================
+class Size[T] { fn size(x: T) -> i32; }
+impl[T] Size[[T]] { fn size(x) = 1; }
+      //^^^^^^^^^ label: the impl it overlaps
+impl Size[[i32]] { fn size(x) = 2; }
+   //^^^^^^^^^^^ error: the impl for `Size[[i32]]` overlaps the one for `Size[[T]]`: some types fit both, so a constraint can't choose one; remove one of them, or make their instances differ
+  size([1]);
+//^^^^ error: more than one impl fits `Size[imm [i32]]`, so it's not known which to use; their instances overlap
+
+================================================================================
+Unused impl params
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+struct Box[T] { item: T }
+impl[T, U] Show[Box[T]] { fn show(x) = 1; }
+      //^ error: `U` isn't in the instance `Show[Box[T]]`, so choosing the impl can't decide it; use it in the instance, or remove it
+impl[T, 'v] Show[[T]] { fn show(x) = 2; }
+      //^^ error: `'v` isn't in the instance `Show[[T]]`, so choosing the impl can't decide it; write it in the instance, like `'v [T]`, or remove it
+impl Show[i32] where 'q: imm { fn show(x) = 3; }
+                   //^^ error: `'q` isn't in the instance `Show[i32]`, so choosing the impl can't decide it; write it before an array or struct in the instance, or remove it
+
+================================================================================
+Missing instances point at what needs them
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+impl Show[i32] { fn show(x) = 1; }
+fn shout(x) = show(x);
+            //^^^^ label: needed by this use in `shout`
+fn loud[T: Show](x: T) -> i32 = show(x);
+         //^^^^ label: needed by this bound of `loud`
+shout(1);
+  shout(True);
+//^^^^^ error: there is no instance `Show[Bool]`
+  loud(False);
+//^^^^ error: there is no instance `Show[Bool]`
+  show(True);
+//^^^^ error: there is no instance `Show[Bool]`
+
+================================================================================
+Missing instances point at the bound of a function
+================================================================================
+class C[T] { fn a(x: T); }
+fn g[T](x: T) where C[T] = ();
+                  //^^^^ label: needed by this bound of `g`
+let y = g(1);
+      //^ error: there is no instance `C[i32]`
+
+================================================================================
+Bounds of structs and enums point at the bound
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+struct Labeled[A: Show] { value: A }
+                //^^^^ label: needed by this bound of `Labeled`
+enum Maybe[A] where Show[A] { Nothing, Has(A) }
+                  //^^^^^^^ label: needed by this bound of `Maybe`
+let a = Labeled { value: True };
+      //^^^^^^^^^^^^^^^^^^^^^^^ error: there is no instance `Show[Bool]`
+let b = Maybe.Has(1);
+      //^^^^^^^^^ error: there is no instance `Show[i32]`

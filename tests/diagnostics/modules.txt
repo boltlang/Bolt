@@ -1,0 +1,225 @@
+================================================================================
+Import errors
+================================================================================
+//- /lib.bolt
+pub fn a() {}
+fn hidden() {}
+//- /main.bolt
+import "./missing" (x);
+     //^^^^^^^^^^^ error: cannot find the file `./missing`
+import "std/io" (print);
+     //^^^^^^^^ error: cannot find `std`, which comes with the compiler
+import "./lib" (nope, hidden, a);
+              //^^^^ error: the imported file has nothing named `nope`
+                    //^^^^^^ error: `hidden` is private
+
+================================================================================
+Imports of variants
+================================================================================
+//- /shapes.bolt
+pub enum Shape { Circle(f64), Square(f64) }
+pub struct Point;
+//- /main.bolt
+import "./shapes" as s;
+import s.Shape.*;
+import s.Point.*;
+     //^^^^^^^ error: `s.Point` is not an enum, so it has no variants to import
+import Nope.*;
+     //^^^^ error: cannot find the enum `Nope`
+let a = Circle(1.0);
+let b: s.Shape = Square(2.0);
+let c: i32 = Circle(1.0);
+           //^^^^^^^^^^^ error: expected `i32`, found `Shape`
+     //^^^ label: expected because of this annotation
+
+================================================================================
+Imported variant in a pattern matches the variant
+================================================================================
+// Without the import, `None` would bind a new name and match anything.
+  import Opt.*;
+  enum Opt { Some(i32), None }
+  fn f(n: i32) -> i32 = match n {
+    None => 0,
+  //^^^^ error: expected `i32`, found `Opt`
+    other => other,
+  };
+  fn g(o: Opt) -> Opt = match o {
+    None => None,
+    Some(x) => Some(x),
+  };
+
+================================================================================
+Cyclic inference, with the first file checked first
+================================================================================
+//- /a.bolt
+// Both are reported, whichever file is checked first.
+import "./b" (g);
+pub fn f(x) = g(x);
+     //^ error: cannot infer the type of this function, because it calls functions in other files that call it back; give it a complete type signature
+//- /b.bolt
+import "./a" (f);
+pub fn g(x) = f(x);
+     //^ error: cannot infer the type of this function, because it calls functions in other files that call it back; give it a complete type signature
+
+================================================================================
+Cyclic inference, with the second file checked first
+================================================================================
+//- /b.bolt
+import "./a" (f);
+pub fn g(x) = f(x);
+     //^ error: cannot infer the type of this function, because it calls functions in other files that call it back; give it a complete type signature
+//- /a.bolt
+import "./b" (g);
+pub fn f(x) = g(x);
+     //^ error: cannot infer the type of this function, because it calls functions in other files that call it back; give it a complete type signature
+
+================================================================================
+Parameters can be in other files
+================================================================================
+//- /lib.bolt
+pub fn negate(x) = if x { False } else { True };
+            //^ label: expected because of this parameter of `negate`
+//- /main.bolt
+import "./lib" (negate);
+  negate(1);
+       //^ error: expected `Bool`, found an integer
+
+================================================================================
+One type per file
+================================================================================
+//- /list.bolt
+pub struct List { n: i32 }
+pub fn new() -> List = List { n: 0 };
+pub fn len(l: List) -> i32 = l.n;
+//- /main.bolt
+import "./list" as List;
+let l = List.new();
+let n: i32 = List.len(l);
+let b: Bool = List.len(l);
+     //^^^^ label: expected because of this annotation
+            //^^^^^^^^^^^ error: expected `Bool`, found `i32`
+
+================================================================================
+Different types with the same name
+================================================================================
+//- /proj/a.bolt
+pub struct Point { x: i32 }
+         //^^^^^ label: another `Point` is defined here
+pub fn origin() -> imm Point = Point { x: 0 };
+//- /proj/main.bolt
+import "./a" (origin);
+struct Point { x: i32 }
+     //^^^^^ label: one `Point` is defined here
+fn f(p: imm Point) -> i32 = p.x;
+      //^^^^^^^^^ label: expected because of this parameter of `f`
+f(origin());
+//^^^^^^^^ error: expected `imm Point`, found `imm Point` (these are different types, both called `Point`)
+
+================================================================================
+What needs an instance can be in another file
+================================================================================
+//- /lib.bolt
+pub class Show[T] { fn show(x: T) -> i32; }
+pub fn shout(x) = show(x);
+                //^^^^ label: needed by this use in `shout`
+//- /main.bolt
+import "./lib" (shout);
+  shout(1);
+//^^^^^ error: there is no instance `Show[i32]`
+
+================================================================================
+Package imports
+================================================================================
+//- /toolchain/std/io.bolt
+pub fn print(s: Bool) -> () = ();
+              //^^^^ label: expected because of this parameter of `print`
+//- /proj/main.bolt
+import "std/io" (print);
+import "std" (x);
+     //^^^^^ error: the package `std` has no file `lib.bolt`
+import "std/../secret" (y);
+     //^^^^^^^^^^^^^^^ error: cannot import `std/../secret`: import a file with a path like `./file`, or a package with its name, like `std/io`
+print(True);
+print(1);
+    //^ error: expected `Bool`, found an integer
+
+================================================================================
+Package items through an alias
+================================================================================
+//- /geo/bolt.toml
+[package]
+name = "geo"
+//- /geo/lib.bolt
+pub(package) fn helper() -> i32 = 1;
+pub fn area() -> i32 = helper();
+//- /proj/bolt.toml
+[package]
+name = "proj"
+[dependencies]
+geo = { path = "../geo" }
+//- /proj/main.bolt
+import "geo" (helper);
+            //^^^^^^ error: `helper` is only visible inside its package
+import "geo" as G;
+let a: i32 = G.area();
+let h: i32 = G.helper();
+             //^^^^^^ error: `helper` is only visible inside its package
+
+================================================================================
+Hidden names through an alias
+================================================================================
+//- /geo/bolt.toml
+[package]
+name = "geo"
+//- /geo/lib.bolt
+pub(package) struct Secret { x: i32 }
+pub(package) enum Kind { Round, Square }
+fn mine() -> i32 = 1;
+pub fn area() -> i32 = 1;
+//- /proj/bolt.toml
+[package]
+name = "proj"
+[dependencies]
+geo = { path = "../geo" }
+//- /proj/main.bolt
+import "geo" as G;
+let m: i32 = G.mine();
+             //^^^^ error: `mine` is private
+fn f(s: G.Secret) -> i32 = 1;
+      //^^^^^^^^ error: `Secret` is only visible inside its package
+let s = G.Secret { x: 1 };
+      //^^^^^^^^^^^^^^^^^ error: `Secret` is only visible inside its package
+let k = match 1 {
+  G.Kind.Round => 1,
+//^^^^^^^^^^^^ error: `Kind` is only visible inside its package
+  _ => 2,
+};
+let n: i32 = G.nothing();
+             //^^^^^^^ error: cannot find `nothing`
+
+================================================================================
+A file of std has no prelude
+:prelude
+================================================================================
+//- /toolchain/std/__prelude__/lib.bolt
+pub import "./option" *;
+//- /toolchain/std/__prelude__/option.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+//- /toolchain/std/__prelude__/uses.bolt
+// It's in `std`, so `Some` needs an import, rather than coming from the
+// prelude that it's part of.
+import "./option" (Option);
+fn f(x: Option[i32]) -> Option[i32] = match x {
+  Some(a) => Some(a),
+//^^^^^^^ error: cannot find `Some(a)`
+           //^^^^ error: cannot find `Some`
+  _ => None,
+     //^^^^ error: cannot find `None`
+};
+
+================================================================================
+Indexing without a prelude
+================================================================================
+fn f(xs: [i32]) -> i32 = xs[0];
+                       //^^^^^ error: this needs the class `Index`, but there's no prelude that defines it

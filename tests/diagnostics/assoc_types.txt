@@ -1,0 +1,88 @@
+================================================================================
+Associated types
+================================================================================
+class Index[C] { type Item; }
+class Other[C] { type Item; }
+fn none[C](c: C) -> C.Item = none(c);
+                  //^^^^^^ error: cannot find the associated type `C.Item`: none of the classes that its type parameter has an instance of declares it; add a bound or a `where` clause
+fn both[C](c: C) -> C.Item where Index[C], Other[C] = both(c);
+                  //^^^^^^ error: `C.Item` is ambiguous: several classes of its type parameter declare it
+fn one[C](c: C) -> C.Item where Index[C] = one(c);
+
+================================================================================
+Associated type equalities
+================================================================================
+class Iterator[I] { type Item; }
+fn f[I: Iterator[Itme = i32]](it: I) = ();
+      //^^^^^^^^^^^^^^^^^^^^ error: the class `Iterator` has no associated type `Itme`
+struct W[I: Iterator[Item = i32]] { it: I }
+          //^^^^^^^^^^^^^^^^^^^^ error: what an associated type is, like `Item = T`, can only be written in a bound or `where` clause of a function or an impl
+
+================================================================================
+Impls must meet the bounds of associated types
+================================================================================
+class Iter2[I] { type Item; }
+class Coll[C] { type It: Iter2; }
+class Other[C] { type It: Nope; }
+                        //^^^^ error: cannot find type `Nope`
+struct Good;
+struct Bad;
+impl Iter2[Good] { type Item = i32; }
+impl Coll[i32] { type It = Good; }
+impl Coll[Bool] { type It = Bad; }
+                     //^^ error: there is no instance `Iter2[imm Bad]`, which class `Coll` asks of its type `It`
+impl[T] Coll[(T,)] where Iter2[T] { type It = T; }
+impl[T] Coll[(T, T)] { type It = T; }
+                          //^^ error: there is no instance `Iter2[T]`, which class `Coll` asks of its type `It`
+
+================================================================================
+Impls must meet what bounds of associated types say other ones are
+================================================================================
+class Iter2[I] { type Item; }
+class Coll[C] { type Item; type It: Iter2[Item = Item]; }
+struct Ints;
+struct Bools;
+impl Iter2[Ints] { type Item = i32; }
+impl Iter2[Bools] { type Item = Bool; }
+impl Coll[i32] { type Item = i32; type It = Ints; }
+impl Coll[Bool] { type Item = i32; type It = Bools; }
+                                      //^^ error: class `Coll` needs the `Item` of its type `It` to be `i32`, but this impl's is `Bool`
+impl[T, I] Coll[(T, I)] where Iter2[I, Item = T] { type Item = T; type It = I; }
+impl Coll[()] { type It = Ints; }
+   //^^^^^^^^ error: missing type `Item` of class `Coll`
+impl[T, I] Coll[(T, I, I)] where Iter2[I] { type Item = T; type It = I; }
+                                                              //^^ error: class `Coll` needs the `Item` of its type `It` to be `T`, but this impl's is `I.Item`
+
+================================================================================
+What bounds of associated types say holds with an impl's own bounds
+================================================================================
+// An impl's own bounds count for what a bound says an associated type
+// is: with `A: Iterable`, `A.Iter.Item` is `A.Item`, on both sides of
+// `Item = Item`. Without errors.
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+class Iterable[C] { type Item = Iter.Item; type Iter: Iterator[Item = Item]; fn iter(c: C) -> Iter; }
+struct ZipIter[A: Iterator, B: Iterator] { first: A, second: B }
+impl[A: Iterator, B: Iterator] Iterator[ZipIter[A, B]] {
+  type Item = (A.Item, B.Item);
+  fn next(it) = match (next(it.first), next(it.second)) {
+    (Option.Some(a), Option.Some(b)) => Option.Some((a, b)),
+    _ => Option.None,
+  };
+}
+struct Zipper[A: Iterable, B: Iterable] { first: A, second: B }
+impl[A: Iterable, B: Iterable] Iterable[Zipper[A, B]] {
+  type Iter = mut ZipIter[A.Iter, B.Iter];
+  fn iter(z) = mut ZipIter { first: iter(z.first), second: iter(z.second) };
+}
+
+================================================================================
+Defaults of associated types that refer to each other
+================================================================================
+class Pair[C] { type A = B; type B = A; type C = A; type D = (D, i32); }
+                   //^ error: type alias `A` refers to itself
+                               //^ error: type alias `B` refers to itself
+                                                       //^ error: type alias `D` refers to itself
+struct Bag { n: i32 }
+impl Pair[Bag] { type B = i32; type D = i32; }
+let x: i32 = 1;

@@ -1,0 +1,174 @@
+================================================================================
+Type mismatch
+:test-prelude
+================================================================================
+fn id(x) { return x }
+  id(1) == 1;
+  id(True) == 1;
+//^^^^^^^^ label: this has type `Bool`
+            //^ error: expected `Bool`, found an integer
+
+================================================================================
+Mismatch in declared function
+================================================================================
+fn f(x: i32) -> Bool { x }
+              //^^^^ label: expected because of the return type
+                     //^ error: expected `Bool`, found `i32`
+
+================================================================================
+Custom operator calls its definition
+================================================================================
+  fn[T] (a: T) <> (b: T) -> T = a;
+  let x: i32 = 1 <> 2;
+  let y: Bool = 1 <> 2;
+       //^^^^ label: expected because of this annotation
+              //^^^^^^ error: expected `Bool`, found an integer
+
+================================================================================
+Types in signatures
+================================================================================
+struct Pair[A, B] { a: A, b: B }
+struct Wrap { inner: Missing }
+                   //^^^^^^^ error: cannot find type `Missing`
+fn f(p: Pair[i32]) -> i32 = 1;
+      //^^^^^^^^^ error: expected 2 type arguments, found 1
+const C: Nope = 1;
+       //^^^^ error: cannot find type `Nope`
+type Loop = Loop;
+   //^^^^ error: type alias `Loop` refers to itself
+fn g(x: Loop) -> i32 = 1;
+      //^^^^ error: type alias `Loop` refers to itself
+type A = B;
+   //^ error: type alias `A` refers to itself
+type B = A;
+   //^ error: type alias `B` refers to itself
+
+================================================================================
+Types in bodies
+================================================================================
+fn f() {
+  let x: Nope = 1;
+       //^^^^ error: cannot find type `Nope`
+  x
+}
+
+================================================================================
+Fields
+================================================================================
+struct Point { x: i32, y: i32 }
+let p = Point { x: 1 };
+      //^^^^^^^^^^^^^^ error: missing field `y`
+  p.z;
+  //^ error: `imm Point` has no field `z`
+
+================================================================================
+Mismatches point at annotations
+================================================================================
+const C: Bool = 1;
+       //^^^^ label: expected because of the type of the constant
+              //^ error: expected `Bool`, found an integer
+fn f() {
+  let x: i32 = True;
+       //^^^ label: expected because of this annotation
+             //^^^^ error: expected `i32`, found `Bool`
+  x
+}
+fn g() -> i32 { return True; }
+        //^^^ label: expected because of the return type
+                     //^^^^ error: expected `i32`, found `Bool`
+
+================================================================================
+Mismatches point at parameters
+================================================================================
+fn takes(n: i32, b: Bool) -> i32 = n;
+                  //^^^^ label: expected because of this parameter of `takes`
+  takes(1, 2);
+         //^ error: expected `Bool`, found an integer
+
+================================================================================
+Mismatches point at fields
+================================================================================
+struct Point { x: i32, y: Bool }
+                        //^^^^ label: expected because of the type of field `y`
+let p = Point { x: 1, y: 2 };
+                       //^ error: expected `Bool`, found an integer
+
+================================================================================
+Branches point at each other
+================================================================================
+let a = if True { 1 } else { True };
+              //^^^^^ label: this has type `i32`
+                           //^^^^ error: expected an integer, found `Bool`
+fn f(b) = match b { True => 1, False => True };
+                          //^ label: this has type `i32`
+                                      //^^^^ error: expected an integer, found `Bool`
+
+================================================================================
+Mismatches point at the type of a constant
+================================================================================
+const X: i32 = True;
+             //^^^^ error: expected `i32`, found `Bool`
+       //^^^ label: expected because of the type of the constant
+
+================================================================================
+Mismatches point at the parameter of a named function
+================================================================================
+fn f(x: i32) = x;
+      //^^^ label: expected because of this parameter of `f`
+f(True);
+//^^^^ error: expected `i32`, found `Bool`
+
+================================================================================
+Bodies of items in impls and enums
+================================================================================
+class Get[T] { fn get(x: T) -> i32; }
+struct Counter { n: i32 }
+impl Get[Counter] {
+  fn get(c) = c;
+            //^ error: expected `i32`, found `Counter`
+}
+enum E { A = True }
+           //^^^^ error: expected an integer, found `Bool`
+
+================================================================================
+An infinite type
+================================================================================
+fn f(x) = x(x);
+          //^ error: this would need the infinite type `fn(a) -> b`
+
+================================================================================
+Calling what isn't a function
+================================================================================
+let y = 1(2);
+      //^ error: expected a function, found `i32`
+
+================================================================================
+Unknown types are named per message
+:test-prelude
+================================================================================
+let f = |x| x;
+  if True { f } else { 1 };
+        //^^^^^ label: this has type `fn(a) -> a`
+                     //^ error: expected `fn(a) -> a`, found an integer
+class Show[T] { fn show(x: T) -> i32; }
+let s = show([]);
+      //^^^^ error: there is no instance `Show[imm [a]]`
+
+================================================================================
+Unknown types skip the names of type parameters
+================================================================================
+fn g[a](x: a) = if True { x } else { |y| y };
+                      //^^^^^ label: this has type `a`
+                                   //^^^^^ error: expected `a`, found `fn(b) -> b`
+
+================================================================================
+Fields of values of unknown types
+================================================================================
+struct Point { x: i32 }
+struct Size { x: u8 }
+fn get_x(p) = p.x;
+            //^^^ label: needed by this use in `get_x`
+let a: i32 = get_x(Point { x: 1 });
+let b: u8 = get_x(Size { x: 2u8 });
+let c = get_x(True);
+      //^^^^^ error: `Bool` has no field `x`

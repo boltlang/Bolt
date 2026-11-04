@@ -1,0 +1,68 @@
+================================================================================
+What structs hold
+================================================================================
+struct VecIter[T, 'v] { data: 'v [T], index: i32 }
+fn f(it: mut VecIter[mut [i32], imm]) {}
+   //^^ error: a `mut VecIter[mut [i32], imm]` can't hold a `mut [i32]` in a field that's `imm`: what an `imm` value holds can't be changed either
+struct Handler[T] { f: fn(T) -> () }
+let h = Handler { f: |xs: mut [i32]| {} };
+
+================================================================================
+Written types that can have no values
+================================================================================
+struct VecIter[T, 'v] { data: 'v [T], index: i32 }
+class C[X] { fn method(it: mut VecIter[mut [i32], imm]) -> i32; }
+                         //^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: a `mut VecIter[mut [i32], imm]` can't hold a `mut [i32]` in a field that's `imm`: what an `imm` value holds can't be changed either
+type Alias = VecIter[mut [i32], imm];
+           //^^^^^^^^^^^^^^^^^^^^^^^ error: a `VecIter[mut [i32], imm]` can't hold a `mut [i32]` in a field that's `imm`: what an `imm` value holds can't be changed either
+type Fine = VecIter[mut [i32], mut];
+
+================================================================================
+Types without values
+================================================================================
+enum Node[T] { Ref(Node[T]) }
+   //^^^^ warning: `Node` has no values, since none of its variants can be built: `Ref` needs a value of `Node[T]`, which has none
+struct S { s: S }
+     //^ warning: `S` has no values, since its field `s` needs a value of `S`, which has none
+struct A { b: B }
+     //^ warning: `A` has no values, since its field `b` needs a value of `B`, which has none
+struct B { a: A }
+     //^ warning: `B` has no values, since its field `a` needs a value of `A`, which has none
+enum Never {}
+struct Wrap { n: Never }
+     //^^^^ warning: `Wrap` has no values, since its field `n` needs a value of `Never`, which has none
+enum List[T] { Cons(T, List[T]), Nil }
+struct Tree { children: [Tree] }
+
+================================================================================
+Types without values in other files
+================================================================================
+//- /a.bolt
+import "./b" (B);
+pub struct A { b: B }
+         //^ warning: `A` has no values, since its field `b` needs a value of `B`, which has none
+//- /b.bolt
+import "./a" (A);
+pub struct B { a: A }
+         //^ warning: `B` has no values, since its field `a` needs a value of `A`, which has none
+
+================================================================================
+Kinds
+================================================================================
+enum Either[E, A] { Left(E), Right(A) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[i32] {}
+           //^^^ error: expected a type of kind `Type -> Type`, found `i32` of kind `Type`
+   //^^^^^^^^^^^^ error: missing method `fmap` of class `Functor`
+impl Functor[Either] {}
+           //^^^^^^ error: expected a type of kind `Type -> Type`, found `Either` of kind `Type -> Type -> Type`
+   //^^^^^^^^^^^^^^^ error: missing method `fmap` of class `Functor`
+// `x: F` comes first, so it makes `F` a type.
+fn f[F](x: F) -> i32 where Functor[F] = 1;
+                                 //^ error: expected a type of kind `Type -> Type`, found `F` of kind `Type`
+
+================================================================================
+A type alias that refers to itself
+================================================================================
+type A = A;
+   //^ error: type alias `A` refers to itself

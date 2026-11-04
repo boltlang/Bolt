@@ -1,0 +1,109 @@
+================================================================================
+Changing arrays that are not mut
+:prelude
+================================================================================
+let xs = [1, 2];
+  xs[0] = 3;
+//^^ error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed
+fn first(ys: [i32]) { ys[0] = 1; }
+                    //^^ error: cannot change an element of `ys`, which is `[i32]`; only a `mut` array can be changed
+let zs = mut [1, 2];
+zs[0] = 3;
+struct Inventory { items: [i32] }
+fn clear(inv: Inventory) { inv.items[0] = 0; }
+                         //^^^^^^^^^ error: cannot change an element of `inv.items`, which is `[i32]`; only a `mut` array can be changed
+
+================================================================================
+Changing structs that are not mut
+================================================================================
+struct Point { x: i32, y: i32 }
+let p = Point { x: 1, y: 2 };
+  p.x = 3;
+//^ error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed
+let q = mut Point { x: 1, y: 2 };
+q.x = 3;
+fn move_x(r) { r.x = 1; }
+  move_x(p);
+//^^^^^^ error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed
+struct Bag { items: mut [i32] }
+                  //^^^^^^^^^ error: a field can't be `mut`: it has the mutability of its struct, so make the struct `mut` instead
+let a = [mut [1]];
+      //^^^^^^^^^ error: an `imm [mut [i32]]` can't hold a `mut [i32]`: what an `imm` value holds can't be changed either
+fn f(x: mut i32) {}
+      //^^^^^^^ error: only an array, a struct or a function can be `mut` or `imm`
+
+================================================================================
+Closure mutability
+================================================================================
+struct Holder { poke: fn() }
+                    //^^^^ label: expected because of the type of field `poke`
+struct Point { x: i32 }
+let p = mut Point { x: 0 };
+let h = Holder { poke: || { p.x = 1; } };
+                     //^^^^^^^^^^^^^^^ error: expected `fn() -> ()`, found `mut fn() -> ()`
+let fs = [|| { p.x = 1; }];
+       //^^^^^^^^^^^^^^^^^ error: an `imm [mut fn() -> ()]` can't hold a `mut fn() -> ()`: what an `imm` value holds can't be changed either
+struct Getter[T] { get: fn() -> T }
+                      //^^^^^^^^^ label: expected because of the type of field `get`
+fn copy[T](g: Getter[T]) = Getter { get: g.get };
+                                       //^^^^^ error: expected `imm fn() -> T`, found `'m fn() -> T`
+
+================================================================================
+Not at most
+================================================================================
+struct Box[T] { item: T }
+fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }
+                                //^^^^^^^^^^^^^^^ error: expected a type that's at most `imm`, found `T`
+fn keep(x) { let b = Box { item: x }; 0 }
+                   //^^^^^^^^^^^^^^^ label: needed by this use in `keep`
+  keep(mut [1]);
+//^^^^ error: expected a type that's at most `imm`, found `mut [i32]`
+
+================================================================================
+Mutability bounds
+================================================================================
+fn reader(xs: 'v [i32]) -> 'f fn() -> 'v [i32] = || xs;
+                                               //^^^^^ error: expected a mutability that's at most `'f`, found `'v`
+let x: imm = 1;
+     //^^^ error: `imm` is a mutability, not a type: on its own, it can only be a bound, like `T: imm`
+
+================================================================================
+Unknown mutabilities
+================================================================================
+fn same(xs: 'm [i32]) -> 'm [i32] = xs;
+fn f() { let ys: 'q [i32] = [1]; }
+               //^^^^^^^^ error: the mutability of `'q [i32]` isn't one of this function's or impl's, or one that this struct declares: a name like `'m` can only be used in the function or impl whose signature names it, an impl's associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`
+
+================================================================================
+Mutability params
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+struct Point { x: i32 }
+fn f(a: Iter[imm, imm], b: Point[imm]) {}
+      //^^^^^^^^^^^^^^ error: expected at most 1 mutability argument, found 2
+                         //^^^^^^^^^^ error: expected at most 0 mutability arguments, found 1
+enum Either['v] { Left('v [i32]), Right }
+          //^^ error: only a struct, a function or an impl can have a mutability parameter like `'v`
+                     //^^^^^^^^ error: the mutability of `'v [i32]` isn't one of this function's or impl's, or one that this struct declares: a name like `'m` can only be used in the function or impl whose signature names it, an impl's associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`
+let a = Iter { data: mut [1], index: 0 };
+      //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: an `imm Iter[mut]` can't have a `mut` mutability argument: what an `imm` value holds can't be changed either
+
+================================================================================
+Assign to immutable
+================================================================================
+fn f() {
+  let x = 1;
+  x = 2;
+//^ error: cannot assign to `x`, which isn't `mut`
+  let mut y = 1;
+  y = 2;
+}
+
+================================================================================
+Assign to non place
+================================================================================
+fn g() -> i32 = 1;
+fn f() {
+  g() = 3;
+//^^^ error: cannot assign to this; only a variable, a field or an element can be assigned to
+}
