@@ -107,10 +107,12 @@ pub fn split<'db>(
                 split(db, arg, bound, out);
             }
         }
-        Ty::Fn(_, _, m) => push(out, Held::Mutability((**m).clone()), bound),
+        Ty::Fn(_, _, m, _) => push(out, Held::Mutability((**m).clone()), bound),
+        // A row of effects holds no values.
         Ty::Builtin(_)
         | Ty::Mutability(_)
         | Ty::Unwritten
+        | Ty::Row(_)
         | Ty::Number(_)
         | Ty::Never
         | Ty::Error => {}

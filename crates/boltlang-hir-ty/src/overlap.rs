@@ -112,7 +112,7 @@ pub fn functions_overlap<'db>(db: &'db dyn Db, a: FunctionId<'db>, b: FunctionId
     let mut unifier = Unifier::new();
     let x = x.probe_with(&mut || unifier.new_var(VarKind::General));
     let y = y.probe_with(&mut || unifier.new_var(VarKind::General));
-    let (Ty::Fn(xs, _, _), Ty::Fn(ys, _, _)) = (&x, &y) else { return false };
+    let (Ty::Fn(xs, _, _, _), Ty::Fn(ys, _, _, _)) = (&x, &y) else { return false };
     // A type with an error is reported on its own, and would fit anything.
     if xs.len() != ys.len() || xs.iter().chain(ys.iter()).any(|t| t.any(&mut |t| *t == Ty::Error)) {
         return false;

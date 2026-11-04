@@ -57,7 +57,7 @@ let mut total = 0;
 apply_twice(|x| { total += x; x }, 1);
 apply_twice(|x| x + 1, 1);
 --------------------------------------------------------------------------------
-apply_twice: forall a. fn(fn(a) -> a, a) -> a
+apply_twice: forall a e. fn(fn(a) -> a does e, a) -> a does e
 let total: i32
 apply_twice(|x| { total += x; x }, 1): i32
 apply_twice(|x| x + 1, 1): i32

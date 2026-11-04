@@ -6,7 +6,7 @@ use std::fmt;
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
     builtin_type::BuiltinType,
-    ids::{EnumId, ItemContainerId, StructId, TypeAliasId},
+    ids::{EffectId, EnumId, ItemContainerId, StructId, TypeAliasId},
     resolver::GenericDefId,
 };
 
@@ -19,12 +19,30 @@ pub struct TyVar(pub u32);
 /// What an inference variable can become. An integer literal without a
 /// suffix has an `Int` variable, which defaults to `i32`. A `Mutability`
 /// variable stands for the mutability of an array, and defaults to `Imm`.
+/// An `Effect` variable stands for a row of effects, and defaults to the
+/// empty row: a function that nothing says does something does nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum VarKind {
     General,
     Int,
     Float,
     Mutability,
+    Effect,
+}
+
+/// An effect in a row, with its arguments, like `State[i32]`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct EffectTy<'db> {
+    pub effect: EffectId<'db>,
+    pub args: Box<[Ty<'db>]>,
+}
+
+impl<'db> EffectTy<'db> {
+    /// The order of effects in a row. It only has to be the same for the same
+    /// effects, so it's the order the effects were interned in.
+    fn key(&self) -> salsa::Id {
+        salsa::plumbing::AsId::as_id(&self.effect)
+    }
 }
 
 /// Whether a number literal is an integer or a float.
@@ -84,12 +102,20 @@ pub enum Ty<'db> {
     /// body, or `Imm`. Only type aliases keep it, for the types they're
     /// used in to replace.
     Unwritten,
-    /// `fn(A, B) -> C`: the parameters, the result, and the mutability.
-    /// A closure is `mut` if it can change what it captured, or capture
-    /// something that can change, and `imm` otherwise; named functions
-    /// capture nothing and are `imm`. As for arrays, an `imm` value can't
-    /// hold a `mut fn`. The mutability doesn't restrict calling it.
-    Fn(Box<[Ty<'db>]>, Box<Ty<'db>>, Box<Ty<'db>>),
+    /// `fn(A, B) -> C does E`: the parameters, the result, the mutability
+    /// and the effects. A closure is `mut` if it can change what it
+    /// captured, or capture something that can change, and `imm` otherwise;
+    /// named functions capture nothing and are `imm`. As for arrays, an
+    /// `imm` value can't hold a `mut fn`. The mutability doesn't restrict
+    /// calling it. The effects are a row: [`Ty::Row`], a variable or a
+    /// parameter.
+    Fn(Box<[Ty<'db>]>, Box<Ty<'db>>, Box<Ty<'db>>, Box<Ty<'db>>),
+    /// A row of effects whose effects are all known, like `Log + State[i32]`,
+    /// which is a type of kind `Effect`. Each effect is in it once, in the
+    /// order of [`Ty::row`]; the empty row is `Nothing`. A row with unknown
+    /// parts is a variable or a parameter, and how it's made of others is a
+    /// constraint (see `site/docs/internals/effects.mdx`).
+    Row(Box<[EffectTy<'db>]>),
     /// An associated type of a class applied to types, like `C.Item` for
     /// `type Item;` of `class Index[C]`: the type alias declared in the
     /// class, and the class's arguments. Which type it is depends on the
@@ -126,9 +152,52 @@ impl<'db> Ty<'db> {
         Ty::Builtin(BuiltinType::Bool)
     }
 
-    /// An `imm` function from `params` to `ret`, like a named function.
+    /// An `imm` function from `params` to `ret` without effects.
     pub fn func(params: impl Into<Box<[Ty<'db>]>>, ret: Ty<'db>) -> Self {
-        Ty::Fn(params.into(), Box::new(ret), Box::new(Ty::Mutability(Mutability::Imm)))
+        Ty::func_does(params, ret, Ty::nothing())
+    }
+
+    /// An `imm` function from `params` to `ret` with the effects `effects`,
+    /// like a named function.
+    pub fn func_does(params: impl Into<Box<[Ty<'db>]>>, ret: Ty<'db>, effects: Ty<'db>) -> Self {
+        Ty::Fn(
+            params.into(),
+            Box::new(ret),
+            Box::new(Ty::Mutability(Mutability::Imm)),
+            Box::new(effects),
+        )
+    }
+
+    /// The row without effects, `Nothing`.
+    pub fn nothing() -> Self {
+        Ty::Row(Box::new([]))
+    }
+
+    /// The row of `effects`, in their order. Each effect must be in it
+    /// once: see [`Ty::union_rows`] for rows that can share effects.
+    pub fn row(effects: impl IntoIterator<Item = EffectTy<'db>>) -> Self {
+        let mut effects: Vec<_> = effects.into_iter().collect();
+        effects.sort_by_key(EffectTy::key);
+        debug_assert!(effects.windows(2).all(|w| w[0].effect != w[1].effect));
+        Ty::Row(effects.into())
+    }
+
+    /// The effects of both rows, with the arguments of an effect in both
+    /// from `a`. The pairs of arguments that must be the same, for the
+    /// effects in both, are given to `same`.
+    pub fn union_rows(
+        a: &[EffectTy<'db>],
+        b: &[EffectTy<'db>],
+        mut same: impl FnMut(&EffectTy<'db>, &EffectTy<'db>),
+    ) -> Self {
+        let mut out: Vec<EffectTy<'db>> = a.to_vec();
+        for e in b {
+            match a.iter().find(|x| x.effect == e.effect) {
+                Some(x) => same(x, e),
+                None => out.push(e.clone()),
+            }
+        }
+        Ty::row(out)
     }
 
     /// An array of `element` with the mutability `mutability`.
@@ -166,7 +235,7 @@ impl<'db> Ty<'db> {
     /// captured.
     pub fn held_mutability(&self) -> Option<&Ty<'db>> {
         match self {
-            Ty::Fn(_, _, mutability) => Some(mutability),
+            Ty::Fn(_, _, mutability, _) => Some(mutability),
             ty => ty.mutability(),
         }
     }
@@ -221,11 +290,13 @@ impl<'db> Ty<'db> {
                 f(mutability);
                 f(elem);
             }
-            Ty::Fn(params, ret, mutability) => {
+            Ty::Fn(params, ret, mutability, effects) => {
                 params.iter().for_each(&mut f);
                 f(ret);
                 f(mutability);
+                f(effects);
             }
+            Ty::Row(effects) => effects.iter().flat_map(|e| e.args.iter()).for_each(f),
             Ty::Assoc(_, args) => args.iter().for_each(f),
             Ty::Var(_)
             | Ty::Builtin(_)
@@ -258,9 +329,18 @@ impl<'db> Ty<'db> {
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
             Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
-            Ty::Fn(params, ret, mutability) => {
-                Ty::Fn(fold_all(params, f), Box::new(ret.fold(f)), Box::new(mutability.fold(f)))
-            }
+            Ty::Fn(params, ret, mutability, effects) => Ty::Fn(
+                fold_all(params, f),
+                Box::new(ret.fold(f)),
+                Box::new(mutability.fold(f)),
+                Box::new(effects.fold(f)),
+            ),
+            Ty::Row(effects) => Ty::Row(
+                effects
+                    .iter()
+                    .map(|e| EffectTy { effect: e.effect, args: fold_all(&e.args, f) })
+                    .collect(),
+            ),
             Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
             Ty::Var(_)
             | Ty::Builtin(_)
@@ -324,6 +404,9 @@ enum Unknown<'db> {
 pub struct TyNames<'db> {
     names: Vec<(Unknown<'db>, String)>,
     mutabilities: Vec<(Unknown<'db>, String)>,
+    /// Names for unknown rows, like `e`, which are only shown when they're
+    /// shared, like mutabilities.
+    effects: Vec<(Unknown<'db>, String)>,
     /// Whether every mutability is shown, even an unknown one used once and
     /// the `imm` of a function.
     explicit: bool,
@@ -350,6 +433,15 @@ impl<'db> TyNames<'db> {
             unknowns: Vec<Unknown<'db>>,
             taken_mutabilities: Vec<String>,
             mutabilities: Vec<Unknown<'db>>,
+            effects: Vec<Unknown<'db>>,
+        }
+        fn effects<'db>(db: &'db dyn Db, row: &Ty<'db>, found: &mut Found<'db>) {
+            match row {
+                Ty::Var(v) => found.effects.push(Unknown::Var(*v)),
+                Ty::Bound(i) => found.effects.push(Unknown::Bound(*i)),
+                Ty::Param(p) => found.taken.push(param_name(db, *p)),
+                _ => row.walk_children(|t| collect(db, t, found)),
+            }
         }
         fn mutability<'db>(db: &'db dyn Db, m: &Ty<'db>, found: &mut Found<'db>) {
             match m {
@@ -376,10 +468,11 @@ impl<'db> TyNames<'db> {
                     args.iter().for_each(|t| collect(db, t, found));
                     ms.iter().for_each(|m| mutability(db, m, found));
                 }
-                Ty::Fn(params, ret, m) => {
+                Ty::Fn(params, ret, m, e) => {
                     mutability(db, m, found);
                     params.iter().for_each(|t| collect(db, t, found));
                     collect(db, ret, found);
+                    effects(db, e, found);
                 }
                 _ => ty.walk_children(|t| collect(db, t, found)),
             }
@@ -407,7 +500,22 @@ impl<'db> TyNames<'db> {
                 out.mutabilities.push((unknown, candidates.next().unwrap()));
             }
         }
+        // From `e`, as in `forall a e.`, skipping the names already taken.
+        let taken: Vec<String> = out.names.iter().map(|(_, n)| n.clone()).collect();
+        let mut candidates =
+            (4..).map(bound_name).filter(|n| !found.taken.contains(n) && !taken.contains(n));
+        for &unknown in &found.effects {
+            let shared = found.effects.iter().filter(|u| **u == unknown).count() > 1;
+            if shared && !out.effects.iter().any(|(u, _)| *u == unknown) {
+                out.effects.push((unknown, candidates.next().unwrap()));
+            }
+        }
         out
+    }
+
+    /// The name of an unknown row, if it's shared.
+    fn effect(&self, unknown: Unknown<'db>) -> Option<&str> {
+        self.effects.iter().find(|(u, _)| *u == unknown).map(|(_, n)| n.as_str())
     }
 
     /// The name of an unknown mutability, if it's shared.
@@ -436,9 +544,24 @@ impl<'db> TyNames<'db> {
         }
     }
 
-    /// The names of the type variables of a scheme, in order.
+    /// A row on its own, as in a constraint like `Log ≲ e`: its effects,
+    /// `Nothing`, or its name.
+    pub fn row_name(&self, db: &'db dyn Db, row: &Ty<'db>) -> String {
+        let shown = DisplayTy { ty: row, db, names: Some(self) }.shown_effects(row);
+        shown.unwrap_or_else(|| match row {
+            Ty::Row(_) => "Nothing".into(),
+            _ => "_".into(),
+        })
+    }
+
+    /// The names of the type variables of a scheme, then those of its rows,
+    /// in order.
     pub fn bound_names(&self) -> impl Iterator<Item = &str> {
-        self.names.iter().filter(|(u, _)| matches!(u, Unknown::Bound(_))).map(|(_, n)| n.as_str())
+        self.names
+            .iter()
+            .chain(self.effects.iter())
+            .filter(|(u, _)| matches!(u, Unknown::Bound(_)))
+            .map(|(_, n)| n.as_str())
     }
 }
 
@@ -547,7 +670,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
             Ty::Mutability(Mutability::Mut) => f.write_str("Mut"),
             Ty::Mutability(Mutability::Imm) => f.write_str("Imm"),
             Ty::Unwritten => f.write_str("_"),
-            Ty::Fn(params, ret, mutability) => {
+            Ty::Fn(params, ret, mutability, effects) => {
                 // An `imm` function is shown as just `fn(...)`, since most
                 // are.
                 let explicit = self.names.is_some_and(|n| n.explicit);
@@ -556,8 +679,15 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 }
                 f.write_str("fn(")?;
                 list(f, params)?;
-                write!(f, ") -> {}", show(ret))
+                write!(f, ") -> {}", show(ret))?;
+                // No effects, or effects that are unknown and not shared, are
+                // shown as nothing.
+                match self.shown_effects(effects) {
+                    Some(row) => write!(f, " does {row}"),
+                    None => Ok(()),
+                }
             }
+            Ty::Row(_) => write!(f, "{}", self.shown_effects(self.ty).unwrap_or("Nothing".into())),
             Ty::Param(param) => write!(f, "{}", param_name(db, *param)),
             // `C.Item`, or `Convert[A, B].Item` for a class with several
             // parameters.
@@ -591,6 +721,39 @@ impl fmt::Display for DisplayTy<'_, '_> {
 }
 
 impl DisplayTy<'_, '_> {
+    /// How the effects of a function are shown after `does`, like `Log +
+    /// State[i32]` or a name like `e` for an unknown row that's shared.
+    /// `None` for no effects, or an unknown row used once.
+    fn shown_effects(&self, row: &Ty<'_>) -> Option<String> {
+        let shared = |unknown| self.names.and_then(|n| n.effect(unknown)).map(str::to_string);
+        match row {
+            Ty::Row(effects) if effects.is_empty() => None,
+            Ty::Row(effects) => {
+                let shown: Vec<String> = effects
+                    .iter()
+                    .map(|e| {
+                        let name = e.effect.item(self.db).name.as_ref().map_or("?", |n| n.as_str());
+                        if e.args.is_empty() {
+                            return name.to_string();
+                        }
+                        let args: Vec<String> = e
+                            .args
+                            .iter()
+                            .map(|ty| DisplayTy { ty, db: self.db, names: self.names }.to_string())
+                            .collect();
+                        format!("{name}[{}]", args.join(", "))
+                    })
+                    .collect();
+                Some(shown.join(" + "))
+            }
+            Ty::Param(p) => Some(param_name(self.db, *p)),
+            Ty::Var(v) => shared(Unknown::Var(*v)),
+            Ty::Bound(i) => shared(Unknown::Bound(*i)),
+            Ty::Error => Some("{error}".into()),
+            _ => None,
+        }
+    }
+
     /// `mut ` or `imm ` before an array or struct, a name like `'m ` for one
     /// that's named or shared, or nothing for one that's unknown or generic.
     fn write_mutability(&self, f: &mut fmt::Formatter<'_>, mutability: &Ty<'_>) -> fmt::Result {

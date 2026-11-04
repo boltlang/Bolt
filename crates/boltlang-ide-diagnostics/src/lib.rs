@@ -113,6 +113,8 @@ impl DiagnosticCode {
     pub const BAD_TEST: Self = Self("E0242");
     pub const NO_LANG_TYPE: Self = Self("E0243");
     pub const INVALID_CAST: Self = Self("E0244");
+    pub const EFFECT_TWICE: Self = Self("E0245");
+    pub const EFFECTS_NOT_ALLOWED: Self = Self("E0246");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -412,7 +414,7 @@ pub fn syntax_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
 /// A function type with the mutability `m`, so that naming the unknowns of
 /// types names `m` as a mutability.
 fn as_mutability<'db>(m: Ty<'db>) -> Ty<'db> {
-    Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m))
+    Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m), Box::new(Ty::nothing()))
 }
 
 /// The types in a diagnostic, in the order they're shown: in the message,
@@ -433,6 +435,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
+        DiagnosticKind::Effects { found, allowed } => vec![found, allowed],
         DiagnosticKind::InvalidCast { from, to } => vec![from, to],
         DiagnosticKind::NotAtMost { held, .. } => vec![held],
         DiagnosticKind::NoInstance { constraint, .. }
@@ -844,6 +847,23 @@ fn describe(
         }
 
         K::Unsupported => (C::UNSUPPORTED, "the type checker doesn't support this yet".into()),
+        K::Effects { found, allowed } => {
+            let found = names.row_name(db, &found);
+            let message = match &allowed {
+                Ty::Row(effects) if effects.is_empty() => {
+                    format!("this does `{found}`, but the code it's in has no effects")
+                }
+                allowed => format!(
+                    "this does `{found}`, but the code it's in only does `{}`",
+                    names.row_name(db, allowed)
+                ),
+            };
+            (C::EFFECTS_NOT_ALLOWED, message)
+        }
+        K::EffectTwice { effect } => (
+            C::EFFECT_TWICE,
+            format!("`{effect}` is in this row twice, with different arguments"),
+        ),
         K::NonExhaustiveMatch { missing: Some(missing) } => (
             C::NON_EXHAUSTIVE_MATCH,
             format!("this match doesn't cover every value: `{missing}` matches none of its arms"),

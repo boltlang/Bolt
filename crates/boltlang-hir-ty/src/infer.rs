@@ -34,6 +34,7 @@ use crate::{
         field_types, generic_predicates, identity_args, named_mutabilities, struct_args,
         struct_mutability, subst_params,
     },
+    rows::RowConstraint,
     scheme::{Scheme, generic_param_ids},
     solve::{
         AtMostConstraint, AtMostSource, Constraint, ConstraintSource, ExprOrPat, FieldConstraint,
@@ -421,6 +422,10 @@ pub(crate) struct InferenceContext<'a, 'db> {
     mut_constructor: bool,
     /// The closures being inferred, innermost last.
     closures: Vec<ClosureFrame>,
+    /// The effects the code being inferred can do: those of its function or
+    /// closure. Each call adds those of what it calls, as `callee ≲ effects`.
+    /// Top-level code and constants can do none.
+    effects: Ty<'db>,
 }
 
 /// What a closure being inferred declares and uses from outside it.
@@ -451,6 +456,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             uninitialized: Vec::new(),
             mut_constructor: false,
             closures: Vec::new(),
+            effects: Ty::nothing(),
         }
     }
 
@@ -611,6 +617,15 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         Resolver::for_expr(self.db, self.def, expr)
     }
 
+    /// The row of the effects written after a closure's `does`.
+    fn lower_row(&mut self, expr: ExprId, terms: &[TypeRefId]) -> Ty<'db> {
+        let resolver = self.resolver(expr);
+        let mut ctx = TyLoweringContext::new(self.db, &resolver, &self.body.store);
+        let row = ctx.lower_row(terms);
+        self.result.diagnostics.extend(ctx.diagnostics.into_iter().map(InferenceDiagnostic::Lower));
+        row
+    }
+
     fn lower_ty(&mut self, expr: ExprId, type_ref: TypeRefId) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let mut ctx = TyLoweringContext::new(self.db, &resolver, &self.body.store);
@@ -628,7 +643,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// Infer a function body with the given parameter and return types.
-    pub fn infer_fn_body(&mut self, params: &[Ty<'db>], ret: &Ty<'db>) {
+    pub fn infer_fn_body(&mut self, params: &[Ty<'db>], ret: &Ty<'db>, effects: &Ty<'db>) {
+        self.effects = effects.clone();
         // The associated types in the signature, like `C.Item`, are decided
         // by the solver, which knows the `where` clauses and impls.
         let origin = self.origin(self.body.body_expr);
@@ -942,12 +958,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
                 Ty::Never
             }
-            Expr::Lambda { params, param_types, ret_type, body: lambda_body, .. } => {
-                let (hint_params, hint_ret) =
-                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                        Some(Ty::Fn(ps, r, _)) if ps.len() == params.len() => (Some(ps), Some(*r)),
-                        _ => (None, None),
-                    };
+            Expr::Lambda { params, param_types, ret_type, effects, body: lambda_body, .. } => {
+                let (hint_params, hint_ret) = match expected
+                    .map(|e| self.solver.unifier.shallow_resolve(e.ty))
+                {
+                    Some(Ty::Fn(ps, r, _, _)) if ps.len() == params.len() => (Some(ps), Some(*r)),
+                    _ => (None, None),
+                };
                 self.closures.push(ClosureFrame::default());
                 let mut param_tys = Vec::new();
                 for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
@@ -964,21 +981,34 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     (None, Some(hint)) => hint,
                     (None, None) => self.new_var(),
                 };
+                // The effects that aren't written are inferred from what the
+                // body calls, which adds to the closure's effects, not to
+                // those of the code around it.
+                let effects = match effects {
+                    Some(terms) => self.lower_row(expr, terms),
+                    None => self.solver.new_var(VarKind::Effect),
+                };
                 let ret_reason = ret_type.map_or(Reason::None, Reason::Annotation);
                 let outer_return = std::mem::replace(&mut self.return_ty, ret.clone());
                 let outer_reason = std::mem::replace(&mut self.return_reason, ret_reason);
                 let outer_breakables = std::mem::take(&mut self.breakables);
+                let outer_effects = std::mem::replace(&mut self.effects, effects.clone());
                 self.check_expr_because(*lambda_body, &ret, ret_reason);
+                self.effects = outer_effects;
                 self.breakables = outer_breakables;
                 self.return_reason = outer_reason;
                 self.return_ty = outer_return;
                 let frame = self.closures.pop().unwrap();
                 let body = self.body;
-                let closure =
-                    Ty::Fn(param_tys.into(), Box::new(ret), Box::new(self.new_mutability()));
+                let closure = Ty::Fn(
+                    param_tys.into(),
+                    Box::new(ret),
+                    Box::new(self.new_mutability()),
+                    Box::new(effects),
+                );
                 // What the closure captured is at most its mutability, and a
                 // `let mut` variable it shares makes it `mut`.
-                let Ty::Fn(_, _, own) = &closure else { unreachable!() };
+                let Ty::Fn(_, _, own, _) = &closure else { unreachable!() };
                 let origin = self.origin(expr);
                 if frame.captured.iter().any(|&b| body[b].mutable) {
                     self.solver.equal(own, &Ty::Mutability(Mutability::Mut), origin);
@@ -1200,6 +1230,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             fields: Box::new([]),
             assoc: Box::new([]),
             bounds: Box::new([]),
+            rows: Box::new([]),
+            effect_vars: Box::new([]),
             ty,
             sources: Default::default(),
         };
@@ -1451,22 +1483,28 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         receiver: Option<(ExprId, &Ty<'db>, bool)>,
     ) -> Ty<'db> {
         let count = args.len() + receiver.is_some() as usize;
-        let (params, ret) = match self.solver.unifier.shallow_resolve(callee_ty) {
-            Ty::Fn(params, ret, _) => (params, *ret),
+        let (params, ret, effects) = match self.solver.unifier.shallow_resolve(callee_ty) {
+            Ty::Fn(params, ret, _, effects) => (params, *ret, *effects),
             // A number literal's type isn't known yet, but it's no function.
             Ty::Var(v) if self.solver.unifier.var_kind(v) == Some(VarKind::General) => {
                 let params: Box<[Ty<'db>]> = (0..count).map(|_| self.new_var()).collect();
                 let ret = self.new_var();
                 // Calling a function doesn't need it to be `mut` or `imm`.
                 let mutability = self.new_mutability();
-                let fn_ty = Ty::Fn(params.clone(), Box::new(ret.clone()), Box::new(mutability));
+                let effects = self.solver.new_var(VarKind::Effect);
+                let fn_ty = Ty::Fn(
+                    params.clone(),
+                    Box::new(ret.clone()),
+                    Box::new(mutability),
+                    Box::new(effects.clone()),
+                );
                 self.solver.equal(&fn_ty, callee_ty, self.origin(callee));
                 // A use of a name with several functions is checked against
                 // the arguments where they are, once one is chosen (#275).
                 let at = receiver.map(|(r, _, _)| r).into_iter().chain(args.iter().copied());
                 let at = at.map(|e| self.origin(e)).collect();
                 self.solver.attach_overload_args(callee_ty, at);
-                (params, ret)
+                (params, ret, effects)
             }
             Ty::Error | Ty::Never => {
                 for &arg in args {
@@ -1484,6 +1522,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 return Ty::Error;
             }
         };
+        // The call does what the function does.
+        let constraint = RowConstraint { sub: effects, sup: self.effects.clone() };
+        self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
         if params.len() != count {
             self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {
                 expr: ExprOrPat::Expr(expr),
@@ -1582,7 +1623,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     Err(_) => return false,
                 },
             };
-            let Ty::Fn(params, ret, _) = &scheme.ty else { return false };
+            let Ty::Fn(params, ret, _, _) = &scheme.ty else { return false };
             if params.len() != arity {
                 continue;
             }
@@ -1924,7 +1965,7 @@ pub(crate) fn solve_overloads<'db>(db: &'db dyn Db, solver: &mut Solver<'db>, en
             // at the argument, as for a function without overloads.
             let call = solver.unifier.shallow_resolve(&constraint.ty);
             match (&call, &ty) {
-                (Ty::Fn(args, ret, m), Ty::Fn(params, own_ret, own_m))
+                (Ty::Fn(args, ret, m, e), Ty::Fn(params, own_ret, own_m, own_e))
                     if args.len() == params.len() && constraint.args.len() == args.len() =>
                 {
                     for (index, ((arg, param), at)) in
@@ -1935,6 +1976,7 @@ pub(crate) fn solve_overloads<'db>(db: &'db dyn Db, solver: &mut Solver<'db>, en
                     }
                     solver.equal(ret, own_ret, origin);
                     solver.equal(m, own_m, origin);
+                    solver.equal(e, own_e, origin);
                 }
                 _ => solver.equal(&constraint.ty, &ty, origin),
             }

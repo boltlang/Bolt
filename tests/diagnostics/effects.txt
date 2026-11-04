@@ -10,3 +10,14 @@ fn g(x: State[i32]) {}
       //^^^^^^^^^^ error: expected a type of kind `Type`, found `State[i32]` of kind `Effect`
 fn h(x: State) {}
       //^^^^^ error: expected a type of kind `Type`, found `State` of kind `Type -> Effect`
+
+================================================================================
+Effects that the code around can't do
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn quiet() -> () { log("hi"); }
+                 //^^^^^^^^^ error: this does `Log`, but the code it's in has no effects
+fn greet() -> () does Log { wait(); }
+                          //^^^^^^ error: this does `Async`, but the code it's in only does `Log`

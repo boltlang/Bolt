@@ -141,9 +141,13 @@ impl<'db> MonoTy<'db> {
             MonoTy::Array(own, elem) => {
                 Ty::Array(Box::new(m(own)), Box::new(elem.to_ty_with(param)?))
             }
-            MonoTy::Fn(ps, ret, own) => {
-                Ty::Fn(all(ps)?, Box::new(ret.to_ty_with(param)?), Box::new(m(own)))
-            }
+            // Instances don't keep effects, which only the checker needs.
+            MonoTy::Fn(ps, ret, own) => Ty::Fn(
+                all(ps)?,
+                Box::new(ret.to_ty_with(param)?),
+                Box::new(m(own)),
+                Box::new(Ty::nothing()),
+            ),
         })
     }
 
@@ -271,6 +275,8 @@ pub fn field_types<'db>(
 pub enum Slot<'db> {
     Ty(MonoTy<'db>),
     Mut(MonoMut),
+    /// A row of effects, which instances don't keep.
+    Row,
 }
 
 /// Why a type couldn't be made closed.
@@ -319,7 +325,7 @@ impl<'db> Subst<'_, 'db> {
             ),
             Ty::Tuple(tys) => MonoTy::Tuple(all(tys)?),
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
-            Ty::Fn(params, ret, own) => {
+            Ty::Fn(params, ret, own, _) => {
                 MonoTy::Fn(all(params)?, Box::new(self.ty(ret)?), self.mutability(own)?)
             }
             // `F[A]` with `F` a type constructor, like `Option`.
@@ -335,7 +341,8 @@ impl<'db> Subst<'_, 'db> {
             // A type that nothing decides, like the elements of `[]`, can't
             // change what the code does.
             Ty::Var(_) => MonoTy::unit(),
-            Ty::Mutability(_) | Ty::Unwritten | Ty::Number(_) | Ty::Error => {
+            // A row is only ever inside a function type, which drops it.
+            Ty::Mutability(_) | Ty::Unwritten | Ty::Row(_) | Ty::Number(_) | Ty::Error => {
                 return Err(TyError::Unknown);
             }
         })

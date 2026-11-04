@@ -473,6 +473,15 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::Type(TypeError::CannotChange { origin, ty }) => {
                         format!("error at `{}`: can't change {}", at(origin.node), show(&[ty])[0])
                     }
+                    InferenceDiagnostic::Type(TypeError::Effects { origin, found, allowed }) => {
+                        let tys = show(&[found, allowed]);
+                        format!(
+                            "error at `{}`: does {}, only {} allowed",
+                            at(origin.node),
+                            tys[0],
+                            tys[1]
+                        )
+                    }
                     InferenceDiagnostic::NoMutability { expr } => {
                         format!("error at `{}`: can't be mut", at(ExprOrPat::Expr(*expr)))
                     }
@@ -482,7 +491,12 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     }
                     InferenceDiagnostic::Type(TypeError::NotAtMost { origin, constraint }) => {
                         fn as_mutability<'db>(m: &Ty<'db>) -> Ty<'db> {
-                            Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()))
+                            Ty::Fn(
+                                Box::new([]),
+                                Box::new(Ty::unit()),
+                                Box::new(m.clone()),
+                                Box::new(Ty::nothing()),
+                            )
                         }
                         let held = match &constraint.held {
                             Held::Mutability(m) => as_mutability(m),
@@ -553,6 +567,9 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         }
         LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at(*id)),
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
+        LowerDiagnostic::EffectTwice { type_ref, effect } => {
+            format!("error at `{}`: {effect} is in this row twice", at(*type_ref))
+        }
         LowerDiagnostic::NoMutability(id) => format!("error at `{}`: can't be mut or imm", at(*id)),
         LowerDiagnostic::MutField(id) => format!("error at `{}`: mut field", at(*id)),
         LowerDiagnostic::MutabilityAlone(id) => {

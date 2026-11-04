@@ -18,6 +18,7 @@ fn describe_type(db: &dyn Db, ty: TypeNs<'_>) -> String {
             format!("param {}", def.generic_params(db).type_params[index as usize].name)
         }
         TypeNs::Builtin(ty) => format!("builtin {ty}"),
+        TypeNs::Nothing => "Nothing".into(),
     }
 }
 

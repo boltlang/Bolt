@@ -207,7 +207,7 @@ fn map(f, o) = match o { Option.Some(x) => Option.Some(f(x)), Option.None => Opt
 let wrap = Option.Some;
 wrap(1);
 --------------------------------------------------------------------------------
-map: forall a b. fn(fn(a) -> b, Option[a]) -> Option[b]
+map: forall a b e. fn(fn(a) -> b does e, Option[a]) -> Option[b] does e
 let wrap: fn(i32) -> Option[i32]
 wrap(1): Option[i32]
 
@@ -452,7 +452,7 @@ fn map(f, xs) = match xs { Nil => Nil, Cons(h, t) => Cons(f(h), map(f, t)) };
 Cons(1, Cons(True, Nil));
 --------------------------------------------------------------------------------
 len: forall a. fn(List[a]) -> i32
-map: forall a b. fn(fn(a) -> b, List[a]) -> List[b]
+map: forall a b e. fn(fn(a) -> b does e, List[a]) -> List[b] does e
 Cons(1, Cons(True, Nil)): List[i32]
 --------------------------------------------------------------------------------
 error at `Cons(True, Nil)`: expected List[{integer}], found List[Bool]

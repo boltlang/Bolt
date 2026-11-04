@@ -87,10 +87,11 @@ fn bind<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, found: &mut 
             bind(m, n, scheme, found);
             bind(x, y, scheme, found);
         }
-        (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
+        (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => {
             all(found, xs, ys);
             bind(x, y, scheme, found);
             bind(m, n, scheme, found);
+            bind(e, f, scheme, found);
         }
         _ => {}
     }

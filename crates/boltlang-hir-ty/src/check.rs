@@ -22,6 +22,7 @@ use crate::{
         ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig,
         generic_predicates, impl_assoc_ty, impl_header, subst_params, with_superclasses,
     },
+    rows::{RowConstraint, positive_rows},
     scheme::{
         Scheme, SchemeSources, assumptions, assumptions_with_sources, at_most_assumptions,
         class_impl_method_sig, declared_scheme, equality_assumptions, generic_chain,
@@ -85,7 +86,9 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     for (assumption, _) in equality_assumptions(db, f) {
                         ctx.solver.assume_assoc(assumption);
                     }
-                    let Ty::Fn(params, ret, _) = &declared_scheme(db, f).ty else { unreachable!() };
+                    let Ty::Fn(params, ret, _, effects) = &declared_scheme(db, f).ty else {
+                        unreachable!()
+                    };
                     for assumption in implied_assumptions(db, f, params) {
                         ctx.solver.assume_at_most(assumption);
                     }
@@ -97,7 +100,7 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                         }
                         ctx.solver.equal(&class_ret, ret, origin);
                     }
-                    ctx.infer_fn_body(params, ret);
+                    ctx.infer_fn_body(params, ret, effects);
                 }
                 DefWithBody::Const(c) => {
                     ctx.infer_expr_body(Some(&const_ty(db, c).ty));
@@ -344,14 +347,19 @@ fn infer_group<'db>(
             Some(ret) => ret.fill_unwritten(&mut || solver.new_var(VarKind::Mutability)),
             None => solver.new_var(VarKind::General),
         };
-        env.mono.insert(f, Ty::func(params.clone(), ret.clone()));
-        signatures.push((params, ret));
+        // The body decides the effects that aren't written.
+        let effects = match &sig.effects {
+            Some(effects) => effects.clone(),
+            None => solver.new_var(VarKind::Effect),
+        };
+        env.mono.insert(f, Ty::func_does(params.clone(), ret.clone(), effects.clone()));
+        signatures.push((params, ret, effects));
     }
     let mut results = Vec::new();
-    for (&f, (params, ret)) in group.iter().zip(&signatures) {
+    for (&f, (params, ret, effects)) in group.iter().zip(&signatures) {
         let def = DefWithBodyId::new(db, DefWithBody::Function(f));
         let mut ctx = InferenceContext::new(db, def, &mut solver, env);
-        ctx.infer_fn_body(params, ret);
+        ctx.infer_fn_body(params, ret, effects);
         results.push((def, ctx.take_result()));
     }
 
@@ -371,6 +379,24 @@ fn infer_group<'db>(
         vars_in(&solver.unifier.resolve(&env.mono[f]), &mut keep);
     }
     solver.settle_at_most(&keep, true);
+    // A function's effects, and other rows only in positive places, get the
+    // least row that holds what's in them. Rows that only the calls inside
+    // decide, like that of a function called there, get theirs too. The
+    // other rows stay part of the types, with their constraints.
+    let is_row = |v| solver.unifier.var_kind(v) == Some(VarKind::Effect);
+    let mut positive = Vec::new();
+    for f in group {
+        positive.extend(positive_rows(&solver.unifier.resolve(&env.mono[f]), is_row));
+    }
+    let mut candidates = positive.clone();
+    for (constraint, _) in &solver.pending_rows {
+        vars_in(&solver.unifier.resolve(&constraint.sub), &mut candidates);
+        vars_in(&solver.unifier.resolve(&constraint.sup), &mut candidates);
+    }
+    candidates.retain(|&v| is_row(v));
+    let keep_rows: Vec<TyVar> = keep.iter().copied().filter(|v| !positive.contains(v)).collect();
+    solver.settle_rows(&candidates, &keep_rows);
+    solver.default_free_rows(&keep_rows);
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
     let mut errors: Vec<_> = std::mem::take(&mut solver.errors)
@@ -383,6 +409,7 @@ fn infer_group<'db>(
     let pending_fields = solver.take_pending_fields();
     let pending_assoc = solver.take_pending_assoc();
     let pending_at_most = solver.take_pending_at_most();
+    let pending_rows = solver.take_pending_rows();
     let solved = Solved {
         unifier: &solver.unifier,
         errors,
@@ -390,6 +417,7 @@ fn infer_group<'db>(
         pending_fields,
         pending_assoc,
         pending_at_most,
+        pending_rows,
     };
     for (&f, (def, mut result)) in group.iter().zip(results) {
         result.add_instances(def, &solver);
@@ -412,6 +440,7 @@ struct Solved<'a, 'db> {
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, Origin<'db>)>,
+    pending_rows: Vec<(RowConstraint<'db>, Origin<'db>)>,
 }
 
 impl<'db> Solved<'_, 'db> {
@@ -430,6 +459,7 @@ impl<'db> Solved<'_, 'db> {
         vars.add(ty);
         let (fields, field_sources, untyped) = self.function_fields(def, &mut vars);
         let (assoc, assoc_sources) = self.function_assoc(def, &mut vars);
+        let rows = self.function_rows(def, &mut vars);
         let (predicates, predicate_sources, ambiguous) =
             self.function_predicates(db, f, def, &vars);
         let (bounds, bound_sources) = self.function_bounds(db, f, def, &vars);
@@ -440,6 +470,10 @@ impl<'db> Solved<'_, 'db> {
             fields,
             assoc,
             bounds,
+            rows,
+            effect_vars: (0..vars.vars.len() as u32)
+                .filter(|&i| self.unifier.var_kind(vars.vars[i as usize]) == Some(VarKind::Effect))
+                .collect(),
             ty: vars.generalize(ty),
             sources: SchemeSources {
                 predicates: predicate_sources,
@@ -535,6 +569,47 @@ impl<'db> Solved<'_, 'db> {
     /// The "at most" constraints that become part of the type of the
     /// function with the body `def`: those about its type's variables and
     /// its parameters, which its callers must meet.
+    /// The containment constraints of rows that become part of the type of
+    /// the function with the body `def`: those about its rows, which can make
+    /// others about them, so this goes on until nothing changes. Their rows
+    /// join `vars`.
+    fn function_rows(
+        &self,
+        def: DefWithBodyId<'db>,
+        vars: &mut Generalization,
+    ) -> Box<[RowConstraint<'db>]> {
+        let mut rest: Vec<_> =
+            self.pending_rows.iter().filter(|(_, origin)| origin.body == def).collect();
+        let mut out = Vec::new();
+        loop {
+            let before = out.len();
+            rest.retain(|(constraint, _)| {
+                let mut found = Vec::new();
+                vars_in(&constraint.sub, &mut found);
+                vars_in(&constraint.sup, &mut found);
+                if !found.iter().any(|v| vars.vars.contains(v)) {
+                    return true;
+                }
+                vars.add(&constraint.sub);
+                vars.add(&constraint.sup);
+                out.push(constraint.clone());
+                false
+            });
+            if out.len() == before {
+                break;
+            }
+        }
+        out.into_iter()
+            .map(|c| c.map(|t| vars.generalize(t)))
+            .fold(Vec::new(), |mut acc, c| {
+                if !acc.contains(&c) {
+                    acc.push(c);
+                }
+                acc
+            })
+            .into()
+    }
+
     fn function_bounds(
         &self,
         db: &'db dyn Db,

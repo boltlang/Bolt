@@ -7,8 +7,8 @@ use boltlang_hir_def::{
     expr_store::ExpressionStore,
     hir::{GenericArg, MutabilityRef, Path, TypeRef, TypeRefId},
     ids::{
-        ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, StructId,
-        TypeAliasId,
+        ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
+        StructId, TypeAliasId,
     },
     item_tree::AssocItem,
     resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution},
@@ -21,7 +21,7 @@ use boltlang_hir_def::{
 use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
     solve::{AssocConstraint, AtMostConstraint, Held},
-    ty::{AdtId, GenericParamId, Mutability, Ty},
+    ty::{AdtId, EffectTy, GenericParamId, Mutability, Ty},
 };
 
 pub(crate) fn imm<'db>() -> Ty<'db> {
@@ -93,6 +93,12 @@ pub enum LowerDiagnostic {
     RecursiveAlias(TypeRefId),
     /// Something the checker doesn't support yet, like `impl Trait`.
     Unsupported(TypeRefId),
+    /// An effect in a row twice, with different arguments, like the second
+    /// `State` of `does State[i32] + State[String]`.
+    EffectTwice {
+        type_ref: TypeRefId,
+        effect: Name,
+    },
     /// A path like `C.Item` where no class of `C` has the associated type.
     NoAssocType {
         type_ref: TypeRefId,
@@ -326,10 +332,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 self.diagnostics.push(LowerDiagnostic::MutabilityAlone(id));
                 return (Ty::Error, None);
             }
-            TypeRef::Fn { params, ret_type, .. } => {
+            TypeRef::Fn { params, ret_type, effects, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
                 let ret = ret_type.map_or_else(Ty::unit, |t| self.lower_ty(t));
-                Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten))
+                // A function type without `does` has no effects.
+                let effects = effects.as_ref().map_or_else(Ty::nothing, |ts| self.lower_row(ts));
+                Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten), Box::new(effects))
             }
             TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
                 self.diagnostics.push(LowerDiagnostic::Unsupported(id));
@@ -348,7 +356,9 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 Ty::Adt(adt, args, ms, Box::new(written))
             }
             Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
-            Ty::Fn(params, ret, old) if fits(&old) => Ty::Fn(params, ret, Box::new(written)),
+            Ty::Fn(params, ret, old, effects) if fits(&old) => {
+                Ty::Fn(params, ret, Box::new(written), effects)
+            }
             Ty::Error => Ty::Error,
             ty => {
                 self.diagnostics.push(LowerDiagnostic::NoMutability(id));
@@ -392,6 +402,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 (Ty::adt(AdtId::Enum(e), [], [], imm()), def_kind(self.db, GenericDefId::Enum(e)))
             }
             TypeNs::Builtin(ty) => (Ty::Builtin(ty), Kind::Type),
+            TypeNs::Nothing => (Ty::nothing(), Kind::Effect),
             TypeNs::GenericParam { def, index } => {
                 let kind = generic_param_kinds(self.db, def)
                     .get(index as usize)
@@ -400,9 +411,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 (Ty::Param(GenericParamId { def, index }), kind)
             }
             TypeNs::TypeAlias(alias) => return self.lower_alias(id, alias, args),
-            // An effect isn't a type, which the kind says: there's no type
-            // for it, but its arguments are still checked.
-            TypeNs::Effect(e) => (Ty::Error, def_kind(self.db, GenericDefId::Effect(e))),
+            TypeNs::Effect(e) => return self.lower_effect(id, e, args),
             TypeNs::Class(_) | TypeNs::Variant(_) => {
                 self.diagnostics.push(LowerDiagnostic::NotAType(id));
                 return (Ty::Error, None);
@@ -433,6 +442,78 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
         let result = kind.apply(tys.len()).cloned();
         (Ty::app(head, tys), result)
+    }
+
+    /// An effect with its arguments, like `State[i32]`: a row of one effect,
+    /// of kind `Effect`. Without all its arguments, like `State`, it's of a
+    /// kind like `Type -> Effect`, and no row.
+    fn lower_effect(
+        &mut self,
+        id: TypeRefId,
+        effect: EffectId<'db>,
+        args: &[GenericArg],
+    ) -> (Ty<'db>, Option<Kind>) {
+        let kind = def_kind(self.db, GenericDefId::Effect(effect));
+        let param_kinds: Vec<Kind> = kind.split().0.into_iter().cloned().collect();
+        let type_args = self.type_args(id, args);
+        if type_args.len() > param_kinds.len() {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: param_kinds.len(),
+                found: type_args.len(),
+            });
+            for &arg in &type_args {
+                self.lower_ty_kinded(arg);
+            }
+            return (Ty::Error, None);
+        }
+        let tys: Vec<Ty<'db>> =
+            type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
+        if tys.len() < param_kinds.len() {
+            return (Ty::Error, kind.apply(tys.len()).cloned());
+        }
+        (Ty::row([EffectTy { effect, args: tys.into() }]), Some(Kind::Effect))
+    }
+
+    /// The row of the effects after `does`, like `Log + State[i32]`. An
+    /// effect in it twice must have the same arguments, and is then in the
+    /// row once.
+    pub fn lower_row(&mut self, terms: &[TypeRefId]) -> Ty<'db> {
+        let mut known: Vec<EffectTy<'db>> = Vec::new();
+        let mut unknown = Vec::new();
+        for &term in terms {
+            match self.lower_ty_expect(term, &Kind::Effect) {
+                Ty::Row(effects) => {
+                    for e in effects.into_vec() {
+                        match known.iter().find(|k| k.effect == e.effect) {
+                            Some(k) if k.args != e.args => {
+                                let effect = e.effect.item(self.db).name.clone();
+                                if let Some(effect) = effect {
+                                    self.diagnostics.push(LowerDiagnostic::EffectTwice {
+                                        type_ref: term,
+                                        effect,
+                                    });
+                                }
+                            }
+                            Some(_) => {}
+                            None => known.push(e),
+                        }
+                    }
+                }
+                Ty::Error => {}
+                row => unknown.push((term, row)),
+            }
+        }
+        match &unknown[..] {
+            [] => Ty::row(known),
+            [(_, row)] if known.is_empty() => row.clone(),
+            // A row with effect variables and other effects is a
+            // combination of rows, which isn't checked yet.
+            [(term, _), ..] => {
+                self.diagnostics.push(LowerDiagnostic::Unsupported(*term));
+                Ty::Error
+            }
+        }
     }
 
     /// The mutability arguments of the struct `s`, like the `imm` of
@@ -1216,6 +1297,11 @@ pub struct FnSig<'db> {
     /// its mutability, so the signature isn't complete. Without a body,
     /// it's `imm`.
     pub ret: Option<Ty<'db>>,
+    /// The effects: the row after `does`. Without `does`, a function whose
+    /// return type is written, or that has no body, has none. `None` when
+    /// they're inferred from the body. An operation of an effect does that
+    /// effect, like `State[S]` for `get`.
+    pub effects: Option<Ty<'db>>,
     /// How many hidden mutability parameters the function has: one for each
     /// array or struct type without `mut` or `imm` in its parameters, so
     /// that it takes values of either mutability.
@@ -1247,7 +1333,20 @@ pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
         None if !id.item(db).has_body => Some(Ty::unit()),
         None => None,
     };
-    FnSig { params, ret, hidden: hidden.count, diagnostics: ctx.diagnostics }
+    let effects = match (&sig.effects, id.container(db)) {
+        // An operation does its effect, with the effect's parameters.
+        (_, ItemContainerId::Effect(effect)) => {
+            let count = GenericDefId::Effect(effect).generic_params(db).type_params.len();
+            let args = (0..count as u32)
+                .map(|index| Ty::Param(GenericParamId { def: GenericDefId::Effect(effect), index }))
+                .collect();
+            Some(Ty::row([EffectTy { effect, args }]))
+        }
+        (Some(terms), _) => Some(ctx.lower_row(terms)),
+        (None, _) if ret.is_some() || !id.item(db).has_body => Some(Ty::nothing()),
+        (None, _) => None,
+    };
+    FnSig { params, ret, effects, hidden: hidden.count, diagnostics: ctx.diagnostics }
 }
 
 /// A struct or a variant: something with fields.
@@ -1395,12 +1494,13 @@ fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
             let ms = ms.iter().map(|a| fill_field(a, &held, own)).collect();
             Some(Ty::Adt(*id, args, ms, Box::new(m)))
         }
-        Ty::Fn(params, ret, m) => {
+        Ty::Fn(params, ret, m, effects) => {
             let params = params.iter().map(|p| fill_field(p, own, own)).collect();
             Some(Ty::Fn(
                 params,
                 Box::new(fill_field(ret, own, own)),
                 Box::new(fill_field(m, fill, own)),
+                effects.clone(),
             ))
         }
         _ => None,

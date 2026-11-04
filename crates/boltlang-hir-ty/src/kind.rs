@@ -309,6 +309,7 @@ impl<'db> KindInference<'db> {
                 for type_ref in types {
                     self.expect_type(&resolver, &sig.store, type_ref);
                 }
+                self.expect_effects(&resolver, &sig.store, &sig.effects);
                 self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
             }
             GenericDefId::Struct(id) => {
@@ -404,6 +405,19 @@ impl<'db> KindInference<'db> {
         self.unify(&kind, &K::Type);
     }
 
+    /// Every effect after a `does` is of kind `Effect`.
+    fn expect_effects(
+        &mut self,
+        resolver: &Resolver<'db>,
+        store: &ExpressionStore,
+        effects: &Option<Box<[TypeRefId]>>,
+    ) {
+        for &id in effects.iter().flatten() {
+            let kind = self.kind_of(resolver, store, id);
+            self.unify(&kind, &K::Effect);
+        }
+    }
+
     fn kind_of(&mut self, resolver: &Resolver<'db>, store: &ExpressionStore, id: TypeRefId) -> K {
         match &store[id] {
             // Not a type; reported where it's lowered.
@@ -416,6 +430,7 @@ impl<'db> KindInference<'db> {
                         TypeNs::Enum(e) => self.def_kind(GenericDefId::Enum(e)),
                         TypeNs::TypeAlias(a) => self.def_kind(GenericDefId::TypeAlias(a)),
                         TypeNs::Builtin(_) => K::Type,
+                        TypeNs::Nothing => K::Effect,
                         TypeNs::Effect(e) => self.def_kind(GenericDefId::Effect(e)),
                         TypeNs::Class(_) | TypeNs::Variant(_) => self.new_var(),
                     },
@@ -446,13 +461,14 @@ impl<'db> KindInference<'db> {
                 self.expect_type(resolver, store, *element);
                 K::Type
             }
-            TypeRef::Fn { params, ret_type, .. } => {
+            TypeRef::Fn { params, ret_type, effects, .. } => {
                 for &(_, ty) in params.iter() {
                     self.expect_type(resolver, store, ty);
                 }
                 if let Some(ret) = ret_type {
                     self.expect_type(resolver, store, *ret);
                 }
+                self.expect_effects(resolver, store, effects);
                 K::Type
             }
             TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),

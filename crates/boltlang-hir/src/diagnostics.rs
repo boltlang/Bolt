@@ -228,6 +228,13 @@ pub enum DiagnosticKind<'db> {
     CannotChange {
         ty: Ty<'db>,
     },
+    /// A call that does the effects `found`, where only `allowed` can be
+    /// done, like a call of `log` in a function with a return type and no
+    /// `does`.
+    Effects {
+        found: Ty<'db>,
+        allowed: Ty<'db>,
+    },
     /// `mut` or `imm` before something that isn't an array or a struct.
     NoMutability,
     /// An `imm` array or struct of type `ty` that holds a `mut` one, `inner`.
@@ -350,6 +357,12 @@ pub enum DiagnosticKind<'db> {
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
+
+    /// An effect in a row twice, with different arguments, like the second
+    /// `State` of `does State[i32] + State[String]`.
+    EffectTwice {
+        effect: Name,
+    },
 
     /// A `match` with values that match none of its arms, like `missing`,
     /// when one can be shown.
@@ -682,7 +695,7 @@ impl<'db> Collector<'db> {
             self.push(range, DiagnosticKind::BadTest { reason: BadTest::Generic });
         }
         if let Ok(scheme) = function_scheme(db, f)
-            && let Ty::Fn(_, ret, _) = &scheme.ty
+            && let Ty::Fn(_, ret, _, _) = &scheme.ty
             && !ret.is_unit()
             // One that never returns, like one that always panics, is fine:
             // its result is `!`, or, when inferred, any type.
@@ -1110,6 +1123,9 @@ impl<'db> Collector<'db> {
                 ),
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
+                LowerDiagnostic::EffectTwice { type_ref, effect } => {
+                    (*type_ref, DiagnosticKind::EffectTwice { effect: effect.clone() })
+                }
                 LowerDiagnostic::NoMutability(id) => (*id, DiagnosticKind::NoMutability),
                 LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
                 LowerDiagnostic::MutabilityAlone(id) => (*id, DiagnosticKind::MutabilityAlone),
@@ -1220,6 +1236,9 @@ impl<'db> Collector<'db> {
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
                         TypeError::CannotChange { origin, ty } => {
                             (origin, DiagnosticKind::CannotChange { ty })
+                        }
+                        TypeError::Effects { origin, found, allowed } => {
+                            (origin, DiagnosticKind::Effects { found, allowed })
                         }
                         TypeError::NotAtMost { origin, constraint } => {
                             if has_error(constraint.held.ty()) || has_error(&constraint.bound) {
@@ -1550,7 +1569,9 @@ fn with_hidden_mutability<'db>(
                 found = Some(match t.clone() {
                     Ty::Array(_, elem) => Ty::Array(Box::new(mutability.clone()), elem),
                     Ty::Adt(id, args, ms, _) => Ty::Adt(id, args, ms, Box::new(mutability.clone())),
-                    Ty::Fn(params, ret, _) => Ty::Fn(params, ret, Box::new(mutability.clone())),
+                    Ty::Fn(params, ret, _, effects) => {
+                        Ty::Fn(params, ret, Box::new(mutability.clone()), effects)
+                    }
                     t => t,
                 });
             }

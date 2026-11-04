@@ -72,6 +72,8 @@ pub enum TypeNs<'db> {
         index: u32,
     },
     Builtin(BuiltinType),
+    /// `Nothing`, the row without effects.
+    Nothing,
 }
 
 /// The functions a name refers to when it has several overloads (#275).
@@ -272,6 +274,9 @@ impl<'db> Resolver<'db> {
         let Some(def) = lookup(db, file, self.file, Namespace::Types, &segments.get(i)?.name)
         else {
             // `i32`, or `u8.MAX`, unless it's in another file, like `m.i32`.
+            if i == 0 && first.name.as_str() == "Nothing" {
+                return Some(TypeResolution { ty: TypeNs::Nothing, unresolved: rest(segments, 1) });
+            }
             let builtin = if i == 0 { BuiltinType::by_name(first.name.as_str()) } else { None };
             return builtin.map(|ty| TypeResolution {
                 ty: TypeNs::Builtin(ty),

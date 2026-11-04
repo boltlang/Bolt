@@ -117,6 +117,24 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// The row variables that nothing decided yet.
+    pub fn unbound_rows(&self) -> Vec<TyVar> {
+        (0..self.vars.len() as u32)
+            .map(TyVar)
+            .filter(|v| matches!(self.vars[v.0 as usize].state, VarState::Unbound(VarKind::Effect)))
+            .collect()
+    }
+
+    /// Make the rows that nothing decided empty: a function that nothing
+    /// says does something does nothing.
+    pub fn default_effect_vars(&mut self) {
+        for var in &mut self.vars {
+            if matches!(var.state, VarState::Unbound(VarKind::Effect)) {
+                var.state = VarState::Bound(Ty::nothing());
+            }
+        }
+    }
+
     /// Like [`Unifier::resolve`], but a number literal whose type only comes
     /// from defaulting is [`Ty::Number`], for type errors: the `1` of
     /// `let a: f64 = 1;` is `{integer}`, not `i32`.
@@ -238,10 +256,19 @@ impl<'db> Unifier<'db> {
                 self.unify(m, n)
             }
             (Ty::Mutability(x), Ty::Mutability(y)) if x == y => Ok(()),
-            (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) if xs.len() == ys.len() => {
+            (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) if xs.len() == ys.len() => {
                 self.unify_all(xs, ys)?;
                 self.unify(x, y)?;
-                self.unify(m, n)
+                self.unify(m, n)?;
+                self.unify(e, f)
+            }
+            // Rows whose effects are all known are equal when they have the
+            // same effects, with the same arguments. Rows are in the same
+            // order, so the effects can be compared one by one.
+            (Ty::Row(xs), Ty::Row(ys))
+                if xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect) =>
+            {
+                xs.iter().zip(ys).try_for_each(|(x, y)| self.unify_all(&x.args, &y.args))
             }
             (Ty::Builtin(x), Ty::Builtin(y)) if x == y => Ok(()),
             (Ty::Param(x), Ty::Param(y)) if x == y => Ok(()),
@@ -267,6 +294,8 @@ impl<'db> Unifier<'db> {
             // A parameter or bound variable in a mutability's place is a
             // mutability too: the checker only puts them there.
             VarKind::Mutability => matches!(ty, Ty::Mutability(_) | Ty::Param(_) | Ty::Bound(_)),
+            // The same for a row, which can also be the error type.
+            VarKind::Effect => matches!(ty, Ty::Row(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Error),
         };
         if !fits {
             return Err(UnifyError::Mismatch(Ty::Var(var), ty.clone()));

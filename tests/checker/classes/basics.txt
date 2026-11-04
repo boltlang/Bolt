@@ -402,7 +402,7 @@ apply(show, 1);
 apply(show, True);
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
-apply: forall a b. fn(fn(a) -> b, a) -> b
+apply: forall a b e. fn(fn(a) -> b does e, a) -> b does e
 let s: fn(i32) -> String
 apply(show, 1): String
 apply(show, True): String

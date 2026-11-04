@@ -11,10 +11,12 @@ use boltlang_hir_def::{
 };
 
 use crate::{
+    kind::{Kind, generic_param_kinds},
     lower::{
         ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty,
         impl_header, named_mutabilities, subst_params,
     },
+    rows::RowConstraint,
     solve::{
         AssocConstraint, AtMostConstraint, AtMostSource, Constraint, ConstraintSource,
         FieldConstraint, Held, Origin, Reason, Solver, normalize_assoc,
@@ -39,6 +41,12 @@ pub struct Scheme<'db> {
     /// What must be at most a mutability (#243), like `a ⊑ imm` for
     /// `fn wrap(x) = [x]`, which makes an `imm` array holding `x`.
     pub bounds: Box<[AtMostConstraint<'db>]>,
+    /// Which rows must be in which, like `Log ≲ e` for a function that logs
+    /// and calls a function it's given.
+    pub rows: Box<[RowConstraint<'db>]>,
+    /// The bound variables that are rows of effects, by index, which get
+    /// variables of kind `Effect` when the scheme is instantiated.
+    pub effect_vars: Box<[u32]>,
     pub ty: Ty<'db>,
     /// Where its constraints come from, so that an error about one can point
     /// there.
@@ -76,6 +84,8 @@ impl<'db> Scheme<'db> {
             fields: Box::new([]),
             assoc: Box::new([]),
             bounds: Box::new([]),
+            rows: Box::new([]),
+            effect_vars: Box::new([]),
             ty,
             sources: SchemeSources::default(),
         }
@@ -106,10 +116,23 @@ impl<'db> Scheme<'db> {
     /// The types it gives the parameters and bound variables are kept, by
     /// `origin`, for the code generator and the evaluator.
     pub fn instantiate(&self, solver: &mut Solver<'db>, origin: Origin<'db>) -> Ty<'db> {
-        let args: Vec<Ty<'db>> =
-            self.params.iter().map(|_| solver.new_var(VarKind::General)).collect();
+        let db = solver.db();
+        // A row gets a row variable, which is no effects if nothing decides
+        // it.
+        let kind_of =
+            |p: &GenericParamId<'db>| match generic_param_kinds(db, p.def).get(p.index as usize) {
+                Some(Kind::Effect) => VarKind::Effect,
+                _ => VarKind::General,
+            };
+        let args: Vec<Ty<'db>> = self.params.iter().map(|p| solver.new_var(kind_of(p))).collect();
         let params: HashMap<_, _> = self.params.iter().copied().zip(args.iter().cloned()).collect();
-        let bound: Vec<_> = (0..self.bound).map(|_| solver.new_var(VarKind::General)).collect();
+        let bound: Vec<_> = (0..self.bound)
+            .map(|i| {
+                let kind =
+                    if self.effect_vars.contains(&i) { VarKind::Effect } else { VarKind::General };
+                solver.new_var(kind)
+            })
+            .collect();
         solver.instantiations.push((origin, args.iter().chain(&bound).cloned().collect()));
         let subst = |t: &Ty<'db>| {
             t.fold(&mut |t| match t {
@@ -149,6 +172,10 @@ impl<'db> Scheme<'db> {
             let source = AtMostSource::Needed(constraint.clone());
             solver.add(Constraint::AtMost { constraint, source, origin });
         }
+        for row in self.rows.iter() {
+            let constraint = row.map(subst);
+            solver.add(Constraint::Row { constraint, origin });
+        }
         let ty = subst(&self.ty);
         solver.flatten_assoc(&ty, origin)
     }
@@ -171,8 +198,9 @@ impl<'db> Scheme<'db> {
         }
         // A mutability in a bound counts as a use of it, so that it gets a
         // name like `'m`.
-        let as_mutability =
-            |m: &Ty<'db>| Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()));
+        let as_mutability = |m: &Ty<'db>| {
+            Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()), Box::new(Ty::nothing()))
+        };
         let bound_tys: Vec<Ty<'db>> = self
             .bounds
             .iter()
@@ -185,6 +213,12 @@ impl<'db> Scheme<'db> {
             })
             .collect();
         tys.extend(bound_tys.iter());
+        // A row in a constraint counts as a use of it, so that it gets a
+        // name like `e`.
+        let as_row = |r: &Ty<'db>| Ty::func_does([], Ty::unit(), r.clone());
+        let row_tys: Vec<Ty<'db>> =
+            self.rows.iter().flat_map(|r| [as_row(&r.sub), as_row(&r.sup)]).collect();
+        tys.extend(row_tys.iter());
         let names = TyNames::new(db, &tys);
         let show = |t: &Ty<'db>| t.display_with(db, &names).to_string();
         let mut forall: Vec<String> = self
@@ -221,6 +255,13 @@ impl<'db> Scheme<'db> {
                 Held::Type(t) => show(t),
             };
             out.push_str(&format!("{held}: {} => ", names.mutability_name(db, &bound.bound)));
+        }
+        for row in self.rows.iter() {
+            out.push_str(&format!(
+                "{} ≲ {} => ",
+                names.row_name(db, &row.sub),
+                names.row_name(db, &row.sup)
+            ));
         }
         out.push_str(&show(&self.ty));
         out
@@ -450,7 +491,9 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         fields: Box::new([]),
         assoc: assoc.into(),
         bounds: bounds.into(),
-        ty: Ty::func(params, ret),
+        rows: Box::new([]),
+        effect_vars: Box::new([]),
+        ty: Ty::func_does(params, ret, sig.effects.clone().unwrap_or_else(Ty::nothing)),
         sources: SchemeSources {
             predicates: sources.into(),
             assoc: assoc_sources.into(),

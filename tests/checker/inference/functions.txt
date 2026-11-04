@@ -53,7 +53,7 @@ apply(inc, 1);
 g(True);
 --------------------------------------------------------------------------------
 inc: fn(i32) -> i32
-apply: forall a b. fn(fn(a) -> b, a) -> b
+apply: forall a b e. fn(fn(a) -> b does e, a) -> b does e
 let g: fn(i32) -> i32
 apply(inc, 1): i32
 g(True): i32
@@ -69,8 +69,8 @@ fn twice(f, x) = f(f(x));
 compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 });
 twice(fn (s: String) = s, "a");
 --------------------------------------------------------------------------------
-compose: forall a b c. 'm: 'o => 'n: 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
-twice: forall a. fn(fn(a) -> a, a) -> a
+compose: forall a b c e f g. 'm: 'o => 'n: 'o => e ≲ g => f ≲ g => fn('m fn(a) -> b does e, 'n fn(c) -> a does f) -> 'o fn(c) -> b does g
+twice: forall a e. fn(fn(a) -> a does e, a) -> a does e
 compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 }): fn(Bool) -> i32
 twice(fn (s: String) = s, "a"): String
 
@@ -149,7 +149,7 @@ apply(|b| !b, True);
 let k = |x: i32| x;
 k(True);
 --------------------------------------------------------------------------------
-apply: forall a b. fn(fn(a) -> b, a) -> b
+apply: forall a b e. fn(fn(a) -> b does e, a) -> b does e
 apply(fn (x) = x + 1, 2): i32
 apply(|b| !b, True): Bool
 let k: fn(i32) -> i32

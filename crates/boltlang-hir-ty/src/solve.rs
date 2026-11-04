@@ -21,6 +21,7 @@ use crate::{
         impl_assoc_ty, impl_header, implied_by, implied_equalities, struct_args, subst_params,
         with_superclasses,
     },
+    rows::RowConstraint,
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
@@ -234,6 +235,8 @@ pub enum Constraint<'db> {
     AtMost { constraint: AtMostConstraint<'db>, source: AtMostSource<'db>, origin: Origin<'db> },
     /// The type of `imm e` for the type of `e`.
     Imm { constraint: ImmConstraint<'db>, origin: Origin<'db> },
+    /// The effects of a row are in another: `sub ≲ sup`.
+    Row { constraint: RowConstraint<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -295,6 +298,13 @@ pub enum TypeError<'db> {
         ty: Ty<'db>,
         candidates: Vec<FunctionId<'db>>,
     },
+    /// Code does the effects `found`, but only `allowed` can be done there,
+    /// like a call of `log` in a function with a return type and no `does`.
+    Effects {
+        origin: Origin<'db>,
+        found: Ty<'db>,
+        allowed: Ty<'db>,
+    },
 }
 
 impl<'db> TypeError<'db> {
@@ -309,6 +319,7 @@ impl<'db> TypeError<'db> {
             | TypeError::NotAtMost { origin, .. }
             | TypeError::NoOverload { origin, .. }
             | TypeError::AmbiguousOverload { origin, .. }
+            | TypeError::Effects { origin, .. }
             | TypeError::TypeNeeded { origin } => origin,
         }
     }
@@ -329,6 +340,10 @@ impl<'db> TypeError<'db> {
                 *constraint = constraint.map(f)
             }
             TypeError::NotAtMost { constraint, .. } => *constraint = constraint.map(f),
+            TypeError::Effects { found, allowed, .. } => {
+                *found = f(found);
+                *allowed = f(allowed);
+            }
             TypeError::TypeNeeded { .. } => {}
         }
     }
@@ -356,6 +371,7 @@ pub struct Solver<'db> {
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
     pending_imm: Vec<(ImmConstraint<'db>, Origin<'db>)>,
+    pub(crate) pending_rows: Vec<(RowConstraint<'db>, Origin<'db>)>,
     /// The structs and enums that `imm` constraints were split into, with
     /// their types after `imm`, so that a type that holds itself, like a
     /// list, is split once.
@@ -392,12 +408,17 @@ impl<'db> Solver<'db> {
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
             pending_imm: Vec::new(),
+            pending_rows: Vec::new(),
             imm_split: Vec::new(),
             overload_choices: Vec::new(),
             chosen: Vec::new(),
             instantiations: Vec::new(),
             errors: Vec::new(),
         }
+    }
+
+    pub(crate) fn db(&self) -> &'db dyn Db {
+        self.db
     }
 
     pub fn new_var(&mut self, kind: VarKind) -> Ty<'db> {
@@ -501,7 +522,11 @@ impl<'db> Solver<'db> {
                         },
                         UnifyError::Occurs(_, ty) => TypeError::InfiniteType { origin, ty },
                     };
-                    self.errors.push(error);
+                    // The arguments of an effect can be compared more than
+                    // once, as its row is settled and then checked.
+                    if !self.errors.contains(&error) {
+                        self.errors.push(error);
+                    }
                 }
             }
             Constraint::Class { constraint, origin } => self.pending.push((constraint, origin)),
@@ -530,6 +555,11 @@ impl<'db> Solver<'db> {
             Constraint::Imm { constraint, origin } => {
                 if !self.solve_imm(&constraint, origin) {
                     self.pending_imm.push((constraint, origin));
+                }
+            }
+            Constraint::Row { constraint, origin } => {
+                if !self.solve_row(&constraint, origin) {
+                    self.pending_rows.push((constraint, origin));
                 }
             }
         }
@@ -761,7 +791,7 @@ impl<'db> Solver<'db> {
                     }
                     true
                 }
-                Ty::Fn(_, _, m) => {
+                Ty::Fn(_, _, m, _) => {
                     sub(self, Held::Mutability(*m), &bound);
                     true
                 }
@@ -817,11 +847,15 @@ impl<'db> Solver<'db> {
         match source {
             AtMostSource::Object(_) => {}
             AtMostSource::Closure(closure) => {
-                let Ty::Fn(params, ret, _) = closure else {
+                let Ty::Fn(params, ret, _, effects) = closure else {
                     unreachable!("a closure has a function type")
                 };
-                let mutable =
-                    Ty::Fn(params.clone(), ret.clone(), Box::new(Ty::Mutability(Mutability::Mut)));
+                let mutable = Ty::Fn(
+                    params.clone(),
+                    ret.clone(),
+                    Box::new(Ty::Mutability(Mutability::Mut)),
+                    effects.clone(),
+                );
                 let error = TypeError::Mismatch {
                     origin,
                     expected: self.unifier.resolve(closure),
@@ -1150,7 +1184,7 @@ impl<'db> Solver<'db> {
     /// count, so that an `imm [i32]` is closer to a `mut [i32]` than to a
     /// `Vec`. `None` when there's no such one.
     fn best_overload(&self, c: &OverloadConstraint<'db>) -> Option<FunctionId<'db>> {
-        let Ty::Fn(params, _, _) = self.unifier.shallow_resolve(&c.ty) else { return None };
+        let Ty::Fn(params, _, _, _) = self.unifier.shallow_resolve(&c.ty) else { return None };
         // The error type fits anything.
         let loose =
             |t: &Ty<'db>| t.fold(&mut |t| matches!(t, Ty::Mutability(_)).then_some(Ty::Error));
@@ -1158,7 +1192,7 @@ impl<'db> Solver<'db> {
             .all
             .iter()
             .filter_map(|(f, probe)| match probe {
-                Ty::Fn(own, _, _) if own.len() == params.len() => {
+                Ty::Fn(own, _, _, _) if own.len() == params.len() => {
                     let pairs = || own.iter().zip(params.iter());
                     let strict = pairs().filter(|(a, b)| self.fits(a, b)).count();
                     let loose = pairs()
@@ -1235,6 +1269,13 @@ impl<'db> Solver<'db> {
                     progress = true;
                 } else {
                     self.pending_imm.push((constraint, origin));
+                }
+            }
+            for (constraint, origin) in std::mem::take(&mut self.pending_rows) {
+                if self.solve_row(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_rows.push((constraint, origin));
                 }
             }
             for (constraint, origin) in std::mem::take(&mut self.pending) {
@@ -1318,6 +1359,8 @@ impl<'db> Solver<'db> {
         self.settle_copies();
         // A body checked on its own can't add to its function's type.
         self.settle_at_most(&[], false);
+        self.finish_rows();
+        self.default_free_rows(&[]);
         self.keep_pending_assoc();
         for (constraint, origin) in self.take_pending() {
             // Unknown because of an error, which is reported already.
@@ -1336,6 +1379,7 @@ impl<'db> Solver<'db> {
         // After resolving the errors, so that an array whose mutability
         // nothing decided is shown as `[T]` in them, not as `imm [T]`.
         self.unifier.default_mutability_vars();
+        self.unifier.default_effect_vars();
         // After resolving the errors, which would otherwise be left out for
         // having the error type in them.
         self.unifier.error_unknowns();
@@ -1491,8 +1535,16 @@ fn match_ty<'db>(
         }
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
-        (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
-            match_all(xs, ys, subst).and(|| match_ty(x, y, subst)).and(|| match_ty(m, n, subst))
+        (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => match_all(xs, ys, subst)
+            .and(|| match_ty(x, y, subst))
+            .and(|| match_ty(m, n, subst))
+            .and(|| match_ty(e, f, subst)),
+        (Ty::Row(xs), Ty::Row(ys))
+            if xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect) =>
+        {
+            xs.iter()
+                .zip(ys)
+                .fold(Match::Yes, |m, (x, y)| m.and(|| match_all(&x.args, &y.args, subst)))
         }
         (x, y) if x == y => Match::Yes,
         _ => Match::No,

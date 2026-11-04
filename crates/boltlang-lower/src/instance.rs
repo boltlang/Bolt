@@ -66,6 +66,7 @@ impl<'db> Instance<'db> {
                     muts += 1;
                     Slot::Mut(MonoMut::Param(muts - 1))
                 }
+                Kind::Row => Slot::Row,
             })
             .collect()
     }
@@ -189,11 +190,25 @@ impl<'db> MonoConstraint<'db> {
     }
 }
 
-/// Whether a parameter of a scheme is a type or a mutability.
+/// Whether a parameter of a scheme is a type, a mutability, or a row of
+/// effects. An instance is only made for each type: it doesn't keep rows,
+/// which only the checker needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, salsa::SalsaValue)]
 pub enum Kind {
     Ty,
     Mut,
+    Row,
+}
+
+/// The kind of the parameter `p` of a scheme.
+pub(crate) fn param_kind<'db>(db: &'db dyn Db, p: GenericParamId<'db>) -> Kind {
+    if is_hidden_param(db, p) {
+        return Kind::Mut;
+    }
+    match boltlang_hir_ty::kind::generic_param_kinds(db, p.def).get(p.index as usize) {
+        Some(boltlang_hir_ty::kind::Kind::Effect) => Kind::Row,
+        _ => Kind::Ty,
+    }
 }
 
 /// What a body is generic over: the parameters of its scheme, as for a
@@ -231,13 +246,17 @@ pub fn generics<'db>(
     Ok(match body.def(db) {
         DefWithBody::Function(f) => {
             let scheme = function_scheme(db, f).map_err(|_| GenericsError::Cycle)?;
-            let mut kinds: Vec<Kind> = scheme
-                .params
-                .iter()
-                .map(|&p| if is_hidden_param(db, p) { Kind::Mut } else { Kind::Ty })
-                .collect();
+            let mut kinds: Vec<Kind> = scheme.params.iter().map(|&p| param_kind(db, p)).collect();
             let bound_muts = bound_mutabilities(&scheme.ty, scheme.bound);
-            kinds.extend(bound_muts.iter().map(|&m| if m { Kind::Mut } else { Kind::Ty }));
+            kinds.extend(bound_muts.iter().enumerate().map(|(i, &m)| {
+                if scheme.effect_vars.contains(&(i as u32)) {
+                    Kind::Row
+                } else if m {
+                    Kind::Mut
+                } else {
+                    Kind::Ty
+                }
+            }));
             Generics {
                 params: scheme.params.clone(),
                 kinds: kinds.into(),
@@ -260,7 +279,7 @@ fn const_generics<'db>(db: &'db dyn Db, c: ConstId<'db>) -> Generics<'db> {
         _ => return Generics::none(ty),
     };
     let params = generic_param_ids(db, [def]);
-    let kinds = params.iter().map(|&p| if is_hidden_param(db, p) { Kind::Mut } else { Kind::Ty });
+    let kinds = params.iter().map(|&p| param_kind(db, p));
     let predicates: Box<[ClassConstraint<'db>]> = match def {
         GenericDefId::Class(class) => {
             Box::new([ClassConstraint { class, args: identity_args(db, def) }])
@@ -291,7 +310,7 @@ fn bound_mutabilities(ty: &Ty<'_>, bound: u32) -> Vec<bool> {
                 mark(own, out);
                 walk(elem, out);
             }
-            Ty::Fn(params, ret, own) => {
+            Ty::Fn(params, ret, own, _) => {
                 mark(own, out);
                 params.iter().for_each(|t| walk(t, out));
                 walk(ret, out);

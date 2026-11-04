@@ -404,14 +404,14 @@ impl<'a, 'db> Cx<'a, 'db> {
             .iter()
             .filter_map(|s| match s {
                 Slot::Ty(t) => Some(t.clone()),
-                Slot::Mut(_) => None,
+                Slot::Mut(_) | Slot::Row => None,
             })
             .collect();
         let mutabilities = actual
             .iter()
             .filter_map(|s| match s {
                 Slot::Mut(m) => Some(*m),
-                Slot::Ty(_) => None,
+                Slot::Ty(_) | Slot::Row => None,
             })
             .collect();
         let instance = Instance::new(db, body, canonical(&args), self.instance.root(db));
@@ -468,7 +468,7 @@ impl<'a, 'db> Cx<'a, 'db> {
             .into_iter()
             .filter_map(|s| match s {
                 Slot::Ty(t) => Some(t),
-                Slot::Mut(_) => None,
+                Slot::Mut(_) | Slot::Row => None,
             })
             .collect();
         Ok(Dict::Impl { imp, args, subs: subs.into() })
@@ -652,7 +652,7 @@ fn fits<'db>(params: &[GenericParamId<'db>], pattern: &Ty<'db>, ty: &MonoTy<'db>
         (Ty::Adt(a, xs, ..), MonoTy::Adt(b, ys, ..)) => a == b && all(xs, ys),
         (Ty::Tuple(xs), MonoTy::Tuple(ys)) => all(xs, ys),
         (Ty::Array(_, x), MonoTy::Array(_, y)) => fits(params, x, y),
-        (Ty::Fn(xs, x, _), MonoTy::Fn(ys, y, _)) => all(xs, ys) && fits(params, x, y),
+        (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, y, _)) => all(xs, ys) && fits(params, x, y),
         (Ty::Never, MonoTy::Never) => true,
         _ => false,
     }
@@ -708,7 +708,7 @@ pub(crate) fn bind<'db>(
             bind_mut(m, *n, found);
             bind(params, x, y, found);
         }
-        (Ty::Fn(xs, x, m), MonoTy::Fn(ys, y, n)) => {
+        (Ty::Fn(xs, x, m, _), MonoTy::Fn(ys, y, n)) => {
             all(xs, ys, found);
             bind(params, x, y, found);
             bind_mut(m, *n, found);
@@ -730,6 +730,7 @@ fn fill<'db>(generics: &Generics<'db>, found: Vec<Option<Slot<'db>>>) -> Vec<Slo
             (Kind::Mut, Some(s @ Slot::Mut(_))) => s,
             (Kind::Ty, _) => Slot::Ty(MonoTy::unit()),
             (Kind::Mut, _) => Slot::Mut(MonoMut::Imm),
+            (Kind::Row, _) => Slot::Row,
         })
         .collect()
 }
@@ -740,10 +741,7 @@ fn fill_slots<'db>(
     params: &[GenericParamId<'db>],
     found: impl IntoIterator<Item = Option<Slot<'db>>>,
 ) -> Vec<Slot<'db>> {
-    let kinds: Box<[Kind]> = params
-        .iter()
-        .map(|&p| if boltlang_hir_ty::ty::is_hidden_param(db, p) { Kind::Mut } else { Kind::Ty })
-        .collect();
+    let kinds: Box<[Kind]> = params.iter().map(|&p| crate::instance::param_kind(db, p)).collect();
     let generics =
         Generics { params: params.into(), kinds, predicates: Box::new([]), ty: Ty::unit() };
     let mut found: Vec<Option<Slot<'db>>> = found.into_iter().collect();
@@ -756,7 +754,7 @@ fn fill_slots<'db>(
             .iter()
             .map(|k| match k {
                 Kind::Ty => types.next().flatten(),
-                Kind::Mut => None,
+                Kind::Mut | Kind::Row => None,
             })
             .collect();
     }

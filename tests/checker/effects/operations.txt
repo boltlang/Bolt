@@ -6,8 +6,10 @@ effect Log { fn log(message: String); }
 fn greet(name: String) { log(name); }
 greet("Bolt");
 --------------------------------------------------------------------------------
-greet: fn(String) -> ()
+greet: fn(String) -> () does Log
 greet("Bolt"): ()
+--------------------------------------------------------------------------------
+error at `greet("Bolt")`: does Log, only Nothing allowed
 
 ================================================================================
 An operation checks its arguments
@@ -19,6 +21,7 @@ log(1);
 --------------------------------------------------------------------------------
 log(1): ()
 --------------------------------------------------------------------------------
+error at `log(1)`: does Log, only Nothing allowed
 error at `1`: expected String, found {integer}
 
 ================================================================================
@@ -28,7 +31,7 @@ An operation of an effect with parameters
 effect State[S] { fn get() -> S; fn set(value: S); }
 fn bump() { set(get() + 1); }
 --------------------------------------------------------------------------------
-bump: fn() -> ()
+bump: fn() -> () does State[i32]
 
 ================================================================================
 An operation through its effect
@@ -37,7 +40,7 @@ An operation through its effect
 effect State[S] { fn get() -> S; fn set(value: S); }
 fn reset() { State.set(0); }
 --------------------------------------------------------------------------------
-reset: fn() -> ()
+reset: fn() -> () does State[i32]
 
 ================================================================================
 An operation with type parameters of its own
@@ -47,6 +50,8 @@ effect Raise[E] { fn raise[T](error: E) -> T; }
 fn divide(a: i32, b: i32) -> i32 = if b == 0 { raise("division by zero") } else { a / b };
 --------------------------------------------------------------------------------
 divide: fn(i32, i32) -> i32
+--------------------------------------------------------------------------------
+error at `raise("division by zero")`: does Raise[String], only Nothing allowed
 
 ================================================================================
 An effect isn't a type
