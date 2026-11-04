@@ -166,7 +166,8 @@ fn download(url: String) -> Bytes does Async {
 The `defer`s of a block run in the opposite order of their statements, so
 what was opened last is closed first. `defer` keeps the cleanup next to
 what it cleans up, which a `finally` doesn't, and Bolt has no `try` blocks
-for one anyway. Go, Swift and Zig have `defer` too.
+for one anyway. Go, Swift and Zig have `defer` too. It's tracked in
+[#348](https://github.com/boltlang/bolt/issues/348).
 
 ### `use`
 
@@ -194,19 +195,20 @@ every value has one owner. Bolt values can be shared, `let b = a` gives
 the same connection a second name, so the end of `a`'s block can't know
 that nobody uses it anymore. With `use`, the programmer says so. The
 language server can warn about a value of a `Close` type that's bound with
-`let`, as C#'s tools do for `IDisposable`.
+`let`, as C#'s tools do for `IDisposable`. It's tracked in
+[#349](https://github.com/boltlang/bolt/issues/349).
 
 ### Still open
 
-- **Catching a cancel.** Code that could catch "you're cancelled" could
+- **Catching a cancel** ([#351](https://github.com/boltlang/bolt/issues/351)). Code that could catch "you're cancelled" could
   refuse to stop. Most designs let code see a cancel but not stop it.
-- **Waiting in cleanup.** Closing a connection politely may need a network
+- **Waiting in cleanup** ([#352](https://github.com/boltlang/bolt/issues/352)). Closing a connection politely may need a network
   call, so a `defer` may want to wait, and then it can hang. C# has a
   separate `IAsyncDisposable` for this. Bolt could allow waiting in a
   `defer`, but with a time limit.
-- **Blocks that can't be cancelled,** for steps that must finish together
+- **Blocks that can't be cancelled** ([#353](https://github.com/boltlang/bolt/issues/353)), for steps that must finish together
   even though they wait, like a database commit.
-- **Conduit.** Unwinding needs a way to resume a continuation with an
+- **Conduit** ([#350](https://github.com/boltlang/bolt/issues/350)). Unwinding needs a way to resume a continuation with an
   unwind instead of values, which OCaml 5 calls `discontinue`. Conduit only
   has `resume` so far. Wasm stack switching has `resume_throw`, which does
   this.
@@ -226,8 +228,12 @@ wait for a promise of JavaScript, which is enough for `suspend` around
 
 ## The keywords
 
-The syntax reserves `async` and `await`. This design doesn't need them, so
-they can be freed, or `await` can stay as another name for `wait`.
+This design doesn't need `async` and `await`, so they'll be dropped as
+keywords and can be names again, and so will `yield`
+([#263](https://github.com/boltlang/bolt/issues/263)). The parser can
+still recognize `async fn` and `await x`, and say what to write instead:
+`does Async` after the parameters or the result type, and the call without
+`await`.
 
 ## Seeing where code waits
 
