@@ -6,9 +6,11 @@ description: A design for effect types in Bolt, with does and +, effects with pa
 
 # Effects (design)
 
-:::warning[Not implemented]
-This page is a design. **Nothing on it is implemented** yet. Algebraic
-effects are tracked in [#40](https://github.com/boltlang/bolt/issues/40).
+:::warning[Mostly not implemented]
+This page is a design. **Only the syntax is implemented**: `effect`
+declarations, `does` and `effect` arms parse, but the compiler ignores them
+after that. Algebraic effects are tracked in
+[#40](https://github.com/boltlang/bolt/issues/40).
 :::
 
 An *effect* is something a function can do besides returning a value:
