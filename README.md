@@ -14,11 +14,16 @@
 [Try it out on our playground!](https://boltlang.net/)
 
 ```rust
-fn fac(n: i32) -> i32 {
-    match n {
-      0 | 1 => 1
-      k => k * fac(k-1)
-    }
+effect Yield { fn yield(value: i32); }
+
+fn naturals() does Yield {
+  let mut n = 0;
+  loop { yield(n); n += 1; }
+}
+
+match naturals() {
+  () => (),
+  effect yield(n), k => if n < 5 { print(show(n)); resume(k, ()) } else { () },
 }
 ```
 
