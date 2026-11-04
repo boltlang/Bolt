@@ -562,13 +562,6 @@ deferred constraints. A scheme keeps the containment constraints left
 about its rows. Instances don't keep rows: monomorphization skips row
 parameters, since only the checker needs them.
 
-The [row types post](https://thunderseethe.dev/posts/row-types/) on
-thunderseethe.dev implements Rose's combination for records. Its solver
-has bugs to avoid here: combining two known rows doesn't reject a label in
-both, taking a row out of another doesn't check that it's in it, and waiting
-constraints are found by their variable as written rather than the one it
-was unified with, so some are never solved.
-
 ## Inferring effects
 
 A body's effects are inferred like its types. The body starts with a fresh
