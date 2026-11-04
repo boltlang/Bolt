@@ -33,7 +33,7 @@ let n: i32
 
 ================================================================================
 Imm of a struct gives its type arguments what imm makes of its fields
-:prelude
+:test-prelude
 ================================================================================
 struct Box[T] { item: T }
 struct Handler[T] { f: imm fn(T) -> () }
@@ -64,7 +64,7 @@ let ys: imm [i32]
 ================================================================================
 An imm copy can't be changed
 :error
-:prelude
+:test-prelude
 ================================================================================
 let xs = mut [1];
 let ys = imm xs;
@@ -79,7 +79,7 @@ error at `ys`: can't change imm [i32]
 ================================================================================
 A closure that changes something can't be imm
 :error
-:prelude
+:test-prelude
 ================================================================================
 let xs = mut [0];
 let f = imm (|| { xs[0] = 1; });

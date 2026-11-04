@@ -95,7 +95,7 @@ impl C[i32] { }
 
 ================================================================================
 Comparing closures says there is no instance
-:prelude
+:test-prelude
 ================================================================================
 fn same(a, b) = a == b;
               //^^^^^^ label: needed by this use in `same`

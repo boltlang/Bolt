@@ -1,6 +1,6 @@
 ================================================================================
 Polymorphic recursion is erased
-:prelude
+:test-prelude
 ================================================================================
 enum Nested[A] { Flat(A), Nest(Nested[(A, A)]) }
 fn depth[A](n: Nested[A]) -> i32 = match n {
@@ -18,7 +18,7 @@ erased depth
 
 ================================================================================
 Erased code calls class methods through dictionaries
-:prelude
+:test-prelude
 ================================================================================
 // The classes of a function that's erased come from dictionaries, which a
 // caller builds from impls.
@@ -47,7 +47,7 @@ erased shn
 
 ================================================================================
 Erased types keep their own dictionaries
-:prelude
+:test-prelude
 ================================================================================
 class Sh[T] { fn sh(x: T) -> i32; }
 impl Sh[i32] { fn sh(x) = 1; }

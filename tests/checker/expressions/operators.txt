@@ -329,7 +329,7 @@ error at `P { x: 1 } == P { x: 2 }`: unresolved
 
 ================================================================================
 Operators on structs call the functions of the prelude
-:prelude
+:test-prelude
 ================================================================================
 struct Money { cents: i32 }
 impl Add[Money] { type Output = Money; fn add(a, b) = Money { cents: a.cents + b.cents }; }
@@ -347,7 +347,7 @@ twice: forall T. Add[T] => fn(T) -> T.Output
 ================================================================================
 An operator on a struct needs an impl
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Point { x: i32 }
 fn f(p: Point) = p * p;

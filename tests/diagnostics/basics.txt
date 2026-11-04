@@ -55,7 +55,7 @@ fn never_returns() { loop {} }
 
 ================================================================================
 Matches that miss values and arms never taken
-:prelude
+:test-prelude
 ================================================================================
 enum Shape { Circle(i32), Dot }
 fn f(s: Shape) -> i32 = match s { Shape.Circle(r) => r };
