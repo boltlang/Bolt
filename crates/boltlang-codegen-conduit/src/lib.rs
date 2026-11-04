@@ -39,7 +39,7 @@ use boltlang_base_db::{Db, File, source_text};
 use boltlang_hir_def::{
     body::{DefWithBody, body_with_source_map},
     hir::ExprId,
-    ids::FunctionId,
+    ids::{FunctionId, ItemContainerId},
 };
 use boltlang_hir_ty::builtin::Builtin;
 use boltlang_lower::{
@@ -173,6 +173,19 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             at: None,
             kind: ErrorKind::unsupported("a function whose types are erased"),
         });
+    }
+    // Operations have no body: what they do is up to a handler, and there are
+    // no handlers yet.
+    for iu in &p.instances {
+        if let DefWithBody::Function(f) = iu.instance.body(db).def(db)
+            && let ItemContainerId::Effect(_) = f.container(db)
+        {
+            errors.push(Error {
+                instance: iu.instance.display(db).to_string(),
+                at: None,
+                kind: ErrorKind::unsupported("calling an operation of an effect"),
+            });
+        }
     }
     if !errors.is_empty() {
         return Err(errors);

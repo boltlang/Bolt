@@ -1,0 +1,8 @@
+================================================================================
+Operations need handlers, which aren't there yet
+:error
+================================================================================
+effect Log { fn log(x: i32); }
+log(1);
+--------------------------------------------------------------------------------
+error in Log.log: calling an operation of an effect isn't supported yet
