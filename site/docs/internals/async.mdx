@@ -9,7 +9,8 @@ description: A design for code that waits, as an Async effect instead of async a
 :::warning[Not implemented]
 This page is a design sketch. **Nothing on it is implemented**: there are no
 effects in Bolt yet, and `async` and `await` are reserved words without a
-meaning. The syntax below is a placeholder and will change.
+meaning. The syntax of effect types is that of the
+[effects design](./effects.mdx).
 :::
 
 Code that waits, for a network request or a timer, is usually marked with
@@ -23,9 +24,9 @@ effect. The [reactive UI design](./reactive.mdx) builds on this.
 A function that waits says so in its type, and returns its result directly:
 
 ```bolt
-fn fetch(url: str) -> Result[Response, HttpError] / { Async };
+fn fetch(url: str) -> Result[Response, HttpError] does Async;
 
-fn is_up(url: str) -> bool / { Async } = match fetch(url) {
+fn is_up(url: str) -> bool does Async = match fetch(url) {
     Ok(_) => true,
     Err(_) => false,
 };
@@ -42,11 +43,11 @@ effect Async {
     // Stop until `start` calls its callback with a value, then go on with it.
     fn suspend[T](start: fn(fn(T) -> ()) -> ()) -> T;
     // Run `task` next to the code that calls spawn.
-    fn spawn[T](task: fn() -> T / { Async }) -> Task[T];
+    fn spawn[T](task: fn() -> T does Async) -> Task[T];
 }
 
 // Wait until a task is done, and get its result.
-fn wait[T](task: Task[T]) -> T / { Async };
+fn wait[T](task: Task[T]) -> T does Async;
 ```
 
 `suspend` connects Bolt to the outside world: `fetch` calls the `fetch` of
@@ -61,14 +62,14 @@ polymorphism, one `map` is enough: the effects of its callback become its
 own.
 
 ```bolt
-fn map[A, B, E](xs: [A], f: fn(A) -> B / E) -> [B] / E;
+fn map[A, B, E](xs: [A], f: fn(A) -> B does E) -> [B] does E;
 
 map([1, 2, 3], |x| x * 2);   // no effects
-map(urls, is_up);            // / { Async }
+map(urls, is_up);            // does Async
 ```
 
-Effect rows are like the rows of extensible records (`{ name: str, .. }`),
-so the type checker may be able to reuse what it does for those.
+An effect variable like `E` stands for a whole row of effects; the
+[effects design](./effects.mdx#effect-variables) has the details.
 
 ## Running things at the same time
 
@@ -82,7 +83,7 @@ let b = fetch(y);   // and only then asks for y
 To ask for both at once, `spawn` one of them, or use a function built on it:
 
 ```bolt
-fn both[A, B](a: fn() -> A / { Async }, b: fn() -> B / { Async }) -> (A, B) / { Async } {
+fn both[A, B](a: fn() -> A does Async, b: fn() -> B does Async) -> (A, B) does Async {
     let task = spawn(a);
     let result = b();
     (wait(task), result)

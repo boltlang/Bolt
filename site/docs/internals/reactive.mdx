@@ -9,7 +9,8 @@ description: A design for a React-like UI framework in Bolt, built on algebraic 
 :::warning[Not implemented]
 This page is a design sketch. **Nothing on it is implemented**: there's no
 reactive state, no markup syntax, no `html` package and no effects in Bolt
-yet. The syntax below is a placeholder and will change.
+yet. The markup syntax below is a placeholder and will change. Effect types
+are written as in the [effects design](./effects.mdx).
 :::
 
 This section outlines a React-like framework for Bolt. This page writes down
@@ -45,7 +46,7 @@ effect Reactive {
     fn read[T](s: Signal[T]) -> T;
 }
 
-fn app() -> Html / { Reactive, Async } {
+fn app() -> Html does Reactive + Async {
     let mut user = None;   // state, see below: let user = state(<key>, None)
     match user { ... }     // match read(user) { ... }
 }
@@ -75,7 +76,7 @@ bindings in its markup rerun, so the compiler can tell from one function
 body which variables are state:
 
 ```bolt
-fn counter() -> Html / { Reactive } {
+fn counter() -> Html does Reactive {
     let mut count = 0;          // written later, by on_click: state
     let doubled = count * 2;    // reads state: derived
     let mut total = 0;          // only used while drawing: a plain variable
@@ -258,7 +259,7 @@ import "html" (Html)
 
 enum Remote[T, E] { Loading, Failed(E), Done(T) }
 
-fn app() -> Html / { Reactive } {
+fn app() -> Html does Reactive {
     let mut user = None;
     match user {
         None => <LoginForm on_login={|u| { user = Some(u); }} />,
@@ -266,9 +267,9 @@ fn app() -> Html / { Reactive } {
     }
 }
 
-fn login_form(on_login: fn(User) -> ()) -> Html / { Reactive } {
+fn login_form(on_login: fn(User) -> ()) -> Html does Reactive {
     let mut failed = false;
-    // fetch waits, so the closure is inferred to be fn() -> () / { Async }.
+    // fetch waits, so the closure is inferred to be fn() -> () does Async.
     // That's what on_click accepts: the page runs it as a task of its own.
     let submit = || match fetch("/api/login") {
         Ok(data) => on_login({ username = data.username }),

@@ -1,0 +1,294 @@
+---
+sidebar_position: 1.5
+title: Effects (design)
+description: A design for effect types in Bolt, with does and +, effects with parameters, and how their kinds are inferred. Nothing of it is implemented.
+---
+
+# Effects (design)
+
+:::warning[Not implemented]
+This page is a design. **Nothing on it is implemented** yet. Algebraic
+effects are tracked in [#40](https://github.com/boltlang/bolt/issues/40).
+:::
+
+An *effect* is something a function can do besides returning a value:
+waiting, failing, reading some state, logging. A function's type says which
+effects it can have, after `does`:
+
+```bolt
+fn fetch(url: String) -> Response does Async;
+fn crawl(url: String) -> () does Async + Log;
+```
+
+The [async](./async.mdx) and [reactive UI](./reactive.mdx) designs build on
+this page.
+
+## Declaring an effect
+
+An effect is declared with its *operations*, the functions that perform it:
+
+```bolt
+effect Log {
+    fn log(message: String);
+}
+
+effect State[S] {
+    fn get() -> S;
+    fn set(value: S);
+}
+```
+
+An operation is called like any other function. Calling it gives the caller
+the effect: a function that calls `log` has `Log` in its type. A *handler*
+decides what an operation does, and takes the effect out of the type of the
+code it runs. The syntax of handlers is for another page.
+
+## Writing effects
+
+Effects come after the result type, after `does`, joined with `+`:
+
+```bolt
+fn crawl(url: String) -> () does Async + Log { … }
+fn count(xs: [String]) -> i32 does State[i32] = …;
+fn total(xs: [i32]) -> i32 = …;
+```
+
+- A function that has no effects writes nothing.
+- The order doesn't matter: `Async + Log` and `Log + Async` are the same.
+- `does` comes before a body, `=` and `where`:
+  `fn f[T](x: T) -> T does Log where Show[T] = …`.
+- In a function type, `does` is part of the type:
+  `f: fn(A) -> B does Log, n: i32`. It belongs to the nearest `fn`, so
+  `fn(A) -> fn(B) -> C does Log` is a function that returns a function with
+  `Log`.
+
+The effects after `does` are a *row*. `+` was chosen over a list in
+delimiters because there's nothing to close, so it can't be mixed up with a
+body (`does { Async } { … }`) or the `,` between parameters. It also reads
+like the bounds that Bolt already joins with `+`.
+
+## Effects with parameters
+
+An effect can have parameters, like `State[S]` above. Its arguments are
+fixed for the whole row: every `get()` of a `State[i32]` returns an `i32`.
+
+An operation can have parameters of its own as well. Each call picks its own
+arguments, and the effect doesn't need a parameter for them:
+
+```bolt
+effect Raise[E] {
+    fn raise[T](error: E) -> T;
+}
+
+effect Async {
+    fn suspend[T](start: fn(fn(T) -> ()) -> ()) -> T;
+}
+```
+
+`raise` can stand where any type is expected, because it never returns, and
+every `suspend` waits for a value of a different type.
+
+Parameters can be types, effects and mutabilities. Mutability parameters
+work as they do for structs.
+
+## Effect variables
+
+A function that takes a function as a parameter often has the effects of
+that function. An *effect variable* says so:
+
+```bolt
+fn map[A, B, E](xs: [A], f: fn(A) -> B does E) -> [B] does E;
+
+map([1, 2, 3], |x| x * 2);   // E is empty: no effects
+map(urls, fetch);            // E is Async
+```
+
+So there's one `map` for every function, whatever it does. An effect
+variable is one more term in a row:
+
+```bolt
+fn retry[T, E](times: i32, f: fn() -> T does E) -> T does Log + E;
+```
+
+`retry` has the effects of `f` and `Log` too. Nothing marks `E` as an effect
+variable: it's one because of where it's used, by the kind inference below.
+
+A row has at most one effect variable. `does E + F` is an error, because
+there's no single way to split a row between two variables, and inference
+would have to guess. A function that needs both writes one variable, and its
+callers pass functions with the same effects.
+
+## No effect twice
+
+An effect can be in a row only once, even with different arguments:
+
+```bolt
+fn f() does State[i32] + State[String];
+//     error: `State` is in this row twice
+```
+
+Some languages allow this, like Koka, where the innermost handler of an
+effect wins and `mask` skips it. That's flexible, but hard to explain, and it
+makes inference guess which of the two a call means. So it's an error for
+now. Allowing it later won't break code that type-checks today. Code that
+needs two states can declare a second effect.
+
+The rule holds for effect variables too. In `does State[i32] + E`, `E` can't
+contain `State`. A call that would put a second `State` in the row, like
+passing a function with `State[String]` for `E`, is an error at the call.
+
+## Kind inference
+
+Effects bring a new kind. The [kinds](./type-checking/kinds.mdx) are now:
+
+$$
+\kappa ::= \mathsf{Type} \mid \mathsf{Effect} \mid \kappa_1 \to \kappa_2
+$$
+
+$\mathsf{Effect}$ is the kind of rows. A single effect is a row of one, so
+`Log`, `State[i32]` and `Async + Log` are all of kind $\mathsf{Effect}$.
+`State` is of kind $\mathsf{Type} \to \mathsf{Effect}$, so `State` alone
+isn't a row, as `Option` alone isn't a type. Koka has two kinds here, one
+for single effects and one for rows. With one, an effect variable can stand
+for any row, which is what `map` needs, and there's less to learn.
+
+Kinds are still never written. Inference gets two new equations, next to
+those for types:
+
+1. Every term of a row after `does` is of kind $\mathsf{Effect}$.
+2. `effect T[a_1, …, a_n]` is of kind
+   $\kappa_{a_1} \to \dots \to \kappa_{a_n} \to \mathsf{Effect}$,
+   where the $\kappa_{a_i}$ come from the operations.
+
+The rest is unchanged: an application $T[\tau_1, \dots, \tau_n]$ gives
+$\kappa_T = \kappa_{\tau_1} \to \dots \to \kappa_{\tau_n} \to \beta$, a
+parameter or field type is of kind $\mathsf{Type}$, and the equations are
+solved by unification.
+
+An effect declaration is a group of its own, with its operations, like a
+class with its methods. So the kind of `State`'s `S` comes from the types of
+`get` and `set`.
+
+For the `map` above:
+
+| Parameter | Used as             | Kind                 |
+| --------- | ------------------- | -------------------- |
+| `A`       | `[A]`, `fn(A)`      | $\mathsf{Type}$      |
+| `B`       | `-> B`, `[B]`       | $\mathsf{Type}$      |
+| `E`       | `does E`            | $\mathsf{Effect}$    |
+
+A parameter of an effect can be a row too:
+
+```bolt
+effect Spawn[E] {
+    fn spawn[T](task: fn() -> T does E) -> Task[T];
+}
+```
+
+`E` is of kind $\mathsf{Effect}$, so `Spawn` is of kind
+$\mathsf{Effect} \to \mathsf{Effect}$, and `Spawn[Async + Log]` is a row.
+
+### Defaulting
+
+A kind variable that nothing decided becomes $\mathsf{Type}$, as before.
+An effect variable is always used after a `does`, so its kind is always
+decided, and it's never defaulted. That holds for the parameters of types
+and classes as well:
+
+```bolt
+struct Button[E] { on_click: fn() -> () does E }
+```
+
+`E` is of kind $\mathsf{Effect}$ from its use, so `Button[Async]` is a
+button whose click can wait.
+
+### Errors
+
+Kind errors are reported like they are now:
+
+- `fn f(x: Log)` expects a type and finds an effect: "expected a type of
+  kind `Type`, found `Log` of kind `Effect`" (`E0216`).
+- `fn f() does i32` expects an effect and finds a type: "expected a type of
+  kind `Effect`, found `i32` of kind `Type`".
+- `fn f() does State` misses an argument, like `Option` alone: "expected 1
+  type argument, found 0".
+- A parameter used both ways, like `E` in `fn f[E](x: E) does E`, takes the
+  kind of its first use, and lowering reports the second.
+
+### Applications with an unknown head
+
+Kind inference allows a parameter of kind
+$\mathsf{Type} \to \mathsf{Effect}$, like the `H` in:
+
+```bolt
+fn run[H, T](f: fn() -> T does H[T]) -> T;
+```
+
+But a row is unified by the names of its effects (see below), and `H[T]`
+has no name until `H` is known. So for now, every effect in a row has to be
+a known effect or an effect variable, and `H[T]` in a row is an error.
+
+## Unifying rows
+
+A row is a set of effects keyed by their name, plus at most one effect
+variable at the end, its *tail*: `State[?a] + Log + ?e`. Since no effect is
+in a row twice, unifying two rows is like unifying two records with their
+fields keyed by name [Rémy 1989, Gaster & Jones 1996]:
+
+1. An effect in both rows: unify their arguments. So `State[?a]` and
+   `State[i32]` give `?a := i32`, with no choice to make.
+2. An effect in only one row goes into the other row's tail. If that row
+   has no tail, the rows don't match.
+3. When both have a tail, a fresh tail takes what's left of both.
+
+For example:
+
+$$
+\mathsf{State}[\alpha] + \epsilon_1 \doteq \mathsf{Log} + \mathsf{State}[\mathsf{i32}] + \epsilon_2
+\quad\leadsto\quad
+\alpha := \mathsf{i32},\ \epsilon_1 := \mathsf{Log} + \epsilon_3,\ \epsilon_2 := \epsilon_3
+$$
+
+A tail can't be given an effect that's already in its row. That's the rule
+against effects twice, and it does what an occurs check does for types: it
+keeps solutions finite and principal.
+
+## Inferring effects
+
+A body's effects are inferred like its types. The body starts with a fresh
+row variable, and each call adds the effects of what it calls. A handler
+takes its effect out.
+
+Closures get their effects the same way: `|| fetch(x)` is
+`fn() -> Response does Async`. A function without a written type gets its
+effects generalized like its type variables, so it's polymorphic in what
+its callbacks do:
+
+```bolt
+fn twice(f) { f(); f() }
+```
+
+```text
+twice: forall a e. fn(fn() -> a does e) -> a does e
+```
+
+## Still to decide
+
+- Whether a function with a written signature but no `does` has no
+  effects, or has its effects inferred.
+- How to give `does` to the outer function of `fn(A) -> fn(B) -> C`. `(T)`
+  is a one-element tuple type, so parentheses don't group types today.
+- The syntax and typing of handlers.
+- Effects twice in a row, if it turns out to be needed.
+- Applications like `H[T]` in a row.
+
+## References
+
+- D. Rémy. *Type checking records and variants in a natural extension of
+  ML.* POPL 1989.
+- B. R. Gaster and M. P. Jones. *A polymorphic type system for extensible
+  records and variants.* Technical report NOTTCS-TR-96-3, 1996.
+- D. Leijen. *Koka: Programming with row polymorphic effect types.* MSFP 2014.
+- J. I. Brachthäuser, P. Schuster and K. Ostermann. *Effects as
+  capabilities: effect handlers and lightweight effect polymorphism.*
+  OOPSLA 2020. The design of Effekt.
