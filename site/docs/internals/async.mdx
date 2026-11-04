@@ -115,15 +115,101 @@ in the same order.
 ## Cancelling
 
 A task that isn't needed anymore should stop: a component that left the
-page, or a search whose text changed. A handler cancels a task by never
-resuming it. With effects, that's allowed: a continuation can be resumed
-once, or not at all.
+page, or a search whose text changed. The handler of `Async` cancels it.
 
-What's left to decide is cleanup. A task that's dropped while it holds
-something, like an open connection or a lock, has to release it. That needs
-a way to run code when a continuation is dropped, like `defer` or a
-`finally`, and a rule for where cancelling can happen: at any `suspend`, or
-only at some.
+### The problem
+
+A handler could cancel a task by never resuming it. With effects that's
+allowed, since a continuation can be resumed once or not at all. But then
+the rest of the task never runs, cleanup included:
+
+```bolt
+fn download(url: String) -> Bytes does Async {
+    let conn = open(url);
+    let data = conn.read_all();   // cancelled while it waits here
+    conn.close();                 // never runs: the connection stays open
+    data
+}
+```
+
+### Unwinding a task
+
+So the handler doesn't drop a task. It resumes it once more, with "you're
+cancelled" instead of a value. The `suspend` the task waits in then stops,
+like an error would, and the task unwinds from there up to the handler,
+running its cleanup on the way. Nothing in the task runs after that.
+
+A task is only cancelled while it waits, at a `suspend`. Code between two
+waits always runs to the end, so this can't be cut off halfway:
+
+```bolt
+balance -= amount;
+history.push(amount);
+```
+
+That's much easier to reason about than threads, which can be stopped
+anywhere.
+
+### `defer`
+
+`defer` runs code when the block it's in ends, however it ends: normally,
+by `return` or `break`, by an error, or by a cancel.
+
+```bolt
+fn download(url: String) -> Bytes does Async {
+    let conn = open(url);
+    defer conn.close();
+    conn.read_all()
+}
+```
+
+The `defer`s of a block run in the opposite order of their statements, so
+what was opened last is closed first. `defer` keeps the cleanup next to
+what it cleans up, which a `finally` doesn't, and Bolt has no `try` blocks
+for one anyway. Go, Swift and Zig have `defer` too.
+
+### `use`
+
+A type that knows how to clean up can say so once, with a class:
+
+```bolt
+class Close[T] {
+    fn close(self: mut T);
+}
+```
+
+Then `use` is a `let` with the `defer` built in:
+
+```bolt
+fn download(url: String) -> Bytes does Async {
+    use conn = open(url);   // let conn = open(url); defer conn.close();
+    conn.read_all()
+}
+```
+
+This is C#'s `using var` (with `IDisposable`) and Python's `with`. It's like
+Rust's `Drop` in that the type writes the cleanup, but it runs where `use`
+says, at the end of the block. Rust can drop values on its own because
+every value has one owner. Bolt values can be shared, `let b = a` gives
+the same connection a second name, so the end of `a`'s block can't know
+that nobody uses it anymore. With `use`, the programmer says so. The
+language server can warn about a value of a `Close` type that's bound with
+`let`, as C#'s tools do for `IDisposable`.
+
+### Still open
+
+- **Catching a cancel.** Code that could catch "you're cancelled" could
+  refuse to stop. Most designs let code see a cancel but not stop it.
+- **Waiting in cleanup.** Closing a connection politely may need a network
+  call, so a `defer` may want to wait, and then it can hang. C# has a
+  separate `IAsyncDisposable` for this. Bolt could allow waiting in a
+  `defer`, but with a time limit.
+- **Blocks that can't be cancelled,** for steps that must finish together
+  even though they wait, like a database commit.
+- **Conduit.** Unwinding needs a way to resume a continuation with an
+  unwind instead of values, which OCaml 5 calls `discontinue`. Conduit only
+  has `resume` so far. Wasm stack switching has `resume_throw`, which does
+  this.
 
 ## Compiling it
 
@@ -152,7 +238,7 @@ a highlight or an inlay hint, like it can mark inferred
 
 ## Still to design
 
-- Cancelling and cleanup, as above.
+- What's still open about [cancelling](#still-open).
 - Errors: `Result`, or an effect for failure that the handlers of `Async`
   know about, so that a failed task can fail the code that waits for it.
 - Timeouts and racing, like `first(a, b)`, which need cancelling.
