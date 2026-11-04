@@ -611,7 +611,19 @@ let f = |x| x;
                      //^ error: expected `fn(a) -> a`, found an integer
 class Show[T] { fn show(x: T) -> i32; }
 let s = show([]);
-      //^^^^ error: cannot tell which instance of `Show[imm [a]]` to use; add a type annotation
+      //^^^^ error: there is no instance `Show[imm [a]]`
+"#,
+    );
+}
+
+#[test]
+fn comparing_closures_says_there_is_no_instance() {
+    check_with_std(
+        r#"
+fn same(a, b) = a == b;
+              //^^^^^^ label: needed by this use in `same`
+  same(|x| x + 1, |x| x + 1);
+//^^^^ error: there is no instance `Eq[fn(i32) -> i32]`
 "#,
     );
 }

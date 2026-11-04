@@ -30,7 +30,7 @@ use crate::{
     solve::{
         AssocConstraint, AtMostConstraint, Constraint, ConstraintSource, ExprOrPat,
         FieldConstraint, Origin, Solver, TypeError, normalize_assoc, prune_implied_errors,
-        resolve_error, vars_in,
+        resolve_error, unsolved_error, vars_in, visible_impls,
     },
     ty::{Mutability, Ty, TyVar, VarKind},
     unify::Unifier,
@@ -586,8 +586,14 @@ impl<'db> Solved<'_, 'db> {
             } else if !constraint.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
                 // Not about a type that's unknown because of an error, which
                 // is reported already.
-                ambiguous
-                    .push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
+                let assumed: Vec<_> = predicates.iter().map(|(p, _)| p.clone()).collect();
+                ambiguous.push(unsolved_error(
+                    db,
+                    visible_impls(db, f.file(db)),
+                    &with_superclasses(db, assumed),
+                    *origin,
+                    constraint.clone(),
+                ));
             }
         }
         // Leave out those of the body that another one implies, like

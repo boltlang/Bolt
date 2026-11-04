@@ -1322,7 +1322,9 @@ impl<'db> Solver<'db> {
         for (constraint, origin) in self.take_pending() {
             // Unknown because of an error, which is reported already.
             if !constraint.args.iter().any(|t| self.unifier.has_error_var(t)) {
-                self.errors.push(TypeError::Ambiguous { origin, constraint });
+                let error =
+                    unsolved_error(self.db, self.impls, &self.assumptions, origin, constraint);
+                self.errors.push(error);
             }
         }
         for (_, origin) in self.take_pending_fields() {
@@ -1521,6 +1523,33 @@ fn match_app<'db>(
     let t_rest = Ty::app(t_head, t_args[..t_args.len() - n].to_vec());
     match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst)
         .and(|| match_ty(&p_rest, &t_rest, subst))
+}
+
+/// The error for a class constraint left unsolved: there's no instance if
+/// no impl in `impls` and no assumption of its class could fit it, whatever
+/// its unknowns turn out to be, and it's ambiguous otherwise (#322).
+pub(crate) fn unsolved_error<'db>(
+    db: &'db dyn Db,
+    impls: &[ImplId<'db>],
+    assumptions: &[ClassConstraint<'db>],
+    origin: Origin<'db>,
+    constraint: ClassConstraint<'db>,
+) -> TypeError<'db> {
+    let could_fit = assumptions.iter().any(|a| a.class == constraint.class)
+        || impls.iter().any(|&imp| {
+            impl_header(db, imp).class.as_ref().is_some_and(|target| {
+                target.class == constraint.class
+                    && !matches!(
+                        match_all(&target.args, &constraint.args, &mut HashMap::new()),
+                        Match::No
+                    )
+            })
+        });
+    if could_fit {
+        TypeError::Ambiguous { origin, constraint }
+    } else {
+        TypeError::NoInstance { origin, constraint }
+    }
 }
 
 /// The impls code in `file` can use: those of the file, of its prelude,
