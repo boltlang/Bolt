@@ -208,8 +208,10 @@ name = "boltlang-lower"
 version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
+ "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "libtest-mimic",
  "salsa",
 ]
 

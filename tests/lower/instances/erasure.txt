@@ -1,0 +1,77 @@
+================================================================================
+Polymorphic recursion is erased
+:prelude
+================================================================================
+enum Nested[A] { Flat(A), Nest(Nested[(A, A)]) }
+fn depth[A](n: Nested[A]) -> i32 = match n {
+  Nested.Flat(_) => 1,
+  Nested.Nest(m) => 1 + depth(m),
+};
+depth(Nested.Flat(1));
+--------------------------------------------------------------------------------
+<file>
+  -> depth[any0]
+depth[any0]
+  -> depth[any0]
+  -> +[i32]
+erased depth
+
+================================================================================
+Erased code calls class methods through dictionaries
+:prelude
+================================================================================
+// The classes of a function that's erased come from dictionaries, which a
+// caller builds from impls.
+class Sh[T] { fn sh(x: T) -> i32; }
+impl Sh[i32] { fn sh(x) = 1; }
+impl Sh[Bool] { fn sh(x) = 2; }
+impl[A, B] Sh[(A, B)] where Sh[A], Sh[B] { fn sh(p) = sh(p.0) + sh(p.1); }
+enum Nested[A] { Flat(A), Nest(Nested[(A, A)]) }
+fn shn[A](n: Nested[A]) -> i32 where Sh[A] = match n {
+  Nested.Flat(x) => sh(x),
+  Nested.Nest(m) => shn(m),
+};
+shn(Nested.Flat(1));
+--------------------------------------------------------------------------------
+<file>
+  -> shn[any0] dict impl Sh[i32]
+shn[any0]
+  -> sh of #0
+  -> shn[any0] dict impl Sh[(A, B)] at [any0, any0] with (#0, #0)
+Sh[i32].sh
+Sh[(A, B)].sh[any0, any0]
+  -> sh of #0
+  -> sh of #0
+  -> +[i32]
+erased shn
+
+================================================================================
+Erased types keep their own dictionaries
+:prelude
+================================================================================
+class Sh[T] { fn sh(x: T) -> i32; }
+impl Sh[i32] { fn sh(x) = 1; }
+impl Sh[Bool] { fn sh(x) = 2; }
+impl[A, B] Sh[(A, B)] where Sh[A], Sh[B] { fn sh(p) = sh(p.0) + sh(p.1); }
+fn f[A, B](x: A, y: B, n: i32) -> i32 where Sh[A], Sh[B] =
+  if n == 0 { sh((x, y)) } else { f((x, y), y, n - 1) };
+f(1, True, 3);
+#[test]
+fn t() { f(True, 1, 0); }
+--------------------------------------------------------------------------------
+<file>
+  -> f[any0, any1] dict impl Sh[i32] dict impl Sh[Bool]
+t
+  -> f[any0, any1] dict impl Sh[Bool] dict impl Sh[i32]
+f[any0, any1]
+  -> ==[i32]
+  -> sh of impl Sh[(A, B)] at [any0, any1] with (#0, #1)
+  -> f[any0, any1] dict impl Sh[(A, B)] at [any0, any1] with (#0, #1) dict #1
+  -> -[i32]
+Sh[Bool].sh
+Sh[i32].sh
+Sh[(A, B)].sh[any0, any1]
+  -> sh of #0
+  -> sh of #1
+  -> +[i32]
+erased f
