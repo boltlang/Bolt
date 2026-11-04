@@ -191,7 +191,6 @@ error at `show`: ambiguous
 
 ================================================================================
 Overlapping impls are reported where they're defined
-:todo
 :test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
@@ -201,7 +200,7 @@ impl Show[i32] { fn show(x) = "two"; }
 Show[i32].show: fn(i32) -> String
 Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
-error at `Show[i32]`: overlaps another impl of Show[i32]
+error at `Show[i32]`: overlaps the impl for Show[i32]
 
 ================================================================================
 A generic impl that overlaps a specific one
