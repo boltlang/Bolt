@@ -203,26 +203,26 @@ A handler is a `match` with `effect` arms, as in OCaml 5
 handler:
 
 ```bolt
-effect Emit {
-    fn emit(value: i32);
+effect Yield {
+    fn yield(value: i32);
 }
 
-fn sum(body: fn() does Emit) -> i32 =
+fn sum(body: fn() does Yield) -> i32 =
     match body() {
         () => 0,
-        effect emit(x), k => x + resume(k, ()),
+        effect yield(x), k => x + resume(k, ()),
     };
 ```
 
 - **Value arms**, like `() => 0`, match what the scrutinee returns when
   it's done, as in any `match`. They're what Koka and OCaml call the return
   clause.
-- **Effect arms**, like `effect emit(x), k => …`, match an operation and
+- **Effect arms**, like `effect yield(x), k => …`, match an operation and
   its arguments, with ordinary patterns. `k` is the *continuation*: the rest
   of the scrutinee, paused where it performed the operation.
 - **`resume(k, v)`** continues the scrutinee with `v` as the result of the
   operation. It returns what the whole `match` gives for the rest of the
-  scrutinee. So `x + resume(k, ())` adds `x` to the sum of what's emitted
+  scrutinee. So `x + resume(k, ())` adds `x` to the sum of what's yielded
   after it, and the value arm gives `0` at the end. There's no mutable state.
 
 Handlers are *deep*: after a `resume`, the rest of the scrutinee is still
@@ -322,7 +322,7 @@ calls. A shorthand for passing on the rest is discussed in
 [#347](https://github.com/boltlang/bolt/issues/347).
 
 The arms of each operation must be exhaustive, like value arms:
-`effect emit(0), k` alone doesn't handle `emit(1)`.
+`effect yield(0), k` alone doesn't handle `yield(1)`.
 
 ### Names
 
@@ -362,7 +362,7 @@ A `match` with effect arms becomes a `handle` in Conduit:
 
 ### Why `match`
 
-A handler could also be a `handle { … } with { fn emit(x) { … } }` block,
+A handler could also be a `handle { … } with { fn yield(x) { … } }` block,
 as in Effekt, or a declaration like `impl`. `match` was chosen because it
 has a return clause, its value arms, and matches the arguments of
 operations with patterns, with the exhaustiveness checks and decision
