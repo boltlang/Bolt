@@ -22,7 +22,7 @@ pub mod uses;
 
 pub use collect::{InstanceUses, Program, Site, program};
 pub use instance::{Instance, MonoConstraint};
-pub use ty::{MonoMut, MonoTy};
+pub use ty::{MonoMut, MonoTy, TyError, field_types};
 pub use uses::{ClassItem, Cx, Dict, Use, UseError};
 
 #[cfg(test)]

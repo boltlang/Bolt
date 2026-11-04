@@ -175,6 +175,22 @@ impl<'a, 'db> Cx<'a, 'db> {
         Ok(self.subst().ty(ty)?)
     }
 
+    /// The type of the instance: that of its function, constant or file.
+    pub fn instance_ty(&self) -> Result<MonoTy<'db>, UseError> {
+        self.ty(&self.generics.ty)
+    }
+
+    pub fn pat_ty(&self, pat: boltlang_hir_def::hir::PatId) -> Result<MonoTy<'db>, UseError> {
+        self.ty(self.infer.pat_ty(pat))
+    }
+
+    pub fn binding_ty(
+        &self,
+        binding: boltlang_hir_def::hir::BindingId,
+    ) -> Result<MonoTy<'db>, UseError> {
+        self.ty(self.infer.binding_ty(binding))
+    }
+
     pub fn expr_ty(&self, expr: ExprId) -> Result<MonoTy<'db>, UseError> {
         self.ty(self.infer.expr_ty(expr))
     }

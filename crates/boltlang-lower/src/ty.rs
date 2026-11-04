@@ -16,8 +16,9 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File};
+use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_def::{builtin_type::BuiltinType, hir::Mutability, ids::TypeAliasId};
-use boltlang_hir_ty::{AdtId, GenericParamId, Ty, solve::normalize_assoc};
+use boltlang_hir_ty::{AdtId, GenericParamId, Ty, lower::VariantDef, solve::normalize_assoc};
 
 /// A mutability in an instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -234,6 +235,34 @@ fn adt_name(db: &dyn Db, adt: AdtId<'_>) -> String {
         AdtId::Enum(e) => e.item(db).name.clone(),
     };
     name.map_or_else(|| "?".to_string(), |n| n.as_str().to_string())
+}
+
+/// The types of the fields of `def`, a struct or a variant of an enum, in a
+/// value of type `MonoTy::Adt(_, args, mutabilities, own)`: with `args` for
+/// the type parameters, `mutabilities` for those a struct declares, and
+/// `own` for the struct's own. An enum's fields don't depend on its
+/// mutability, which is always `imm`.
+pub fn field_types<'db>(
+    db: &'db dyn Db,
+    root: File,
+    def: VariantDef<'db>,
+    args: &[MonoTy<'db>],
+    mutabilities: &[MonoMut],
+    own: MonoMut,
+) -> Result<Vec<MonoTy<'db>>, TyError> {
+    let generic = match def {
+        VariantDef::Struct(id) => GenericDefId::Struct(id),
+        VariantDef::Variant(v) => GenericDefId::Enum(v.parent),
+    };
+    let mut slots: Vec<Slot<'db>> = args.iter().cloned().map(Slot::Ty).collect();
+    if let VariantDef::Struct(_) = def {
+        slots.extend(mutabilities.iter().map(|&m| Slot::Mut(m)));
+        slots.push(Slot::Mut(own));
+    }
+    let params: Vec<GenericParamId<'db>> =
+        (0..slots.len() as u32).map(|index| GenericParamId { def: generic, index }).collect();
+    let subst = Subst { db, root, params: &params, slots: &slots };
+    boltlang_hir_ty::lower::field_types(db, def).fields.iter().map(|(_, t)| subst.ty(t)).collect()
 }
 
 /// What a parameter of a scheme is in an instance: a type, or one of the
