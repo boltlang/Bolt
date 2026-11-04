@@ -75,6 +75,8 @@ pub struct FunctionSignature {
     pub params: Box<[ParamData]>,
     pub is_variadic: bool,
     pub ret_type: Option<TypeRefId>,
+    /// The effects after `does`, if it's written: one type for each.
+    pub effects: Option<Box<[TypeRefId]>>,
     pub is_const: bool,
     /// `Some` for `extern "C" fn`, with the ABI if one is given.
     pub abi: Option<Option<String>>,
@@ -302,6 +304,7 @@ fn lower_function<'db>(
     let mut is_variadic = false;
     let mut generic_params = GenericParams::default();
     let mut ret_type = None;
+    let mut effects = None;
     let mut abi = None;
     if let Some(decl) = &decl {
         generic_params = lower_generic_params(
@@ -318,6 +321,7 @@ fn lower_function<'db>(
             }
         }
         ret_type = decl.ret_type().map(|r| c.lower_opt_type(r.ty()));
+        effects = c.lower_effect_row(decl.effect_row());
         abi = decl.abi().map(|abi| abi.string().map(|s| unquote(s.text())));
     }
     let (store, source_map) = c.finish();
@@ -328,6 +332,7 @@ fn lower_function<'db>(
         params: params.into(),
         is_variadic,
         ret_type,
+        effects,
         is_const: item.is_const,
         abi,
         store,

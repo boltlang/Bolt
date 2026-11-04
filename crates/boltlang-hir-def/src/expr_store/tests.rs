@@ -222,8 +222,8 @@ impl Printer<'_> {
             Expr::Return { expr } => {
                 format!("(return{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e))))
             }
-            Expr::Lambda { params, param_types, ret_type, body, kind } => format!(
-                "({kind:?} ({}){} {})",
+            Expr::Lambda { params, param_types, ret_type, effects, body, kind } => format!(
+                "({kind:?} ({}){}{} {})",
                 params
                     .iter()
                     .zip(param_types.iter())
@@ -234,6 +234,10 @@ impl Printer<'_> {
                     .collect::<Vec<_>>()
                     .join(", "),
                 ret_type.map_or(String::new(), |t| format!(" -> {}", self.ty(t))),
+                effects.as_ref().map_or(String::new(), |ts| {
+                    let ts: Vec<String> = ts.iter().map(|t| self.ty(*t)).collect();
+                    format!(" does {}", ts.join(" + "))
+                }),
                 self.expr(*body)
             ),
             Expr::MacroCall { name } => {

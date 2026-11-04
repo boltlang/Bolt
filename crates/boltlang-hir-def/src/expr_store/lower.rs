@@ -198,15 +198,23 @@ impl ExprCollector {
             }
         }
         let ret_type = ty.ret_type().map(|r| self.lower_opt_type(r.ty()));
+        let effects = self.lower_effect_row(ty.effect_row());
         let has_token = |kind| ty.syntax().children_with_tokens().any(|t| t.kind() == kind);
         let abi = ty.abi().map(|abi| abi.string().map(|s| unquote(s.text())));
         TypeRef::Fn {
             params: params.into(),
             is_variadic,
             ret_type,
+            effects,
             is_const: has_token(CONST_KEYWORD),
             abi,
         }
+    }
+
+    /// The effects after `does`: one type for each, like `Log` and
+    /// `State[i32]` in `does Log + State[i32]`. `None` without `does`.
+    pub fn lower_effect_row(&mut self, row: Option<ast::EffectRow>) -> Option<Box<[TypeRefId]>> {
+        Some(row?.effects().map(|t| self.lower_type(t)).collect())
     }
 
     // Paths
@@ -406,10 +414,24 @@ impl ExprCollector {
             E::Continue(e) => Expr::Continue { label: e.label().and_then(|l| label_name(&l)) },
             E::Ret(e) => Expr::Return { expr: e.expr().map(|x| self.lower_expr(x)) },
             E::Closure(e) => {
-                self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Closure)
+                let effects = self.lower_effect_row(e.effect_row());
+                self.lower_lambda(
+                    e.param_list(),
+                    e.ret_type(),
+                    effects,
+                    e.body(),
+                    LambdaKind::Closure,
+                )
             }
             E::Fun(e) => {
-                self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Function)
+                let effects = self.lower_effect_row(e.effect_row());
+                self.lower_lambda(
+                    e.param_list(),
+                    e.ret_type(),
+                    effects,
+                    e.body(),
+                    LambdaKind::Function,
+                )
             }
             E::Macro(e) => Expr::MacroCall { name: macro_name(e.macro_call()) },
         };
@@ -421,6 +443,7 @@ impl ExprCollector {
         &mut self,
         list: Option<ast::ParamList>,
         ret_type: Option<ast::RetType>,
+        effects: Option<Box<[TypeRefId]>>,
         body: Option<ast::Expr>,
         kind: LambdaKind,
     ) -> Expr {
@@ -436,6 +459,7 @@ impl ExprCollector {
             params: params.into(),
             param_types: param_types.into(),
             ret_type,
+            effects,
             body,
             kind,
         }

@@ -196,6 +196,8 @@ pub enum Expr {
         params: Box<[PatId]>,
         param_types: Box<[Option<TypeRefId>]>,
         ret_type: Option<TypeRefId>,
+        /// The effects after `does`, if it's written.
+        effects: Option<Box<[TypeRefId]>>,
         body: ExprId,
         kind: LambdaKind,
     },
@@ -500,6 +502,8 @@ pub enum TypeRef {
         params: Box<[(Option<Name>, TypeRefId)]>,
         is_variadic: bool,
         ret_type: Option<TypeRefId>,
+        /// The effects after `does`, if it's written.
+        effects: Option<Box<[TypeRefId]>>,
         is_const: bool,
         /// `Some` for `extern "C" fn`, with the ABI if one is given.
         abi: Option<Option<String>>,
