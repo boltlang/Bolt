@@ -1,0 +1,204 @@
+---
+sidebar_position: 2
+title: Effects
+description: Effects say what a function does besides returning a value, and handlers decide what that means.
+---
+
+# Effects
+
+:::warning[Not implemented yet]
+Effects are designed, but **not implemented yet**: the examples on this
+page don't run today. The design is in the
+[internals](../../internals/effects.mdx), and the work is tracked in
+[#40](https://github.com/boltlang/bolt/issues/40).
+:::
+
+Besides returning a value, a function can *do* things: log a message, fail,
+wait for the network. Those are *effects*. In Bolt, a function's type says
+which effects it has, and a *handler* decides what they mean.
+
+## Declaring and using an effect
+
+An effect is a list of *operations*:
+
+```bolt
+effect Log {
+  fn log(message: String);
+}
+```
+
+An operation is called like a function. A function that calls it has the
+effect, and says so after `does`:
+
+```bolt
+fn greet(name: String) does Log {
+  log("hello");
+  log(name);
+}
+```
+
+A function with more effects joins them with `+`, like
+`does Log + Async`. The order doesn't matter.
+
+## Handling an effect
+
+`log` doesn't print anything by itself: what it does is up to the code that
+runs `greet`. That code *handles* `Log`, with a `match` that has `effect`
+arms:
+
+```bolt
+match greet("Bolt") {
+  () => (),
+  effect log(message), k => {
+    print(message);
+    resume(k, ())
+  },
+}
+```
+
+```text
+hello
+Bolt
+```
+
+The `match` runs `greet("Bolt")`. Each time it calls `log`, the
+`effect log(message), k` arm runs instead. `k` is the rest of `greet`,
+paused at that call, and `resume(k, ())` lets it go on. When `greet` is
+done, its result goes to the ordinary arm, `() => ()`.
+
+The same `greet` can be handled in another way, for example to count its
+messages:
+
+```bolt
+fn count_logs(body: fn() does Log) -> i32 =
+  match body() {
+    () => 0,
+    effect log(_), k => 1 + resume(k, ()),
+  };
+
+count_logs(|| greet("Bolt"));
+```
+
+```text
+2
+```
+
+`resume` returns what the `match` gives for the rest of `body`. So each
+message adds 1 to the count of the messages after it, and the end of `body`
+gives 0.
+
+## Giving back a value
+
+An operation can return a value, and the handler chooses it:
+
+```bolt
+effect Ask {
+  fn ask() -> i32;
+}
+
+fn add_twice() -> i32 does Ask = ask() + ask();
+
+fn answer(n: i32, body: fn() -> i32 does Ask) -> i32 =
+  match body() {
+    value => value,
+    effect ask(), k => resume(k, n),
+  };
+
+answer(21, add_twice);
+```
+
+```text
+42
+```
+
+## Stopping early
+
+An arm that doesn't call `resume` stops the code it handles, and its value
+becomes the value of the `match`. That's how errors work:
+
+```bolt
+effect Raise[E] {
+  fn raise[T](error: E) -> T;
+}
+
+fn divide(a: i32, b: i32) -> i32 does Raise[String] =
+  if b == 0 { raise("division by zero") } else { a / b };
+
+fn catch[T](body: fn() -> T does Raise[String]) -> Result[T, String] =
+  match body() {
+    value => Ok(value),
+    effect raise(error), _ => Err(error),
+  };
+
+[catch(|| divide(10, 2)), catch(|| divide(1, 0))];
+```
+
+```text
+[Ok(5), Err("division by zero")]
+```
+
+`raise` never returns, so it can stand where a value of any type is
+expected, like the `i32` of `divide`.
+
+`Raise` has a parameter, the type of its errors, like a struct can.
+
+## Effects are inferred
+
+Effects don't have to be written. A function without a written result type
+gets the effects of what it calls, and so does a closure:
+
+```bolt
+fn welcome() {
+  greet("Bolt");   // so welcome does Log too
+}
+
+let f = || log("hi");   // fn() does Log
+```
+
+Once a function's result type is written, its effects must be written as
+well. A result type without `does` means the function has no effects:
+
+```bolt
+fn quiet() -> () {
+  log("hi");
+}
+```
+
+```text
+Error: `quiet` has no effects, but `log` does `Log`
+```
+
+To write that a function has no effects without writing its result type,
+use `does Nothing`.
+
+## Functions that take functions
+
+A function that calls a function it's given does what that function does.
+An *effect variable* says so:
+
+```bolt
+fn twice[E](f: fn() does E) does E {
+  f();
+  f();
+}
+
+count_logs(|| twice(|| log("hi")));
+```
+
+```text
+2
+```
+
+`twice` works with any function, whatever it does. There's no need for a
+second version for functions that log, or that wait: in
+[async code](../../internals/async.mdx), waiting is the effect `Async`, and
+`twice` works with it like with any other.
+
+## Rules
+
+- A `match` that handles an effect needs an arm for each of its operations.
+  To pass an operation on to the handler around it, an arm calls it again:
+  `effect log(m), k => resume(k, log(m))`.
+- A continuation can be resumed only once.
+- An effect can be in a function's type only once: `State[i32] +
+  State[String]` is an error.
