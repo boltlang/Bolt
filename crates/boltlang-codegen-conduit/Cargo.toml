@@ -5,3 +5,18 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+boltlang-base-db.workspace = true
+boltlang-hir-def.workspace = true
+boltlang-hir-ty.workspace = true
+boltlang-lower.workspace = true
+# Conduit is developed next to Bolt, in `../conduit`.
+conduit-ir = { path = "../../../conduit/crates/conduit-ir" }
+
+[dev-dependencies]
+boltlang-corpus.workspace = true
+conduit-eval = { path = "../../../conduit/crates/conduit-eval" }
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "conduit"
+harness = false

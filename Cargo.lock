@@ -144,6 +144,16 @@ dependencies = [
 [[package]]
 name = "boltlang-codegen-conduit"
 version = "0.2.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-corpus",
+ "boltlang-hir-def",
+ "boltlang-hir-ty",
+ "boltlang-lower",
+ "conduit-eval",
+ "conduit-ir",
+ "libtest-mimic",
+]
 
 [[package]]
 name = "boltlang-common"
@@ -315,6 +325,17 @@ name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
+
+[[package]]
+name = "conduit-eval"
+version = "0.1.0"
+dependencies = [
+ "conduit-ir",
+]
+
+[[package]]
+name = "conduit-ir"
+version = "0.1.0"
 
 [[package]]
 name = "console_error_panic_hook"
