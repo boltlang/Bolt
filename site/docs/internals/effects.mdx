@@ -45,19 +45,16 @@ code it runs. The syntax of handlers is for another page.
 
 ## Writing effects
 
-Effects come after the result type, after `does`, joined with `+`:
+Effects come after `does`, joined with `+`, after the result type if one
+is written:
 
 ```bolt
 fn crawl(url: String) -> () does Async + Log { … }
 fn count(xs: [String]) -> i32 does State[i32] = …;
+fn is_up(url: String) does Async = match fetch(url) { … };
 fn total(xs: [i32]) -> i32 = …;
 ```
 
-- A written result type without `does` means the function has no effects,
-  as in Koka [Leijen 2014]. If `total` called `log`, that would be an error
-  at its signature.
-- A function without a written result type has its effects inferred, like
-  its types (see [Inferring effects](#inferring-effects)).
 - The order doesn't matter: `Async + Log` and `Log + Async` are the same.
 - `does` comes before a body, `=` and `where`:
   `fn f[T](x: T) -> T does Log where Show[T] = …`.
@@ -65,6 +62,31 @@ fn total(xs: [i32]) -> i32 = …;
   `f: fn(A) -> B does Log, n: i32`. It belongs to the nearest `fn`, so
   `fn(A) -> fn(B) -> C does Log` is a function that returns a function with
   `Log`.
+
+### Written or inferred
+
+A function's effects are inferred only when neither its result type nor
+`does` is written:
+
+| Written                          | Result   | Effects         |
+| -------------------------------- | -------- | --------------- |
+| `fn f(x: i32) -> i32`            | `i32`    | none            |
+| `fn f(x: i32) does Async`        | inferred | exactly `Async` |
+| `fn f(x: i32) -> i32 does Async` | `i32`    | exactly `Async` |
+| `fn f(x: i32)`                   | inferred | inferred        |
+
+- A written result type without `does` means the function has no effects,
+  as in Koka [Leijen 2014]. If `total` called `log`, that would be an error
+  at its signature.
+- A written `does` is all the function does, also when the result type is
+  inferred. If `is_up` called `log`, that would be an error too. A function
+  that has `Async` and whatever else its body does writes an effect
+  variable: `does Async + E`.
+- Without either, the effects are inferred like the types (see
+  [Inferring effects](#inferring-effects)).
+
+So a [complete signature](./type-checking/generalization.mdx), with every
+type written, tells callers what the function does without its body.
 
 Function types follow the same rule: `fn(A) -> B` has no effects. So a
 parameter that takes a function with any effects needs an effect variable,
@@ -74,6 +96,27 @@ The cost of this rule is that a new effect deep down a call chain, like a
 call of `log`, has to be added to each written signature above it.
 Signatures that are inferred, or that have an effect variable, don't need
 changing.
+
+### `nothing`
+
+`nothing` is the row without effects. It's for two places:
+
+```bolt
+fn double(x: i32) does nothing = x * 2;   // no effects, result inferred
+let b: Button[nothing] = …;               // a button whose click does nothing
+```
+
+The first is the only way to say "no effects" without writing the result
+type. The second gives an effect parameter no effects, like
+`map[i32, i32, nothing]`.
+
+`nothing` is a name of the prelude, like `i32`, of kind `Effect`. It isn't
+an effect without operations: `nothing + E` is `E`, and `does nothing +
+Log` is `does Log`, which the formatter writes instead. It was chosen over
+`none`, which Conduit prints for the empty row but which is too close to
+`Option`'s `None`, and over `()`, which is the unit type. A modifier like
+Koka's `total` or a `pure fn` would be a second place to write effects, and
+couldn't be a type argument.
 
 The effects after `does` are a *row*. `+` was chosen over a list in
 delimiters because there's nothing to close, so it can't be mixed up with a
@@ -112,7 +155,7 @@ that function. An *effect variable* says so:
 ```bolt
 fn map[A, B, E](xs: [A], f: fn(A) -> B does E) -> [B] does E;
 
-map([1, 2, 3], |x| x * 2);   // E is empty: no effects
+map([1, 2, 3], |x| x * 2);   // E is nothing
 map(urls, fetch);            // E is Async
 ```
 
