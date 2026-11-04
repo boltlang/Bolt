@@ -141,28 +141,6 @@ digits;
 321
 
 ================================================================================
-Looping over an iterator made from a function
-:todo wasm
-:test-prelude
-================================================================================
-let mut n = 0;
-let it = mut FnIter {
-  next: || if n < 3 {
-    n += 1;
-    Some(n)
-  } else {
-    None
-  },
-};
-let mut total = 0;
-for x in it {
-  total += x;
-}
-total;
---------------------------------------------------------------------------------
-6
-
-================================================================================
 A bound that says what an associated type is
 :todo wasm
 :test-prelude

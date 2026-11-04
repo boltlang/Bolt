@@ -60,21 +60,3 @@ impl[A: Iterable, B: Iterable] Iterable[Zipper[A, B]] {
 pub fn zip[A: Iterable, B: Iterable](first: A, second: B) -> mut Zipper[A, B] {
   mut Zipper { first, second }
 }
-
-/// An iterator made from a function that gives the next item each time
-/// it's called. A function that keeps where it is, like one that counts,
-/// is `mut`, so the iterator is too: `mut FnIter { next: ... }`.
-pub struct FnIter[T] {
-  next: fn() -> Option[T],
-}
-
-impl[T] Iterator[FnIter[T]] {
-  type Item = T;
-  fn next(it) = (it.next)();
-}
-
-/// An iterator can be looped over itself.
-impl[T] Iterable['m FnIter[T]] {
-  type Iter = 'm FnIter[T];
-  fn iter(it) = it;
-}

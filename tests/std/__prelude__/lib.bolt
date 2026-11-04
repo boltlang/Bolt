@@ -893,22 +893,6 @@ pub class Iterable[C] {
   fn iter(c: C) -> Iter;
 }
 
-/// An iterator made from a function that gives the next item each time
-/// it's called.
-pub struct FnIter[T] {
-  next: fn() -> Option[T],
-}
-
-impl[T] Iterator[FnIter[T]] {
-  type Item = T;
-  fn next(it) = (it.next)();
-}
-
-impl[T] Iterable['m FnIter[T]] {
-  type Iter = 'm FnIter[T];
-  fn iter(it) = it;
-}
-
 impl[T] Index[[T]] {
   type Item = T;
   fn index(xs, i) = array_get(xs, i);
