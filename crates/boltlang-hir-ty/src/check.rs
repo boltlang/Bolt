@@ -389,11 +389,7 @@ fn infer_group<'db>(
         positive.extend(positive_rows(&solver.unifier.resolve(&env.mono[f]), is_row));
     }
     let mut candidates = positive.clone();
-    for (constraint, _) in &solver.pending_rows {
-        vars_in(&solver.unifier.resolve(&constraint.sub), &mut candidates);
-        vars_in(&solver.unifier.resolve(&constraint.sup), &mut candidates);
-    }
-    candidates.retain(|&v| is_row(v));
+    candidates.extend(solver.pending_row_vars());
     let keep_rows: Vec<TyVar> = keep.iter().copied().filter(|v| !positive.contains(v)).collect();
     solver.settle_rows(&candidates, &keep_rows);
     solver.default_free_rows(&keep_rows);
@@ -585,13 +581,15 @@ impl<'db> Solved<'_, 'db> {
             let before = out.len();
             rest.retain(|(constraint, _)| {
                 let mut found = Vec::new();
-                vars_in(&constraint.sub, &mut found);
-                vars_in(&constraint.sup, &mut found);
+                for row in constraint.rows() {
+                    vars_in(row, &mut found);
+                }
                 if !found.iter().any(|v| vars.vars.contains(v)) {
                     return true;
                 }
-                vars.add(&constraint.sub);
-                vars.add(&constraint.sup);
+                for row in constraint.rows() {
+                    vars.add(row);
+                }
                 out.push(constraint.clone());
                 false
             });

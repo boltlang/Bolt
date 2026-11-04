@@ -342,7 +342,7 @@ impl<'db> Subst<'_, 'db> {
             // change what the code does.
             Ty::Var(_) => MonoTy::unit(),
             // A row is only ever inside a function type, which drops it.
-            Ty::Mutability(_) | Ty::Unwritten | Ty::Row(_) | Ty::Number(_) | Ty::Error => {
+            Ty::Mutability(_) | Ty::Unwritten | Ty::Row(..) | Ty::Number(_) | Ty::Error => {
                 return Err(TyError::Unknown);
             }
         })

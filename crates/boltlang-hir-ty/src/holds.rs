@@ -112,7 +112,7 @@ pub fn split<'db>(
         Ty::Builtin(_)
         | Ty::Mutability(_)
         | Ty::Unwritten
-        | Ty::Row(_)
+        | Ty::Row(..)
         | Ty::Number(_)
         | Ty::Never
         | Ty::Error => {}

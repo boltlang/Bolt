@@ -110,12 +110,14 @@ pub enum Ty<'db> {
     /// calling it. The effects are a row: [`Ty::Row`], a variable or a
     /// parameter.
     Fn(Box<[Ty<'db>]>, Box<Ty<'db>>, Box<Ty<'db>>, Box<Ty<'db>>),
-    /// A row of effects whose effects are all known, like `Log + State[i32]`,
-    /// which is a type of kind `Effect`. Each effect is in it once, in the
-    /// order of [`Ty::row`]; the empty row is `Nothing`. A row with unknown
-    /// parts is a variable or a parameter, and how it's made of others is a
-    /// constraint (see `site/docs/internals/effects.mdx`).
-    Row(Box<[EffectTy<'db>]>),
+    /// A row of effects, which is a type of kind `Effect`: the effects that
+    /// are known, like `Log + State[i32]`, and the rows it's made of that
+    /// stand for any row, like the `E` of `Log + E`, which are parameters or
+    /// variables bound by a scheme. Each effect is in it once, and both
+    /// lists are in the order of [`Ty::row_of`]; the empty row is `Nothing`.
+    /// A row made of rows still being inferred is a variable, and how it's
+    /// made is a constraint (see `site/docs/internals/effects.mdx`).
+    Row(Box<[EffectTy<'db>]>, Box<[Ty<'db>]>),
     /// An associated type of a class applied to types, like `C.Item` for
     /// `type Item;` of `class Index[C]`: the type alias declared in the
     /// class, and the class's arguments. Which type it is depends on the
@@ -170,26 +172,72 @@ impl<'db> Ty<'db> {
 
     /// The row without effects, `Nothing`.
     pub fn nothing() -> Self {
-        Ty::Row(Box::new([]))
+        Ty::Row(Box::new([]), Box::new([]))
     }
 
-    /// The row of `effects`, in their order. Each effect must be in it
+    /// The row of `effects`, which are all known. Each effect must be in it
     /// once: see [`Ty::union_rows`] for rows that can share effects.
     pub fn row(effects: impl IntoIterator<Item = EffectTy<'db>>) -> Self {
-        let mut effects: Vec<_> = effects.into_iter().collect();
-        effects.sort_by_key(EffectTy::key);
-        debug_assert!(effects.windows(2).all(|w| w[0].effect != w[1].effect));
-        Ty::Row(effects.into())
+        Ty::row_of(effects, [])
     }
 
-    /// The effects of both rows, with the arguments of an effect in both
+    /// The row of `effects` and the rows `rest`, in its one form: rows in
+    /// `rest` that are known are taken apart, an effect already there keeps
+    /// its arguments, both lists are sorted, and a row that's one row of
+    /// `rest` and nothing else is that row.
+    pub fn row_of(
+        effects: impl IntoIterator<Item = EffectTy<'db>>,
+        rest: impl IntoIterator<Item = Ty<'db>>,
+    ) -> Self {
+        let mut known: Vec<EffectTy<'db>> = Vec::new();
+        let add = |e: EffectTy<'db>, known: &mut Vec<EffectTy<'db>>| {
+            if !known.iter().any(|k| k.effect == e.effect) {
+                known.push(e);
+            }
+        };
+        for e in effects {
+            add(e, &mut known);
+        }
+        let mut parts: Vec<Ty<'db>> = Vec::new();
+        let mut todo: Vec<Ty<'db>> = rest.into_iter().collect();
+        while let Some(part) = todo.pop() {
+            match part {
+                Ty::Row(es, rs) => {
+                    for e in es.into_vec() {
+                        add(e, &mut known);
+                    }
+                    todo.extend(rs.into_vec());
+                }
+                part if !parts.contains(&part) => parts.push(part),
+                _ => {}
+            }
+        }
+        known.sort_by_key(EffectTy::key);
+        parts.sort_by_key(rest_key);
+        if known.is_empty() && parts.len() == 1 {
+            return parts.pop().unwrap();
+        }
+        Ty::Row(known.into(), parts.into())
+    }
+
+    /// The known effects of a row and the rows it's made of, for a row that's
+    /// not a variable: a lone parameter is a row made of itself.
+    pub fn row_parts(&self) -> Option<(&[EffectTy<'db>], Vec<Ty<'db>>)> {
+        match self {
+            Ty::Row(effects, rest) => Some((effects, rest.to_vec())),
+            Ty::Param(_) | Ty::Bound(_) => Some((&[], vec![self.clone()])),
+            _ => None,
+        }
+    }
+
+    /// The effects of both lists, with the arguments of an effect in both
     /// from `a`. The pairs of arguments that must be the same, for the
     /// effects in both, are given to `same`.
     pub fn union_rows(
         a: &[EffectTy<'db>],
         b: &[EffectTy<'db>],
         mut same: impl FnMut(&EffectTy<'db>, &EffectTy<'db>),
-    ) -> Self {
+    ) -> Vec<EffectTy<'db>> {
         let mut out: Vec<EffectTy<'db>> = a.to_vec();
         for e in b {
             match a.iter().find(|x| x.effect == e.effect) {
@@ -197,7 +245,7 @@ impl<'db> Ty<'db> {
                 None => out.push(e.clone()),
             }
         }
-        Ty::row(out)
+        out
     }
 
     /// An array of `element` with the mutability `mutability`.
@@ -296,7 +344,10 @@ impl<'db> Ty<'db> {
                 f(mutability);
                 f(effects);
             }
-            Ty::Row(effects) => effects.iter().flat_map(|e| e.args.iter()).for_each(f),
+            Ty::Row(effects, rest) => {
+                effects.iter().flat_map(|e| e.args.iter()).for_each(&mut f);
+                rest.iter().for_each(f);
+            }
             Ty::Assoc(_, args) => args.iter().for_each(f),
             Ty::Var(_)
             | Ty::Builtin(_)
@@ -335,11 +386,14 @@ impl<'db> Ty<'db> {
                 Box::new(mutability.fold(f)),
                 Box::new(effects.fold(f)),
             ),
-            Ty::Row(effects) => Ty::Row(
+            // A part of the row can become a row with effects, like `E` when
+            // it's replaced by `Log`, so the row is made again.
+            Ty::Row(effects, rest) => Ty::row_of(
                 effects
                     .iter()
                     .map(|e| EffectTy { effect: e.effect, args: fold_all(&e.args, f) })
-                    .collect(),
+                    .collect::<Vec<_>>(),
+                fold_all(rest, f).into_vec(),
             ),
             Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
             Ty::Var(_)
@@ -440,6 +494,12 @@ impl<'db> TyNames<'db> {
                 Ty::Var(v) => found.effects.push(Unknown::Var(*v)),
                 Ty::Bound(i) => found.effects.push(Unknown::Bound(*i)),
                 Ty::Param(p) => found.taken.push(param_name(db, *p)),
+                Ty::Row(known, rest) => {
+                    for e in known.iter() {
+                        e.args.iter().for_each(|t| collect(db, t, found));
+                    }
+                    rest.iter().for_each(|r| effects(db, r, found));
+                }
                 _ => row.walk_children(|t| collect(db, t, found)),
             }
         }
@@ -549,7 +609,7 @@ impl<'db> TyNames<'db> {
     pub fn row_name(&self, db: &'db dyn Db, row: &Ty<'db>) -> String {
         let shown = DisplayTy { ty: row, db, names: Some(self) }.shown_effects(row);
         shown.unwrap_or_else(|| match row {
-            Ty::Row(_) => "Nothing".into(),
+            Ty::Row(..) => "Nothing".into(),
             _ => "_".into(),
         })
     }
@@ -687,7 +747,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
                     None => Ok(()),
                 }
             }
-            Ty::Row(_) => write!(f, "{}", self.shown_effects(self.ty).unwrap_or("Nothing".into())),
+            Ty::Row(..) => write!(f, "{}", self.shown_effects(self.ty).unwrap_or("Nothing".into())),
             Ty::Param(param) => write!(f, "{}", param_name(db, *param)),
             // `C.Item`, or `Convert[A, B].Item` for a class with several
             // parameters.
@@ -727,9 +787,9 @@ impl DisplayTy<'_, '_> {
     fn shown_effects(&self, row: &Ty<'_>) -> Option<String> {
         let shared = |unknown| self.names.and_then(|n| n.effect(unknown)).map(str::to_string);
         match row {
-            Ty::Row(effects) if effects.is_empty() => None,
-            Ty::Row(effects) => {
-                let shown: Vec<String> = effects
+            Ty::Row(effects, rest) if effects.is_empty() && rest.is_empty() => None,
+            Ty::Row(effects, rest) => {
+                let mut shown: Vec<String> = effects
                     .iter()
                     .map(|e| {
                         let name = e.effect.item(self.db).name.as_ref().map_or("?", |n| n.as_str());
@@ -744,6 +804,9 @@ impl DisplayTy<'_, '_> {
                         format!("{name}[{}]", args.join(", "))
                     })
                     .collect();
+                // A part of a row that stands for any row is shown by its
+                // name, which it has since it's also elsewhere, or as `_`.
+                shown.extend(rest.iter().map(|r| self.shown_effects(r).unwrap_or("_".into())));
                 Some(shown.join(" + "))
             }
             Ty::Param(p) => Some(param_name(self.db, *p)),
@@ -779,6 +842,17 @@ impl DisplayTy<'_, '_> {
             Ty::Bound(i) => shared(Unknown::Bound(*i)),
             _ => None,
         }
+    }
+}
+
+/// The order of the rows a row is made of: parameters, then variables, then
+/// the variables of a scheme. It only has to be the same for the same rows.
+fn rest_key(t: &Ty<'_>) -> (u8, Option<salsa::Id>, u32) {
+    match t {
+        Ty::Param(p) => (0, Some(salsa::plumbing::AsId::as_id(&p.def)), p.index),
+        Ty::Var(v) => (1, None, v.0),
+        Ty::Bound(i) => (2, None, *i),
+        _ => (3, None, 0),
     }
 }
 

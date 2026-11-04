@@ -173,10 +173,13 @@ impl<'db> Scheme<'db> {
             solver.add(Constraint::AtMost { constraint, source, origin });
         }
         for row in self.rows.iter() {
-            let constraint = row.map(subst);
+            let constraint = row.map(|t| solver.open_rows(&subst(t), origin));
             solver.add(Constraint::Row { constraint, origin });
         }
-        let ty = subst(&self.ty);
+        // A row made of rows that are now variables, like the `Log + E` of
+        // `fn retry[T, E](f: fn() -> T does E) -> T does Log + E`, becomes a
+        // variable that a combination decides.
+        let ty = solver.open_rows(&subst(&self.ty), origin);
         solver.flatten_assoc(&ty, origin)
     }
 
@@ -217,7 +220,7 @@ impl<'db> Scheme<'db> {
         // name like `e`.
         let as_row = |r: &Ty<'db>| Ty::func_does([], Ty::unit(), r.clone());
         let row_tys: Vec<Ty<'db>> =
-            self.rows.iter().flat_map(|r| [as_row(&r.sub), as_row(&r.sup)]).collect();
+            self.rows.iter().flat_map(|r| r.rows().into_iter().map(as_row)).collect();
         tys.extend(row_tys.iter());
         let names = TyNames::new(db, &tys);
         let show = |t: &Ty<'db>| t.display_with(db, &names).to_string();
@@ -257,11 +260,16 @@ impl<'db> Scheme<'db> {
             out.push_str(&format!("{held}: {} => ", names.mutability_name(db, &bound.bound)));
         }
         for row in self.rows.iter() {
-            out.push_str(&format!(
-                "{} ≲ {} => ",
-                names.row_name(db, &row.sub),
-                names.row_name(db, &row.sup)
-            ));
+            let row = match row {
+                RowConstraint::Contains { sub, sup } => {
+                    format!("{} ≲ {}", names.row_name(db, sub), names.row_name(db, sup))
+                }
+                RowConstraint::Combine { parts, goal } => {
+                    let parts: Vec<String> = parts.iter().map(|p| names.row_name(db, p)).collect();
+                    format!("{} ~ {}", parts.join(" ⊙ "), names.row_name(db, goal))
+                }
+            };
+            out.push_str(&format!("{row} => "));
         }
         out.push_str(&show(&self.ty));
         out

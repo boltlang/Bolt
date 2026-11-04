@@ -1523,7 +1523,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         };
         // The call does what the function does.
-        let constraint = RowConstraint { sub: effects, sup: self.effects.clone() };
+        let constraint = RowConstraint::contains(effects, self.effects.clone());
         self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
         if params.len() != count {
             self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {

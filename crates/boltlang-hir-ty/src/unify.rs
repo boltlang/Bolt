@@ -262,11 +262,13 @@ impl<'db> Unifier<'db> {
                 self.unify(m, n)?;
                 self.unify(e, f)
             }
-            // Rows whose effects are all known are equal when they have the
-            // same effects, with the same arguments. Rows are in the same
-            // order, so the effects can be compared one by one.
-            (Ty::Row(xs), Ty::Row(ys))
-                if xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect) =>
+            // Rows are equal when they have the same effects, with the same
+            // arguments, and are made of the same other rows. Rows are in
+            // one order, so they can be compared one by one.
+            (Ty::Row(xs, xr), Ty::Row(ys, yr))
+                if xs.len() == ys.len()
+                    && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect)
+                    && xr == yr =>
             {
                 xs.iter().zip(ys).try_for_each(|(x, y)| self.unify_all(&x.args, &y.args))
             }
@@ -295,7 +297,7 @@ impl<'db> Unifier<'db> {
             // mutability too: the checker only puts them there.
             VarKind::Mutability => matches!(ty, Ty::Mutability(_) | Ty::Param(_) | Ty::Bound(_)),
             // The same for a row, which can also be the error type.
-            VarKind::Effect => matches!(ty, Ty::Row(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Error),
+            VarKind::Effect => matches!(ty, Ty::Row(..) | Ty::Param(_) | Ty::Bound(_) | Ty::Error),
         };
         if !fits {
             return Err(UnifyError::Mismatch(Ty::Var(var), ty.clone()));

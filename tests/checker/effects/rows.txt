@@ -118,3 +118,62 @@ fn f() -> () does State[i32] + State[String] {}
 f: fn() -> () does State[i32]
 --------------------------------------------------------------------------------
 error at `State[String]`: State is in this row twice
+
+================================================================================
+A row made of an effect and an effect variable
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn retry[T, E](times: i32, f: fn() -> T does E) -> T does Log + E {
+  log("trying");
+  f()
+}
+fn quiet() = retry(3, || 1);
+fn loud() = retry(3, || { log("again"); 1 });
+fn slow() = retry(3, || { wait(); 1 });
+--------------------------------------------------------------------------------
+retry: forall T E. fn(i32, fn() -> T does E) -> T does Log + E
+quiet: fn() -> i32 does Log
+loud: fn() -> i32 does Log
+slow: fn() -> i32 does Log + Async
+
+================================================================================
+A row made of two effect variables
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn both[E, F](f: fn() -> () does E, g: fn() -> () does F) -> () does E + F {
+  f();
+  g();
+}
+fn h() = both(|| log("a"), || wait());
+--------------------------------------------------------------------------------
+both: forall E F. fn(fn() -> () does E, fn() -> () does F) -> () does E + F
+h: fn() -> () does Log + Async
+
+================================================================================
+An inferred row made of an effect and an effect variable
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+fn noisy(f) { log("calling"); f() }
+--------------------------------------------------------------------------------
+noisy: forall a e. fn(fn() -> a does e) -> a does Log + e
+
+================================================================================
+A row with an effect variable allows nothing else
+:test-prelude
+:error
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn retry[T, E](f: fn() -> T does E) -> T does Log + E {
+  wait();
+  f()
+}
+--------------------------------------------------------------------------------
+retry: forall T E. fn(fn() -> T does E) -> T does Log + E
+--------------------------------------------------------------------------------
+error at `wait()`: does Async, only Log + E allowed

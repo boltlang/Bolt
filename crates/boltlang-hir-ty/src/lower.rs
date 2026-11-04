@@ -483,7 +483,8 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         let mut unknown = Vec::new();
         for &term in terms {
             match self.lower_ty_expect(term, &Kind::Effect) {
-                Ty::Row(effects) => {
+                Ty::Row(effects, rest) => {
+                    unknown.extend(rest.into_vec());
                     for e in effects.into_vec() {
                         match known.iter().find(|k| k.effect == e.effect) {
                             Some(k) if k.args != e.args => {
@@ -501,19 +502,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                     }
                 }
                 Ty::Error => {}
-                row => unknown.push((term, row)),
+                // A row parameter, like the `E` of `Log + E`.
+                row => unknown.push(row),
             }
         }
-        match &unknown[..] {
-            [] => Ty::row(known),
-            [(_, row)] if known.is_empty() => row.clone(),
-            // A row with effect variables and other effects is a
-            // combination of rows, which isn't checked yet.
-            [(term, _), ..] => {
-                self.diagnostics.push(LowerDiagnostic::Unsupported(*term));
-                Ty::Error
-            }
-        }
+        Ty::row_of(known, unknown)
     }
 
     /// The mutability arguments of the struct `s`, like the `imm` of

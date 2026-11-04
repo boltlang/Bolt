@@ -1539,12 +1539,15 @@ fn match_ty<'db>(
             .and(|| match_ty(x, y, subst))
             .and(|| match_ty(m, n, subst))
             .and(|| match_ty(e, f, subst)),
-        (Ty::Row(xs), Ty::Row(ys))
-            if xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect) =>
+        (Ty::Row(xs, xr), Ty::Row(ys, yr))
+            if xs.len() == ys.len()
+                && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect)
+                && xr.len() == yr.len() =>
         {
             xs.iter()
                 .zip(ys)
                 .fold(Match::Yes, |m, (x, y)| m.and(|| match_all(&x.args, &y.args, subst)))
+                .and(|| match_all(xr, yr, subst))
         }
         (x, y) if x == y => Match::Yes,
         _ => Match::No,

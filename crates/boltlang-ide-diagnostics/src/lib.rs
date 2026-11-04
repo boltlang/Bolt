@@ -850,7 +850,7 @@ fn describe(
         K::Effects { found, allowed } => {
             let found = names.row_name(db, &found);
             let message = match &allowed {
-                Ty::Row(effects) if effects.is_empty() => {
+                Ty::Row(effects, rest) if effects.is_empty() && rest.is_empty() => {
                     format!("this does `{found}`, but the code it's in has no effects")
                 }
                 allowed => format!(
