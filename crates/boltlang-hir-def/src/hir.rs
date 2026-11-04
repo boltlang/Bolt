@@ -312,6 +312,90 @@ pub enum Pat {
     },
 }
 
+impl Expr {
+    /// The expressions directly in this one, in the order they're written.
+    pub fn children(&self) -> Vec<ExprId> {
+        let mut out = Vec::new();
+        match self {
+            Expr::Missing
+            | Expr::Path(_)
+            | Expr::Literal(_)
+            | Expr::Continue { .. }
+            | Expr::MacroCall { .. } => {}
+            Expr::Block { statements, tail, .. } => {
+                for s in statements.iter() {
+                    match s {
+                        Statement::Let { initializer, else_branch, .. } => {
+                            out.extend(initializer.iter().chain(else_branch.iter()));
+                        }
+                        Statement::Expr { expr, .. } => out.push(*expr),
+                        Statement::Item => {}
+                    }
+                }
+                out.extend(tail.iter());
+            }
+            Expr::Call { callee, args } => {
+                out.push(*callee);
+                out.extend(args.iter());
+            }
+            Expr::Field { expr, .. }
+            | Expr::Await { expr }
+            | Expr::Try { expr }
+            | Expr::Cast { expr, .. }
+            | Expr::Prefix { expr, .. }
+            | Expr::Imm { expr }
+            | Expr::Mut { expr }
+            | Expr::Let { expr, .. } => out.push(*expr),
+            Expr::Index { base, index } => out.extend([*base, *index]),
+            Expr::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
+            Expr::Range { lhs, rhs, .. } => out.extend(lhs.iter().chain(rhs.iter())),
+            Expr::Tuple { exprs } | Expr::Array { exprs } => out.extend(exprs.iter()),
+            Expr::ArrayRepeat { value, count } => out.extend([*value, *count]),
+            Expr::Record { fields, spread, .. } => {
+                out.extend(fields.iter().map(|f| f.expr));
+                out.extend(spread.iter());
+            }
+            Expr::If { condition, then_branch, else_branch } => {
+                out.extend([*condition, *then_branch]);
+                out.extend(else_branch.iter());
+            }
+            Expr::Match { expr, arms } => {
+                out.push(*expr);
+                for arm in arms.iter() {
+                    out.extend(arm.guard.iter());
+                    out.push(arm.expr);
+                }
+            }
+            Expr::While { condition, body, .. } => out.extend([*condition, *body]),
+            Expr::Loop { body, .. } => out.push(*body),
+            Expr::For { iterable, body, .. } => out.extend([*iterable, *body]),
+            Expr::Break { expr, .. } | Expr::Return { expr } | Expr::Yield { expr } => {
+                out.extend(expr.iter())
+            }
+            Expr::Lambda { body, .. } => out.push(*body),
+        }
+        out
+    }
+
+    /// The patterns directly in this expression, like those of its `let`s,
+    /// its arms or its parameters.
+    pub fn pats(&self) -> Vec<PatId> {
+        match self {
+            Expr::Block { statements, .. } => statements
+                .iter()
+                .filter_map(|s| match s {
+                    Statement::Let { pat, .. } => Some(*pat),
+                    _ => None,
+                })
+                .collect(),
+            Expr::Let { pat, .. } | Expr::For { pat, .. } => vec![*pat],
+            Expr::Match { arms, .. } => arms.iter().map(|a| a.pat).collect(),
+            Expr::Lambda { params, .. } => params.to_vec(),
+            _ => Vec::new(),
+        }
+    }
+}
+
 impl Pat {
     /// The patterns directly inside this one, like the `x` and `y` of
     /// `(x, y)`, or the `Some(y)` of `x @ Some(y)`.
