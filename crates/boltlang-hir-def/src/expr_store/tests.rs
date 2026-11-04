@@ -553,3 +553,11 @@ fn source_map_points_back_to_the_syntax() {
     let nest = bin.parent().unwrap();
     assert_eq!(source_map.node_expr(&nest), Some(id));
 }
+
+#[test]
+fn effect_arms_are_left_out() {
+    assert_eq!(
+        render("match f() { v => v, effect yield(n), k => resume(k, ()) }"),
+        "(match (call f ) [v => v])"
+    );
+}

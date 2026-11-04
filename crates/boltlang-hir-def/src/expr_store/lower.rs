@@ -368,9 +368,11 @@ impl ExprCollector {
             }
             E::Match(e) => {
                 let expr = self.lower_opt_expr(e.expr());
+                // Effect arms only parse so far, and are left out.
                 let arms = e
                     .arms()
                     .into_iter()
+                    .filter(|arm| arm.effect_pattern().is_none())
                     .map(|arm| MatchArm {
                         pat: self.lower_opt_pat(arm.pattern()),
                         guard: arm.guard().map(|g| self.lower_opt_expr(g.condition())),
