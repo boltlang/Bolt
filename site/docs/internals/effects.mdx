@@ -6,14 +6,12 @@ description: A design for effect types in Bolt, with does and +, effects with pa
 
 # Effects (design)
 
-:::warning[Mostly not implemented]
-This page is a design, and **most of it isn't implemented**. `effect`
-declarations, `does` and `effect` arms parse. Effects and their operations
-are found by name, effects have the kind `Effect`, and a call of an
-operation is checked like a call of a function. But rows aren't checked
-yet, `does` and `effect` arms are ignored, and nothing runs. Algebraic
-effects are tracked in
-[#40](https://github.com/boltlang/bolt/issues/40).
+:::warning[Partly implemented]
+The syntax parses, and the type checker infers and checks effects: rows,
+`does`, containment and `Nothing`. **Not implemented yet**: handlers, which
+are left out of a `match`, rows that combine effects with an effect
+variable, like `Log + E`, and running effects. Algebraic effects are
+tracked in [#40](https://github.com/boltlang/bolt/issues/40).
 :::
 
 An *effect* is something a function can do besides returning a value:
@@ -184,29 +182,32 @@ fn retry[T, E](times: i32, f: fn() -> T does E) -> T does Log + E;
 `retry` has the effects of `f` and `Log` too. Nothing marks `E` as an effect
 variable: it's one because of where it's used, by the kind inference below.
 
-A row has at most one effect variable. `does E + F` is an error, because
-there's no single way to split a row between two variables, and inference
-would have to guess. A function that needs both writes one variable, and its
-callers pass functions with the same effects.
+A row can have several effect variables, like `does E + F` for a function
+that calls two functions it's given. The checker writes such a row as a
+predicate (see [Rows as predicates](#rows-as-predicates)), so there's no
+guessing how to split a row between the variables.
 
 ## No effect twice
 
-An effect can be in a row only once, even with different arguments:
+An effect can be in a row only once, with one list of arguments:
 
 ```bolt
 fn f() does State[i32] + State[String];
-//     error: `State` is in this row twice
+//     error: `State` is in this row twice, with different arguments
 ```
 
-Some languages allow this, like Koka, where the innermost handler of an
-effect wins and `mask` skips it. That's flexible, but hard to explain, and it
-makes inference guess which of the two a call means. So it's an error for
-now. Allowing it later won't break code that type-checks today. Code that
-needs two states can declare a second effect.
+Writing the same effect twice with the same arguments is fine, and so is
+getting it twice: a function that logs and calls a function that logs does
+`Log` once. Rows combine by *union*, and an effect in both rows must have
+the same arguments there. So the effects of all the calls in a function tie
+their arguments together: after `set(1)`, a `set("one")` in the same
+function is an error, since both are `State`.
 
-The rule holds for effect variables too. In `does State[i32] + E`, `E` can't
-contain `State`. A call that would put a second `State` in the row, like
-passing a function with `State[String]` for `E`, is an error at the call.
+Some languages allow the same effect twice, like Koka, where the innermost
+handler of an effect wins and `mask` skips it. That's flexible, but hard to
+explain, and it makes inference guess which of the two a call means. So
+it's an error for now. Allowing it later won't break code that type-checks
+today. Code that needs two states can declare a second effect.
 
 ## Effects in classes
 
@@ -496,30 +497,77 @@ But a row is unified by the names of its effects (see below), and `H[T]`
 has no name until `H` is known. So for now, every effect in a row has to be
 a known effect or an effect variable, and `H[T]` in a row is an error.
 
-## Unifying rows
+## Rows as predicates
 
-A row is a set of effects keyed by their name, plus at most one effect
-variable at the end, its *tail*: `State[?a] + Log + ?e`. Since no effect is
-in a row twice, unifying two rows is like unifying two records with their
-fields keyed by name [Rémy 1989, Gaster & Jones 1996]:
+Rows follow Morris and McKinna's Rose [Morris & McKinna 2019]. A row in a
+type is either known, like `Log + State[i32]`, or a variable or parameter,
+like `e` or `E`. How rows relate is a *predicate* on them, which the solver
+defers until the rows are known well enough, as it does for class
+constraints:
 
-1. An effect in both rows: unify their arguments. So `State[?a]` and
-   `State[i32]` give `?a := i32`, with no choice to make.
-2. An effect in only one row goes into the other row's tail. If that row
-   has no tail, the rows don't match.
-3. When both have a tail, a fresh tail takes what's left of both.
+- **Containment**, `ρ₁ ≲ ρ₂`: every effect of `ρ₁` is in `ρ₂`, with the
+  same arguments. A call adds `callee ≲ body`: the effects of what it calls
+  must be effects of the code it's in.
+- **Combination**, `ρ₁ ⊙ ρ₂ ~ ρ₃`: `ρ₃` has the effects of both. This is
+  what `Log + E` will mean. It's not implemented yet: a row that combines
+  known effects with a variable is reported as unsupported.
 
-For example:
+What the predicates mean is a *row theory*. Rose works with several; Bolt's
+is **consistent union**: rows combine by union, and the same effect in both
+must have the same arguments. So `Log ⊙ Log ~ Log`, but no row has both
+`State[i32]` and `State[String]`. The paper's main example, simple rows, only
+combines rows with no effect in common, which would make `does Log + E` fail
+for an `E` that logs too.
 
-$$
-\mathsf{State}[\alpha] + \epsilon_1 \doteq \mathsf{Log} + \mathsf{State}[\mathsf{i32}] + \epsilon_2
-\quad\leadsto\quad
-\alpha := \mathsf{i32},\ \epsilon_1 := \mathsf{Log} + \epsilon_3,\ \epsilon_2 := \epsilon_3
-$$
+Containment is checked like this:
 
-A tail can't be given an effect that's already in its row. That's the rule
-against effects twice, and it does what an occurs check does for types: it
-keeps solutions finite and principal.
+1. No effects fit in any row, and a row fits in itself.
+2. Two known rows: each effect of the first must be in the second, and its
+   arguments are unified with those there.
+3. A variable on either side: the constraint waits.
+4. A parameter like `E` stands for any row, so nothing but itself is known
+   to fit in it, and it isn't known to fit in anything else.
+
+### Least solutions
+
+What a function does is the least row that holds what it calls. When a
+function is generalized, each row variable that's only in *positive*
+places, like the `does` of the function, or of a closure it returns, gets
+the union of the rows that must fit in it, or `Nothing`. That's as general
+as leaving it open, since a smaller row fits wherever a bigger one does
+through `≲`. A row that must hold exactly one unknown row becomes that row:
+
+```text
+twice: forall a e. fn(fn() -> a does e) -> a does e
+```
+
+The rows of parameters stay variables, with their constraints as part of
+the type, like the `e ≲ g` and `f ≲ g` of a function that returns a closure
+calling two functions it's given:
+
+```text
+compose: forall a b c e f g. e ≲ g => f ≲ g => fn(fn(a) -> b does e, fn(c) -> a does f) -> fn(c) -> b does g
+```
+
+A row that nothing decides has no effects, like the row of a closure that
+calls nothing.
+
+### Implementation
+
+`Ty::Row` in `boltlang-hir-ty` is a known row, its effects sorted so that
+equal rows are equal. Row variables are inference variables of kind
+`Effect`, and row parameters are type parameters of kind `Effect`.
+Containment is `RowConstraint` in `rows.rs`, solved by the solver like other
+deferred constraints. A scheme keeps the containment constraints left
+about its rows. Instances don't keep rows: monomorphization skips row
+parameters, since only the checker needs them.
+
+The [row types post](https://thunderseethe.dev/posts/row-types/) on
+thunderseethe.dev implements Rose's combination for records. Its solver
+has bugs to avoid here: combining two known rows doesn't reject a label in
+both, taking a row out of another doesn't check that it's in it, and waiting
+constraints are found by their variable as written rather than the one it
+was unified with, so some are never solved.
 
 ## Inferring effects
 
@@ -527,10 +575,11 @@ A body's effects are inferred like its types. The body starts with a fresh
 row variable, and each call adds the effects of what it calls. A `match`
 with effect arms takes the effects it handles out.
 
-Closures get their effects the same way: `|| fetch(x)` is
-`fn() -> Response does Async`. A function without a written result type gets its
-effects generalized like its type variables, so it's polymorphic in what
-its callbacks do:
+Closures get their effects the same way, and the calls in a closure's body
+add to the closure's effects, not to those of the code around it: `||
+fetch(x)` is `fn() -> Response does Async`. A function without a written
+result type gets the [least row](#least-solutions) that holds what it
+calls, so it's polymorphic in what its callbacks do:
 
 ```bolt
 fn twice(f) { f(); f() }
@@ -553,15 +602,14 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
   [cancelling](./async.mdx#cancelling).
 - `match { … } { … }`, with a block as scrutinee: Bolt has record literals
   in braces, so the parser has to tell the two apart.
+- Combination, `ρ₁ ⊙ ρ₂ ~ ρ₃`, for rows like `Log + E`.
 - Effects twice in a row, if it turns out to be needed.
 - Applications like `H[T]` in a row.
 
 ## References
 
-- D. Rémy. *Type checking records and variants in a natural extension of
-  ML.* POPL 1989.
-- B. R. Gaster and M. P. Jones. *A polymorphic type system for extensible
-  records and variants.* Technical report NOTTCS-TR-96-3, 1996.
+- J. G. Morris and J. McKinna. *Abstracting extensible data types: or,
+  rows by any other name.* POPL 2019. In `papers/` of the repository.
 - D. Leijen. *Koka: Programming with row polymorphic effect types.* MSFP 2014.
 - G. Plotkin and M. Pretnar. *Handlers of algebraic effects.* ESOP 2009.
 - K. C. Sivaramakrishnan, S. Dolan, L. White, T. Kelly, S. Jaffer and
