@@ -23,7 +23,12 @@ fn naturals() does Yield {
 
 match naturals() {
   () => (),
-  effect yield(n), k => if n < 5 { print(show(n)); resume(k, ()) } else { () },
+  effect yield(n), k => if n < 5 {
+    print(show(n));
+    resume(k, ())
+  } else {
+    ()
+  },
 }
 ```
 
