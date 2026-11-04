@@ -26,8 +26,6 @@ match naturals() {
   effect yield(n), k => if n < 5 {
     print(show(n));
     resume(k, ())
-  } else {
-    ()
   },
 }
 ```
