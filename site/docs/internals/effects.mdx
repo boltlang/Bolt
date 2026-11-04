@@ -113,8 +113,7 @@ type. The second gives an effect parameter no effects, like
 `Nothing` is a name of the prelude, of kind `Effect`, and capitalized like
 other effects. It isn't an effect without operations: `Nothing + E` is `E`,
 and `does Nothing + Log` is `does Log`, which the formatter writes instead. It was chosen over
-`none`, which Conduit prints for the empty row but which is too close to
-`Option`'s `None`, and over `()`, which is the unit type. A modifier like
+`none`, which is too close to `Option`'s `None`, and over `()`, which is the unit type. A modifier like
 Koka's `total` or a `pure fn` would be a second place to write effects, and
 couldn't be a type argument.
 

@@ -1,0 +1,105 @@
+---
+sidebar_position: 5
+title: Conduit
+description: How Bolt compiles to Conduit, the IR it lowers to after type checking, and what Bolt's designs need from it.
+---
+
+# Conduit
+
+[Conduit](https://github.com/boltlang/conduit) is the IR that Bolt compiles
+to after type checking. `boltlang-lower` finds the instances of each
+function and compiles `match` to decision graphs, and
+`boltlang-codegen-conduit` turns the result into a Conduit module, which
+Conduit optimizes and compiles to WebAssembly.
+
+This page is about what's particular to Bolt: how its mutability, its
+copies and its effects map onto Conduit's. Conduit's own docs describe the
+IR itself.
+
+## Mutability parameters
+
+A generic function keeps its `'m` parameters and its `where` clauses in
+Conduit, and an instance is specialized on types but not on mutabilities.
+So there's one Conduit function for every instance, generic in the
+mutabilities it takes:
+
+```
+fn fn1['m1, 'm2](%0: 'm2 [i32]) -> ('m1 data10['m2]) where 'm2: 'm1 { .. }
+let %1: mut data10[imm] = call fn1[mut, imm](%0)
+```
+
+A data type gets a mutability parameter for each mutability in its type
+arguments, so `Option[mut [i32]]` and `Option[imm [i32]]` share one
+declaration. A struct's fields without `mut` or `imm` are `inherit`.
+
+At run time nothing changes: a backend has no mutabilities, so a function
+is compiled once for every mutability it's called with.
+
+## Copies to `imm`
+
+Conduit has no deep copy. Copying a value to `imm` is the job of the type's
+`ToImm` impl, which is shallow, and builds the new value with Conduit's
+`new` and `array_clone`:
+
+```bolt
+Vec { items: array_freeze(v.items), len: v.len }
+```
+
+where `array_freeze` lowers to an `array_clone` to `imm`. Conduit's
+`copies` pass then removes what it can:
+
+- An `imm` array cloned to `imm` is the array itself.
+- An `imm` object rebuilt from its own fields at the same type is the
+  object. So once Conduit has inlined it, `to_imm` of a `Vec` that's `imm`
+  already costs nothing.
+- A clone to `imm` of an array that nothing else can reach becomes an
+  `array_freeze` in place, shown by a region analysis: the optimization
+  that [regions](./type-checking/mutability/regions.mdx) and
+  [uniqueness](./type-checking/mutability/uniqueness.mdx) describe.
+
+The last doesn't fire on `to_imm` of a fresh `mut` `Vec` yet: the impl
+reads `v.len` after cloning the buffer, so `v` is still used and the
+analysis keeps the copy. Reading an integer field can't reach the array,
+so the analysis could see past such reads
+([conduit#9](https://github.com/boltlang/conduit/issues/9)).
+
+The codegen doesn't lower `imm e` yet.
+
+## Effects
+
+**Not implemented: this is a design,** in Conduit as in
+[Bolt](./effects.mdx).
+
+Conduit's effect types follow Bolt's: rows after `does`, joined with `+`,
+with `Nothing` for the empty row and effect parameters `E1`, `E2`, ..
+written without a quote, as Bolt writes `E`. Effects are capitalized, as
+Bolt's are: `Effect20`.
+
+- **Effect parameters are kept,** as mutability parameters are. A function
+  like
+
+  ```bolt
+  fn map[A, B, E](xs: [A], f: fn(A) -> B does E) -> [B] does E
+  ```
+
+  is monomorphized on `A` and `B` but keeps `E`, so there's one `map` for
+  every callback.
+- **An effect with type parameters,** like `State[i32]`, becomes one
+  Conduit effect per instance, as a generic data type does.
+- **`handle` is typed as Bolt types a handler:** it takes its effect out of
+  what the body performs, and puts back what the clauses perform.
+- **Rows tell Conduit what suspends.** A function whose row has no
+  suspending effect, like `Async`, never needs its stack captured.
+
+In Conduit, results are always in parentheses, so
+`fn() -> (imm fn() -> () does E)` gives the row to the inner closure and
+`fn() -> (imm fn() -> ()) does E` to the outer one. Bolt's syntax can't
+tell these apart yet.
+
+Still to decide, for Conduit:
+
+- Effects whose parameters are rows, like
+  `effect Spawn[E] { fn spawn[T](task: fn() -> T does E) -> Task[T]; }`.
+- Operations with type parameters of their own, like
+  `fn raise[T](error: E) -> T`: erase `T` to Conduit's boxed `any`, or make
+  one operation per instance.

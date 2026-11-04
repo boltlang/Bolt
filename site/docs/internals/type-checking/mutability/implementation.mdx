@@ -93,9 +93,10 @@ description: Where the rules of mutability are in the checker, the tests and the
   (`solve_imm_adt`), so one that's only in a function type stays as it is.
   A closure, a type parameter, or a type still unknown when the body is
   solved (`Solver::settle_imm`) stays as it is, and must be at most `imm`.
-  It's lowered to Conduit's `copy[imm]`, which Conduit's `copies` pass
-  turns into a `freeze` when its region analysis shows nothing else can
-  reach the originals. What such an analysis must show is proven in Lean
+  It isn't lowered to Conduit yet: a copy to `imm` there is the type's
+  `ToImm` impl, made of `new` and `array_clone`, which Conduit's `copies`
+  pass turns into an `array_freeze` when its region analysis shows nothing
+  else can reach the originals (see [Conduit](../../conduit.mdx)). What such an analysis must show is proven in Lean
   (below).
 - **`mut e`** (`infer.rs`): `mut` before an array, a struct
   literal or a call of a tuple struct's constructor (`constructs_struct`)
