@@ -66,6 +66,13 @@ fn total(xs: [i32]) -> i32 = …;
   `f: fn(A) -> B does Log, n: i32`. It belongs to the nearest `fn`, so
   `fn(A) -> fn(B) -> C does Log` is a function that returns a function with
   `Log`.
+- A closure writes `does` after its parameters, or after its result type if
+  it has one, and then its body must be a block, as with a result type:
+  `|x| -> i32 does Log { … }`, `|x| does Log { … }`. Most closures don't
+  write it: their effects are inferred.
+- An extern says `does` like any function:
+  `extern "env" { fn log(message: String) does Console; }`. Without it, the
+  extern has no effects.
 
 ### Written or inferred
 
@@ -195,6 +202,21 @@ needs two states can declare a second effect.
 The rule holds for effect variables too. In `does State[i32] + E`, `E` can't
 contain `State`. A call that would put a second `State` in the row, like
 passing a function with `State[String]` for `E`, is an error at the call.
+
+## Effects in classes
+
+A class method could have effects too, and an impl could have effects its
+class doesn't name, like an `Iterator` whose `next` waits. One way is an
+effect parameter on the class:
+
+```bolt
+class Iterator[T, E] {
+    fn next(self: mut Self) -> Option[T] does E;
+}
+```
+
+That's the plan, but not part of the first version: there, the methods of
+classes and impls can't have effects.
 
 ## Handlers
 
@@ -346,6 +368,9 @@ type $U$:
 So `match` takes the effects it has arms for out of the row, and nothing
 else.
 
+`resume` and `Cont` are names of the prelude, like `Nothing`, and not
+keywords.
+
 An operation with type parameters of its own, like `fn suspend[T](…) -> T`,
 gives each of its arms a new type for `T`, equal to no other type. In the
 scheduler above, `k` can only be resumed with a value of that type, which
@@ -359,6 +384,11 @@ A `match` with effect arms becomes a `handle` in Conduit:
 - the value arms become the return clause;
 - the arms of each operation become its clause, with a decision graph over
   the arguments.
+
+Effect parameters, like the `E` of `map`, are passed through to Conduit as
+effect parameters, as mutability parameters are. Instances are only made
+for types, so a `map` that's called with functions of different effects is
+still one function in Conduit.
 
 ### Why `match`
 
@@ -507,6 +537,9 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
 
 ## Still to decide
 
+- How effects in classes work, beyond the plan
+  [above](#effects-in-classes).
+- Which effects the prelude's `print` and `panic` have.
 - How to give `does` to the outer function of `fn(A) -> fn(B) -> C`. `(T)`
   is a one-element tuple type, so parentheses don't group types today.
 - A shorthand for passing operations on in a handler
