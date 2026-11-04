@@ -19,7 +19,8 @@
 //! interprets. A new case can leave out its output, and a harness fills it
 //! in when it runs with `UPDATE_EXPECT=1`.
 //!
-//! The input can have several files, each starting with a line like
+//! The input is kept as it is, without the blank lines around it. It can
+//! have several files, each starting with a line like
 //! `//- /lib.bolt`: see [`split_files`].
 
 use std::{
@@ -106,9 +107,14 @@ pub fn parse_cases(text: &str, max_sections: usize) -> Result<Vec<Case>, String>
             };
             return Err(format!("`{title}`: expected the input and at most {n} of output"));
         }
-        let mut parts = parts.into_iter().map(|part| part.join("\n").trim().to_string());
-        let input = parts.next().unwrap_or_default() + "\n";
-        let sections = parts.collect();
+        let mut parts = parts.into_iter();
+        // Without the blank lines around it, but with the indentation of its
+        // first line, which carets in comments below it can count on.
+        let input = parts.next().map_or(String::new(), |part| {
+            let start = part.iter().position(|line| !line.trim().is_empty()).unwrap_or(part.len());
+            part[start..].join("\n").trim_end().to_string()
+        }) + "\n";
+        let sections = parts.map(|part| part.join("\n").trim().to_string()).collect();
         let head = head_start..head_end.unwrap_or(i);
         cases.push(Case { title, attributes, input, sections, head, lines: head_start..i });
     }
