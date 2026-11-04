@@ -8,10 +8,9 @@ description: A design for effect types in Bolt, with does and +, effects with pa
 
 :::warning[Partly implemented]
 The syntax parses, and the type checker infers and checks effects: rows,
-`does`, containment and `Nothing`. **Not implemented yet**: handlers, which
-are left out of a `match`, rows that combine effects with an effect
-variable, like `Log + E`, and running effects. Algebraic effects are
-tracked in [#40](https://github.com/boltlang/bolt/issues/40).
+`does`, containment, combination and `Nothing`. **Not implemented yet**:
+handlers, which are left out of a `match`, and running effects. Algebraic
+effects are tracked in [#40](https://github.com/boltlang/bolt/issues/40).
 :::
 
 An *effect* is something a function can do besides returning a value:
@@ -500,17 +499,20 @@ a known effect or an effect variable, and `H[T]` in a row is an error.
 ## Rows as predicates
 
 Rows follow Morris and McKinna's Rose [Morris & McKinna 2019]. A row in a
-type is either known, like `Log + State[i32]`, or a variable or parameter,
-like `e` or `E`. How rows relate is a *predicate* on them, which the solver
-defers until the rows are known well enough, as it does for class
-constraints:
+type has the effects that are known, like `Log + State[i32]`, and can be
+made of rows that stand for any row, like the `E` of `Log + E`: parameters,
+and the variables of an inferred function's type. A row made of rows still
+being inferred is a variable instead. How rows relate is a *predicate* on
+them, which the solver defers until the rows are known well enough, as it
+does for class constraints:
 
 - **Containment**, `ρ₁ ≲ ρ₂`: every effect of `ρ₁` is in `ρ₂`, with the
   same arguments. A call adds `callee ≲ body`: the effects of what it calls
   must be effects of the code it's in.
-- **Combination**, `ρ₁ ⊙ ρ₂ ~ ρ₃`: `ρ₃` has the effects of both. This is
-  what `Log + E` will mean. It's not implemented yet: a row that combines
-  known effects with a variable is reported as unsupported.
+- **Combination**, `ρ₁ ⊙ … ⊙ ρₙ ~ ρ`: `ρ` has the effects of all of them.
+  Using a function whose type has `Log + E` gives `E` a new variable `?e`,
+  and the row becomes a variable `?r` with `Log ⊙ ?e ~ ?r`. Once `?e` is
+  known, `?r` is too.
 
 What the predicates mean is a *row theory*. Rose works with several; Bolt's
 is **consistent union**: rows combine by union, and the same effect in both
@@ -521,12 +523,16 @@ for an `E` that logs too.
 
 Containment is checked like this:
 
-1. No effects fit in any row, and a row fits in itself.
-2. Two known rows: each effect of the first must be in the second, and its
-   arguments are unified with those there.
+1. No effects fit in any row, a row fits in itself, and a row fits in a row
+   made of it, like `E` in `Log + E`.
+2. Two rows that aren't variables: each effect of the first must be in the
+   second, and its arguments are unified with those there. Each row the
+   first is made of, like `E`, must be one the second is made of: a
+   parameter stands for any row, so it isn't known to be in any other.
 3. A variable on either side: the constraint waits.
-4. A parameter like `E` stands for any row, so nothing but itself is known
-   to fit in it, and it isn't known to fit in anything else.
+
+Combination waits until its rows aren't variables, and then makes the goal
+their union.
 
 ### Least solutions
 
@@ -541,25 +547,31 @@ through `≲`. A row that must hold exactly one unknown row becomes that row:
 twice: forall a e. fn(fn() -> a does e) -> a does e
 ```
 
-The rows of parameters stay variables, with their constraints as part of
-the type, like the `e ≲ g` and `f ≲ g` of a function that returns a closure
-calling two functions it's given:
+The rows of parameters stay variables, and a least row can be made of them:
 
 ```text
-compose: forall a b c e f g. e ≲ g => f ≲ g => fn(fn(a) -> b does e, fn(c) -> a does f) -> fn(c) -> b does g
+noisy: forall a e. fn(fn() -> a does e) -> a does Log + e
+compose: forall a b c e f. fn(fn(a) -> b does e, fn(c) -> a does f) -> fn(c) -> b does e + f
 ```
+
+Rows that wait only for each other, like those of functions that call each
+other, have the same least solution, so they're made one. A row constraint
+that's still left becomes part of the function's type.
 
 A row that nothing decides has no effects, like the row of a closure that
 calls nothing.
 
 ### Implementation
 
-`Ty::Row` in `boltlang-hir-ty` is a known row, its effects sorted so that
-equal rows are equal. Row variables are inference variables of kind
-`Effect`, and row parameters are type parameters of kind `Effect`.
-Containment is `RowConstraint` in `rows.rs`, solved by the solver like other
-deferred constraints. A scheme keeps the containment constraints left
-about its rows. Instances don't keep rows: monomorphization skips row
+`Ty::Row` in `boltlang-hir-ty` is a row's known effects and the rows it's
+made of, both sorted so that equal rows are equal; a row that's one
+parameter and nothing else is that parameter. Row variables are inference
+variables of kind `Effect`, and row parameters are type parameters of kind
+`Effect`. Containment and combination are `RowConstraint` in `rows.rs`,
+solved by the solver like other deferred constraints. Instantiating a
+scheme turns each row made of variables into a variable and a
+combination (`open_rows`). A scheme keeps the row constraints left about
+its rows. Instances don't keep rows: monomorphization skips row
 parameters, since only the checker needs them.
 
 ## Inferring effects
@@ -595,7 +607,6 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
   [cancelling](./async.mdx#cancelling).
 - `match { … } { … }`, with a block as scrutinee: Bolt has record literals
   in braces, so the parser has to tell the two apart.
-- Combination, `ρ₁ ⊙ ρ₂ ~ ρ₃`, for rows like `Log + E`.
 - Effects twice in a row, if it turns out to be needed.
 - Applications like `H[T]` in a row.
 
