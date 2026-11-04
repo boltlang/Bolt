@@ -33,8 +33,9 @@ fn is_up(url: str) -> bool does Async = match fetch(url) {
 ```
 
 There's no `await`: `fetch` returns the response once it's there. Callers
-don't write `async` either; `Async` is inferred for every function and
-closure that calls `fetch`, like `is_up`.
+don't write `async` either. A signature like `is_up`'s says `does Async`, as
+it says its result type, and closures and functions without a written
+result type get `Async` by inference.
 
 The effect itself has two operations:
 

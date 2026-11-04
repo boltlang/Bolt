@@ -53,7 +53,11 @@ fn count(xs: [String]) -> i32 does State[i32] = …;
 fn total(xs: [i32]) -> i32 = …;
 ```
 
-- A function that has no effects writes nothing.
+- A written result type without `does` means the function has no effects,
+  as in Koka [Leijen 2014]. If `total` called `log`, that would be an error
+  at its signature.
+- A function without a written result type has its effects inferred, like
+  its types (see [Inferring effects](#inferring-effects)).
 - The order doesn't matter: `Async + Log` and `Log + Async` are the same.
 - `does` comes before a body, `=` and `where`:
   `fn f[T](x: T) -> T does Log where Show[T] = …`.
@@ -61,6 +65,15 @@ fn total(xs: [i32]) -> i32 = …;
   `f: fn(A) -> B does Log, n: i32`. It belongs to the nearest `fn`, so
   `fn(A) -> fn(B) -> C does Log` is a function that returns a function with
   `Log`.
+
+Function types follow the same rule: `fn(A) -> B` has no effects. So a
+parameter that takes a function with any effects needs an effect variable,
+as `map` has [below](#effect-variables).
+
+The cost of this rule is that a new effect deep down a call chain, like a
+call of `log`, has to be added to each written signature above it.
+Signatures that are inferred, or that have an effect variable, don't need
+changing.
 
 The effects after `does` are a *row*. `+` was chosen over a list in
 delimiters because there's nothing to close, so it can't be mixed up with a
@@ -260,7 +273,7 @@ row variable, and each call adds the effects of what it calls. A handler
 takes its effect out.
 
 Closures get their effects the same way: `|| fetch(x)` is
-`fn() -> Response does Async`. A function without a written type gets its
+`fn() -> Response does Async`. A function without a written result type gets its
 effects generalized like its type variables, so it's polymorphic in what
 its callbacks do:
 
@@ -274,8 +287,6 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
 
 ## Still to decide
 
-- Whether a function with a written signature but no `does` has no
-  effects, or has its effects inferred.
 - How to give `does` to the outer function of `fn(A) -> fn(B) -> C`. `(T)`
   is a one-element tuple type, so parentheses don't group types today.
 - The syntax and typing of handlers.
