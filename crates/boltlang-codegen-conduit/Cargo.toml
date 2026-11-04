@@ -9,12 +9,12 @@ boltlang-base-db.workspace = true
 boltlang-hir-def.workspace = true
 boltlang-hir-ty.workspace = true
 boltlang-lower.workspace = true
-# Conduit is developed next to Bolt, in `../conduit`.
-conduit-ir = { path = "../../../conduit/crates/conduit-ir" }
+# Conduit, at a commit of its `main`: bump `rev` to use newer changes.
+conduit-ir = { git = "https://github.com/boltlang/conduit", rev = "9b35f5a" }
 
 [dev-dependencies]
 boltlang-corpus.workspace = true
-conduit-eval = { path = "../../../conduit/crates/conduit-eval" }
+conduit-eval = { git = "https://github.com/boltlang/conduit", rev = "9b35f5a" }
 libtest-mimic = "0.8.2"
 
 [[test]]
