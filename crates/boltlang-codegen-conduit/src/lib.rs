@@ -16,7 +16,13 @@
 //!   module `bolt`, and so is `unmatched`, which a `match` that no arm
 //!   takes calls.
 //!
-//! What's left out: closures, erased code and dictionaries, patterns in
+//! - A lambda is lifted to a function of its own, which takes what it
+//!   captures first, as `boltlang-lower` finds it, then its parameters. A
+//!   local that's assigned is captured as its ref. Making the lambda is a
+//!   `closure` of that function, and calling a value that isn't a named
+//!   function is an `apply`.
+//!
+//! What's left out: erased code and dictionaries, variants as functions, patterns in
 //! parameters, and what needs something Conduit doesn't have yet: `imm e`,
 //! `array_alloc`, `array_copy` and 128-bit integers. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
@@ -32,12 +38,14 @@ use std::{
 use boltlang_base_db::{Db, File, source_text};
 use boltlang_hir_def::{
     body::{DefWithBody, body_with_source_map},
+    hir::ExprId,
     ids::FunctionId,
 };
 use boltlang_hir_ty::builtin::Builtin;
 use boltlang_lower::{
     Cx, Instance, MonoTy, Site, Use, UseError,
     decision::{Node, body_decisions},
+    lambda::{Lambda, body_lambdas},
     program,
 };
 use conduit_ir::{Extern, ExternId, Func, FuncId, Module, MutParams, Sig};
@@ -128,6 +136,8 @@ pub(crate) struct Ctx<'db> {
     pub db: &'db dyn Db,
     pub root: File,
     pub funcs: HashMap<Instance<'db>, FuncId>,
+    /// The function each lambda of an instance is lifted to.
+    pub lambdas: HashMap<(Instance<'db>, ExprId), FuncId>,
     pub externs: HashMap<ExternKey<'db>, ExternId>,
     pub erased: Vec<FunctionId<'db>>,
 }
@@ -171,6 +181,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         db,
         root: entry,
         funcs: HashMap::new(),
+        lambdas: HashMap::new(),
         externs: HashMap::new(),
         erased: p.erased.clone(),
     };
@@ -180,6 +191,14 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         let id = FuncId(1 + i as u64);
         cx.funcs.insert(iu.instance, id);
         names.insert(id, iu.instance.display(db).to_string());
+    }
+    // The lambdas, lifted, after the instances.
+    for iu in &p.instances {
+        for (k, lambda) in body_lambdas(db, iu.instance.body(db)).iter().enumerate() {
+            let id = FuncId(1 + names.len() as u64);
+            cx.lambdas.insert((iu.instance, lambda.expr), id);
+            names.insert(id, format!("{}::lambda{k}", iu.instance.display(db)));
+        }
     }
     let mut module = Module::default();
     let mut types = Types::default();
@@ -211,8 +230,14 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             }
         }
         match instance_sig(&mut types, &lcx, entry) {
-            Ok(sig) => sigs.push((iu.instance, sig)),
+            Ok(sig) => sigs.push((cx.funcs[&iu.instance], sig)),
             Err(kind) => errors.push(error(kind)),
+        }
+        for lambda in body_lambdas(db, iu.instance.body(db)) {
+            match lambda_sig(&mut types, &lcx, entry, lambda) {
+                Ok(sig) => sigs.push((cx.lambdas[&(iu.instance, lambda.expr)], sig)),
+                Err(kind) => errors.push(error(kind)),
+            }
         }
         for (site, u) in &iu.uses {
             if let Err(kind) = declare_extern(&mut cx, &mut module, &mut types, &lcx, site, u) {
@@ -239,16 +264,22 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         cx.externs.insert(ExternKey::Bolt("unmatched"), unmatched);
     }
     module.data = types.decls.clone();
-    for (instance, (sig, mut_params)) in &sigs {
+    for (id, (sig, mut_params)) in &sigs {
         let mut f = Func::new(sig.params.clone(), sig.results.clone());
         f.mut_params = mut_params.clone();
-        module.funcs.insert(cx.funcs[instance], f);
+        module.funcs.insert(*id, f);
     }
     let mut built = Vec::new();
     for iu in &p.instances {
-        match func::lower_body(&cx, &module, &mut types, iu) {
+        match func::lower_body(&cx, &module, &mut types, iu, None) {
             Ok(f) => built.push((cx.funcs[&iu.instance], f)),
             Err(e) => errors.push(e),
+        }
+        for lambda in body_lambdas(db, iu.instance.body(db)) {
+            match func::lower_body(&cx, &module, &mut types, iu, Some(lambda)) {
+                Ok(f) => built.push((cx.lambdas[&(iu.instance, lambda.expr)], f)),
+                Err(e) => errors.push(e),
+            }
         }
     }
     if !errors.is_empty() {
@@ -302,6 +333,34 @@ fn instance_sig<'db>(
         DefWithBody::File(_) => {}
         DefWithBody::Variant(_) => return Err(ErrorKind::unsupported("the value of a variant")),
     }
+    let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
+    Ok((sig, mut_params))
+}
+
+/// The signature of a lifted lambda: its captures, then its parameters.
+/// A local that's assigned is captured as its ref.
+fn lambda_sig<'db>(
+    types: &mut Types<'db>,
+    lcx: &Cx<'_, 'db>,
+    root: File,
+    lambda: &Lambda,
+) -> Result<(Sig, MutParams), ErrorKind> {
+    let db = lcx.db;
+    let (body, _) = body_with_source_map(db, lcx.instance.body(db));
+    let mut sig = Sig { params: Vec::new(), results: Vec::new() };
+    for &b in lambda.captures.iter() {
+        if let Some(t) = types.value(db, root, &lcx.binding_ty(b)?)? {
+            let mutable = body.bindings[b].mutable;
+            sig.params.push(if mutable { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
+        }
+    }
+    let MonoTy::Fn(params, ret, _) = lcx.expr_ty(lambda.expr)? else {
+        return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
+    };
+    for t in params.iter() {
+        sig.params.extend(types.value(db, root, t)?);
+    }
+    sig.results.extend(types.value(db, root, &ret)?);
     let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
     Ok((sig, mut_params))
 }

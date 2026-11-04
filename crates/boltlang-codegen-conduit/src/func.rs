@@ -23,6 +23,7 @@ use boltlang_lower::{
     Cx, InstanceUses, MonoTy, Site, Use,
     decision::{Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value, body_decisions},
     field_types,
+    lambda::{Lambda, body_lambdas},
 };
 use conduit_ir::{
     Atom, CtorId, Func, Lit, Module, Mutability, Prim, Sign, Ty, build::FuncBuilder,
@@ -61,11 +62,13 @@ struct Target {
 }
 
 /// The function of the instance `iu`.
+/// The function of the instance `iu`, or of one of its lambdas, lifted.
 pub(crate) fn lower_body<'db>(
     cx: &Ctx<'db>,
     module: &Module,
     types: &mut Types<'db>,
     iu: &InstanceUses<'db>,
+    lambda: Option<&Lambda>,
 ) -> Result<Func, Error> {
     let db = cx.db;
     let def = iu.instance.body(db);
@@ -75,7 +78,11 @@ pub(crate) fn lower_body<'db>(
         at: None,
         kind: e.into(),
     })?;
-    let sig = &module.funcs[&cx.funcs[&iu.instance]];
+    let id = match lambda {
+        Some(lambda) => cx.lambdas[&(iu.instance, lambda.expr)],
+        None => cx.funcs[&iu.instance],
+    };
+    let sig = &module.funcs[&id];
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
     b.set_mut_params(sig.mut_params.clone());
     let mut l = Lower {
@@ -86,6 +93,7 @@ pub(crate) fn lower_body<'db>(
         body,
         map,
         b,
+        lambda,
         uses: iu.uses.iter().cloned().collect(),
         locals: HashMap::new(),
         targets: Vec::new(),
@@ -118,6 +126,8 @@ struct Lower<'a, 'm, 'db> {
     body: &'db Body,
     map: &'db ExpressionStoreSourceMap,
     b: FuncBuilder<'m, Module>,
+    /// The lambda this is the function of, if it's one.
+    lambda: Option<&'a Lambda>,
     uses: HashMap<Site, Use<'db>>,
     locals: HashMap<BindingId, Local>,
     targets: Vec<Target>,
@@ -148,6 +158,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     }
 
     fn run(&mut self) -> R<()> {
+        if let Some(lambda) = self.lambda {
+            return self.run_lambda(lambda);
+        }
         let db = self.cx.db;
         // The parameters: each of a type with values is one of Conduit's.
         let mut next = 0;
@@ -171,6 +184,73 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
         }
         Ok(())
+    }
+
+    /// The function of a lambda: its captures, then its parameters.
+    fn run_lambda(&mut self, lambda: &Lambda) -> R<()> {
+        let mut next = 0;
+        for &b in lambda.captures.iter() {
+            let local = match self.cty(&self.lcx.binding_ty(b)?)? {
+                Some(_) => {
+                    next += 1;
+                    let p = self.b.param(next - 1);
+                    if self.body.bindings[b].mutable {
+                        Local::Ref(p)
+                    } else {
+                        Local::Value(Some(Atom::Var(p)))
+                    }
+                }
+                None => Local::Value(None),
+            };
+            self.locals.insert(b, local);
+        }
+        let Expr::Lambda { params, body: inner, .. } = &self.body[lambda.expr] else {
+            return Err(ErrorKind::unsupported("this lambda"));
+        };
+        for &pat in params.iter() {
+            let t = self.lcx.pat_ty(pat)?;
+            let value = match self.cty(&t)? {
+                Some(_) => {
+                    next += 1;
+                    Some(Atom::Var(self.b.param(next - 1)))
+                }
+                None => None,
+            };
+            self.bind_pat(pat, value)?;
+        }
+        let result = self.expr(*inner)?;
+        if !self.ended() {
+            self.b.ret(result.into_iter().collect::<Vec<_>>());
+        }
+        Ok(())
+    }
+
+    /// A closure of the lifted lambda `e`, with the values it captures.
+    fn closure(&mut self, e: ExprId) -> R<Val> {
+        let f = self.cx.lambdas[&(self.lcx.instance, e)];
+        let lambda = body_lambdas(self.cx.db, self.def)
+            .iter()
+            .find(|l| l.expr == e)
+            .ok_or_else(|| ErrorKind::unsupported("this lambda"))?;
+        let mut captures = Vec::new();
+        for b in lambda.captures.iter() {
+            match self.locals.get(b) {
+                Some(Local::Value(Some(v))) => captures.push(v.clone()),
+                Some(Local::Ref(r)) => captures.push(Atom::Var(*r)),
+                Some(Local::Value(None)) => {}
+                None => return Err(ErrorKind::unsupported("a capture that isn't in scope")),
+            }
+        }
+        let MonoTy::Fn(_, _, m) = self.mono(e)? else {
+            return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
+        };
+        Ok(Some(Atom::Var(self.b.closure_at(f, self.own_margs(), mutability(m), captures))))
+    }
+
+    /// The instance's own mutability parameters, to give a lifted lambda,
+    /// which has them too.
+    fn own_margs(&self) -> Vec<Mutability> {
+        (1..=self.lcx.instance.mut_params(self.cx.db) as u32).map(Mutability::Param).collect()
     }
 
     /// Bind the pattern of a parameter or a `let` to `value`, which it
@@ -470,7 +550,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 "a deep copy that keeps what's shared and cycles, for `imm e`: it has to tell \
                  objects apart",
             )),
-            Expr::Lambda { .. } => Err(ErrorKind::unsupported("closures")),
+            Expr::Lambda { .. } => self.closure(e),
             Expr::Let { .. } => Err(ErrorKind::unsupported("`let` here")),
             Expr::Missing => Err(ErrorKind::unsupported("code with syntax errors")),
             Expr::Await { .. }
@@ -659,7 +739,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Some(ValueNs::Local(id)) => match self.locals.get(&id).cloned() {
                 Some(Local::Value(v)) => Ok(v),
                 Some(Local::Ref(r)) => Ok(Some(Atom::Var(self.b.ref_get(r)))),
-                None => Err(ErrorKind::unsupported("a local from outside, in a closure")),
+                None => Err(ErrorKind::unsupported("a local that isn't in scope")),
             },
             Some(ValueNs::Builtin(BuiltinValue::True)) => Ok(Some(Atom::Lit(Lit::I32(1)))),
             Some(ValueNs::Builtin(BuiltinValue::False)) => Ok(Some(Atom::Lit(Lit::I32(0)))),
@@ -670,9 +750,28 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 self.variant(e, v, Vec::new())
             }
             Some(ValueNs::Const(_)) => self.call_use(Site::Expr(e), Vec::new(), e),
-            Some(ValueNs::Function(_)) => Err(ErrorKind::unsupported("a function as a value")),
+            Some(ValueNs::Function(_)) => self.function_value(e),
             _ => Err(ErrorKind::unsupported("this name")),
         }
+    }
+
+    /// A named function as a value: a closure of its instance that
+    /// captures nothing.
+    fn function_value(&mut self, e: ExprId) -> R<Val> {
+        let Some(Use::Instance { instance, mutabilities, dicts }) =
+            self.uses.get(&Site::Expr(e)).cloned()
+        else {
+            return Err(ErrorKind::unsupported("a builtin or a host function as a value"));
+        };
+        if !dicts.is_empty() {
+            return Err(ErrorKind::unsupported("dictionaries"));
+        }
+        let MonoTy::Fn(_, _, m) = self.mono(e)? else {
+            return Err(ErrorKind::unsupported("a function whose type isn't a function"));
+        };
+        let f = self.cx.funcs[&instance];
+        let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
+        Ok(Some(Atom::Var(self.b.closure_at(f, margs, mutability(m), Vec::<Atom>::new()))))
     }
 
     /// A value of the variant `v`, of the type of `e`, with these fields.
@@ -752,7 +851,17 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
             return self.variant(e, v, values.into_iter().flatten().collect());
         }
-        Err(ErrorKind::unsupported("calling a value that isn't a named function"))
+        // A value that's a function, like a closure: `apply` it.
+        let f = val!(self.expr(callee)).ok_or_else(|| ErrorKind::unsupported("calling this"))?;
+        for &a in args {
+            values.push(val!(self.expr(a)));
+        }
+        let args: Vec<Atom> = values.into_iter().flatten().collect();
+        let results = self.b.apply(f, args);
+        if matches!(self.mono(e)?, MonoTy::Never) {
+            self.b.unreachable();
+        }
+        Ok(results.first().map(|&v| Atom::Var(v)))
     }
 
     /// Call what the use at `site` is, with these arguments, for the
