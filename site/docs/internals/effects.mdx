@@ -7,9 +7,12 @@ description: A design for effect types in Bolt, with does and +, effects with pa
 # Effects (design)
 
 :::warning[Mostly not implemented]
-This page is a design. **Only the syntax is implemented**: `effect`
-declarations, `does` and `effect` arms parse, but the compiler ignores them
-after that. Algebraic effects are tracked in
+This page is a design, and **most of it isn't implemented**. `effect`
+declarations, `does` and `effect` arms parse. Effects and their operations
+are found by name, effects have the kind `Effect`, and a call of an
+operation is checked like a call of a function. But rows aren't checked
+yet, `does` and `effect` arms are ignored, and nothing runs. Algebraic
+effects are tracked in
 [#40](https://github.com/boltlang/bolt/issues/40).
 :::
 

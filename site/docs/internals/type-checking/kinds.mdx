@@ -28,7 +28,7 @@ inference keeps its principal types.
 A *kind* is the type of a type (`Kind` in `kind.rs`):
 
 $$
-\kappa ::= \mathsf{Type} \mid \kappa_1 \to \kappa_2
+\kappa ::= \mathsf{Type} \mid \mathsf{Effect} \mid \kappa_1 \to \kappa_2
 $$
 
 `i32` and `Option[i32]` are of kind $\mathsf{Type}$. `Option` is of kind
@@ -37,6 +37,11 @@ $\mathsf{Type} \to \mathsf{Type} \to \mathsf{Type}$, and the `F` of `Functor`
 of kind $\mathsf{Type} \to \mathsf{Type}$. Applying a constructor of kind
 $\kappa_1 \to \kappa_2$ to a type of kind $\kappa_1$ gives a type of kind
 $\kappa_2$, so `Either[String]` is of kind $\mathsf{Type} \to \mathsf{Type}$.
+
+$\mathsf{Effect}$ is the kind of [effects](../effects.mdx#kind-inference):
+`Log` is of kind $\mathsf{Effect}$, and `State` of kind
+$\mathsf{Type} \to \mathsf{Effect}$. An effect where a type is expected,
+like `fn f(x: Log)`, is a kind mismatch.
 
 Kinds are not to be confused with the `VarKind` of inference variables,
 which says whether a variable is for any type or for a number.
