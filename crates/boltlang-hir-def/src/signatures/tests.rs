@@ -25,13 +25,13 @@ fn function_signatures() {
     let db = TestDb::new();
     let file = db.file(
         "/main.bolt",
-        "pub async fn f[T: Show, const N: usize = 3](x: T, y: i32 = N, ...) -> [T; N] where T: Eq, Convert[T, i32] {}\n",
+        "pub fn f[T: Show, const N: usize = 3](x: T, y: i32 = N, ...) -> [T; N] where T: Eq, Convert[T, i32] {}\n",
     );
     let ModItem::Function(idx) = top(&db, file, 0) else { panic!() };
     let sig = function_signature(&db, FunctionId::new(&db, ItemContainerId::File(file), idx));
     let s = &sig.store;
     assert_eq!(sig.visibility, RawVisibility::Public);
-    assert!(sig.is_async && !sig.is_const);
+    assert!(!sig.is_const);
     assert!(sig.is_variadic);
     assert_eq!(sig.params.len(), 2);
     assert_eq!(type_name(s, sig.params[0].type_ref.unwrap()), "T");

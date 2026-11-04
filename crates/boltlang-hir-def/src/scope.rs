@@ -261,7 +261,6 @@ fn children(expr: &Expr) -> Vec<ExprId> {
             out.extend(args.iter().copied());
         }
         Expr::Field { expr, .. }
-        | Expr::Await { expr }
         | Expr::Try { expr }
         | Expr::Imm { expr }
         | Expr::Mut { expr }
@@ -276,9 +275,7 @@ fn children(expr: &Expr) -> Vec<ExprId> {
             out.extend(fields.iter().map(|f| f.expr));
             out.extend(*spread);
         }
-        Expr::Break { expr, .. } | Expr::Return { expr } | Expr::Yield { expr } => {
-            out.extend(*expr)
-        }
+        Expr::Break { expr, .. } | Expr::Return { expr } => out.extend(*expr),
         // These are handled by walk_expr.
         Expr::Let { .. }
         | Expr::Block { .. }

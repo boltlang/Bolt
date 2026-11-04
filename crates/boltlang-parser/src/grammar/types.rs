@@ -21,7 +21,6 @@ pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     LABEL_IDENT,
     T![!],
     T![fn],
-    T![async],
     T![const],
     T![extern],
     T![impl],
@@ -61,7 +60,7 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
         T![mut] | T![imm] if p.nth_at(1, T!['[']) => array_type(p),
         T![mut] | T![imm] | LABEL_IDENT => mut_type(p),
         T![!] => never_type(p),
-        T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
+        T![fn] | T![const] | T![extern] => fn_type(p),
         T![impl] => impl_trait_type(p),
         _ if at_macro_call(p) => {
             let m = p.start();
@@ -115,7 +114,7 @@ fn impl_trait_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, IMPL_TRAIT_TYPE)
 }
 
-/// `fn(A) -> B`, with optional modifiers: `async`, `const`, `extern "C"`.
+/// `fn(A) -> B`, with optional modifiers: `const` and `extern "C"`.
 fn fn_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     function_modifiers(p);
@@ -125,12 +124,12 @@ fn fn_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, FN_TYPE)
 }
 
-/// `async`, `const` and `extern "C"`, in any order, as in the grammar's
+/// `const` and `extern "C"`, in any order, as in the grammar's
 /// `function_modifiers`.
 pub(crate) fn function_modifiers(p: &mut Parser) {
     loop {
         match p.current() {
-            T![async] | T![const] => p.bump_any(),
+            T![const] => p.bump_any(),
             T![extern] => abi(p),
             _ => break,
         }

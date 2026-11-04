@@ -274,7 +274,7 @@ Generators
 ================================================================================
 || {
     while i <= n {
-        yield i;
+        yield(i);
         i += 1;
     }
     return;
@@ -288,13 +288,12 @@ if x < 0 { const { 4i32.pow(4) } } else { x }
 let three_ranges = [const { (0..=5).into_inner() }; 3];
 
 ================================================================================
-Yield expressions
+async, await and yield are names
 ================================================================================
-yield 42;
-let x = yield 42;
-let y = yield;
-f(yield a + b);
-let z = (yield 1) + 2;
+let async = 1;
+let await = async;
+yield(await);
+let r = task.await;
 
 ================================================================================
 Anonymous functions
@@ -368,7 +367,6 @@ let a = |x| x + 1;
 let b = |x, y| x * y;
 let c = || 42;
 let d = |x: i32| -> i32 { x };
-let e = async |x| f(x).await;
 let f = |(Ok(x) | Err(x))| x;
 let g = |_| _;
 map(xs, |x| x || y);
@@ -395,9 +393,6 @@ let e = t.0.1.2;
 let f = x.f(1);
 let g = x.f().g();
 let h = 1.max(2);
-let i = fut.await;
-let j = fut.await?.x;
-let k = t.0 .await;
 
 ================================================================================
 Anonymous function in a let
@@ -493,9 +488,7 @@ for A | B in c {}
 'b: while x { break 'b x; }
 let v = loop { break 42; };
 let w = 'c: { break 'c 1; };
-let a = async { f().await };
 let c = const { 1 + 2 };
-fn g() { yield; yield 1; }
 fn h() { if x { return } else { continue } }
 
 ================================================================================

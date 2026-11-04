@@ -91,12 +91,12 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
 }
 
 /// Whether a named function starts here, possibly after modifiers like
-/// `async` or `extern "C"`. `fn (x) = x` is an anonymous function instead.
+/// `const` or `extern "C"`. `fn (x) = x` is an anonymous function instead.
 fn at_fn(p: &Parser) -> bool {
     let mut n = 0;
     loop {
         match p.nth(n) {
-            T![async] | T![const] => n += 1,
+            T![const] => n += 1,
             T![extern] => {
                 n += 1;
                 if p.nth_at(n, STRING) {

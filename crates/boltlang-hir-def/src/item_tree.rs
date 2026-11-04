@@ -216,7 +216,6 @@ pub struct Function {
     /// called by its path, `Vec.new()`.
     pub owner: Option<Name>,
     pub visibility: RawVisibility,
-    pub is_async: bool,
     pub is_const: bool,
     /// Whether it has a body, as opposed to a signature like `fn f();`.
     pub has_body: bool,
@@ -464,7 +463,6 @@ impl ItemTree {
             name: fn_name,
             owner: f.owner().map(|owner| Name::from_ident(&owner.text())),
             visibility: RawVisibility::from_ast(f.visibility()),
-            is_async: f.async_token().is_some(),
             is_const: f.const_token().is_some(),
             has_body: f.body().is_some(),
             is_test: has_attr(f, "test"),

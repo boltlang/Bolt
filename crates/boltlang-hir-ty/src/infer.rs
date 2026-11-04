@@ -722,7 +722,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Call { callee, args } => self.infer_call(expr, *callee, args, false),
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
-            Expr::Await { expr: inner } | Expr::Try { expr: inner } => {
+            Expr::Try { expr: inner } => {
                 self.infer_expr(*inner);
                 self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
                 Ty::Error
@@ -941,13 +941,6 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     ),
                 }
                 Ty::Never
-            }
-            Expr::Yield { expr: value } => {
-                if let Some(value) = value {
-                    self.infer_expr(*value);
-                }
-                self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
-                Ty::unit()
             }
             Expr::Lambda { params, param_types, ret_type, body: lambda_body, .. } => {
                 let (hint_params, hint_ret) =

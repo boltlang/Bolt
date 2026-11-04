@@ -111,7 +111,6 @@ impl Printer<'_> {
                 }
                 let kind = match kind {
                     BlockKind::Plain => "",
-                    BlockKind::Async => "async ",
                     BlockKind::Const => "const ",
                 };
                 format!("{}{kind}{{{}}}", self.label(*label), parts.join(" "))
@@ -120,7 +119,6 @@ impl Printer<'_> {
                 format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr))
             }
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
-            Expr::Await { expr } => format!("(await {})", self.expr(*expr)),
             Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
             Expr::Imm { expr } => format!("(imm {})", self.expr(*expr)),
             // As the literals were written before `mut e`: `mut [1]` and
@@ -223,9 +221,6 @@ impl Printer<'_> {
             }
             Expr::Return { expr } => {
                 format!("(return{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e))))
-            }
-            Expr::Yield { expr } => {
-                format!("(yield{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e))))
             }
             Expr::Lambda { params, param_types, ret_type, body, kind } => format!(
                 "({kind:?} ({}){} {})",
@@ -400,8 +395,8 @@ fn literals_with_quotes_and_bytes() {
 #[test]
 fn postfix_expressions() {
     assert_eq!(
-        render("t.0.1;\nx.f(1)?.await;\nxs[i];\nr#match.r#type;"),
-        "(. (. t 0) 1);\n(await (? (call (. x f) 1)));\n(index xs i);\n(. match type);"
+        render("t.0.1;\nx.f(1)?.y;\nxs[i];\nr#match.r#type;"),
+        "(. (. t 0) 1);\n(. (? (call (. x f) 1)) y);\n(index xs i);\n(. match type);"
     );
 }
 
@@ -409,13 +404,13 @@ fn postfix_expressions() {
 fn blocks_and_statements() {
     assert_eq!(
         render(
-            "let mut x: i32 = 1;\nlet Some(y) = o else { return; };\n{ f(); g() }\nfn item() {}\nasync { 1 };\n'l: { break 'l 2; };"
+            "let mut x: i32 = 1;\nlet Some(y) = o else { return; };\n{ f(); g() }\nfn item() {}\nconst { 1 };\n'l: { break 'l 2; };"
         ),
         "(let mut x : i32 = 1)\n\
          (let Some(y) = o else {(return);})\n\
          {(call f ); (call g )}\n\
          item\n\
-         async {1};\n\
+         const {1};\n\
          'l {(break 'l 2);};"
     );
 }
@@ -427,13 +422,13 @@ fn control_flow() {
             "if let Some(x) = o && x > 0 { a } else if b { c } else { d }\n\
              match x { 0 | 1 => a, n if n > 1 => b, _ => {} }\n\
              'outer: while c { continue 'outer; }\n\
-             for (i, x) in xs { yield x; }\n\
+             for (i, x) in xs { yield(x); }\n\
              loop { break; }"
         ),
         "(if (&& (let Some(x) o) (> x 0)) {a} (if b {c} {d}))\n\
          (match x [0 | 1 => a] [n if (> n 1) => b] [_ => {}])\n\
          ('outer while c {(continue 'outer);})\n\
-         (for (i, x) xs {(yield x);})\n\
+         (for (i, x) xs {(call yield x);})\n\
          (loop {(break);})"
     );
 }
@@ -455,11 +450,10 @@ fn compound_expressions() {
 fn lambdas_and_macros() {
     assert_eq!(
         render(
-            "|x| x;\n|a, b: i32| -> i32 { a };\nasync || 1;\nfn (x) = x + 1;\nfn (x: i32) -> i32 = x;\nprintln!(\"{}\", x);"
+            "|x| x;\n|a, b: i32| -> i32 { a };\nfn (x) = x + 1;\nfn (x: i32) -> i32 = x;\nprintln!(\"{}\", x);"
         ),
         "(Closure (x) x);\n\
          (Closure (a, b: i32) -> i32 {a});\n\
-         (AsyncClosure () 1);\n\
          (Function (x) (+ x 1));\n\
          (Function (x: i32) -> i32 x);\n\
          (println!);"

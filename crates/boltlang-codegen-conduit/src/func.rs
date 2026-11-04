@@ -553,11 +553,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Expr::Lambda { .. } => self.closure(e),
             Expr::Let { .. } => Err(ErrorKind::unsupported("`let` here")),
             Expr::Missing => Err(ErrorKind::unsupported("code with syntax errors")),
-            Expr::Await { .. }
-            | Expr::Try { .. }
-            | Expr::Range { .. }
-            | Expr::Yield { .. }
-            | Expr::MacroCall { .. } => Err(ErrorKind::unsupported("this expression")),
+            Expr::Try { .. } | Expr::Range { .. } | Expr::MacroCall { .. } => {
+                Err(ErrorKind::unsupported("this expression"))
+            }
         }
     }
 

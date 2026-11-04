@@ -2,19 +2,13 @@
 Unsupported expressions have the error type
 ================================================================================
 fn f(x) { x?; }
-fn g(x) { x.await; }
 fn h() = 1..2;
-fn k() { yield 1; }
 --------------------------------------------------------------------------------
 f: forall a. fn(a) -> ()
-g: forall a. fn(a) -> ()
 h: fn() -> {error}
-k: fn() -> ()
 --------------------------------------------------------------------------------
 warning at `x?`: unsupported
-warning at `x.await`: unsupported
 warning at `1..2`: unsupported
-warning at `yield 1`: unsupported
 
 ================================================================================
 Unsupported types have the error type

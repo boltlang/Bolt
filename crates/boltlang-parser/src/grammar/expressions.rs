@@ -361,16 +361,12 @@ fn index_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
     m.complete(p, INDEX_EXPR)
 }
 
-/// `x.await`, `x.field` or `x.0`. A method call like `x.f()` is a call of
+/// `x.field` or `x.0`. A method call like `x.f()` is a call of
 /// the field access `x.f`, as in the grammar.
 fn dot_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
     let m = lhs.precede(p);
     p.bump(T![.]);
     match p.current() {
-        T![await] => {
-            p.bump(T![await]);
-            return m.complete(p, AWAIT_EXPR);
-        }
         IDENT | INT_NUMBER => {
             let name = p.start();
             p.bump_any();

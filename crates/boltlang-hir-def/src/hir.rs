@@ -58,8 +58,6 @@ pub enum BinaryOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum BlockKind {
     Plain,
-    /// `async { }`
-    Async,
     /// `const { }`
     Const,
 }
@@ -68,8 +66,6 @@ pub enum BlockKind {
 pub enum LambdaKind {
     /// `|x| body`
     Closure,
-    /// `async |x| body`
-    AsyncClosure,
     /// `fn (x) = body`
     Function,
 }
@@ -96,9 +92,6 @@ pub enum Expr {
     Field {
         expr: ExprId,
         name: Name,
-    },
-    Await {
-        expr: ExprId,
     },
     Try {
         expr: ExprId,
@@ -196,9 +189,6 @@ pub enum Expr {
         label: Option<Name>,
     },
     Return {
-        expr: Option<ExprId>,
-    },
-    Yield {
         expr: Option<ExprId>,
     },
     /// A closure or an anonymous function.
@@ -339,7 +329,6 @@ impl Expr {
                 out.extend(args.iter());
             }
             Expr::Field { expr, .. }
-            | Expr::Await { expr }
             | Expr::Try { expr }
             | Expr::Cast { expr, .. }
             | Expr::Prefix { expr, .. }
@@ -369,9 +358,7 @@ impl Expr {
             Expr::While { condition, body, .. } => out.extend([*condition, *body]),
             Expr::Loop { body, .. } => out.push(*body),
             Expr::For { iterable, body, .. } => out.extend([*iterable, *body]),
-            Expr::Break { expr, .. } | Expr::Return { expr } | Expr::Yield { expr } => {
-                out.extend(expr.iter())
-            }
+            Expr::Break { expr, .. } | Expr::Return { expr } => out.extend(expr.iter()),
             Expr::Lambda { body, .. } => out.push(*body),
         }
         out
@@ -513,7 +500,6 @@ pub enum TypeRef {
         params: Box<[(Option<Name>, TypeRefId)]>,
         is_variadic: bool,
         ret_type: Option<TypeRefId>,
-        is_async: bool,
         is_const: bool,
         /// `Some` for `extern "C" fn`, with the ABI if one is given.
         abi: Option<Option<String>>,

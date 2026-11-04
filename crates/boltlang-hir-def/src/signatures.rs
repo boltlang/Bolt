@@ -75,7 +75,6 @@ pub struct FunctionSignature {
     pub params: Box<[ParamData]>,
     pub is_variadic: bool,
     pub ret_type: Option<TypeRefId>,
-    pub is_async: bool,
     pub is_const: bool,
     /// `Some` for `extern "C" fn`, with the ABI if one is given.
     pub abi: Option<Option<String>>,
@@ -307,7 +306,6 @@ fn lower_function<'db>(
         params: params.into(),
         is_variadic,
         ret_type,
-        is_async: item.is_async,
         is_const: item.is_const,
         abi,
         store,

@@ -69,8 +69,6 @@ pub enum SyntaxKind {
     // Keywords. `macro_rules` is contextual: the lexer produces an IDENT and
     // the parser remaps it where it acts as a keyword.
     AS_KEYWORD,
-    ASYNC_KEYWORD,
-    AWAIT_KEYWORD,
     BREAK_KEYWORD,
     CLASS_KEYWORD,
     CONST_KEYWORD,
@@ -98,7 +96,6 @@ pub enum SyntaxKind {
     TYPE_KEYWORD,
     WHERE_KEYWORD,
     WHILE_KEYWORD,
-    YIELD_KEYWORD,
 
     // Names and paths
     /// The name of something being declared, like the `f` in `fn f()`
@@ -211,7 +208,6 @@ pub enum SyntaxKind {
     TOKEN_TREE,
 
     // Expressions
-    AWAIT_EXPR,
     /// `[a, b]` or `[x; n]`
     ARRAY_EXPR,
     /// `|a, b| a + b`
@@ -230,8 +226,6 @@ pub enum SyntaxKind {
     BREAK_EXPR,
     /// `continue` or `continue 'label`
     CONTINUE_EXPR,
-    /// `yield` or `yield value`
-    YIELD_EXPR,
     /// `'outer`, before a loop or block or after `break` and `continue`
     LABEL,
     /// The `{ ... }` of a `match`
@@ -367,8 +361,6 @@ macro_rules! T {
     ['\''] => { $crate::SyntaxKind::QUOTE };
     [_] => { $crate::SyntaxKind::UNDERSCORE };
     [as] => { $crate::SyntaxKind::AS_KEYWORD };
-    [async] => { $crate::SyntaxKind::ASYNC_KEYWORD };
-    [await] => { $crate::SyntaxKind::AWAIT_KEYWORD };
     [break] => { $crate::SyntaxKind::BREAK_KEYWORD };
     [const] => { $crate::SyntaxKind::CONST_KEYWORD };
     [continue] => { $crate::SyntaxKind::CONTINUE_KEYWORD };
@@ -396,7 +388,6 @@ macro_rules! T {
     [type] => { $crate::SyntaxKind::TYPE_KEYWORD };
     [where] => { $crate::SyntaxKind::WHERE_KEYWORD };
     [while] => { $crate::SyntaxKind::WHILE_KEYWORD };
-    [yield] => { $crate::SyntaxKind::YIELD_KEYWORD };
     [ident] => { $crate::SyntaxKind::IDENT };
 }
 
@@ -405,7 +396,7 @@ use rowan::GreenNode;
 
 pub use rowan;
 
-pub const LAST_TOKEN_KIND_DISCRIMINANT: usize = YIELD_KEYWORD as usize;
+pub const LAST_TOKEN_KIND_DISCRIMINANT: usize = WHILE_KEYWORD as usize;
 
 impl SyntaxKind {
     pub fn is_trivia(&self) -> bool {
@@ -451,7 +442,6 @@ impl SyntaxKind {
             FOR_EXPR => "a for loop",
             BREAK_EXPR => "a break expression",
             CONTINUE_EXPR => "a continue expression",
-            YIELD_EXPR => "a yield expression",
             LABEL => "a label",
             IF_EXPR => "an if expression",
             LET_EXPR => "a let condition",
@@ -503,8 +493,6 @@ impl SyntaxKind {
             LABEL_IDENT => "a label (like 'outer)",
             METAVARIABLE => "a metavariable (like $name)",
             AS_KEYWORD => "'as'",
-            ASYNC_KEYWORD => "'async'",
-            AWAIT_KEYWORD => "'await'",
             BREAK_KEYWORD => "'break'",
             CONST_KEYWORD => "'const'",
             CONTINUE_KEYWORD => "'continue'",
@@ -532,11 +520,9 @@ impl SyntaxKind {
             TYPE_KEYWORD => "'type'",
             WHERE_KEYWORD => "'where'",
             WHILE_KEYWORD => "'while'",
-            YIELD_KEYWORD => "'yield'",
             AT => "'@'",
             ARG_LIST => "the argument list",
             ASSIGNMENT => "an assignment operator",
-            AWAIT_EXPR => "an await expression",
             BIN_EXPR => "an infix-expression",
             BLOCK => "a block of statement",
             BLOCK_COMMENT => "a block comment",

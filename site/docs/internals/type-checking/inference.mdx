@@ -219,7 +219,7 @@ against the struct type, and missing fields are fine.
 
 ### Unsupported expressions
 
-`?`, `await`, `yield`, ranges and macro calls have type $\bot$ and report
+`?`, ranges and macro calls have type $\bot$ and report
 that they aren't supported yet. Their subexpressions are still inferred.
 Casts `e as T` infer `e` and have type `T`, without checking that the cast
 is valid.

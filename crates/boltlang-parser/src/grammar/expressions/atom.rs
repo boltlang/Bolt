@@ -36,8 +36,6 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T![match],
     T![break],
     T![continue],
-    T![yield],
-    T![async],
     T![const],
     LABEL_IDENT,
 ]));
@@ -98,9 +96,8 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
         T!['['] => array_expr(p),
         T![|] => closure_expr(p, r),
         _ if p.at_op("||") => closure_expr(p, r),
-        T![async] if p.nth_at(1, T![|]) || p.nth_at_op(1, "||") => closure_expr(p, r),
         T!['{'] => return Some((parse_block_expr(p), BlockLike::Block)),
-        T![async] | T![const] if p.nth_at(1, T!['{']) => {
+        T![const] if p.nth_at(1, T!['{']) => {
             let m = p.start();
             p.bump_any();
             block(p);
@@ -117,12 +114,6 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
         T![match] => return Some((match_expr(p), BlockLike::Block)),
         T![break] => break_expr(p, r),
         T![continue] => continue_expr(p),
-        T![yield] => {
-            let m = p.start();
-            p.bump(T![yield]);
-            opt_value(p, r);
-            m.complete(p, YIELD_EXPR)
-        }
         T![return] => return_expr(p, r),
         T![fn] => fun_expr(p, r),
         T![if] => return Some((if_expr(p), BlockLike::Block)),
@@ -402,7 +393,7 @@ fn continue_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, CONTINUE_EXPR)
 }
 
-/// The optional value of `break`, `return` or `yield`. In a condition, a
+/// The optional value of `break` or `return`. In a condition, a
 /// `{` starts the body, not the value: `if x { break } {`.
 fn opt_value(p: &mut Parser, r: Restrictions) {
     if at_expr_start(p) && !(r.forbid_structs && p.at(T!['{'])) {
@@ -485,12 +476,11 @@ fn match_arm(p: &mut Parser) {
     m.complete(p, MATCH_ARM);
 }
 
-/// `|a, b| a + b`, `|x: i32| -> i32 { x }`, `async |x| ...` or `|| x`.
+/// `|a, b| a + b`, `|x: i32| -> i32 { x }` or `|| x`.
 /// The body takes the restrictions of the context: in `if let f = || a {`,
 /// the `{` starts the body of the `if`.
 fn closure_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     let m = p.start();
-    p.eat(T![async]);
     let params = p.start();
     if p.at_op("||") {
         // The lexer joined the two `|` of an empty parameter list.

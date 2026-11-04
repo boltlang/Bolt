@@ -641,7 +641,6 @@ ast_enum!(
         Try(TryExpr) = TRY_EXPR,
         Ret(RetExpr) = RET_EXPR,
         Field(FieldExpr) = FIELD_EXPR,
-        Await(AwaitExpr) = AWAIT_EXPR,
         If(IfExpr) = IF_EXPR,
         Let(LetExpr) = LET_EXPR,
         While(WhileExpr) = WHILE_EXPR,
@@ -649,7 +648,6 @@ ast_enum!(
         For(ForExpr) = FOR_EXPR,
         Break(BreakExpr) = BREAK_EXPR,
         Continue(ContinueExpr) = CONTINUE_EXPR,
-        Yield(YieldExpr) = YIELD_EXPR,
         Match(MatchExpr) = MATCH_EXPR,
         Record(RecordExpr) = RECORD_EXPR,
         Array(ArrayExpr) = ARRAY_EXPR,
@@ -890,9 +888,6 @@ pub struct ClosureExpr(SyntaxNode);
 simple_node!(ClosureExpr, CLOSURE_EXPR);
 
 impl ClosureExpr {
-    pub fn async_token(&self) -> Option<SyntaxToken> {
-        self.find_token(ASYNC_KEYWORD)
-    }
     pub fn param_list(&self) -> Option<ParamList> {
         self.find_node()
     }
@@ -1098,28 +1093,6 @@ impl ContinueExpr {
     }
 }
 
-/// `yield` or `yield value`
-pub struct YieldExpr(SyntaxNode);
-
-simple_node!(YieldExpr, YIELD_EXPR);
-
-impl YieldExpr {
-    pub fn expr(&self) -> Option<Expr> {
-        self.find_node()
-    }
-}
-
-/// `x.await`
-pub struct AwaitExpr(SyntaxNode);
-
-simple_node!(AwaitExpr, AWAIT_EXPR);
-
-impl AwaitExpr {
-    pub fn expr(&self) -> Option<Expr> {
-        self.find_node()
-    }
-}
-
 /// `a + b`
 pub struct BinExpr(SyntaxNode);
 
@@ -1275,10 +1248,6 @@ impl BlockExpr {
     /// The label of `'a: { }`.
     pub fn label(&self) -> Option<Label> {
         self.find_node()
-    }
-    /// The `async` of `async { }`.
-    pub fn async_token(&self) -> Option<SyntaxToken> {
-        self.find_token(ASYNC_KEYWORD)
     }
     /// The `const` of `const { }`.
     pub fn const_token(&self) -> Option<SyntaxToken> {
@@ -1507,10 +1476,6 @@ impl Node for FuncDecl {
 impl FuncDecl {
     pub fn visibility(&self) -> Option<Visibility> {
         self.find_node()
-    }
-
-    pub fn async_token(&self) -> Option<SyntaxToken> {
-        self.find_token(ASYNC_KEYWORD)
     }
 
     pub fn const_token(&self) -> Option<SyntaxToken> {

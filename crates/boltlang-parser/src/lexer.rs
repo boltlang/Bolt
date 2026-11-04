@@ -127,8 +127,6 @@ lazy_static! {
         // parser remaps it where needed.
         let mut m = HashMap::new();
         m.insert("as", AS_KEYWORD);
-        m.insert("async", ASYNC_KEYWORD);
-        m.insert("await", AWAIT_KEYWORD);
         m.insert("break", BREAK_KEYWORD);
         m.insert("class", CLASS_KEYWORD);
         m.insert("const", CONST_KEYWORD);
@@ -155,7 +153,6 @@ lazy_static! {
         m.insert("type", TYPE_KEYWORD);
         m.insert("where", WHERE_KEYWORD);
         m.insert("while", WHILE_KEYWORD);
-        m.insert("yield", YIELD_KEYWORD);
         m
     };
 }

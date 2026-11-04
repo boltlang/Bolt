@@ -16,7 +16,7 @@ import "./c" as c;
 import "./d" *;
 pub fn f(x: i32) -> i32 = x;
 fn a + b = add(a, b);
-async const fn g();
+const fn g();
 pub(package) struct Point { x: i32 }
 enum Color { Red, Green = 2 }
 class Show[T] { fn show(x: T) -> String; type Out; }
@@ -39,7 +39,7 @@ let top_level_statements_are_not_items = 1;
             "Alias(\"c\")",
             "kind: Glob",
             "Operator(\"+\")",
-            "is_async: true",
+            "is_const: true",
             "has_body: false",
             "visibility: Package",
             "\"Red\"",

@@ -204,7 +204,6 @@ impl ExprCollector {
             params: params.into(),
             is_variadic,
             ret_type,
-            is_async: has_token(ASYNC_KEYWORD),
             is_const: has_token(CONST_KEYWORD),
             abi,
         }
@@ -287,7 +286,6 @@ impl ExprCollector {
                     .unwrap_or_else(|| Name::new(""));
                 Expr::Field { expr, name }
             }
-            E::Await(e) => Expr::Await { expr: self.lower_opt_expr(e.expr()) },
             E::Try(e) => Expr::Try { expr: self.lower_opt_expr(e.expr()) },
             E::Imm(e) => Expr::Imm { expr: self.lower_opt_expr(e.expr()) },
             E::Mut(e) => Expr::Mut { expr: self.lower_opt_expr(e.expr()) },
@@ -405,14 +403,8 @@ impl ExprCollector {
             },
             E::Continue(e) => Expr::Continue { label: e.label().and_then(|l| label_name(&l)) },
             E::Ret(e) => Expr::Return { expr: e.expr().map(|x| self.lower_expr(x)) },
-            E::Yield(e) => Expr::Yield { expr: e.expr().map(|x| self.lower_expr(x)) },
             E::Closure(e) => {
-                let kind = if e.async_token().is_some() {
-                    LambdaKind::AsyncClosure
-                } else {
-                    LambdaKind::Closure
-                };
-                self.lower_lambda(e.param_list(), e.ret_type(), e.body(), kind)
+                self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Closure)
             }
             E::Fun(e) => {
                 self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Function)
@@ -460,13 +452,8 @@ impl ExprCollector {
     }
 
     pub fn lower_block(&mut self, block_expr: &ast::BlockExpr) -> ExprId {
-        let kind = if block_expr.async_token().is_some() {
-            BlockKind::Async
-        } else if block_expr.const_token().is_some() {
-            BlockKind::Const
-        } else {
-            BlockKind::Plain
-        };
+        let kind =
+            if block_expr.const_token().is_some() { BlockKind::Const } else { BlockKind::Plain };
         let label = self.lower_label(block_expr.label());
         let mut statements = Vec::new();
         let mut tail = None;
