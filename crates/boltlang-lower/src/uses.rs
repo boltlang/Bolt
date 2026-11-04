@@ -78,6 +78,42 @@ pub enum Dict<'db> {
     Impl { imp: ImplId<'db>, args: Box<[MonoTy<'db>]>, subs: Box<[Dict<'db>]> },
 }
 
+impl<'db> Dict<'db> {
+    /// The dictionary as text: `#0` for a parameter, `#0.super1` for a
+    /// superclass of one, and `impl Show[(A, B)] at [i32, Bool] with (#0)`
+    /// for an impl at its type parameters, with the dictionaries it's given.
+    pub fn display(&self, db: &'db dyn boltlang_base_db::Db) -> String {
+        match self {
+            Dict::Param(i) => format!("#{i}"),
+            Dict::Super { of, index } => format!("{}.super{index}", of.display(db)),
+            Dict::Impl { imp, args, subs } => {
+                let mut s = match &impl_header(db, *imp).class {
+                    Some(c) => {
+                        let args: Vec<String> =
+                            c.args.iter().map(|t| t.display(db).to_string()).collect();
+                        format!(
+                            "impl {}[{}]",
+                            crate::instance::class_name(db, c.class),
+                            args.join(", ")
+                        )
+                    }
+                    None => "impl".to_string(),
+                };
+                if !args.is_empty() {
+                    let args: Vec<String> =
+                        args.iter().map(|t| t.display(db).to_string()).collect();
+                    s.push_str(&format!(" at [{}]", args.join(", ")));
+                }
+                if !subs.is_empty() {
+                    let subs: Vec<String> = subs.iter().map(|d| d.display(db)).collect();
+                    s.push_str(&format!(" with ({})", subs.join(", ")));
+                }
+                s
+            }
+        }
+    }
+}
+
 /// Why a use can't be compiled.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum UseError {
