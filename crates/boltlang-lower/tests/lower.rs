@@ -28,6 +28,12 @@
 //!   n2 = arm 1
 //!   ```
 //!
+//! - `lambdas`: each lambda, with the locals around it that it captures:
+//!
+//!   ```text
+//!   `|x| x + n` captures n
+//!   ```
+//!
 //! A case can have several files, each starting with a line like
 //! `//- /lib.bolt`, so that they can import each other. Without such lines,
 //! the code is `/main.bolt`, which is the program's entry with several
@@ -69,6 +75,7 @@ use boltlang_hir_def::{
 use boltlang_lower::{
     ClassItem, Site, Use, UseError,
     decision::{DecisionError, body_decisions},
+    lambda::body_lambdas,
     program,
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -78,6 +85,7 @@ use libtest_mimic::{Arguments, Failed, Trial};
 enum Kind {
     Instances,
     Decisions,
+    Lambdas,
 }
 
 /// The attributes of a case, like `:todo`.
@@ -243,6 +251,45 @@ impl Program {
         Ok(out)
     }
 
+    /// The bodies of a file: its top-level statements, then its functions.
+    fn bodies(&self, file: File) -> Vec<DefWithBodyId<'_>> {
+        let db = &self.db;
+        let mut defs = vec![DefWithBodyId::new(db, DefWithBody::File(file))];
+        for item in &item_tree(db, file).top_level {
+            if let ModItem::Function(idx) = *item {
+                let f = FunctionId::new(db, ItemContainerId::File(file), idx);
+                if f.item(db).has_body {
+                    defs.push(DefWithBodyId::new(db, DefWithBody::Function(f)));
+                }
+            }
+        }
+        defs
+    }
+
+    /// The lambdas of the case's files, of their top-level statements and
+    /// functions, each with what it captures.
+    fn lambdas(&self) -> String {
+        let db = &self.db;
+        let mut out = String::new();
+        for &(_, file) in &self.files {
+            let prefix = self.prefix(file).unwrap_or_default();
+            for def in self.bodies(file) {
+                let (body, _) = body_with_source_map(db, def);
+                for lambda in body_lambdas(db, def) {
+                    let names: Vec<&str> =
+                        lambda.captures.iter().map(|&b| body.bindings[b].name.as_str()).collect();
+                    let captures =
+                        if names.is_empty() { "nothing".to_string() } else { names.join(", ") };
+                    out.push_str(&format!(
+                        "{prefix}`{}` captures {captures}\n",
+                        self.snippet(def, Node::Expr(lambda.expr))
+                    ));
+                }
+            }
+        }
+        out
+    }
+
     /// The decisions of the `match`es of the case's files, of their
     /// top-level statements and functions.
     fn decisions(&self) -> String {
@@ -250,16 +297,7 @@ impl Program {
         let mut out = String::new();
         for &(_, file) in &self.files {
             let prefix = self.prefix(file).unwrap_or_default();
-            let mut defs = vec![DefWithBodyId::new(db, DefWithBody::File(file))];
-            for item in &item_tree(db, file).top_level {
-                if let ModItem::Function(idx) = *item {
-                    let f = FunctionId::new(db, ItemContainerId::File(file), idx);
-                    if f.item(db).has_body {
-                        defs.push(DefWithBodyId::new(db, DefWithBody::Function(f)));
-                    }
-                }
-            }
-            for def in defs {
+            for def in self.bodies(file) {
                 let (body, _) = body_with_source_map(db, def);
                 for (expr, found) in &body_decisions(db, def).matches {
                     let Expr::Match { expr: value, .. } = &body[*expr] else { continue };
@@ -318,6 +356,7 @@ fn lower(case: &Case, kind: Kind) -> Result<String, String> {
         let out = match kind {
             Kind::Instances => program.instances()?,
             Kind::Decisions => program.decisions(),
+            Kind::Lambdas => program.lambdas(),
         };
         Ok(out.trim().to_string())
     })
@@ -364,9 +403,10 @@ fn main() {
         let kind = match stem.split("::").next() {
             Some("instances") => Kind::Instances,
             Some("decisions") => Kind::Decisions,
+            Some("lambdas") => Kind::Lambdas,
             _ => {
                 let message = format!(
-                    "{}: a file of `tests/lower` must be in `instances` or `decisions`",
+                    "{}: a file of `tests/lower` must be in `instances`, `decisions` or `lambdas`",
                     path.display()
                 );
                 trials.push(Trial::test(stem, move || Err(message.into())));

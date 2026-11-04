@@ -1,8 +1,8 @@
 //! Lowering after type checking, shared by the backends.
 //!
 //! So far: monomorphization, which instances of its functions a program
-//! needs and what each use in them calls, and compiling patterns to
-//! decisions.
+//! needs and what each use in them calls, compiling patterns to decisions,
+//! and the captures of lambdas, for lifting them.
 //!
 //! - [`instance`]: an [`Instance`] is a body at concrete types. It's
 //!   specialized on types, not on mutabilities: those are its parameters.
@@ -13,10 +13,12 @@
 //! - [`collect`]: every instance a program needs, from its entry file and
 //!   its tests, erasing functions that recurse polymorphically.
 //! - [`decision`]: the tests that a `match` or a `let` makes, as a graph.
+//! - [`lambda`]: what each lambda captures, to lift it to a function.
 
 pub mod collect;
 pub mod decision;
 pub mod instance;
+pub mod lambda;
 pub mod ty;
 pub mod uses;
 
