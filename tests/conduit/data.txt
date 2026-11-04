@@ -779,6 +779,120 @@ fn fn7(%0: i32, %1: i32) -> (i32) {
 env.log(6)
 
 ================================================================================
+A for loop over an array
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+let mut sum = 0;
+for x in [1, 2, 3] { sum += x; }
+log(sum);
+--------------------------------------------------------------------------------
+// fn1: <file>
+// fn2: +[i32]
+// fn3: Iterable['v [T]].iter[i32]
+// fn4: Iterator[mut ArrayIter[T]].next[i32]
+// fn5: Add[i32].add
+// fn6: <[i32]
+// fn7: -[i32]
+// fn8: PartialOrd[i32].lt
+// fn9: Sub[i32].sub
+
+data data10['m1] {
+  ('m1 [i32], i32)
+}
+
+data data11 {
+  ()
+  (i32)
+}
+
+extern extern1 "env" "log" (i32) -> ()
+
+fn fn1() -> () {
+  let %0: ref i32 = ref_new(0i32)
+  let %1: imm [i32] = array_new(1i32, 2i32, 3i32)
+  let %2: mut data10[imm] = call fn3[imm](%1)
+  join j1() =
+    let %7: i32 = ref_get(%0)
+    let = call_extern extern1(%7)
+    jump ret()
+  in
+  join rec j2() =
+    let %3: imm data11 = call fn4[imm](%2)
+    case %3 {
+      data11.1 =>
+        let %4: i32 = get data11.1.0(%3)
+        let %5: i32 = ref_get(%0)
+        let %6: i32 = call fn2(%5, %4)
+        let = ref_set(%0, %6)
+        jump j2()
+      _ => jump j1()
+    }
+  in jump j2()
+}
+
+fn fn2(%0: i32, %1: i32) -> (i32) {
+  let %2: i32 = call fn5(%0, %1)
+  jump ret(%2)
+}
+
+fn fn3['m1](%0: 'm1 [i32]) -> (mut data10['m1]) {
+  let %1: mut data10['m1] = new data10.0(%0, 0i32)
+  jump ret(%1)
+}
+
+fn fn4['m1](%0: mut data10['m1]) -> (imm data11) {
+  join j1(%1: imm data11) = jump ret(%1)
+  in
+  let %2: i32 = get data10.0.1(%0)
+  let %3: 'm1 [i32] = get data10.0.0(%0)
+  let %4: i32 = array_len(%3)
+  let %5: i32 = call fn6(%2, %4)
+  case %5 {
+    0 =>
+      let %6: imm data11 = new data11.0()
+      jump j1(%6)
+    _ =>
+      let %7: i32 = get data10.0.1(%0)
+      let %8: i32 = call fn2(%7, 1i32)
+      let = set data10.0.1(%0, %8)
+      let %9: 'm1 [i32] = get data10.0.0(%0)
+      let %10: i32 = get data10.0.1(%0)
+      let %11: i32 = call fn7(%10, 1i32)
+      let %12: i32 = array_get(%9, %11)
+      let %13: imm data11 = new data11.1(%12)
+      jump j1(%13)
+  }
+}
+
+fn fn5(%0: i32, %1: i32) -> (i32) {
+  let %2: i32 = add(%0, %1)
+  jump ret(%2)
+}
+
+fn fn6(%0: i32, %1: i32) -> (i32) {
+  let %2: i32 = call fn8(%0, %1)
+  jump ret(%2)
+}
+
+fn fn7(%0: i32, %1: i32) -> (i32) {
+  let %2: i32 = call fn9(%0, %1)
+  jump ret(%2)
+}
+
+fn fn8(%0: i32, %1: i32) -> (i32) {
+  let %2: i32 = lt.s(%0, %1)
+  jump ret(%2)
+}
+
+fn fn9(%0: i32, %1: i32) -> (i32) {
+  let %2: i32 = sub(%0, %1)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+env.log(6)
+
+================================================================================
 A struct that holds an array has its mutability
 :test-prelude
 ================================================================================
