@@ -38,10 +38,14 @@ effect State[S] {
 }
 ```
 
-An operation is called like any other function. Calling it gives the caller
-the effect: a function that calls `log` has `Log` in its type. A *handler*
-decides what an operation does, and takes the effect out of the type of the
-code it runs. The syntax of handlers is for another page.
+An operation is called like any other function, by its bare name, as class
+methods are: `log("hi")`, `get()`. It's in scope wherever its effect is. If
+two effects in scope have an operation of the same name, a call writes the
+effect too: `State.get()`.
+
+Calling an operation gives the caller the effect: a function that calls
+`log` has `Log` in its type. A [handler](#handlers) decides what an
+operation does, and takes the effect out of the type of the code it runs.
 
 ## Writing effects
 
@@ -192,6 +196,180 @@ The rule holds for effect variables too. In `does State[i32] + E`, `E` can't
 contain `State`. A call that would put a second `State` in the row, like
 passing a function with `State[String]` for `E`, is an error at the call.
 
+## Handlers
+
+A handler is a `match` with `effect` arms, as in OCaml 5
+[Sivaramakrishnan et al. 2021]. The `match` runs its scrutinee under the
+handler:
+
+```bolt
+effect Emit {
+    fn emit(value: i32);
+}
+
+fn sum(body: fn() does Emit) -> i32 =
+    match body() {
+        () => 0,
+        effect emit(x), k => x + resume(k, ()),
+    };
+```
+
+- **Value arms**, like `() => 0`, match what the scrutinee returns when
+  it's done, as in any `match`. They're what Koka and OCaml call the return
+  clause.
+- **Effect arms**, like `effect emit(x), k => …`, match an operation and
+  its arguments, with ordinary patterns. `k` is the *continuation*: the rest
+  of the scrutinee, paused where it performed the operation.
+- **`resume(k, v)`** continues the scrutinee with `v` as the result of the
+  operation. It returns what the whole `match` gives for the rest of the
+  scrutinee. So `x + resume(k, ())` adds `x` to the sum of what's emitted
+  after it, and the value arm gives `0` at the end. There's no mutable state.
+
+Handlers are *deep*: after a `resume`, the rest of the scrutinee is still
+handled by the same `match`. An arm itself isn't, so an operation performed
+in an arm goes to the next handler out.
+
+### Not resuming
+
+An arm that doesn't resume *aborts*: the scrutinee never continues, and the
+arm's value is the value of the `match`. That's how exceptions work:
+
+```bolt
+effect Raise[E] {
+    fn raise[T](error: E) -> T;
+}
+
+fn catch[T, E, R](body: fn() -> T does Raise[E] + R) -> Result[T, E] does R =
+    match body() {
+        value => Ok(value),
+        effect raise(error), _ => Err(error),
+    };
+```
+
+### Keeping the continuation
+
+`k` is a value like any other. It can be kept and resumed later, which is
+what a scheduler does:
+
+```bolt
+match main() {
+    () => run_next(queue),
+    effect suspend(start), k => {
+        start(|value| queue.push(|| resume(k, value)));
+        run_next(queue)
+    },
+}
+```
+
+A continuation can be resumed **once**. Resuming it again stops the program,
+as in Conduit, whose continuations are one-shot because the code they run
+can change things, and running those changes twice would be wrong.
+
+### State
+
+With the value arm, state can be a function that each arm passes on:
+
+```bolt
+fn run_state[S, T, R](init: S, body: fn() -> T does State[S] + R) -> (T, S) does R {
+    let f = match body() {
+        value => |s| (value, s),
+        effect get(), k => |s| resume(k, s)(s),
+        effect set(s), k => |_| resume(k, ())(s),
+    };
+    f(init)
+}
+```
+
+A `let mut` variable that the arms change is simpler, and works as well:
+
+```bolt
+fn run_state[S, T, R](init: S, body: fn() -> T does State[S] + R) -> (T, S) does R {
+    let mut state = init;
+    let value = match body() {
+        value => value,
+        effect get(), k => resume(k, state),
+        effect set(s), k => { state = s; resume(k, ()) },
+    };
+    (value, state)
+}
+```
+
+### Every operation needs an arm
+
+A `match` that has an arm for an operation of an effect handles that whole
+effect, and must have arms for all its operations:
+
+```text
+error: this `match` handles `State`, but has no arm for `set`
+```
+
+Otherwise the effect couldn't leave the row, and whether it does would
+depend on whether an arm was forgotten. To handle one operation and pass
+another on to the next handler out, the arm performs it again:
+
+```bolt
+match body() {
+    value => value,
+    effect get(), k => { log("get"); resume(k, get()) },
+    effect set(s), k => resume(k, set(s)),
+}
+```
+
+The arms run outside of the `match`, so the `get()` and `set(s)` in them
+go to the next handler, and the `match` still has `State` in its row. Arms
+like these always resume at the end, so Conduit compiles them to plain
+calls. A shorthand for passing on the rest is discussed in
+[#347](https://github.com/boltlang/bolt/issues/347).
+
+The arms of each operation must be exhaustive, like value arms:
+`effect emit(0), k` alone doesn't handle `emit(1)`.
+
+### Names
+
+An arm names its operation by its bare name. When the effects of a `match`
+have two operations of the same name, the arm writes the effect too:
+`effect State.get(), k`.
+
+### Typing
+
+Say the scrutinee has type $T$ and does $\mathit{Op}_1 + \dots + \rho$,
+where the $\mathit{Op}_i$ are the effects with arms, and the `match` has
+type $U$:
+
+- The value arms have patterns of type $T$, and must be exhaustive.
+- An arm for an operation `fn op(a: A) -> B` of $\mathit{Op}_i$ has patterns
+  of type $A$, and binds `k` to a `Cont[B, U, R]`, where `R` is $\rho$:
+  what resuming the continuation does. `R` is of kind $\mathsf{Effect}$.
+- `resume(k, b)` has type $U$ and does $\rho$.
+- The `match` does $\rho$, plus what its arms do.
+
+So `match` takes the effects it has arms for out of the row, and nothing
+else.
+
+An operation with type parameters of its own, like `fn suspend[T](…) -> T`,
+gives each of its arms a new type for `T`, equal to no other type. In the
+scheduler above, `k` can only be resumed with a value of that type, which
+only `start` provides. Existential types of GADTs are checked the same way.
+
+### Lowering
+
+A `match` with effect arms becomes a `handle` in Conduit:
+
+- the scrutinee becomes the body closure, through lambda lifting;
+- the value arms become the return clause;
+- the arms of each operation become its clause, with a decision graph over
+  the arguments.
+
+### Why `match`
+
+A handler could also be a `handle { … } with { fn emit(x) { … } }` block,
+as in Effekt, or a declaration like `impl`. `match` was chosen because it
+has a return clause, its value arms, and matches the arguments of
+operations with patterns, with the exhaustiveness checks and decision
+graphs that Bolt already has. It also reads like handling exceptions. The
+cost is that a `match` that only handles effects still needs a value arm
+like `v => v`, and `, k` is a form that nothing else in Bolt has.
+
 ## Kind inference
 
 Effects bring a new kind. The [kinds](./type-checking/kinds.mdx) are now:
@@ -311,8 +489,8 @@ keeps solutions finite and principal.
 ## Inferring effects
 
 A body's effects are inferred like its types. The body starts with a fresh
-row variable, and each call adds the effects of what it calls. A handler
-takes its effect out.
+row variable, and each call adds the effects of what it calls. A `match`
+with effect arms takes the effects it handles out.
 
 Closures get their effects the same way: `|| fetch(x)` is
 `fn() -> Response does Async`. A function without a written result type gets its
@@ -331,7 +509,12 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
 
 - How to give `does` to the outer function of `fn(A) -> fn(B) -> C`. `(T)`
   is a one-element tuple type, so parentheses don't group types today.
-- The syntax and typing of handlers.
+- A shorthand for passing operations on in a handler
+  ([#347](https://github.com/boltlang/bolt/issues/347)).
+- `discontinue(k)`, to unwind a continuation instead of resuming it, for
+  [cancelling](./async.mdx#cancelling).
+- `match { … } { … }`, with a block as scrutinee: Bolt has record literals
+  in braces, so the parser has to tell the two apart.
 - Effects twice in a row, if it turns out to be needed.
 - Applications like `H[T]` in a row.
 
@@ -342,6 +525,9 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
 - B. R. Gaster and M. P. Jones. *A polymorphic type system for extensible
   records and variants.* Technical report NOTTCS-TR-96-3, 1996.
 - D. Leijen. *Koka: Programming with row polymorphic effect types.* MSFP 2014.
+- G. Plotkin and M. Pretnar. *Handlers of algebraic effects.* ESOP 2009.
+- K. C. Sivaramakrishnan, S. Dolan, L. White, T. Kelly, S. Jaffer and
+  A. Madhavapeddy. *Retrofitting effect handlers onto OCaml.* PLDI 2021.
 - J. I. Brachthäuser, P. Schuster and K. Ostermann. *Effects as
   capabilities: effect handlers and lightweight effect polymorphism.*
   OOPSLA 2020. The design of Effekt.
