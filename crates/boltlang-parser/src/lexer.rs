@@ -131,6 +131,8 @@ lazy_static! {
         m.insert("class", CLASS_KEYWORD);
         m.insert("const", CONST_KEYWORD);
         m.insert("continue", CONTINUE_KEYWORD);
+        m.insert("does", DOES_KEYWORD);
+        m.insert("effect", EFFECT_KEYWORD);
         m.insert("else", ELSE_KEYWORD);
         m.insert("enum", ENUM_KEYWORD);
         m.insert("extern", EXTERN_KEYWORD);

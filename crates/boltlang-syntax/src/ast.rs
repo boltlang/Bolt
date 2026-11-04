@@ -224,6 +224,9 @@ impl FnType {
     pub fn ret_type(&self) -> Option<RetType> {
         self.find_node()
     }
+    pub fn effect_row(&self) -> Option<EffectRow> {
+        self.find_node()
+    }
 }
 
 /// `impl Trait` or `impl for[T] Trait`
@@ -316,6 +319,20 @@ simple_node!(RetType, RET_TYPE);
 impl RetType {
     pub fn ty(&self) -> Option<Type> {
         self.find_node()
+    }
+}
+
+/// `does A + B`: the effects of a function, after its result type or its
+/// parameters.
+pub struct EffectRow(SyntaxNode);
+
+simple_node!(EffectRow, EFFECT_ROW);
+
+impl EffectRow {
+    /// The effects, like `State[i32]`, and the effect variable if there's
+    /// one, in the order they're written.
+    pub fn effects(&self) -> ChildrenIter<Type> {
+        ChildrenIter::new(&self.0)
     }
 }
 
@@ -894,6 +911,9 @@ impl ClosureExpr {
     pub fn ret_type(&self) -> Option<RetType> {
         self.find_node()
     }
+    pub fn effect_row(&self) -> Option<EffectRow> {
+        self.find_node()
+    }
     /// The body, or `None` if it is `_`.
     pub fn body(&self) -> Option<Expr> {
         self.find_node()
@@ -992,13 +1012,18 @@ impl MatchArmList {
     }
 }
 
-/// `pattern if guard => value`
+/// `pattern if guard => value`, or `effect op(x), k => value`
 pub struct MatchArm(SyntaxNode);
 
 simple_node!(MatchArm, MATCH_ARM);
 
 impl MatchArm {
+    /// The pattern of an arm for a value. An arm for an effect has none,
+    /// but an [`EffectPattern`].
     pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+    pub fn effect_pattern(&self) -> Option<EffectPattern> {
         self.find_node()
     }
     pub fn guard(&self) -> Option<MatchGuard> {
@@ -1006,6 +1031,23 @@ impl MatchArm {
     }
     pub fn expr(&self) -> Option<Expr> {
         self.find_node()
+    }
+}
+
+/// `effect yield(x), k` in a match arm: the operation the arm handles, with
+/// patterns for its arguments, and a pattern for the continuation.
+pub struct EffectPattern(SyntaxNode);
+
+simple_node!(EffectPattern, EFFECT_PATT);
+
+impl EffectPattern {
+    /// The operation, like `yield(x)` or `State.get()`.
+    pub fn operation(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+    /// What the continuation is bound to, like `k` or `_`.
+    pub fn continuation(&self) -> Option<Pattern> {
+        self.0.children().filter_map(Pattern::cast).nth(1)
     }
 }
 
@@ -1293,6 +1335,9 @@ impl FunExpr {
     pub fn ret_type(&self) -> Option<RetType> {
         self.find_node()
     }
+    pub fn effect_row(&self) -> Option<EffectRow> {
+        self.find_node()
+    }
     pub fn body(&self) -> Option<Expr> {
         self.find_node()
     }
@@ -1518,6 +1563,10 @@ impl FuncDecl {
         self.find_node()
     }
 
+    pub fn effect_row(&self) -> Option<EffectRow> {
+        self.find_node()
+    }
+
     pub fn where_clause(&self) -> Option<WhereClause> {
         self.find_node()
     }
@@ -1598,6 +1647,7 @@ ast_enum!(
         Const(Const) = CONST,
         TypeAlias(TypeAlias) = TYPE_ALIAS,
         Class(Class) = CLASS,
+        Effect(Effect) = EFFECT,
         Impl(Impl) = IMPL,
         ExternBlock(ExternBlock) = EXTERN_BLOCK,
         Import(Import) = IMPORT,
@@ -1728,6 +1778,28 @@ impl Class {
     pub fn where_clause(&self) -> Option<WhereClause> {
         self.find_node()
     }
+    pub fn item_list(&self) -> Option<ItemList> {
+        self.find_node()
+    }
+}
+
+/// `effect State[S] { fn get() -> S; fn set(value: S); }`
+pub struct Effect(SyntaxNode);
+
+simple_node!(Effect, EFFECT);
+
+impl Effect {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    /// The effect's parameters, like the `[S]` of `effect State[S]`.
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    /// The operations.
     pub fn item_list(&self) -> Option<ItemList> {
         self.find_node()
     }
@@ -2054,6 +2126,7 @@ has_attrs!(
     Const,
     TypeAlias,
     Class,
+    Effect,
     Impl,
     ItemList,
     ExternBlock,
@@ -2176,6 +2249,7 @@ has_docs!(
     Const,
     TypeAlias,
     Class,
+    Effect,
     Impl,
     ExternBlock,
     Import,

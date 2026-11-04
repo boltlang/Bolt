@@ -4,7 +4,7 @@
 use boltlang_parser::parse_file;
 use boltlang_syntax::{
     SyntaxNode,
-    ast::{Expr, GenericArg, Node, Pattern, SourceElement, SourceFile, Type},
+    ast::{EffectRow, Expr, GenericArg, Node, Pattern, SourceElement, SourceFile, Type},
 };
 
 /// Parse `let x = <expr>;` and return the initializer.
@@ -185,4 +185,80 @@ fn doc_comments() {
     );
     let SourceElement::FuncDecl(g) = &items[1] else { panic!() };
     assert!(g.doc_comments().is_empty());
+}
+
+/// Parse a file without diagnostics, and give its first statement.
+fn first_element(source: &str) -> SourceElement {
+    let (green, diags) = parse_file(source);
+    assert!(diags.is_empty(), "{source:?} has diagnostics: {diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    file.elements().next().expect("no statement")
+}
+
+/// The source text of each effect after `does`.
+fn effects(row: Option<EffectRow>) -> Vec<String> {
+    row.expect("no `does`").effects().map(|t| t.syntax().text().to_string()).collect()
+}
+
+#[test]
+fn effect_decl() {
+    let SourceElement::Effect(effect) =
+        first_element("effect State[S] { fn get() -> S; fn set(value: S); }")
+    else {
+        panic!()
+    };
+    assert_eq!(effect.name().unwrap().syntax().text().to_string(), "State");
+    assert_eq!(effect.generic_param_list().unwrap().params().count(), 1);
+    assert_eq!(effect.item_list().unwrap().items().count(), 2);
+}
+
+#[test]
+fn func_decl_effects() {
+    let SourceElement::FuncDecl(f) = first_element("fn f() -> () does Async + Log { }") else {
+        panic!()
+    };
+    assert!(f.ret_type().is_some());
+    assert_eq!(effects(f.effect_row()), ["Async", "Log"]);
+
+    // Without a result type, `does` comes right after the parameters.
+    let SourceElement::FuncDecl(g) = first_element("fn g(x) does State[i32] = x;") else {
+        panic!()
+    };
+    assert!(g.ret_type().is_none());
+    assert_eq!(effects(g.effect_row()), ["State[i32]"]);
+    assert!(matches!(g.body(), Some(Expr::Path(_))));
+}
+
+#[test]
+fn fn_type_effects_belong_to_the_nearest_fn() {
+    let SourceElement::VarDecl(decl) = first_element("let k: fn(A) -> fn(B) -> C does Log = f;")
+    else {
+        panic!()
+    };
+    let Some(Type::Fn(outer)) = decl.type_expr() else { panic!() };
+    assert!(outer.effect_row().is_none());
+    let Some(Type::Fn(inner)) = outer.ret_type().unwrap().ty() else { panic!() };
+    assert_eq!(effects(inner.effect_row()), ["Log"]);
+}
+
+#[test]
+fn closure_effects() {
+    let Expr::Closure(closure) = let_expr("let a = |x| does Log { log(x) };") else { panic!() };
+    assert!(closure.ret_type().is_none());
+    assert_eq!(effects(closure.effect_row()), ["Log"]);
+    assert!(matches!(closure.body(), Some(Expr::Block(_))));
+}
+
+#[test]
+fn effect_arms() {
+    let Expr::Match(m) = let_expr("let x = match f() { v => v, effect yield(n), k => n };") else {
+        panic!()
+    };
+    let arms = m.arms();
+    assert!(arms[0].pattern().is_some() && arms[0].effect_pattern().is_none());
+    assert!(arms[1].pattern().is_none());
+    let effect = arms[1].effect_pattern().unwrap();
+    assert_eq!(effect.operation().unwrap().syntax().text().to_string(), "yield(n)");
+    assert_eq!(effect.continuation().unwrap().syntax().text().to_string(), "k");
+    assert_eq!(text(arms[1].expr()), "n");
 }

@@ -421,6 +421,8 @@ impl ItemTree {
                     MacroRules { name: name(m.name()), ast_id },
                 ))
             }
+            // Effects only parse so far: there's nothing to name or check yet.
+            E::Effect(_) => return None,
             E::VarDecl(_) | E::ExprStmt(_) | E::MacroCall(_) => return None,
         };
         Some(item)

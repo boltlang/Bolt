@@ -121,6 +121,7 @@ fn fn_type(p: &mut Parser) -> CompletedMarker {
     p.expect(T![fn]);
     fn_type_param_list(p);
     opt_ret_type(p);
+    opt_effect_row(p);
     m.complete(p, FN_TYPE)
 }
 
@@ -142,6 +143,22 @@ pub(crate) fn abi(p: &mut Parser) {
     p.bump(T![extern]);
     p.eat(STRING);
     m.complete(p, ABI);
+}
+
+/// `does A + B`, the effects of a function, if it has any. Each effect is
+/// a type, like `Log` or `State[i32]`, or an effect variable like `E`. It
+/// comes after the result type, or after the parameters if there's none.
+pub(crate) fn opt_effect_row(p: &mut Parser) {
+    if !p.at(T![does]) {
+        return;
+    }
+    let m = p.start();
+    p.bump(T![does]);
+    type_no_bounds(p);
+    while p.eat(T![+]) {
+        type_no_bounds(p);
+    }
+    m.complete(p, EFFECT_ROW);
 }
 
 /// `-> T`, if there is one.

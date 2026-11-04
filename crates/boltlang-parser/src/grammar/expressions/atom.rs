@@ -10,7 +10,8 @@ use super::{
 use crate::{
     grammar::{
         at_inner_attr, at_macro_call, at_outer_attr, attr, dotted_path, expr_path, is_path_start,
-        macro_call, opt_ret_type, outer_attrs, param_list, parse_pattern, pattern_single, type_,
+        macro_call, opt_effect_row, opt_ret_type, outer_attrs, param_list, parse_pattern,
+        pattern_single, type_,
     },
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
@@ -301,6 +302,7 @@ fn fun_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     p.bump(T![fn]);
     param_list(p);
     opt_ret_type(p);
+    opt_effect_row(p);
     if p.eat(T![=]) {
         expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 1);
     } else {
@@ -458,7 +460,11 @@ fn match_arm(p: &mut Parser) {
         m.abandon(p);
         return;
     }
-    parse_pattern(p);
+    if p.at(T![effect]) {
+        effect_patt(p);
+    } else {
+        parse_pattern(p);
+    }
     if p.at(T![if]) {
         let guard = p.start();
         p.bump(T![if]);
@@ -476,7 +482,20 @@ fn match_arm(p: &mut Parser) {
     m.complete(p, MATCH_ARM);
 }
 
-/// `|a, b| a + b`, `|x: i32| -> i32 { x }` or `|| x`.
+/// `effect yield(x), k` at the start of a match arm: the operation the arm
+/// handles, with patterns for its arguments, and the continuation. The
+/// operation is a tuple struct pattern, like `yield(x)` or `State.get()`.
+fn effect_patt(p: &mut Parser) {
+    let m = p.start();
+    p.bump(T![effect]);
+    pattern_single(p);
+    p.expect(T![,]);
+    pattern_single(p);
+    m.complete(p, EFFECT_PATT);
+}
+
+/// `|a, b| a + b`, `|x: i32| -> i32 { x }`, `|x| does Log { f(x) }` or
+/// `|| x`.
 /// The body takes the restrictions of the context: in `if let f = || a {`,
 /// the `{` starts the body of the `if`.
 fn closure_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
@@ -497,13 +516,17 @@ fn closure_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
         p.expect(T![|]);
     }
     params.complete(p, PARAM_LIST);
-    if p.at(T![->]) {
-        // With a return type, the body must be a block.
+    if p.at(T![->]) || p.at(T![does]) {
+        // With a return type or effects, the body must be a block.
+        let has_ret = p.at(T![->]);
         opt_ret_type(p);
+        opt_effect_row(p);
         if p.at(T!['{']) {
             parse_block_expr(p);
-        } else {
+        } else if has_ret {
             p.error("expected a block after the return type");
+        } else {
+            p.error("expected a block after the effects");
         }
     } else if !p.eat(T![_]) {
         expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 1);

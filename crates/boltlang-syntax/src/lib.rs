@@ -73,6 +73,8 @@ pub enum SyntaxKind {
     CLASS_KEYWORD,
     CONST_KEYWORD,
     CONTINUE_KEYWORD,
+    DOES_KEYWORD,
+    EFFECT_KEYWORD,
     ELSE_KEYWORD,
     ENUM_KEYWORD,
     EXTERN_KEYWORD,
@@ -137,6 +139,9 @@ pub enum SyntaxKind {
     OR_PATT,
     /// `const { ... }`
     CONST_BLOCK_PATT,
+    /// `effect yield(x), k` in a match arm: an operation and its
+    /// continuation
+    EFFECT_PATT,
 
     // Type expressions
     /// A type named by a path, like `Vec[T]` or `Shape.Circle`
@@ -156,6 +161,8 @@ pub enum SyntaxKind {
     FN_TYPE,
     /// `-> T`
     RET_TYPE,
+    /// `does A + B` after a function's parameters or result type
+    EFFECT_ROW,
     /// `extern` or `extern "C"`
     ABI,
     /// `impl Trait` or `impl for[T] Trait`
@@ -293,6 +300,8 @@ pub enum SyntaxKind {
     IMPORT_ALIAS,
     /// `class Show[T] { items }`
     CLASS,
+    /// `effect State[S] { items }`
+    EFFECT,
     /// `impl Dog { items }` or `impl Show[Dog] { items }`
     IMPL,
     /// The `{ items }` of a class, impl or extern block
@@ -364,6 +373,8 @@ macro_rules! T {
     [break] => { $crate::SyntaxKind::BREAK_KEYWORD };
     [const] => { $crate::SyntaxKind::CONST_KEYWORD };
     [continue] => { $crate::SyntaxKind::CONTINUE_KEYWORD };
+    [does] => { $crate::SyntaxKind::DOES_KEYWORD };
+    [effect] => { $crate::SyntaxKind::EFFECT_KEYWORD };
     [else] => { $crate::SyntaxKind::ELSE_KEYWORD };
     [enum] => { $crate::SyntaxKind::ENUM_KEYWORD };
     [extern] => { $crate::SyntaxKind::EXTERN_KEYWORD };
@@ -419,6 +430,9 @@ impl SyntaxKind {
             IMPORT_LIST => "a list of imported names",
             IMPORT_ALIAS => "an imported name with an alias",
             CLASS => "a class",
+            EFFECT => "an effect",
+            EFFECT_ROW => "the effects of a function",
+            EFFECT_PATT => "an effect pattern",
             IMPL => "an impl",
             ITEM_LIST => "a list of items",
             CONST => "a constant",
@@ -496,6 +510,8 @@ impl SyntaxKind {
             BREAK_KEYWORD => "'break'",
             CONST_KEYWORD => "'const'",
             CONTINUE_KEYWORD => "'continue'",
+            DOES_KEYWORD => "'does'",
+            EFFECT_KEYWORD => "'effect'",
             ELSE_KEYWORD => "'else'",
             ENUM_KEYWORD => "'enum'",
             EXTERN_KEYWORD => "'extern'",
