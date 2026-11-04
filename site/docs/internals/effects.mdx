@@ -97,22 +97,22 @@ call of `log`, has to be added to each written signature above it.
 Signatures that are inferred, or that have an effect variable, don't need
 changing.
 
-### `nothing`
+### `Nothing`
 
-`nothing` is the row without effects. It's for two places:
+`Nothing` is the row without effects. It's for two places:
 
 ```bolt
-fn double(x: i32) does nothing = x * 2;   // no effects, result inferred
-let b: Button[nothing] = …;               // a button whose click does nothing
+fn double(x: i32) does Nothing = x * 2;   // no effects, result inferred
+let b: Button[Nothing] = …;               // a button whose click does nothing
 ```
 
 The first is the only way to say "no effects" without writing the result
 type. The second gives an effect parameter no effects, like
-`map[i32, i32, nothing]`.
+`map[i32, i32, Nothing]`.
 
-`nothing` is a name of the prelude, like `i32`, of kind `Effect`. It isn't
-an effect without operations: `nothing + E` is `E`, and `does nothing +
-Log` is `does Log`, which the formatter writes instead. It was chosen over
+`Nothing` is a name of the prelude, of kind `Effect`, and capitalized like
+other effects. It isn't an effect without operations: `Nothing + E` is `E`,
+and `does Nothing + Log` is `does Log`, which the formatter writes instead. It was chosen over
 `none`, which Conduit prints for the empty row but which is too close to
 `Option`'s `None`, and over `()`, which is the unit type. A modifier like
 Koka's `total` or a `pure fn` would be a second place to write effects, and
@@ -155,7 +155,7 @@ that function. An *effect variable* says so:
 ```bolt
 fn map[A, B, E](xs: [A], f: fn(A) -> B does E) -> [B] does E;
 
-map([1, 2, 3], |x| x * 2);   // E is nothing
+map([1, 2, 3], |x| x * 2);   // E is Nothing
 map(urls, fetch);            // E is Async
 ```
 
