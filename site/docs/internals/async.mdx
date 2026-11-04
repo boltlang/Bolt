@@ -8,8 +8,7 @@ description: A design for code that waits, as an Async effect instead of async a
 
 :::warning[Not implemented]
 This page is a design sketch. **Nothing on it is implemented**: there are no
-effects in Bolt yet, and `async` and `await` are reserved words without a
-meaning. The syntax of effect types is that of the
+effects in Bolt yet. The syntax of effect types is that of the
 [effects design](./effects.mdx).
 :::
 
@@ -228,9 +227,9 @@ wait for a promise of JavaScript, which is enough for `suspend` around
 
 ## The keywords
 
-This design doesn't need `async` and `await`, so they'll be dropped as
-keywords and can be names again, and so will `yield`
-([#263](https://github.com/boltlang/bolt/issues/263)). The parser can
+This design doesn't need `async`, `await` and `yield`, so they're no longer
+keywords, and can be names
+([#263](https://github.com/boltlang/bolt/issues/263)). The parser could
 still recognize `async fn` and `await x`, and say what to write instead:
 `does Async` after the parameters or the result type, and the call without
 `await`.
