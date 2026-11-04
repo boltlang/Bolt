@@ -106,8 +106,8 @@ fn item_nodes(root: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> {
 fn is_item_kind(kind: SyntaxKind) -> bool {
     matches!(
         kind,
-        FUNC_DECL | STRUCT | ENUM | CLASS | IMPL | CONST | TYPE_ALIAS | IMPORT | EXTERN_BLOCK
-            | MACRO_RULES | MACRO_CALL
+        FUNC_DECL | STRUCT | ENUM | CLASS | EFFECT | IMPL | CONST | TYPE_ALIAS | IMPORT
+            | EXTERN_BLOCK | MACRO_RULES | MACRO_CALL
     )
 }
 
@@ -120,6 +120,7 @@ pub struct ItemTree {
     pub structs: Vec<Struct>,
     pub enums: Vec<Enum>,
     pub classes: Vec<Class>,
+    pub effects: Vec<Effect>,
     pub impls: Vec<Impl>,
     pub consts: Vec<Const>,
     pub type_aliases: Vec<TypeAlias>,
@@ -136,6 +137,7 @@ pub enum ModItem {
     Struct(Idx<Struct>),
     Enum(Idx<Enum>),
     Class(Idx<Class>),
+    Effect(Idx<Effect>),
     Impl(Idx<Impl>),
     Const(Idx<Const>),
     TypeAlias(Idx<TypeAlias>),
@@ -252,6 +254,16 @@ pub struct Class {
     pub ast_id: AstId,
 }
 
+/// `effect State[S] { fn get() -> S; }`: an effect and its operations.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct Effect {
+    pub name: Option<Name>,
+    pub visibility: RawVisibility,
+    /// The operations, which are functions without a body.
+    pub items: Vec<AssocItem>,
+    pub ast_id: AstId,
+}
+
 /// `impl Show[Dog] { }`: an instance of a class.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Impl {
@@ -335,6 +347,7 @@ impl ItemTree {
             STRUCT => self.structs.len(),
             ENUM => self.enums.len(),
             CLASS => self.classes.len(),
+            EFFECT => self.effects.len(),
             IMPL => self.impls.len(),
             CONST => self.consts.len(),
             TYPE_ALIAS => self.type_aliases.len(),
@@ -375,7 +388,7 @@ impl ItemTree {
                 ModItem::Enum(push(&mut self.enums, enum_))
             }
             // The items inside get their `AstId`s after the item's own. A
-            // class, impl or extern block can't contain another, so it's
+            // class, effect, impl or extern block can't contain another, so it's
             // pushed after them at the index it had before.
             E::Class(c) => {
                 let ast_id = self.next_ast_id(CLASS);
@@ -421,8 +434,17 @@ impl ItemTree {
                     MacroRules { name: name(m.name()), ast_id },
                 ))
             }
-            // Effects only parse so far: there's nothing to name or check yet.
-            E::Effect(_) => return None,
+            E::Effect(e) => {
+                let ast_id = self.next_ast_id(EFFECT);
+                let items = self.lower_assoc_items(e.item_list());
+                let effect = Effect {
+                    name: name(e.name()),
+                    visibility: RawVisibility::from_ast(e.visibility()),
+                    items,
+                    ast_id,
+                };
+                ModItem::Effect(push(&mut self.effects, effect))
+            }
             E::VarDecl(_) | E::ExprStmt(_) | E::MacroCall(_) => return None,
         };
         Some(item)

@@ -18,15 +18,15 @@ use crate::{
     builtin_type::{BuiltinType, BuiltinValue},
     hir::{BindingId, ExprId, Path, PathSegment, TypeRef},
     ids::{
-        ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId,
-        StructId, TypeAliasId,
+        ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
+        ModuleDefId, StructId, TypeAliasId,
     },
     item_tree::{AssocItem, FunctionName, RawVisibility, item_tree},
     nameres::{Namespace, file_scope, is_visible_from, type_member, type_member_entry},
     scope::{ExprScopes, ScopeId, expr_scopes},
     signatures::{
-        GenericParams, class_signature, enum_signature, function_signature, impl_signature,
-        struct_signature, type_alias_signature,
+        GenericParams, class_signature, effect_signature, enum_signature, function_signature,
+        impl_signature, struct_signature, type_alias_signature,
     },
 };
 
@@ -37,6 +37,7 @@ pub enum GenericDefId<'db> {
     Struct(StructId<'db>),
     Enum(EnumId<'db>),
     Class(ClassId<'db>),
+    Effect(EffectId<'db>),
     Impl(ImplId<'db>),
     TypeAlias(TypeAliasId<'db>),
 }
@@ -48,6 +49,7 @@ impl<'db> GenericDefId<'db> {
             GenericDefId::Struct(id) => &struct_signature(db, id).generic_params,
             GenericDefId::Enum(id) => &enum_signature(db, id).generic_params,
             GenericDefId::Class(id) => &class_signature(db, id).generic_params,
+            GenericDefId::Effect(id) => &effect_signature(db, id).generic_params,
             GenericDefId::Impl(id) => &impl_signature(db, id).generic_params,
             GenericDefId::TypeAlias(id) => &type_alias_signature(db, id).generic_params,
         }
@@ -62,6 +64,7 @@ pub enum TypeNs<'db> {
     /// A variant, as in the struct literal `Shape.Circle { radius: 1 }`.
     Variant(EnumVariantId<'db>),
     Class(ClassId<'db>),
+    Effect(EffectId<'db>),
     TypeAlias(TypeAliasId<'db>),
     /// The `index`th type parameter of `def`.
     GenericParam {
@@ -154,6 +157,7 @@ impl<'db> Resolver<'db> {
         let mut resolver = Self::for_file(container.file(db));
         match container {
             ItemContainerId::Class(id) => resolver.push_generics(db, GenericDefId::Class(id)),
+            ItemContainerId::Effect(id) => resolver.push_generics(db, GenericDefId::Effect(id)),
             ItemContainerId::Impl(id) => resolver.push_generics(db, GenericDefId::Impl(id)),
             ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => {}
         }
@@ -287,6 +291,7 @@ impl<'db> Resolver<'db> {
             }
             ModuleDefId::Variant(id) => TypeNs::Variant(id),
             ModuleDefId::Class(id) => TypeNs::Class(id),
+            ModuleDefId::Effect(id) => TypeNs::Effect(id),
             ModuleDefId::TypeAlias(id) => TypeNs::TypeAlias(id),
             ModuleDefId::File(_)
             | ModuleDefId::Function(_)
@@ -353,6 +358,10 @@ impl<'db> Resolver<'db> {
         ty: TypeNs<'db>,
         name: &Name,
     ) -> Option<FunctionId<'db>> {
+        // An operation of an effect, like `State.get`.
+        if let TypeNs::Effect(effect) = ty {
+            return effect_operation(db, effect, name);
+        }
         let (file, owner) = owner_of(db, ty)?;
         match type_member(db, file, owner, name, self.file)? {
             ModuleDefId::Function(f) => Some(f),
@@ -537,6 +546,22 @@ pub fn impl_class<'db>(db: &'db dyn Db, id: ImplId<'db>) -> Option<ClassId<'db>>
 
 /// The file and name of a type that can have functions in its namespace,
 /// like `Vec` for `Vec.new`.
+/// The operation `name` of `effect`.
+fn effect_operation<'db>(
+    db: &'db dyn Db,
+    effect: EffectId<'db>,
+    name: &Name,
+) -> Option<FunctionId<'db>> {
+    let tree = item_tree(db, effect.file(db));
+    effect.item(db).items.iter().find_map(|item| match *item {
+        AssocItem::Function(idx) => {
+            matches!(&tree.functions[idx.index()].name, Some(FunctionName::Name(n)) if n == name)
+                .then(|| FunctionId::new(db, ItemContainerId::Effect(effect), idx))
+        }
+        _ => None,
+    })
+}
+
 fn owner_of<'db>(db: &'db dyn Db, ty: TypeNs<'db>) -> Option<(File, &'db Name)> {
     match ty {
         TypeNs::Struct(id) => Some((id.file(db), id.item(db).name.as_ref()?)),
@@ -555,6 +580,7 @@ fn file_of<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> File {
         GenericDefId::Struct(id) => id.file(db),
         GenericDefId::Enum(id) => id.file(db),
         GenericDefId::Class(id) => id.file(db),
+        GenericDefId::Effect(id) => id.file(db),
         GenericDefId::Impl(id) => id.file(db),
         GenericDefId::TypeAlias(id) => id.file(db),
     }

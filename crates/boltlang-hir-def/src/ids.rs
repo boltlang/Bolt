@@ -12,11 +12,13 @@ use crate::{
     item_tree::{self, Idx, item_tree as tree_of},
 };
 
-/// Where a function, const or type alias is defined.
+/// Where a function, const or type alias is defined. The operations of an
+/// effect are functions in the effect.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum ItemContainerId<'db> {
     File(File),
     Class(ClassId<'db>),
+    Effect(EffectId<'db>),
     Impl(ImplId<'db>),
     ExternBlock(ExternBlockId<'db>),
 }
@@ -26,6 +28,7 @@ impl<'db> ItemContainerId<'db> {
         match self {
             ItemContainerId::File(file) => file,
             ItemContainerId::Class(id) => id.file(db),
+            ItemContainerId::Effect(id) => id.file(db),
             ItemContainerId::Impl(id) => id.file(db),
             ItemContainerId::ExternBlock(id) => id.file(db),
         }
@@ -81,6 +84,7 @@ macro_rules! assoc_item_id {
 file_item_id!(StructId, Struct, structs);
 file_item_id!(EnumId, Enum, enums);
 file_item_id!(ClassId, Class, classes);
+file_item_id!(EffectId, Effect, effects);
 file_item_id!(ImplId, Impl, impls);
 file_item_id!(ExternBlockId, ExternBlock, extern_blocks);
 file_item_id!(MacroRulesId, MacroRules, macro_rules);
@@ -119,6 +123,7 @@ pub enum ModuleDefId<'db> {
     Enum(EnumId<'db>),
     Variant(EnumVariantId<'db>),
     Class(ClassId<'db>),
+    Effect(EffectId<'db>),
     Const(ConstId<'db>),
     TypeAlias(TypeAliasId<'db>),
     MacroRules(MacroRulesId<'db>),

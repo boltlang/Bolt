@@ -135,7 +135,8 @@ impl fmt::Display for DisplayInstance<'_> {
     }
 }
 
-/// `Show[i32].` for an item of an impl, `Show.` for one of a class.
+/// `Show[i32].` for an item of an impl, `Show.` for one of a class, and
+/// `State.` for an operation of an effect.
 fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
     match container {
         ItemContainerId::Impl(imp) => match &impl_header(db, imp).class {
@@ -146,6 +147,10 @@ fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
             None => "impl.".to_string(),
         },
         ItemContainerId::Class(class) => format!("{}.", class_name(db, class)),
+        ItemContainerId::Effect(effect) => match &effect.item(db).name {
+            Some(name) => format!("{name}."),
+            None => String::new(),
+        },
         ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => String::new(),
     }
 }

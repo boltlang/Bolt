@@ -13,8 +13,8 @@ use boltlang_hir_def::{
     item_tree::AssocItem,
     resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution},
     signatures::{
-        self, FieldList, GenericParams, class_signature, const_signature, enum_signature,
-        function_signature, impl_signature, struct_signature, type_alias_signature,
+        self, FieldList, GenericParams, class_signature, const_signature, effect_signature,
+        enum_signature, function_signature, impl_signature, struct_signature, type_alias_signature,
     },
 };
 
@@ -400,6 +400,9 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 (Ty::Param(GenericParamId { def, index }), kind)
             }
             TypeNs::TypeAlias(alias) => return self.lower_alias(id, alias, args),
+            // An effect isn't a type, which the kind says: there's no type
+            // for it, but its arguments are still checked.
+            TypeNs::Effect(e) => (Ty::Error, def_kind(self.db, GenericDefId::Effect(e))),
             TypeNs::Class(_) | TypeNs::Variant(_) => {
                 self.diagnostics.push(LowerDiagnostic::NotAType(id));
                 return (Ty::Error, None);
@@ -1161,6 +1164,10 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         }
         GenericDefId::Class(id) => {
             let sig = class_signature(db, id);
+            (&sig.store, &sig.generic_params)
+        }
+        GenericDefId::Effect(id) => {
+            let sig = effect_signature(db, id);
             (&sig.store, &sig.generic_params)
         }
         GenericDefId::Impl(id) => {

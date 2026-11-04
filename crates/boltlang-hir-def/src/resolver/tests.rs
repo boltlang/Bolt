@@ -12,6 +12,7 @@ fn describe_type(db: &dyn Db, ty: TypeNs<'_>) -> String {
         TypeNs::Enum(id) => format!("enum {}", id.item(db).name.as_ref().unwrap()),
         TypeNs::Variant(id) => format!("variant {}", id.name(db)),
         TypeNs::Class(id) => format!("class {}", id.item(db).name.as_ref().unwrap()),
+        TypeNs::Effect(id) => format!("effect {}", id.item(db).name.as_ref().unwrap()),
         TypeNs::TypeAlias(id) => format!("type {}", id.item(db).name.as_ref().unwrap()),
         TypeNs::GenericParam { def, index } => {
             format!("param {}", def.generic_params(db).type_params[index as usize].name)
@@ -159,4 +160,21 @@ fn generic_params_and_locals() {
         r.resolve_path_in_type_ns(&db, p).map(|t| t.ty),
         Some(TypeNs::GenericParam { def: GenericDefId::Function(f), index: 0 })
     );
+}
+
+#[test]
+fn effects_and_their_operations() {
+    let db = TestDb::new();
+    let file = db.file(
+        "/main.bolt",
+        "effect State[S] { fn get() -> S; fn set(value: S); }\nfn f() { get(); }\n",
+    );
+    let r = Resolver::for_file(file);
+    let ty = |p: &str| r.resolve_path_in_type_ns(&db, &path(p)).map(|t| describe_type(&db, t.ty));
+    let value = |p: &str| r.resolve_path_in_value_ns(&db, &path(p)).map(|v| describe_value(&db, v));
+    assert_eq!(ty("State").as_deref(), Some("effect State"));
+    // Operations are called by their name, or through their effect.
+    assert_eq!(value("get").as_deref(), Some("fn get"));
+    assert_eq!(value("State.set").as_deref(), Some("fn set"));
+    assert_eq!(value("State.missing").as_deref(), Some("effect State + 1"));
 }

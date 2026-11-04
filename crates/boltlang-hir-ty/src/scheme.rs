@@ -233,6 +233,7 @@ pub fn generic_chain<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<GenericDef
     let mut chain = Vec::new();
     match f.container(db) {
         ItemContainerId::Class(c) => chain.push(GenericDefId::Class(c)),
+        ItemContainerId::Effect(e) => chain.push(GenericDefId::Effect(e)),
         ItemContainerId::Impl(i) => chain.push(GenericDefId::Impl(i)),
         ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => {}
     }

@@ -17,7 +17,7 @@ use boltlang_hir_def::{
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
     hir::{Expr, MutabilityRef, TypeRef, TypeRefId},
     ids::{
-        ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
+        ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
         ItemContainerId, StructId, TypeAliasId,
     },
     item_tree::{AssocItem, AstId, ModItem, item_tree},
@@ -25,9 +25,9 @@ use boltlang_hir_def::{
     resolver::GenericDefId,
     signatures::{
         FieldList, class_signature_with_source_map, const_signature_with_source_map,
-        enum_signature_with_source_map, function_signature, function_signature_with_source_map,
-        impl_signature, impl_signature_with_source_map, struct_signature_with_source_map,
-        type_alias_signature_with_source_map,
+        effect_signature_with_source_map, enum_signature_with_source_map, function_signature,
+        function_signature_with_source_map, impl_signature, impl_signature_with_source_map,
+        struct_signature_with_source_map, type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
@@ -623,6 +623,13 @@ impl<'db> Collector<'db> {
                     let (_, map) = class_signature_with_source_map(db, id);
                     self.lower(map, &generic_predicates(db, GenericDefId::Class(id)).diagnostics);
                     self.assoc_items(ItemContainerId::Class(id), &id.item(db).items);
+                }
+                ModItem::Effect(idx) => {
+                    let id = EffectId::new(db, file, idx);
+                    self.fallback = self.item_range(id.item(db).ast_id);
+                    let (_, map) = effect_signature_with_source_map(db, id);
+                    self.lower(map, &generic_predicates(db, GenericDefId::Effect(id)).diagnostics);
+                    self.assoc_items(ItemContainerId::Effect(id), &id.item(db).items);
                 }
                 ModItem::Impl(idx) => {
                     let id = ImplId::new(db, file, idx);
@@ -1420,6 +1427,9 @@ impl<'db> Collector<'db> {
                     }
                     GenericDefId::Class(c) => {
                         (c.file(db), &class_signature_with_source_map(db, c).1, None)
+                    }
+                    GenericDefId::Effect(e) => {
+                        (e.file(db), &effect_signature_with_source_map(db, e).1, None)
                     }
                     GenericDefId::TypeAlias(_) => return None,
                 };

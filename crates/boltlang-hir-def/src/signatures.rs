@@ -17,7 +17,7 @@ use crate::{
     Name,
     expr_store::{ExprCollector, ExpressionStore, ExpressionStoreSourceMap, unquote},
     hir::{ExprId, TypeRefId},
-    ids::{ClassId, ConstId, EnumId, FunctionId, ImplId, StructId, TypeAliasId},
+    ids::{ClassId, ConstId, EffectId, EnumId, FunctionId, ImplId, StructId, TypeAliasId},
     item_tree::{AstId, FunctionName, RawVisibility},
 };
 
@@ -140,6 +140,15 @@ pub struct ClassSignature {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct EffectSignature {
+    pub name: Option<Name>,
+    pub visibility: RawVisibility,
+    /// The effect's parameters, like the `S` of `effect State[S]`.
+    pub generic_params: GenericParams,
+    pub store: ExpressionStore,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ImplSignature {
     pub generic_params: GenericParams,
     /// The class instance, like `Show[Dog]`. Name resolution checks that
@@ -221,6 +230,19 @@ pub fn class_signature_with_source_map<'db>(
 #[salsa::tracked(returns(ref))]
 pub fn class_signature<'db>(db: &'db dyn Db, id: ClassId<'db>) -> ClassSignature {
     class_signature_with_source_map(db, id).0.clone()
+}
+
+#[salsa::tracked(returns(ref))]
+pub fn effect_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: EffectId<'db>,
+) -> (EffectSignature, ExpressionStoreSourceMap) {
+    lower_effect(db, id)
+}
+
+#[salsa::tracked(returns(ref))]
+pub fn effect_signature<'db>(db: &'db dyn Db, id: EffectId<'db>) -> EffectSignature {
+    effect_signature_with_source_map(db, id).0.clone()
 }
 
 #[salsa::tracked(returns(ref))]
@@ -390,6 +412,29 @@ fn lower_class<'db>(
     let (store, source_map) = c.finish();
     (
         ClassSignature {
+            name: item.name.clone(),
+            visibility: item.visibility,
+            generic_params,
+            store,
+        },
+        source_map,
+    )
+}
+
+fn lower_effect<'db>(
+    db: &'db dyn Db,
+    id: EffectId<'db>,
+) -> (EffectSignature, ExpressionStoreSourceMap) {
+    let item = id.item(db);
+    let node = item_node::<ast::Effect>(db, id.file(db), item.ast_id);
+    let mut c = ExprCollector::new();
+    let generic_params = match &node {
+        Some(node) => lower_generic_params(&mut c, node.generic_param_list(), std::iter::empty()),
+        None => GenericParams::default(),
+    };
+    let (store, source_map) = c.finish();
+    (
+        EffectSignature {
             name: item.name.clone(),
             visibility: item.visibility,
             generic_params,

@@ -25,7 +25,7 @@ use crate::manifest::{
 use crate::{
     Name,
     ids::{
-        ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
+        ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
         ItemContainerId, MacroRulesId, ModuleDefId, StructId, TypeAliasId,
     },
     item_tree::{AssocItem, AstId, ImportKind, ItemTree, ModItem, RawVisibility, item_tree},
@@ -325,6 +325,28 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                             Some(c.visibility),
                         );
                     }
+                }
+            }
+            ModItem::Effect(idx) => {
+                let e = &tree.effects[idx.index()];
+                let effect = EffectId::new(db, file, idx);
+                out.define_item(
+                    Namespace::Types,
+                    &e.name,
+                    ModuleDefId::Effect(effect),
+                    e.visibility,
+                    e.ast_id,
+                );
+                // Operations are called like functions, like class methods,
+                // with the effect's visibility.
+                for &item in &e.items {
+                    out.define_assoc(
+                        db,
+                        tree,
+                        ItemContainerId::Effect(effect),
+                        item,
+                        Some(e.visibility),
+                    );
                 }
             }
             ModItem::MacroRules(idx) => {

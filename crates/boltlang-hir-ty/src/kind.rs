@@ -22,8 +22,8 @@ use boltlang_hir_def::{
     item_tree::AssocItem,
     resolver::{GenericDefId, Resolver, TypeNs},
     signatures::{
-        FieldList, GenericParams, class_signature, const_signature, enum_signature,
-        function_signature, impl_signature, struct_signature, type_alias_signature,
+        FieldList, GenericParams, class_signature, const_signature, effect_signature,
+        enum_signature, function_signature, impl_signature, struct_signature, type_alias_signature,
     },
 };
 
@@ -31,6 +31,8 @@ use boltlang_hir_def::{
 pub enum Kind {
     /// The kind of types that values have, like `i32` or `Option[i32]`.
     Type,
+    /// The kind of effects, like `Log` or `State[i32]`.
+    Effect,
     /// A type constructor, which gives a type of the second kind when it's
     /// applied to a type of the first: `Option` is `Type -> Type`.
     Arrow(Box<Kind>, Box<Kind>),
@@ -63,10 +65,11 @@ impl Kind {
         Some(kind)
     }
 
-    /// Whether all the arguments it takes are types, like `Type -> Type`,
-    /// as opposed to `(Type -> Type) -> Type`.
+    /// Whether it takes types and gives a type, like `Type -> Type`, as
+    /// opposed to `(Type -> Type) -> Type` or `Type -> Effect`.
     pub fn is_first_order(&self) -> bool {
-        self.split().0.iter().all(|k| **k == Kind::Type)
+        let (params, result) = self.split();
+        params.iter().all(|k| **k == Kind::Type) && *result == Kind::Type
     }
 }
 
@@ -74,6 +77,7 @@ impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Kind::Type => f.write_str("Type"),
+            Kind::Effect => f.write_str("Effect"),
             Kind::Arrow(param, result) if matches!(**param, Kind::Arrow(..)) => {
                 write!(f, "({param}) -> {result}")
             }
@@ -92,10 +96,20 @@ pub fn generic_param_kinds<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<
     kinds.filter(|k| k.len() == count).unwrap_or_else(|| vec![Kind::Type; count].into())
 }
 
-/// The kind of a struct, enum, class or type alias: that of a constructor
-/// taking its type parameters, like `Type -> Type` for `Option`.
+/// The kind of a struct, enum, class, effect or type alias: that of a
+/// constructor taking its type parameters, like `Type -> Type` for `Option`,
+/// or `Type -> Effect` for `State`.
 pub fn def_kind<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Kind {
-    Kind::arrows(generic_param_kinds(db, def).into_vec().into_iter(), Kind::Type)
+    Kind::arrows(generic_param_kinds(db, def).into_vec().into_iter(), result_kind(def))
+}
+
+/// What a definition gives once it has all its arguments: an effect for an
+/// effect, a type otherwise.
+fn result_kind(def: GenericDefId<'_>) -> Kind {
+    match def {
+        GenericDefId::Effect(_) => Kind::Effect,
+        _ => Kind::Type,
+    }
 }
 
 /// The definition whose group `def` is inferred in: its class or impl for
@@ -108,6 +122,7 @@ fn group_root<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> GenericDefId<'db>
     };
     match container {
         ItemContainerId::Class(id) => GenericDefId::Class(id),
+        ItemContainerId::Effect(id) => GenericDefId::Effect(id),
         ItemContainerId::Impl(id) => GenericDefId::Impl(id),
         ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => def,
     }
@@ -118,6 +133,7 @@ fn group_members<'db>(db: &'db dyn Db, root: GenericDefId<'db>) -> Vec<GenericDe
     let mut members = vec![root];
     let (container, items) = match root {
         GenericDefId::Class(id) => (ItemContainerId::Class(id), &id.item(db).items),
+        GenericDefId::Effect(id) => (ItemContainerId::Effect(id), &id.item(db).items),
         GenericDefId::Impl(id) => (ItemContainerId::Impl(id), &id.item(db).items),
         _ => return members,
     };
@@ -181,6 +197,7 @@ fn group_kinds_cycle<'db>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum K {
     Type,
+    Effect,
     Arrow(Box<K>, Box<K>),
     Var(u32),
 }
@@ -194,6 +211,7 @@ impl K {
     fn from_kind(kind: &Kind) -> K {
         match kind {
             Kind::Type => K::Type,
+            Kind::Effect => K::Effect,
             Kind::Arrow(a, b) => K::Arrow(Box::new(K::from_kind(a)), Box::new(K::from_kind(b))),
         }
     }
@@ -228,7 +246,7 @@ impl<'db> KindInference<'db> {
         match self.shallow(k) {
             K::Var(w) => v == w,
             K::Arrow(a, b) => self.occurs(v, &a) || self.occurs(v, &b),
-            K::Type => false,
+            K::Type | K::Effect => false,
         }
     }
 
@@ -254,6 +272,7 @@ impl<'db> KindInference<'db> {
     fn finish(&self, k: &K) -> Kind {
         match self.shallow(k) {
             K::Type | K::Var(_) => Kind::Type,
+            K::Effect => Kind::Effect,
             K::Arrow(a, b) => Kind::Arrow(Box::new(self.finish(&a)), Box::new(self.finish(&b))),
         }
     }
@@ -277,7 +296,7 @@ impl<'db> KindInference<'db> {
             Some(vars) => vars.clone(),
             None => generic_param_kinds(self.db, def).iter().map(K::from_kind).collect(),
         };
-        K::arrows(params, K::Type)
+        K::arrows(params, K::from_kind(&result_kind(def)))
     }
 
     fn walk_def(&mut self, def: GenericDefId<'db>) {
@@ -306,6 +325,10 @@ impl<'db> KindInference<'db> {
             }
             GenericDefId::Class(id) => {
                 let sig = class_signature(db, id);
+                self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
+            }
+            GenericDefId::Effect(id) => {
+                let sig = effect_signature(db, id);
                 self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
             }
             GenericDefId::Impl(id) => {
@@ -393,6 +416,7 @@ impl<'db> KindInference<'db> {
                         TypeNs::Enum(e) => self.def_kind(GenericDefId::Enum(e)),
                         TypeNs::TypeAlias(a) => self.def_kind(GenericDefId::TypeAlias(a)),
                         TypeNs::Builtin(_) => K::Type,
+                        TypeNs::Effect(e) => self.def_kind(GenericDefId::Effect(e)),
                         TypeNs::Class(_) | TypeNs::Variant(_) => self.new_var(),
                     },
                     // An associated type like `T.Item`, or an unresolved
