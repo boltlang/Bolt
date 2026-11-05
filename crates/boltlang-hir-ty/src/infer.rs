@@ -29,7 +29,7 @@ use boltlang_hir_def::{
 use crate::{
     check::{InferenceCycle, function_scheme},
     holds::struct_atoms_of,
-    lang::{LangClass, char_ty, string_ty},
+    lang::{LangClass, char_ty, range_struct, string_ty},
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty,
         field_types, field_visible, generic_predicates, identity_args, named_mutabilities,
@@ -837,6 +837,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
+            // `a..b` is the prelude's `Range { start: a, end: b }`. The other
+            // ranges have no types in std yet.
+            Expr::Range { lhs: Some(start), rhs: Some(end), inclusive: false } => {
+                self.infer_range(expr, *start, *end)
+            }
             Expr::Range { lhs, rhs, .. } => {
                 for e in lhs.iter().chain(rhs.iter()) {
                     self.infer_expr(*e);
@@ -1330,6 +1335,29 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             let name = field_types(self.db, def).fields[index].0.clone();
             self.result.diagnostics.push(InferenceDiagnostic::PrivateField { at, strukt, name });
         }
+    }
+
+    /// `start..end`: the prelude's `Range`, made like a struct literal.
+    fn infer_range(&mut self, expr: ExprId, start: ExprId, end: ExprId) -> Ty<'db> {
+        let file = self.def.def(self.db).file(self.db);
+        let Some(s) = range_struct(self.db, file) else {
+            self.infer_expr(start);
+            self.infer_expr(end);
+            let at = ExprOrPat::Expr(expr);
+            self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: "Range" });
+            return Ty::Error;
+        };
+        let def = VariantDef::Struct(s);
+        let (ty, args) = self.fresh_adt(def, literal_mutability(false));
+        self.struct_holds(&ty, expr);
+        let fields = field_types(self.db, def);
+        for (name, e) in [("start", start), ("end", end)] {
+            let field = fields.field(&Name::new(name)).map(|(_, t)| t.clone());
+            let field =
+                field.map_or(Ty::Error, |t| subst_params(&t, GenericDefId::Struct(s), &args));
+            self.check_expr(e, &field);
+        }
+        ty
     }
 
     /// A path that names a type used as a value: a constructor.

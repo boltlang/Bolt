@@ -573,6 +573,13 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Expr::Lambda { .. } => self.closure(e),
             Expr::Let { .. } => Err(ErrorKind::unsupported("`let` here")),
             Expr::Missing => Err(ErrorKind::unsupported("code with syntax errors")),
+            // `a..b`: the prelude's `Range { start: a, end: b }`.
+            Expr::Range { lhs: Some(start), rhs: Some(end), inclusive: false } => {
+                let (start, end) = (*start, *end);
+                let start = val!(self.expr(start));
+                let end = val!(self.expr(end));
+                self.construct(e, 0, start.into_iter().chain(end).collect())
+            }
             Expr::Try { .. } | Expr::Range { .. } | Expr::MacroCall { .. } => {
                 Err(ErrorKind::unsupported("this expression"))
             }

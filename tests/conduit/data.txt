@@ -2698,3 +2698,169 @@ env.log(1)
 env.log(2)
 env.log(3)
 env.log(60)
+
+================================================================================
+A for loop over a..b
+:prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+for i in 0..3 { log(i * i); }
+fn count(n: i32) -> i32 { let mut c = 0; for _ in 0..n { c += 1; } c }
+log(count(5));
+let r = 2..4;
+for i in r { log(i); }
+for i in r { log(i); }
+--------------------------------------------------------------------------------
+data Range_i32 {
+  (i32, i32)
+}
+
+data RangeIter_i32 {
+  (i32, i32)
+}
+
+data Option_i32 {
+  ()
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+fn file() -> () {
+  let %0: imm Range_i32 = new Range_i32.0(0i32, 3i32)
+  let %1: mut RangeIter_i32 = call Iterable_Range_T_iter_i32[imm](%0)
+  join j1() =
+    let %5: i32 = call count(5i32)
+    let = call_extern log(%5)
+    let %r: imm Range_i32 = new Range_i32.0(2i32, 4i32)
+    let %7: mut RangeIter_i32 = call Iterable_Range_T_iter_i32[imm](%r)
+    join j3() =
+      let %10: mut RangeIter_i32 = call Iterable_Range_T_iter_i32[imm](%r)
+      join j5() = jump ret()
+      in
+      join rec j6() =
+        let %11: imm Option_i32 = call Iterator_mut_RangeIter_T_next_i32(%10)
+        case %11 {
+          Option_i32.1 =>
+            let %i#12: i32 = get Option_i32.1.0(%11)
+            let = call_extern log(%i#12)
+            jump j6()
+          _ => jump j5()
+        }
+      in jump j6()
+    in
+    join rec j4() =
+      let %8: imm Option_i32 = call Iterator_mut_RangeIter_T_next_i32(%7)
+      case %8 {
+        Option_i32.1 =>
+          let %i#9: i32 = get Option_i32.1.0(%8)
+          let = call_extern log(%i#9)
+          jump j4()
+        _ => jump j3()
+      }
+    in jump j4()
+  in
+  join rec j2() =
+    let %2: imm Option_i32 = call Iterator_mut_RangeIter_T_next_i32(%1)
+    case %2 {
+      Option_i32.1 =>
+        let %i#3: i32 = get Option_i32.1.0(%2)
+        let %4: i32 = call star_i32(%i#3, %i#3)
+        let = call_extern log(%4)
+        jump j2()
+      _ => jump j1()
+    }
+  in jump j2()
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Iterable_Range_T_iter_i32['m1](%r: 'm1 Range_i32) -> (mut RangeIter_i32) {
+  let %1: i32 = get Range_i32.0.0(%r)
+  let %2: i32 = get Range_i32.0.1(%r)
+  let %3: mut RangeIter_i32 = new RangeIter_i32.0(%1, %2)
+  jump ret(%3)
+}
+
+fn Iterator_mut_RangeIter_T_next_i32(%it: mut RangeIter_i32) -> (imm Option_i32) {
+  join j1(%1: imm Option_i32) = jump ret(%1)
+  in
+  let %2: i32 = get RangeIter_i32.0.0(%it)
+  let %3: i32 = get RangeIter_i32.0.1(%it)
+  let %4: i32 = call lt_i32(%2, %3)
+  case %4 {
+    0 =>
+      let %5: imm Option_i32 = new Option_i32.0()
+      jump j1(%5)
+    _ =>
+      let %x: i32 = get RangeIter_i32.0.0(%it)
+      let %7: i32 = call Step_i32_successor(%x)
+      let = set RangeIter_i32.0.0(%it, %7)
+      let %8: imm Option_i32 = new Option_i32.1(%x)
+      jump j1(%8)
+  }
+}
+
+fn count(%n: i32) -> (i32) {
+  let %c: ref i32 = ref_new(0i32)
+  let %2: imm Range_i32 = new Range_i32.0(0i32, %n)
+  let %3: mut RangeIter_i32 = call Iterable_Range_T_iter_i32[imm](%2)
+  join j1() =
+    let %8: i32 = ref_get(%c)
+    jump ret(%8)
+  in
+  join rec j2() =
+    let %4: imm Option_i32 = call Iterator_mut_RangeIter_T_next_i32(%3)
+    case %4 {
+      Option_i32.1 =>
+        let %5: i32 = get Option_i32.1.0(%4)
+        let %6: i32 = ref_get(%c)
+        let %7: i32 = call plus_i32(%6, 1i32)
+        let = ref_set(%c, %7)
+        jump j2()
+      _ => jump j1()
+    }
+  in jump j2()
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
+  jump ret(%2)
+}
+
+fn Step_i32_successor(%x: i32) -> (i32) {
+  let %1: i32 = call plus_i32(%x, 1i32)
+  jump ret(%1)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+env.log(0)
+env.log(1)
+env.log(4)
+env.log(5)
+env.log(2)
+env.log(3)
+env.log(2)
+env.log(3)
