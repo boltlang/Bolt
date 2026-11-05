@@ -11,10 +11,10 @@ boltlang-hir-ty.workspace = true
 boltlang-lower.workspace = true
 # Conduit, at a commit of its `main`: bump `rev` to use newer changes.
 conduit-ir = { git = "https://github.com/boltlang/conduit", rev = "621243c" }
+conduit-eval = { git = "https://github.com/boltlang/conduit", rev = "621243c" }
 
 [dev-dependencies]
 boltlang-corpus.workspace = true
-conduit-eval = { git = "https://github.com/boltlang/conduit", rev = "621243c" }
 libtest-mimic = "0.8.2"
 
 [[test]]

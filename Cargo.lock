@@ -134,6 +134,8 @@ dependencies = [
  "anyhow",
  "ariadne",
  "boltlang-base-db",
+ "boltlang-codegen-conduit",
+ "boltlang-hir-def",
  "boltlang-ide-diagnostics",
  "boltlang-std",
  "boltlang-syntax",

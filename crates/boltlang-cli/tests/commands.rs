@@ -1,5 +1,5 @@
-//! `bolt dump-ast` and `bolt check`, run on files in a temporary directory,
-//! without a prelude, so that they don't depend on `std`.
+//! The commands of `bolt`, run on files in a temporary directory: without
+//! a prelude where they can, so that they don't depend on `std`.
 
 use std::{fs, path::PathBuf, process::Command};
 
@@ -124,13 +124,52 @@ fn check_reports_a_used_file_with_errors() {
 }
 
 #[test]
-fn run_test_and_build_are_not_available() {
+fn build_is_not_available() {
     let dir = dir_with("stubs", &[("a.bolt", "1;\n")]);
-    for command in ["run", "test", "build"] {
-        let o = bolt(&dir, command, &["a.bolt", "--wasm"]);
-        assert!(!o.ok, "{command}");
-        assert!(o.err.contains("not available until the Conduit backend lands"), "{}", o.err);
-    }
+    let o = bolt(&dir, "build", &["a.bolt"]);
+    assert!(!o.ok);
+    assert!(o.err.contains("not available until the Conduit backend lands"), "{}", o.err);
+}
+
+#[test]
+fn run_prints_through_conduit() {
+    let dir = dir_with("run", &[("a.bolt", "print(\"hello\");\nprint(\"world\");\n")]);
+    let o = bolt_std(&dir, "run", &["a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "hello\nworld\n");
+}
+
+#[test]
+fn run_stops_with_an_error() {
+    let dir = dir_with("run-error", &[("a.bolt", "print(\"before\");\npanic(\"oops\");\n")]);
+    let o = bolt_std(&dir, "run", &["a.bolt"]);
+    assert!(!o.ok);
+    assert_eq!(o.out, "before\noops\n");
+    assert!(o.err.contains("stopped with an error"), "{}", o.err);
+}
+
+#[test]
+fn run_stops_out_of_fuel() {
+    let dir = dir_with("run-fuel", &[("a.bolt", "let mut i = 0;\nwhile True { i += 1; }\n")]);
+    let o = bolt_std(&dir, "run", &["a.bolt", "--fuel", "1000"]);
+    assert!(!o.ok);
+    assert!(o.err.contains("out of fuel"), "{}", o.err);
+}
+
+#[test]
+fn test_runs_the_tests_of_files() {
+    let source = "fn double(x: i32) -> i32 = x * 2;\n\
+        #[test]\nfn doubles() { assert(double(2) == 4); }\n\
+        #[test]\nfn fails() { assert(double(2) == 5); }\n";
+    let dir = dir_with("test", &[("a.bolt", source)]);
+    let o = bolt_std(&dir, "test", &[]);
+    assert!(!o.ok);
+    assert!(o.out.contains("a.bolt::doubles ... ok"), "{}", o.out);
+    assert!(o.out.contains("a.bolt::fails ... "), "{}", o.out);
+    assert!(o.out.contains("test result: FAILED. 1 passed; 1 failed"), "{}", o.out);
+    let filtered = bolt_std(&dir, "test", &["--filter", "doubles"]);
+    assert!(filtered.ok, "{}", filtered.out);
+    assert!(filtered.out.contains("test result: ok. 1 passed; 0 failed"), "{}", filtered.out);
 }
 
 /// `bolt --version`, with `BOLT_PRELUDE_PATH` set to `std`, or unset.

@@ -11,6 +11,8 @@ use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{
     DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text,
 };
+use boltlang_codegen_conduit::{Lowered, lower, run::run};
+use boltlang_hir_def::nameres::test_functions;
 use boltlang_ide_diagnostics::{
     Diagnostic, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
 };
@@ -158,18 +160,37 @@ impl Exec for CheckCommand {
     }
 }
 
-/// Run a file. Not available until the Conduit backend lands.
+/// Check a file, then run the statements at its top level, with Conduit's
+/// evaluator.
 #[derive(clap::Parser)]
 struct RunCommand {
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
-    _args: Vec<String>,
+    file: PathBuf,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Run the file even when the checker finds errors.
+    #[arg(long)]
+    no_check: bool,
+    /// Stop after this many steps of the evaluator.
+    #[arg(long, value_name = "STEPS")]
+    fuel: Option<u64>,
 }
 
-/// Run the tests of files. Not available until the Conduit backend lands.
+/// Check files, then run their tests, with Conduit's evaluator: the
+/// functions with `#[test]` before them. A test fails when it stops with an
+/// error, like a panic.
 #[derive(clap::Parser)]
 struct TestCommand {
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
-    _args: Vec<String>,
+    /// Files, or directories whose `.bolt` files to test, recursively
+    /// [default: the current directory]
+    paths: Vec<PathBuf>,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Only run the tests whose name contains this.
+    #[arg(long, value_name = "NAME")]
+    filter: Option<String>,
+    /// Stop a test after this many steps of the evaluator.
+    #[arg(long, value_name = "STEPS")]
+    fuel: Option<u64>,
 }
 
 /// Compile a file. Not available until the Conduit backend lands.
@@ -179,8 +200,7 @@ struct BuildCommand {
     _args: Vec<String>,
 }
 
-/// What `bolt run`, `bolt test` and `bolt build` do until Bolt has a
-/// backend again.
+/// What `bolt build` does until it can write a Wasm module.
 fn not_available(command: &str) -> anyhow::Result<bool> {
     eprintln!("error: `bolt {command}` is not available until the Conduit backend lands");
     Ok(false)
@@ -188,14 +208,128 @@ fn not_available(command: &str) -> anyhow::Result<bool> {
 
 impl Exec for RunCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        not_available("run")
+        let db = self.prelude.database()?;
+        let Some(file) = open(&db, &self.file) else { return Ok(false) };
+        let found =
+            if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
+        report(&db, &found)?;
+        if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
+            return Ok(false);
+        }
+        let Some(program) = lowered(&db, file) else { return Ok(false) };
+        match run(&program, program.entry, self.fuel) {
+            Ok(()) => Ok(true),
+            Err(error) => {
+                eprintln!("error: {error}");
+                Ok(false)
+            }
+        }
     }
 }
 
 impl Exec for TestCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        not_available("test")
+        let db = self.prelude.database()?;
+        let mut paths = Vec::new();
+        let roots =
+            if self.paths.is_empty() { vec![PathBuf::from(".")] } else { self.paths.clone() };
+        for root in &roots {
+            bolt_files(root, &mut paths)?;
+        }
+        let mut files = Vec::new();
+        let mut ok = true;
+        for path in &paths {
+            match open(&db, path) {
+                Some(file) => files.push(file),
+                None => ok = false,
+            }
+        }
+        let selected = |name: &str| self.filter.as_ref().is_none_or(|f| name.contains(f.as_str()));
+        let (mut passed, mut failed, mut skipped) = (0, 0, 0);
+        for &file in &files {
+            let count = test_functions(&db, file)
+                .iter()
+                .filter(|f| {
+                    let name = f.item(&db).display_name().map(|n| n.to_string());
+                    selected(&name.unwrap_or_default())
+                })
+                .count();
+            if count == 0 {
+                continue;
+            }
+            // A file with errors, or that can't be compiled yet, isn't run.
+            let found = checked(&db, file, &files);
+            report(&db, &found)?;
+            let program = if found.iter().any(|d| d.severity == Severity::Error) {
+                None
+            } else {
+                lowered(&db, file)
+            };
+            let Some(program) = program else {
+                println!("{}: not run, since it has errors", display_path(&db, file));
+                skipped += count;
+                ok = false;
+                continue;
+            };
+            for (name, f) in program.tests.iter().filter(|(name, _)| selected(name)) {
+                print!("test {}::{name} ... ", display_path(&db, file));
+                io::stdout().flush()?;
+                // Each test gets a machine of its own, so that tests don't
+                // see each other's objects.
+                match run(&program, *f, self.fuel) {
+                    Ok(()) => {
+                        println!("ok");
+                        passed += 1;
+                    }
+                    Err(error) => {
+                        println!("FAILED");
+                        eprintln!("error: {error}");
+                        failed += 1;
+                    }
+                }
+            }
+        }
+        let result = if failed == 0 && ok { "ok" } else { "FAILED" };
+        let skipped = if skipped > 0 { format!("; {skipped} not run") } else { String::new() };
+        println!("test result: {result}. {passed} passed; {failed} failed{skipped}");
+        Ok(ok && failed == 0)
     }
+}
+
+/// `file` and what it uses, lowered to Conduit, or `None` after saying why
+/// it can't be.
+fn lowered(db: &dyn Db, file: File) -> Option<Lowered> {
+    match lower(db, file) {
+        Ok(program) => Some(program),
+        Err(errors) => {
+            for e in &errors {
+                eprintln!("error {e}");
+            }
+            None
+        }
+    }
+}
+
+/// The `.bolt` files of `path`: the file itself, or those of a directory
+/// and the directories in it, but not hidden ones, like `.bolt`. In order of
+/// their paths, so that tests run in the same order each time.
+fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+    if !path.is_dir() {
+        out.push(path.to_path_buf());
+        return Ok(());
+    }
+    let mut entries: Vec<PathBuf> =
+        std::fs::read_dir(path)?.map(|e| e.map(|e| e.path())).collect::<Result<_, _>>()?;
+    entries.sort();
+    for entry in entries {
+        let hidden = entry.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
+        if entry.is_dir() && !hidden {
+            bolt_files(&entry, out)?;
+        } else if entry.extension().is_some_and(|e| e == "bolt") {
+            out.push(entry);
+        }
+    }
+    Ok(())
 }
 
 impl Exec for BuildCommand {

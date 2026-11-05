@@ -31,6 +31,7 @@
 
 mod func;
 mod host;
+pub mod run;
 mod ty;
 
 use std::{
