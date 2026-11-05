@@ -275,6 +275,318 @@ impl[A, B, C, D] Ord[(A, B, C, D)] where Ord[A], Ord[B], Ord[C], Ord[D] {
   fn cmp(a, b) = match cmp(a.0, b.0) { Ordering.Equal => match cmp(a.1, b.1) { Ordering.Equal => match cmp(a.2, b.2) { Ordering.Equal => cmp(a.3, b.3), other => other }, other => other }, other => other };
 }
 
+// From five elements on, a tuple is compared by its first element and then
+// by the tuple of the others, so each length uses the one before it.
+
+impl[A, B, C, D, E] Eq[(A, B, C, D, E)] where Eq[A], Eq[B], Eq[C], Eq[D], Eq[E] {
+  fn eq(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4;
+}
+
+impl[A, B, C, D, E] PartialOrd[(A, B, C, D, E)]
+where
+  PartialOrd[A],
+  PartialOrd[B],
+  PartialOrd[C],
+  PartialOrd[D],
+  PartialOrd[E],
+{
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) {
+    Some(Ordering.Equal) => partial_cmp((a.1, a.2, a.3, a.4), (b.1, b.2, b.3, b.4)),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E] Ord[(A, B, C, D, E)] where Ord[A], Ord[B], Ord[C], Ord[D], Ord[E] {
+  fn cmp(a, b) = match cmp(a.0, b.0) {
+    Ordering.Equal => cmp((a.1, a.2, a.3, a.4), (b.1, b.2, b.3, b.4)),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F] Eq[(A, B, C, D, E, F)] where Eq[A], Eq[B], Eq[C], Eq[D], Eq[E], Eq[F] {
+  fn eq(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5;
+}
+
+impl[A, B, C, D, E, F] PartialOrd[(A, B, C, D, E, F)]
+where
+  PartialOrd[A],
+  PartialOrd[B],
+  PartialOrd[C],
+  PartialOrd[D],
+  PartialOrd[E],
+  PartialOrd[F],
+{
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) {
+    Some(Ordering.Equal) => partial_cmp((a.1, a.2, a.3, a.4, a.5), (b.1, b.2, b.3, b.4, b.5)),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F] Ord[(A, B, C, D, E, F)]
+where
+  Ord[A],
+  Ord[B],
+  Ord[C],
+  Ord[D],
+  Ord[E],
+  Ord[F],
+{
+  fn cmp(a, b) = match cmp(a.0, b.0) {
+    Ordering.Equal => cmp((a.1, a.2, a.3, a.4, a.5), (b.1, b.2, b.3, b.4, b.5)),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G] Eq[(A, B, C, D, E, F, G)]
+where
+  Eq[A],
+  Eq[B],
+  Eq[C],
+  Eq[D],
+  Eq[E],
+  Eq[F],
+  Eq[G],
+{
+  fn eq(a, b) =
+    a.0 == b.0
+      && a.1 == b.1
+      && a.2 == b.2
+      && a.3 == b.3
+      && a.4 == b.4
+      && a.5 == b.5
+      && a.6 == b.6;
+}
+
+impl[A, B, C, D, E, F, G] PartialOrd[(A, B, C, D, E, F, G)]
+where
+  PartialOrd[A],
+  PartialOrd[B],
+  PartialOrd[C],
+  PartialOrd[D],
+  PartialOrd[E],
+  PartialOrd[F],
+  PartialOrd[G],
+{
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) {
+    Some(Ordering.Equal) => partial_cmp(
+      (a.1, a.2, a.3, a.4, a.5, a.6),
+      (b.1, b.2, b.3, b.4, b.5, b.6),
+    ),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G] Ord[(A, B, C, D, E, F, G)]
+where
+  Ord[A],
+  Ord[B],
+  Ord[C],
+  Ord[D],
+  Ord[E],
+  Ord[F],
+  Ord[G],
+{
+  fn cmp(a, b) = match cmp(a.0, b.0) {
+    Ordering.Equal => cmp((a.1, a.2, a.3, a.4, a.5, a.6), (b.1, b.2, b.3, b.4, b.5, b.6)),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G, H] Eq[(A, B, C, D, E, F, G, H)]
+where
+  Eq[A],
+  Eq[B],
+  Eq[C],
+  Eq[D],
+  Eq[E],
+  Eq[F],
+  Eq[G],
+  Eq[H],
+{
+  fn eq(a, b) =
+    a.0 == b.0
+      && a.1 == b.1
+      && a.2 == b.2
+      && a.3 == b.3
+      && a.4 == b.4
+      && a.5 == b.5
+      && a.6 == b.6
+      && a.7 == b.7;
+}
+
+impl[A, B, C, D, E, F, G, H] PartialOrd[(A, B, C, D, E, F, G, H)]
+where
+  PartialOrd[A],
+  PartialOrd[B],
+  PartialOrd[C],
+  PartialOrd[D],
+  PartialOrd[E],
+  PartialOrd[F],
+  PartialOrd[G],
+  PartialOrd[H],
+{
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) {
+    Some(Ordering.Equal) => partial_cmp(
+      (a.1, a.2, a.3, a.4, a.5, a.6, a.7),
+      (b.1, b.2, b.3, b.4, b.5, b.6, b.7),
+    ),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G, H] Ord[(A, B, C, D, E, F, G, H)]
+where
+  Ord[A],
+  Ord[B],
+  Ord[C],
+  Ord[D],
+  Ord[E],
+  Ord[F],
+  Ord[G],
+  Ord[H],
+{
+  fn cmp(a, b) = match cmp(a.0, b.0) {
+    Ordering.Equal => cmp((a.1, a.2, a.3, a.4, a.5, a.6, a.7), (b.1, b.2, b.3, b.4, b.5, b.6, b.7)),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G, H, I] Eq[(A, B, C, D, E, F, G, H, I)]
+where
+  Eq[A],
+  Eq[B],
+  Eq[C],
+  Eq[D],
+  Eq[E],
+  Eq[F],
+  Eq[G],
+  Eq[H],
+  Eq[I],
+{
+  fn eq(a, b) =
+    a.0 == b.0
+      && a.1 == b.1
+      && a.2 == b.2
+      && a.3 == b.3
+      && a.4 == b.4
+      && a.5 == b.5
+      && a.6 == b.6
+      && a.7 == b.7
+      && a.8 == b.8;
+}
+
+impl[A, B, C, D, E, F, G, H, I] PartialOrd[(A, B, C, D, E, F, G, H, I)]
+where
+  PartialOrd[A],
+  PartialOrd[B],
+  PartialOrd[C],
+  PartialOrd[D],
+  PartialOrd[E],
+  PartialOrd[F],
+  PartialOrd[G],
+  PartialOrd[H],
+  PartialOrd[I],
+{
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) {
+    Some(Ordering.Equal) => partial_cmp(
+      (a.1, a.2, a.3, a.4, a.5, a.6, a.7, a.8),
+      (b.1, b.2, b.3, b.4, b.5, b.6, b.7, b.8),
+    ),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G, H, I] Ord[(A, B, C, D, E, F, G, H, I)]
+where
+  Ord[A],
+  Ord[B],
+  Ord[C],
+  Ord[D],
+  Ord[E],
+  Ord[F],
+  Ord[G],
+  Ord[H],
+  Ord[I],
+{
+  fn cmp(a, b) = match cmp(a.0, b.0) {
+    Ordering.Equal => cmp(
+      (a.1, a.2, a.3, a.4, a.5, a.6, a.7, a.8),
+      (b.1, b.2, b.3, b.4, b.5, b.6, b.7, b.8),
+    ),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G, H, I, J] Eq[(A, B, C, D, E, F, G, H, I, J)]
+where
+  Eq[A],
+  Eq[B],
+  Eq[C],
+  Eq[D],
+  Eq[E],
+  Eq[F],
+  Eq[G],
+  Eq[H],
+  Eq[I],
+  Eq[J],
+{
+  fn eq(a, b) =
+    a.0 == b.0
+      && a.1 == b.1
+      && a.2 == b.2
+      && a.3 == b.3
+      && a.4 == b.4
+      && a.5 == b.5
+      && a.6 == b.6
+      && a.7 == b.7
+      && a.8 == b.8
+      && a.9 == b.9;
+}
+
+impl[A, B, C, D, E, F, G, H, I, J] PartialOrd[(A, B, C, D, E, F, G, H, I, J)]
+where
+  PartialOrd[A],
+  PartialOrd[B],
+  PartialOrd[C],
+  PartialOrd[D],
+  PartialOrd[E],
+  PartialOrd[F],
+  PartialOrd[G],
+  PartialOrd[H],
+  PartialOrd[I],
+  PartialOrd[J],
+{
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) {
+    Some(Ordering.Equal) => partial_cmp(
+      (a.1, a.2, a.3, a.4, a.5, a.6, a.7, a.8, a.9),
+      (b.1, b.2, b.3, b.4, b.5, b.6, b.7, b.8, b.9),
+    ),
+    other => other,
+  };
+}
+
+impl[A, B, C, D, E, F, G, H, I, J] Ord[(A, B, C, D, E, F, G, H, I, J)]
+where
+  Ord[A],
+  Ord[B],
+  Ord[C],
+  Ord[D],
+  Ord[E],
+  Ord[F],
+  Ord[G],
+  Ord[H],
+  Ord[I],
+  Ord[J],
+{
+  fn cmp(a, b) = match cmp(a.0, b.0) {
+    Ordering.Equal => cmp(
+      (a.1, a.2, a.3, a.4, a.5, a.6, a.7, a.8, a.9),
+      (b.1, b.2, b.3, b.4, b.5, b.6, b.7, b.8, b.9),
+    ),
+    other => other,
+  };
+}
+
 // The classes of operators, like Rust's `std::ops`. Each operator is a
 // function of its class's method, so that it works on any type with an
 // impl of the class. The primitive types have theirs, which are the
