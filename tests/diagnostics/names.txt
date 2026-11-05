@@ -65,10 +65,10 @@ fn f(e: E) = match e { E.A(x) | E.B(x) => 1, E.C => 0 };
 The operations of an effect arm bind the same names
 :test-prelude
 ================================================================================
-effect Log { fn info(m: String); fn warn(m: String); fn tick(); }
+effect Log { fn info(m: String); fn warn(m: String); fn note(m: String); fn tick(); }
 fn f(body: fn() does Log) -> () does Log = match body() {
   v => v,
   effect info(m) | warn(m), _ => (),
-  effect tick() | warn(n), _ => (),
+  effect tick() | note(n), _ => (),
                      //^ error: `n` is bound in some alternatives of this pattern, but not in all of them
 };

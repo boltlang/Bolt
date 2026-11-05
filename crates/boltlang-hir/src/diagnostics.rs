@@ -393,6 +393,12 @@ pub enum DiagnosticKind<'db> {
     NonExhaustiveMatch {
         missing: Option<String>,
     },
+    /// The arms of a `match` for the operation `name` miss some arguments,
+    /// like `missing`, if it's known.
+    NonExhaustiveOperation {
+        name: Name,
+        missing: Option<String>,
+    },
     /// An arm of a `match` that's never taken: the arms before it match
     /// every value it does.
     UnreachableArm,
@@ -1427,6 +1433,27 @@ impl<'db> Collector<'db> {
                 if !reached {
                     let range = node_range(map, ExprOrPat::Pat(arm.pat));
                     self.push(range, DiagnosticKind::UnreachableArm);
+                }
+            }
+        }
+        // The arms of each operation of an effect arm, like those of a
+        // match, at the first of them.
+        for found in &body_decisions(db, id).operations {
+            let Ok(decision) = &found.decision else { continue };
+            let Some(name) = found.op.item(db).name.as_ref().map(|n| n.name().clone()) else {
+                continue;
+            };
+            if decision.can_fail() {
+                let arity = fn_sig(db, found.op).params.len();
+                let missing = decision
+                    .missing_args(db, arity)
+                    .map(|args| format!("{name}({})", args.join(", ")));
+                let range = node_range(map, ExprOrPat::Pat(found.pats[0]));
+                self.push(range, DiagnosticKind::NonExhaustiveOperation { name, missing });
+            }
+            for (&pat, reached) in found.pats.iter().zip(decision.reached_arms()) {
+                if !reached {
+                    self.push(node_range(map, ExprOrPat::Pat(pat)), DiagnosticKind::UnreachableArm);
                 }
             }
         }

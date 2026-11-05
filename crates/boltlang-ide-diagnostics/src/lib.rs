@@ -904,6 +904,14 @@ fn describe(
         K::NonExhaustiveMatch { missing: None } => {
             (C::NON_EXHAUSTIVE_MATCH, "this match doesn't cover every value".into())
         }
+        K::NonExhaustiveOperation { name, missing: Some(missing) } => (
+            C::NON_EXHAUSTIVE_MATCH,
+            format!("the arms for `{name}` don't cover every value: `{missing}` matches none of them"),
+        ),
+        K::NonExhaustiveOperation { name, missing: None } => (
+            C::NON_EXHAUSTIVE_MATCH,
+            format!("the arms for `{name}` don't cover every value"),
+        ),
         K::UnreachableArm => (
             C::UNREACHABLE_ARM,
             "this arm is never taken: the arms before it match every value it does".into(),

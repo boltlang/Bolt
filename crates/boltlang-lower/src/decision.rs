@@ -25,12 +25,12 @@ use boltlang_hir_def::{
     body::{Body, DefWithBodyId, body},
     builtin_type::BuiltinValue,
     hir::{BindingId, Expr, ExprId, Literal, Pat, PatId, Path, Statement},
-    ids::{ConstId, EnumVariantId, StructId},
+    ids::{ConstId, EnumVariantId, FunctionId, StructId},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
 };
 use boltlang_hir_ty::{
     Ty, infer_body,
-    lower::{VariantDef, field_types},
+    lower::{VariantDef, field_types, fn_sig},
 };
 
 pub type PlaceId = u32;
@@ -145,6 +145,21 @@ pub enum DecisionError {
 pub struct BodyDecisions<'db> {
     pub matches: Vec<(ExprId, Result<Decision<'db>, DecisionError>)>,
     pub lets: Vec<(PatId, Result<Decision<'db>, DecisionError>)>,
+    /// The decisions of the effect arms of the `match`es, one for each
+    /// operation they handle, over its arguments.
+    pub operations: Vec<OperationDecision<'db>>,
+}
+
+/// The decision of the arms of a `match` for one operation, like those for
+/// `yield` of `effect yield(0), k` and `effect yield(n), k`: its arguments
+/// are matched as a tuple.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct OperationDecision<'db> {
+    pub expr: ExprId,
+    pub op: FunctionId<'db>,
+    /// The operation's patterns in the arms, like `yield(0)`, in order.
+    pub pats: Vec<PatId>,
+    pub decision: Result<Decision<'db>, DecisionError>,
 }
 
 /// The decisions of the body `def`.
@@ -154,10 +169,32 @@ pub fn body_decisions<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> BodyDeci
     let mut out = BodyDecisions::default();
     for (id, expr) in body.exprs.iter() {
         match expr {
-            Expr::Match { arms, .. } => {
+            Expr::Match { arms, effect_arms, .. } => {
                 let arms: Vec<(PatId, Option<ExprId>)> =
                     arms.iter().map(|a| (a.pat, a.guard)).collect();
                 out.matches.push((id, decide(db, def, body, &arms)));
+                // The arms of each operation, in order. An arm for several
+                // operations is one for each.
+                let operations = &infer_body(db, def).operations;
+                let mut groups: Vec<(FunctionId<'db>, Vec<(PatId, Option<ExprId>)>)> = Vec::new();
+                for arm in effect_arms.iter() {
+                    for &op in arm.ops.iter() {
+                        let Some(&f) = operations.get(op) else { continue };
+                        match groups.iter_mut().find(|(g, _)| *g == f) {
+                            Some((_, arms)) => arms.push((op, arm.guard)),
+                            None => groups.push((f, vec![(op, arm.guard)])),
+                        }
+                    }
+                }
+                for (op, arms) in groups {
+                    let arity = fn_sig(db, op).params.len();
+                    out.operations.push(OperationDecision {
+                        expr: id,
+                        op,
+                        pats: arms.iter().map(|(p, _)| *p).collect(),
+                        decision: decide_args(db, def, body, arity, &arms),
+                    });
+                }
             }
             Expr::Let { pat, .. } => out.lets.push((*pat, decide(db, def, body, &[(*pat, None)]))),
             Expr::Block { statements, .. } => {
@@ -195,6 +232,50 @@ pub fn decide<'db>(
     for (arm, (pat, _)) in arms.iter().enumerate() {
         let row = Row { cols: vec![(0, *pat)], arm: arm as u32, bindings: Vec::new() };
         rows.extend(b.expand(row)?);
+    }
+    let root = b.compile(rows)?;
+    Ok(Decision { places: b.places, nodes: b.nodes, root, arms: arms.len() as u32 })
+}
+
+/// The decision for the arms of an operation, each a pattern like
+/// `yield(x)` and a guard, over the `arity` arguments of the operation: the
+/// scrutinee is the tuple of the arguments.
+pub fn decide_args<'db>(
+    db: &'db dyn Db,
+    def: DefWithBodyId<'db>,
+    body: &Body,
+    arity: usize,
+    arms: &[(PatId, Option<ExprId>)],
+) -> Result<Decision<'db>, DecisionError> {
+    let mut b = Builder {
+        db,
+        def,
+        body,
+        arms,
+        places: vec![Place::Scrutinee],
+        place_ids: HashMap::new(),
+        nodes: Vec::new(),
+        memo: HashMap::new(),
+    };
+    let ctor = Ctor::Tuple(arity as u32);
+    let mut rows = Vec::new();
+    for (arm, (op, _)) in arms.iter().enumerate() {
+        let Pat::TupleStruct { args, rest, .. } = &body[*op] else {
+            return Err(DecisionError::Unknown(*op));
+        };
+        // The checker reports the wrong number of arguments.
+        let fits = match rest {
+            None => args.len() == arity,
+            Some(_) => args.len() <= arity,
+        };
+        if !fits {
+            return Err(DecisionError::Unknown(*op));
+        }
+        let cols = positional(args, *rest, arity)
+            .into_iter()
+            .map(|(index, pat)| (b.place(Place::Field { of: 0, ctor, index }), pat))
+            .collect();
+        rows.extend(b.expand(Row { cols, arm: arm as u32, bindings: Vec::new() })?);
     }
     let root = b.compile(rows)?;
     Ok(Decision { places: b.places, nodes: b.nodes, root, arms: arms.len() as u32 })
@@ -707,9 +788,9 @@ impl<'db> Decision<'db> {
         }
     }
 
-    /// A pattern for a value that no arm matches, like `Option.None`, if
-    /// there is one: the value along the first path to [`Node::Fail`].
-    pub fn missing(&self, db: &'db dyn Db) -> Option<String> {
+    /// What's known of the places along the first path to [`Node::Fail`],
+    /// if there is one.
+    fn missing_steps(&self) -> Option<HashMap<PlaceId, Step<'db>>> {
         // What each place was found to be on the path, by breadth-first
         // search from the root to a failure.
         let mut prev: Vec<Option<(NodeId, Step<'db>)>> = vec![None; self.nodes.len()];
@@ -757,7 +838,30 @@ impl<'db> Decision<'db> {
             }
             at = from;
         }
+        Some(known)
+    }
+
+    /// A pattern for a value that no arm matches, like `Option.None`, if
+    /// there is one: the value along the first path to [`Node::Fail`].
+    pub fn missing(&self, db: &'db dyn Db) -> Option<String> {
+        let known = self.missing_steps()?;
         Some(self.show(db, 0, &known))
+    }
+
+    /// For a decision of [`decide_args`], arguments that no arm matches, as
+    /// patterns, if there are some.
+    pub fn missing_args(&self, db: &'db dyn Db, arity: usize) -> Option<Vec<String>> {
+        let known = self.missing_steps()?;
+        let ctor = Ctor::Tuple(arity as u32);
+        let args = (0..arity as u32)
+            .map(|index| {
+                match self.places.iter().position(|p| *p == Place::Field { of: 0, ctor, index }) {
+                    Some(at) => self.show(db, at as PlaceId, &known),
+                    None => "_".to_string(),
+                }
+            })
+            .collect();
+        Some(args)
     }
 
     /// The pattern for `place`, from what's known of the places.

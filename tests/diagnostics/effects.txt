@@ -52,3 +52,30 @@ fn run(body: fn() -> i32 does State + Log) -> i32 = match body() {
   effect info(m), k => resume(k, ()),
        //^^^^^^^ error: this match handles `Log`, so it needs an arm for `warn` too
 };
+
+================================================================================
+The arms of each operation cover its arguments
+:test-prelude
+================================================================================
+effect Yield { fn yield(value: i32); }
+effect Ask { fn ask(question: Option[i32], quiet: Bool) -> i32; }
+fn run(body: fn() -> i32 does Yield + Ask) -> i32 = match body() {
+  v => v,
+  effect yield(0), k => resume(k, ()),
+       //^^^^^^^^ warning: the arms for `yield` don't cover every value: `yield(_)` matches none of them
+  effect ask(Some(_), _) | ask(None, True), k => resume(k, 0),
+       //^^^^^^^^^^^^^^^ warning: the arms for `ask` don't cover every value: `ask(Option.None, False)` matches none of them
+  effect ask(Some(1), q), k => resume(k, 1),
+       //^^^^^^^^^^^^^^^ warning: this arm is never taken: the arms before it match every value it does
+};
+
+================================================================================
+A guard doesn't cover an operation's arguments
+:test-prelude
+================================================================================
+effect Log { fn log(m: i32); }
+fn run(body: fn() -> i32 does Log, quiet: Bool) -> i32 = match body() {
+  v => v,
+  effect log(m), k if quiet => resume(k, ()),
+       //^^^^^^ warning: the arms for `log` don't cover every value: `log(_)` matches none of them
+};
