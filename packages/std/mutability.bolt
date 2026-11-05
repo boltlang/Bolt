@@ -62,6 +62,202 @@ impl ToMutDeep[u128] { type MutDeep = u128; fn to_mut_deep(x) = x; }
 impl ToMutDeep[usize] { type MutDeep = usize; fn to_mut_deep(x) = x; }
 impl ToMutDeep[f32] { type MutDeep = f32; fn to_mut_deep(x) = x; }
 impl ToMutDeep[f64] { type MutDeep = f64; fn to_mut_deep(x) = x; }
+impl ToMutDeep[()] { type MutDeep = (); fn to_mut_deep(x) = x; }
+
+/// A tuple is copied element by element. There are impls up to ten elements:
+/// one for every length needs #363.
+impl[A: ToMutDeep, B: ToMutDeep] ToMutDeep[(A, B)] {
+  type MutDeep = (A.MutDeep, B.MutDeep);
+  fn to_mut_deep(p) = match p { (a, b) => (to_mut_deep(a), to_mut_deep(b)) };
+}
+
+impl[A: ToMutDeep, B: ToMutDeep, C: ToMutDeep] ToMutDeep[(A, B, C)] {
+  type MutDeep = (A.MutDeep, B.MutDeep, C.MutDeep);
+  fn to_mut_deep(t) = match t {
+    (a, b, c) => (to_mut_deep(a), to_mut_deep(b), to_mut_deep(c)),
+  };
+}
+
+impl[A: ToMutDeep, B: ToMutDeep, C: ToMutDeep, D: ToMutDeep] ToMutDeep[(A, B, C, D)] {
+  type MutDeep = (A.MutDeep, B.MutDeep, C.MutDeep, D.MutDeep);
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d) => (to_mut_deep(a), to_mut_deep(b), to_mut_deep(c), to_mut_deep(d)),
+  };
+}
+
+impl[
+  A: ToMutDeep,
+  B: ToMutDeep,
+  C: ToMutDeep,
+  D: ToMutDeep,
+  E: ToMutDeep,
+] ToMutDeep[(A, B, C, D, E)] {
+  type MutDeep = (A.MutDeep, B.MutDeep, C.MutDeep, D.MutDeep, E.MutDeep);
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d, e) => (
+      to_mut_deep(a),
+      to_mut_deep(b),
+      to_mut_deep(c),
+      to_mut_deep(d),
+      to_mut_deep(e),
+    ),
+  };
+}
+
+impl[
+  A: ToMutDeep,
+  B: ToMutDeep,
+  C: ToMutDeep,
+  D: ToMutDeep,
+  E: ToMutDeep,
+  F: ToMutDeep,
+] ToMutDeep[(A, B, C, D, E, F)] {
+  type MutDeep = (A.MutDeep, B.MutDeep, C.MutDeep, D.MutDeep, E.MutDeep, F.MutDeep);
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d, e, f) => (
+      to_mut_deep(a),
+      to_mut_deep(b),
+      to_mut_deep(c),
+      to_mut_deep(d),
+      to_mut_deep(e),
+      to_mut_deep(f),
+    ),
+  };
+}
+
+impl[
+  A: ToMutDeep,
+  B: ToMutDeep,
+  C: ToMutDeep,
+  D: ToMutDeep,
+  E: ToMutDeep,
+  F: ToMutDeep,
+  G: ToMutDeep,
+] ToMutDeep[(A, B, C, D, E, F, G)] {
+  type MutDeep = (A.MutDeep, B.MutDeep, C.MutDeep, D.MutDeep, E.MutDeep, F.MutDeep, G.MutDeep);
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d, e, f, g) => (
+      to_mut_deep(a),
+      to_mut_deep(b),
+      to_mut_deep(c),
+      to_mut_deep(d),
+      to_mut_deep(e),
+      to_mut_deep(f),
+      to_mut_deep(g),
+    ),
+  };
+}
+
+impl[
+  A: ToMutDeep,
+  B: ToMutDeep,
+  C: ToMutDeep,
+  D: ToMutDeep,
+  E: ToMutDeep,
+  F: ToMutDeep,
+  G: ToMutDeep,
+  H: ToMutDeep,
+] ToMutDeep[(A, B, C, D, E, F, G, H)] {
+  type MutDeep = (
+    A.MutDeep,
+    B.MutDeep,
+    C.MutDeep,
+    D.MutDeep,
+    E.MutDeep,
+    F.MutDeep,
+    G.MutDeep,
+    H.MutDeep,
+  );
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d, e, f, g, h) => (
+      to_mut_deep(a),
+      to_mut_deep(b),
+      to_mut_deep(c),
+      to_mut_deep(d),
+      to_mut_deep(e),
+      to_mut_deep(f),
+      to_mut_deep(g),
+      to_mut_deep(h),
+    ),
+  };
+}
+
+impl[
+  A: ToMutDeep,
+  B: ToMutDeep,
+  C: ToMutDeep,
+  D: ToMutDeep,
+  E: ToMutDeep,
+  F: ToMutDeep,
+  G: ToMutDeep,
+  H: ToMutDeep,
+  I: ToMutDeep,
+] ToMutDeep[(A, B, C, D, E, F, G, H, I)] {
+  type MutDeep = (
+    A.MutDeep,
+    B.MutDeep,
+    C.MutDeep,
+    D.MutDeep,
+    E.MutDeep,
+    F.MutDeep,
+    G.MutDeep,
+    H.MutDeep,
+    I.MutDeep,
+  );
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d, e, f, g, h, i) => (
+      to_mut_deep(a),
+      to_mut_deep(b),
+      to_mut_deep(c),
+      to_mut_deep(d),
+      to_mut_deep(e),
+      to_mut_deep(f),
+      to_mut_deep(g),
+      to_mut_deep(h),
+      to_mut_deep(i),
+    ),
+  };
+}
+
+impl[
+  A: ToMutDeep,
+  B: ToMutDeep,
+  C: ToMutDeep,
+  D: ToMutDeep,
+  E: ToMutDeep,
+  F: ToMutDeep,
+  G: ToMutDeep,
+  H: ToMutDeep,
+  I: ToMutDeep,
+  J: ToMutDeep,
+] ToMutDeep[(A, B, C, D, E, F, G, H, I, J)] {
+  type MutDeep = (
+    A.MutDeep,
+    B.MutDeep,
+    C.MutDeep,
+    D.MutDeep,
+    E.MutDeep,
+    F.MutDeep,
+    G.MutDeep,
+    H.MutDeep,
+    I.MutDeep,
+    J.MutDeep,
+  );
+  fn to_mut_deep(t) = match t {
+    (a, b, c, d, e, f, g, h, i, j) => (
+      to_mut_deep(a),
+      to_mut_deep(b),
+      to_mut_deep(c),
+      to_mut_deep(d),
+      to_mut_deep(e),
+      to_mut_deep(f),
+      to_mut_deep(g),
+      to_mut_deep(h),
+      to_mut_deep(i),
+      to_mut_deep(j),
+    ),
+  };
+}
 
 /// Types that have a copy that can't be changed all the way down, even if
 /// the original can: the arrays and structs it holds are copied too, not
