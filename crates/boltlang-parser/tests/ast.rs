@@ -262,3 +262,16 @@ fn effect_arms() {
     assert_eq!(effect.continuation().unwrap().syntax().text().to_string(), "k");
     assert_eq!(text(arms[1].expr()), "n");
 }
+
+#[test]
+fn effect_arms_with_several_operations() {
+    let Expr::Match(m) =
+        let_expr("let x = match f() { v => v, effect info(m) | State.warn(m), k => m };")
+    else {
+        panic!()
+    };
+    let effect = m.arms()[1].effect_pattern().unwrap();
+    let ops: Vec<String> = effect.operations().map(|p| p.syntax().text().to_string()).collect();
+    assert_eq!(ops, ["info(m)", "State.warn(m)"]);
+    assert_eq!(effect.continuation().unwrap().syntax().text().to_string(), "k");
+}

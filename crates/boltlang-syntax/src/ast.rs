@@ -1041,9 +1041,19 @@ pub struct EffectPattern(SyntaxNode);
 simple_node!(EffectPattern, EFFECT_PATT);
 
 impl EffectPattern {
-    /// The operation, like `yield(x)` or `State.get()`.
+    /// The operation, like `yield(x)` or `State.get()`, or an or-pattern of
+    /// operations, like `get() | set(_)`.
     pub fn operation(&self) -> Option<Pattern> {
         self.find_node()
+    }
+    /// The operations, one for each alternative of [`Self::operation`].
+    pub fn operations(&self) -> impl Iterator<Item = Pattern> {
+        let op = self.operation();
+        let alternatives: Vec<Pattern> = match &op {
+            Some(Pattern::Or(or)) => or.patterns().collect(),
+            _ => op.into_iter().collect(),
+        };
+        alternatives.into_iter()
     }
     /// What the continuation is bound to, like `k` or `_`.
     pub fn continuation(&self) -> Option<Pattern> {

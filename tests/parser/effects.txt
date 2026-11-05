@@ -62,6 +62,11 @@ match body() {
   effect State.set(s), k => { state = s; resume(k, ()) },
   effect yield(0), k if quiet => resume(k, ()),
 }
+match body() {
+  v => v,
+  effect info(m) | warn(m), k => { print(m); resume(k, ()) },
+  effect raise(e) | State.fail(e), _ => Err(e),
+}
 
 ================================================================================
 An effect arm needs a continuation
@@ -79,4 +84,13 @@ An effect arm needs the parentheses of its operation
 match body() {
   v => v,
   effect get, k => resume(k, 0),
+}
+
+================================================================================
+Every operation in an or-pattern needs its parentheses
+:error
+================================================================================
+match body() {
+  v => v,
+  effect get() | reset, k => resume(k, 0),
 }

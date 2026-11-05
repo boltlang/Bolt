@@ -484,20 +484,35 @@ fn match_arm(p: &mut Parser) {
 
 /// `effect yield(x), k` at the start of a match arm: the operation the arm
 /// handles, with patterns for its arguments, and the continuation. The
-/// operation is a tuple struct pattern, like `yield(x)` or `State.get()`.
-/// An operation without arguments still needs its parentheses, as in
-/// `get()`: whether `get` alone is allowed is undecided (#354).
+/// operation is a tuple struct pattern, like `yield(x)` or `State.get()`,
+/// or several of them in an or-pattern, like `get() | set(_)`. An operation
+/// without arguments still needs its parentheses, as in `get()`: whether
+/// `get` alone is allowed is undecided (#354).
 fn effect_patt(p: &mut Parser) {
     let m = p.start();
     p.bump(T![effect]);
+    let ops = p.start();
+    effect_op(p);
+    if p.at(T![|]) {
+        while p.eat(T![|]) {
+            effect_op(p);
+        }
+        ops.complete(p, OR_PATT);
+    } else {
+        ops.abandon(p);
+    }
+    p.expect(T![,]);
+    pattern_single(p);
+    m.complete(p, EFFECT_PATT);
+}
+
+/// One operation in an effect arm, like `yield(x)`.
+fn effect_op(p: &mut Parser) {
     if let Some(op) = pattern_single(p)
         && op.kind() != TUPLE_STRUCT_PATT
     {
         p.error("expected an operation with parentheses, like `get()`");
     }
-    p.expect(T![,]);
-    pattern_single(p);
-    m.complete(p, EFFECT_PATT);
 }
 
 /// `|a, b| a + b`, `|x: i32| -> i32 { x }`, `|x| does Log { f(x) }` or
