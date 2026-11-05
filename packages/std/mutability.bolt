@@ -100,7 +100,8 @@ impl ToImmDeep[f32] { type ImmDeep = f32; fn to_imm_deep(x) = x; }
 impl ToImmDeep[f64] { type ImmDeep = f64; fn to_imm_deep(x) = x; }
 impl ToImmDeep[()] { type ImmDeep = (); fn to_imm_deep(x) = x; }
 
-/// A tuple is copied element by element.
+/// A tuple is copied element by element. There are impls up to ten elements:
+/// one for every length needs #363.
 impl[A: ToImmDeep, B: ToImmDeep] ToImmDeep[(A, B)] {
   type ImmDeep = (A.ImmDeep, B.ImmDeep);
   fn to_imm_deep(p) = match p { (a, b) => (to_imm_deep(a), to_imm_deep(b)) };
@@ -110,5 +111,186 @@ impl[A: ToImmDeep, B: ToImmDeep, C: ToImmDeep] ToImmDeep[(A, B, C)] {
   type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep);
   fn to_imm_deep(t) = match t {
     (a, b, c) => (to_imm_deep(a), to_imm_deep(b), to_imm_deep(c)),
+  };
+}
+
+impl[A: ToImmDeep, B: ToImmDeep, C: ToImmDeep, D: ToImmDeep] ToImmDeep[(A, B, C, D)] {
+  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep);
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d) => (to_imm_deep(a), to_imm_deep(b), to_imm_deep(c), to_imm_deep(d)),
+  };
+}
+
+impl[
+  A: ToImmDeep,
+  B: ToImmDeep,
+  C: ToImmDeep,
+  D: ToImmDeep,
+  E: ToImmDeep,
+] ToImmDeep[(A, B, C, D, E)] {
+  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep, E.ImmDeep);
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d, e) => (
+      to_imm_deep(a),
+      to_imm_deep(b),
+      to_imm_deep(c),
+      to_imm_deep(d),
+      to_imm_deep(e),
+    ),
+  };
+}
+
+impl[
+  A: ToImmDeep,
+  B: ToImmDeep,
+  C: ToImmDeep,
+  D: ToImmDeep,
+  E: ToImmDeep,
+  F: ToImmDeep,
+] ToImmDeep[(A, B, C, D, E, F)] {
+  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep, E.ImmDeep, F.ImmDeep);
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d, e, f) => (
+      to_imm_deep(a),
+      to_imm_deep(b),
+      to_imm_deep(c),
+      to_imm_deep(d),
+      to_imm_deep(e),
+      to_imm_deep(f),
+    ),
+  };
+}
+
+impl[
+  A: ToImmDeep,
+  B: ToImmDeep,
+  C: ToImmDeep,
+  D: ToImmDeep,
+  E: ToImmDeep,
+  F: ToImmDeep,
+  G: ToImmDeep,
+] ToImmDeep[(A, B, C, D, E, F, G)] {
+  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep, E.ImmDeep, F.ImmDeep, G.ImmDeep);
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d, e, f, g) => (
+      to_imm_deep(a),
+      to_imm_deep(b),
+      to_imm_deep(c),
+      to_imm_deep(d),
+      to_imm_deep(e),
+      to_imm_deep(f),
+      to_imm_deep(g),
+    ),
+  };
+}
+
+impl[
+  A: ToImmDeep,
+  B: ToImmDeep,
+  C: ToImmDeep,
+  D: ToImmDeep,
+  E: ToImmDeep,
+  F: ToImmDeep,
+  G: ToImmDeep,
+  H: ToImmDeep,
+] ToImmDeep[(A, B, C, D, E, F, G, H)] {
+  type ImmDeep = (
+    A.ImmDeep,
+    B.ImmDeep,
+    C.ImmDeep,
+    D.ImmDeep,
+    E.ImmDeep,
+    F.ImmDeep,
+    G.ImmDeep,
+    H.ImmDeep,
+  );
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d, e, f, g, h) => (
+      to_imm_deep(a),
+      to_imm_deep(b),
+      to_imm_deep(c),
+      to_imm_deep(d),
+      to_imm_deep(e),
+      to_imm_deep(f),
+      to_imm_deep(g),
+      to_imm_deep(h),
+    ),
+  };
+}
+
+impl[
+  A: ToImmDeep,
+  B: ToImmDeep,
+  C: ToImmDeep,
+  D: ToImmDeep,
+  E: ToImmDeep,
+  F: ToImmDeep,
+  G: ToImmDeep,
+  H: ToImmDeep,
+  I: ToImmDeep,
+] ToImmDeep[(A, B, C, D, E, F, G, H, I)] {
+  type ImmDeep = (
+    A.ImmDeep,
+    B.ImmDeep,
+    C.ImmDeep,
+    D.ImmDeep,
+    E.ImmDeep,
+    F.ImmDeep,
+    G.ImmDeep,
+    H.ImmDeep,
+    I.ImmDeep,
+  );
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d, e, f, g, h, i) => (
+      to_imm_deep(a),
+      to_imm_deep(b),
+      to_imm_deep(c),
+      to_imm_deep(d),
+      to_imm_deep(e),
+      to_imm_deep(f),
+      to_imm_deep(g),
+      to_imm_deep(h),
+      to_imm_deep(i),
+    ),
+  };
+}
+
+impl[
+  A: ToImmDeep,
+  B: ToImmDeep,
+  C: ToImmDeep,
+  D: ToImmDeep,
+  E: ToImmDeep,
+  F: ToImmDeep,
+  G: ToImmDeep,
+  H: ToImmDeep,
+  I: ToImmDeep,
+  J: ToImmDeep,
+] ToImmDeep[(A, B, C, D, E, F, G, H, I, J)] {
+  type ImmDeep = (
+    A.ImmDeep,
+    B.ImmDeep,
+    C.ImmDeep,
+    D.ImmDeep,
+    E.ImmDeep,
+    F.ImmDeep,
+    G.ImmDeep,
+    H.ImmDeep,
+    I.ImmDeep,
+    J.ImmDeep,
+  );
+  fn to_imm_deep(t) = match t {
+    (a, b, c, d, e, f, g, h, i, j) => (
+      to_imm_deep(a),
+      to_imm_deep(b),
+      to_imm_deep(c),
+      to_imm_deep(d),
+      to_imm_deep(e),
+      to_imm_deep(f),
+      to_imm_deep(g),
+      to_imm_deep(h),
+      to_imm_deep(i),
+      to_imm_deep(j),
+    ),
   };
 }
