@@ -300,7 +300,9 @@ log(f(1));
 --------------------------------------------------------------------------------
 extern log "env" "log" (i32) -> ()
 
-extern unmatched "bolt" "unmatched" () -> ()
+extern write_file "bolt" "write_file" (i32, i32) -> ()
+
+extern flush "bolt" "flush" (i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call f(1i32)
@@ -314,12 +316,50 @@ fn f(%n: i32) -> (i32) {
   case %n {
     0 => jump j1(0i32)
     _ =>
-      let = call_extern unmatched()
+      let = call bolt_unmatched()
       trap
   }
 }
+
+fn bolt_unmatched() -> () {
+  let = call_extern write_file(2i32, 101i32)
+  let = call_extern write_file(2i32, 114i32)
+  let = call_extern write_file(2i32, 114i32)
+  let = call_extern write_file(2i32, 111i32)
+  let = call_extern write_file(2i32, 114i32)
+  let = call_extern write_file(2i32, 58i32)
+  let = call_extern write_file(2i32, 32i32)
+  let = call_extern write_file(2i32, 110i32)
+  let = call_extern write_file(2i32, 111i32)
+  let = call_extern write_file(2i32, 32i32)
+  let = call_extern write_file(2i32, 97i32)
+  let = call_extern write_file(2i32, 114i32)
+  let = call_extern write_file(2i32, 109i32)
+  let = call_extern write_file(2i32, 32i32)
+  let = call_extern write_file(2i32, 111i32)
+  let = call_extern write_file(2i32, 102i32)
+  let = call_extern write_file(2i32, 32i32)
+  let = call_extern write_file(2i32, 97i32)
+  let = call_extern write_file(2i32, 32i32)
+  let = call_extern write_file(2i32, 109i32)
+  let = call_extern write_file(2i32, 97i32)
+  let = call_extern write_file(2i32, 116i32)
+  let = call_extern write_file(2i32, 99i32)
+  let = call_extern write_file(2i32, 104i32)
+  let = call_extern write_file(2i32, 32i32)
+  let = call_extern write_file(2i32, 109i32)
+  let = call_extern write_file(2i32, 97i32)
+  let = call_extern write_file(2i32, 116i32)
+  let = call_extern write_file(2i32, 99i32)
+  let = call_extern write_file(2i32, 104i32)
+  let = call_extern write_file(2i32, 101i32)
+  let = call_extern write_file(2i32, 100i32)
+  let = call_extern write_file(2i32, 10i32)
+  let = call_extern flush(2i32)
+  jump ret()
+}
 --------------------------------------------------------------------------------
-bolt.unmatched()
+stderr: error: no arm of a match matched
 error: fn1: trap
 
 ================================================================================
@@ -978,7 +1018,9 @@ data String {
 
 extern log "env" "log" (i32) -> ()
 
-extern print "bolt" "print" (imm String) -> ()
+extern write_file "bolt" "write_file" (i32, i32) -> ()
+
+extern flush "bolt" "flush" (i32) -> ()
 
 fn file() -> () {
   let %v: mut Vec_i32 = call Vec_new_i32()
@@ -1156,7 +1198,7 @@ fn get_i32['m1](%v: 'm1 Vec_i32, %index: i32) -> (i32) {
 }
 
 fn panic(%message: imm String) -> () {
-  let = call_extern print(%message)
+  let = call bolt_print(%message)
   trap
 }
 
@@ -1202,6 +1244,25 @@ fn PartialOrd_i32_gte(%a: i32, %b: i32) -> (i32) {
   let %2: i32 = ge.s(%a, %b)
   jump ret(%2)
 }
+
+fn bolt_print(%0: imm String) -> () {
+  let %1: imm [i32] = get String.0.0(%0)
+  let %2: i32 = array_len(%1)
+  join rec j1(%3: i32) =
+    let %4: i32 = lt.s(%3, %2)
+    case %4 {
+      0 =>
+        let = call_extern write_file(1i32, 10i32)
+        let = call_extern flush(1i32)
+        jump ret()
+      _ =>
+        let %5: i32 = array_get(%1, %3)
+        let = call_extern write_file(1i32, %5)
+        let %6: i32 = add(%3, 1i32)
+        jump j1(%6)
+    }
+  in jump j1(0i32)
+}
 --------------------------------------------------------------------------------
 env.log(10)
 env.log(9)
@@ -1234,7 +1295,9 @@ data String {
 
 extern log "env" "log" (i32) -> ()
 
-extern print "bolt" "print" (imm String) -> ()
+extern write_file "bolt" "write_file" (i32, i32) -> ()
+
+extern flush "bolt" "flush" (i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32, 2i32)
@@ -1520,7 +1583,7 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
 }
 
 fn panic(%message: imm String) -> () {
-  let = call_extern print(%message)
+  let = call bolt_print(%message)
   trap
 }
 
@@ -1593,6 +1656,25 @@ fn gt_eq_i32(%a: i32, %b: i32) -> (i32) {
 fn PartialOrd_i32_gte(%a: i32, %b: i32) -> (i32) {
   let %2: i32 = ge.s(%a, %b)
   jump ret(%2)
+}
+
+fn bolt_print(%0: imm String) -> () {
+  let %1: imm [i32] = get String.0.0(%0)
+  let %2: i32 = array_len(%1)
+  join rec j1(%3: i32) =
+    let %4: i32 = lt.s(%3, %2)
+    case %4 {
+      0 =>
+        let = call_extern write_file(1i32, 10i32)
+        let = call_extern flush(1i32)
+        jump ret()
+      _ =>
+        let %5: i32 = array_get(%1, %3)
+        let = call_extern write_file(1i32, %5)
+        let %6: i32 = add(%3, 1i32)
+        jump j1(%6)
+    }
+  in jump j1(0i32)
 }
 --------------------------------------------------------------------------------
 env.log(1)

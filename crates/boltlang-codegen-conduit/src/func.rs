@@ -932,7 +932,10 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             // a freeze when nothing else has the array.
             Builtin::ArrayFreeze => one(self.b.array_clone(Mutability::Imm, args[0].clone())),
             Builtin::Print => {
-                self.b.call_extern(self.cx.externs[&ExternKey::Bolt("print")], args);
+                let Some(print) = self.cx.helpers.print else {
+                    return Err(ErrorKind::unsupported("this `print`"));
+                };
+                self.b.call(print, args);
                 Ok(None)
             }
             Builtin::Abort => {
@@ -1646,9 +1649,11 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             }
             Node::Fail if self.fail_arm => arm(l, FAIL),
             Node::Fail => {
-                // The host says so, then the program stops: reaching this is
-                // defined, so it's a `trap`, not an `unreachable`.
-                l.b.call_extern(l.cx.externs[&ExternKey::Bolt("unmatched")], ());
+                // Say so on stderr, then stop: reaching this is defined, so
+                // it's a `trap`, not an `unreachable`.
+                if let Some(unmatched) = l.cx.helpers.unmatched {
+                    l.b.call(unmatched, ());
+                }
                 l.b.trap();
                 Ok(())
             }

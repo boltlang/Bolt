@@ -91,14 +91,40 @@ impl Attributes {
     }
 }
 
-/// A host that writes down every call.
+/// A host that writes down every call. The module `bolt`'s `write_file`
+/// and `flush` are a line for each flush instead, like `stdout: hi`.
 #[derive(Default, Clone)]
 struct Log {
     lines: Rc<RefCell<Vec<String>>>,
+    /// What each file has waiting, by its number.
+    files: Rc<RefCell<std::collections::BTreeMap<i32, Vec<u8>>>>,
 }
 
 impl Host for Log {
     fn call(&mut self, _: ExternId, decl: &Extern, args: &[Value]) -> Result<Vec<Value>, String> {
+        if &*decl.module == "bolt" {
+            match (&*decl.name, args) {
+                ("write_file", [Value::I32(file), Value::I32(byte)]) => {
+                    self.files.borrow_mut().entry(*file).or_default().push(*byte as u8);
+                    return Ok(Vec::new());
+                }
+                ("flush", [Value::I32(file)]) => {
+                    let bytes = self.files.borrow_mut().remove(file).unwrap_or_default();
+                    let name = match file {
+                        1 => "stdout".to_string(),
+                        2 => "stderr".to_string(),
+                        n => format!("file {n}"),
+                    };
+                    let text = String::from_utf8_lossy(&bytes);
+                    for line in text.strip_suffix('\n').unwrap_or(&text).split('\n') {
+                        let line = format!("{name}: {line}");
+                        self.lines.borrow_mut().push(line.trim_end().to_string());
+                    }
+                    return Ok(Vec::new());
+                }
+                _ => {}
+            }
+        }
         let args: Vec<String> = args.iter().map(show_value).collect();
         self.lines.borrow_mut().push(format!("{}.{}({})", decl.module, decl.name, args.join(", ")));
         if !decl.sig.results.is_empty() {

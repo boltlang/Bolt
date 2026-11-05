@@ -12,9 +12,9 @@
 //! - A `match`, and a `let` with a pattern, in a statement or a condition,
 //!   follow the decision that `boltlang-lower` makes for them.
 //! - The host functions of an `extern` block are Conduit externs, in the
-//!   module the block names. `print` is the host's, in the module `bolt`,
-//!   and so is `unmatched`, which a `match` that no arm takes calls.
-//!   `abort` is a `trap`. An `unreachable` is only where Bolt can promise
+//!   module the block names. The module `bolt` has `write_file` and
+//!   `flush`, which `print` and a `match` that no arm takes write with
+//!   (see [`host`]). `abort` is a `trap`. An `unreachable` is only where Bolt can promise
 //!   that nothing gets, like after a call of a function that never
 //!   returns.
 //!
@@ -30,6 +30,7 @@
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
 mod func;
+mod host;
 mod ty;
 
 use std::{
@@ -125,12 +126,11 @@ impl fmt::Display for Error {
     }
 }
 
-/// What a host function is, so that each one is declared once.
+/// What a host function is, so that each one is declared once: a function
+/// of an `extern` block. The module `bolt`'s are in [`host`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ExternKey<'db> {
     Function(FunctionId<'db>),
-    /// `print`, `panic` or `unmatched`, in the module `bolt`.
-    Bolt(&'static str),
 }
 
 /// What every body is lowered with.
@@ -142,6 +142,10 @@ pub(crate) struct Ctx<'db> {
     pub lambdas: HashMap<(Instance<'db>, ExprId), FuncId>,
     pub externs: HashMap<ExternKey<'db>, ExternId>,
     pub erased: Vec<FunctionId<'db>>,
+    /// The host's `write_file` and `flush`, once something needs them.
+    pub io: Option<host::Io>,
+    /// The functions that call them: `bolt_print` and `bolt_unmatched`.
+    pub helpers: host::Helpers,
 }
 
 /// The program of `entry` and its tests, in Conduit.
@@ -199,6 +203,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         lambdas: HashMap::new(),
         externs: HashMap::new(),
         erased: p.erased.clone(),
+        io: None,
+        helpers: host::Helpers::default(),
     };
     // From 0, in the order they're defined, so that the text format can
     // write each by its name alone.
@@ -264,7 +270,14 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     if !errors.is_empty() {
         return Err(errors);
     }
-    // `unmatched`, for a `match` that no arm takes, if one can fail.
+    // The functions that call the host: `bolt_print`, if something prints,
+    // and `bolt_unmatched`, if a `match` can be taken by no arm.
+    if let Some(string) = &cx.helpers.string {
+        let id = FuncId(names.len() as u64);
+        names.insert(id, "bolt_print".into());
+        sigs.push((id, (Sig::new(vec![string.clone()], Vec::new()), MutParams::default())));
+        cx.helpers.print = Some(id);
+    }
     let can_fail = p.instances.iter().any(|iu| {
         body_decisions(db, iu.instance.body(db))
             .matches
@@ -272,18 +285,11 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             .any(|(_, d)| d.as_ref().is_ok_and(|d| d.nodes.contains(&Node::Fail)))
     });
     if can_fail {
-        let unmatched = ExternId(module.externs.len() as u64);
-        let sig = Sig::new(Vec::new(), Vec::new());
-        module.externs.insert(
-            unmatched,
-            Extern {
-                module: "bolt".into(),
-                name: "unmatched".into(),
-                sig,
-                debug_name: Some("unmatched".into()),
-            },
-        );
-        cx.externs.insert(ExternKey::Bolt("unmatched"), unmatched);
+        host::declare_io(&mut module, &mut cx.io);
+        let id = FuncId(names.len() as u64);
+        names.insert(id, "bolt_unmatched".into());
+        sigs.push((id, (Sig::new(Vec::new(), Vec::new()), MutParams::default())));
+        cx.helpers.unmatched = Some(id);
     }
     module.data = types.decls.clone();
     for (id, (sig, mut_params)) in &sigs {
@@ -302,6 +308,19 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 Ok(f) => built.push((cx.lambdas[&(iu.instance, lambda.expr)], f)),
                 Err(e) => errors.push(e),
             }
+        }
+    }
+    let helpers = [
+        cx.helpers
+            .print
+            .zip(cx.helpers.string.as_ref())
+            .map(|(id, string)| (id, host::print_func(&module, cx.io.unwrap(), string))),
+        cx.helpers.unmatched.map(|id| (id, host::unmatched_func(&module, cx.io.unwrap()))),
+    ];
+    for (id, f) in helpers.into_iter().flatten() {
+        match f {
+            Ok(f) => built.push((id, f)),
+            Err(kind) => errors.push(Error { instance: names[&id].clone(), at: None, kind }),
         }
     }
     if !errors.is_empty() {
@@ -409,7 +428,24 @@ fn declare_extern<'db>(
             let name = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
             (ExternKey::Function(*f), abi, name)
         }
-        Use::Builtin(Builtin::Print) => (ExternKey::Bolt("print"), "bolt".into(), "print".into()),
+        // `print` is a function of the module, `bolt_print`, which calls the
+        // host's `write_file` and `flush`. Its id is given once every
+        // instance has one.
+        Use::Builtin(Builtin::Print) => {
+            if cx.helpers.string.is_some() {
+                return Ok(());
+            }
+            let Site::Expr(callee) = site else { return Ok(()) };
+            let MonoTy::Fn(params, ..) = lcx.expr_ty(*callee)? else {
+                return Err(ErrorKind::unsupported("a `print` whose type isn't a function"));
+            };
+            let Some(string) = types.value(db, cx.root, &params[0])? else {
+                return Err(ErrorKind::unsupported("a `String` with no values"));
+            };
+            host::declare_io(module, &mut cx.io);
+            cx.helpers.string = Some(string);
+            return Ok(());
+        }
         _ => return Ok(()),
     };
     if cx.externs.contains_key(&key) {
