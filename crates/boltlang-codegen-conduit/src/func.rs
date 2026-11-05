@@ -803,7 +803,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     /// A new object of the type of `e`, made with its constructor `index`.
     fn construct(&mut self, e: ExprId, index: u32, fields: Vec<Atom>) -> R<Val> {
         let t = self.literal_ty(e)?;
-        let Some(Ty::Data(id, m, margs)) = self.cty(&t)? else {
+        let Some(Ty::Data(id, m, margs, _)) = self.cty(&t)? else {
             return Err(ErrorKind::unsupported("this value"));
         };
         Ok(Some(Atom::Var(self.b.new_object_with(CtorId { data: id, index }, m, margs, fields))))
@@ -901,7 +901,15 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
                 self.b.call_at(f, margs, args)
             }
-            Use::Extern(f) => self.b.call_extern(self.cx.externs[&ExternKey::Function(f)], args),
+            Use::Extern(f) => {
+                let results = self.b.call_extern(self.cx.externs[&ExternKey::Function(f)], args);
+                // A host function can return although it's declared not to,
+                // and nothing in Bolt can promise it won't: stop then.
+                if matches!(result_ty, MonoTy::Never) {
+                    self.b.trap();
+                }
+                results
+            }
             Use::Builtin(builtin) => return self.builtin(builtin, args, &result_ty),
             Use::Method { .. } => return Err(ErrorKind::unsupported("dictionaries")),
         };
@@ -927,10 +935,8 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 self.b.call_extern(self.cx.externs[&ExternKey::Bolt("print")], args);
                 Ok(None)
             }
-            // Conduit's `unreachable` traps when it's reached, so it's all
-            // that aborting needs.
             Builtin::Abort => {
-                self.b.unreachable();
+                self.b.trap();
                 Ok(None)
             }
             Builtin::ArrayAlloc => {
@@ -1640,8 +1646,10 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             }
             Node::Fail if self.fail_arm => arm(l, FAIL),
             Node::Fail => {
+                // The host says so, then the program stops: reaching this is
+                // defined, so it's a `trap`, not an `unreachable`.
                 l.b.call_extern(l.cx.externs[&ExternKey::Bolt("unmatched")], ());
-                l.b.unreachable();
+                l.b.trap();
                 Ok(())
             }
         }

@@ -315,12 +315,12 @@ fn f(%n: i32) -> (i32) {
     0 => jump j1(0i32)
     _ =>
       let = call_extern unmatched()
-      unreachable
+      trap
   }
 }
 --------------------------------------------------------------------------------
 bolt.unmatched()
-error: fn1: reached unreachable code
+error: fn1: trap
 
 ================================================================================
 A let with a pattern
@@ -1157,7 +1157,7 @@ fn get_i32['m1](%v: 'm1 Vec_i32, %index: i32) -> (i32) {
 
 fn panic(%message: imm String) -> () {
   let = call_extern print(%message)
-  unreachable
+  trap
 }
 
 fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
@@ -1521,7 +1521,7 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
 
 fn panic(%message: imm String) -> () {
   let = call_extern print(%message)
-  unreachable
+  trap
 }
 
 fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
@@ -2454,3 +2454,21 @@ env.log(1)
 env.log(1)
 env.log(1)
 env.log(1)
+
+================================================================================
+Abort stops the program
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+log(1);
+abort();
+--------------------------------------------------------------------------------
+extern log "env" "log" (i32) -> ()
+
+fn file() -> () {
+  let = call_extern log(1i32)
+  trap
+}
+--------------------------------------------------------------------------------
+env.log(1)
+error: fn0: trap

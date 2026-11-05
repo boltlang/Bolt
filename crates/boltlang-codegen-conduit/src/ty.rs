@@ -120,20 +120,20 @@ impl<'db> Types<'db> {
                 let (args, extracted) = abstract_muts(elems, 0);
                 let id = self.data(db, root, DataKey::Tuple(args))?;
                 let own = held_mutability(&extracted)?;
-                Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect())
+                Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect(), Vec::new())
             }
             MonoTy::Adt(AdtId::Enum(e), ..) if is_fieldless(db, *e) => Ty::I32,
             MonoTy::Adt(adt @ AdtId::Enum(_), args, _, _) => {
                 let (args, extracted) = abstract_muts(args, 0);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
                 let own = held_mutability(&extracted)?;
-                Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect())
+                Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect(), Vec::new())
             }
             MonoTy::Adt(adt @ AdtId::Struct(_), args, muts, own) => {
                 let (args, extracted) = abstract_muts(args, muts.len() as u32);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
                 let margs = muts.iter().chain(&extracted).map(|&m| mutability(m)).collect();
-                Ty::Data(id, mutability(*own), margs)
+                Ty::Data(id, mutability(*own), margs, Vec::new())
             }
             MonoTy::Array(m, elem) => match self.value(db, root, elem)? {
                 Some(elem) => Ty::Array(Box::new(elem), mutability(*m)),
@@ -204,6 +204,8 @@ impl<'db> Types<'db> {
             DataKey::Tuple(elems) => {
                 let params = count_params(elems);
                 DataDecl {
+                    // Bolt doesn't give Conduit its effects yet.
+                    effect_params: 0,
                     params,
                     ctors: vec![fields_of(self, elems.to_vec())?],
                     debug_name: Some(data_name(db, "Tuple", elems).into()),
@@ -220,6 +222,8 @@ impl<'db> Types<'db> {
                     field_types(db, root, VariantDef::Struct(*s), args, &muts, MonoMut::Param(OWN))
                         .map_err(unknown)?;
                 DataDecl {
+                    // Bolt doesn't give Conduit its effects yet.
+                    effect_params: 0,
                     params: declared + count_params(args),
                     ctors: vec![fields_of(self, tys)?],
                     debug_name: s
@@ -240,6 +244,8 @@ impl<'db> Types<'db> {
                     ctors.push(fields_of(self, tys)?);
                 }
                 DataDecl {
+                    // Bolt doesn't give Conduit its effects yet.
+                    effect_params: 0,
                     params: count_params(args),
                     ctors,
                     debug_name: e

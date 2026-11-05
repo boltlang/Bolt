@@ -269,3 +269,24 @@ fn second() -> () {
 env.log(1)
 test second
 env.log(2)
+
+================================================================================
+A host function that's declared never to return stops the program if it does
+================================================================================
+extern "env" { fn log(x: i32); fn stop() -> !; }
+log(1);
+stop();
+--------------------------------------------------------------------------------
+extern log "env" "log" (i32) -> ()
+
+extern stop "env" "stop" () -> ()
+
+fn file() -> () {
+  let = call_extern log(1i32)
+  let = call_extern stop()
+  trap
+}
+--------------------------------------------------------------------------------
+env.log(1)
+env.stop()
+error: fn0: trap

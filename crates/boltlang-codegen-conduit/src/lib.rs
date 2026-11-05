@@ -14,7 +14,9 @@
 //! - The host functions of an `extern` block are Conduit externs, in the
 //!   module the block names. `print` is the host's, in the module `bolt`,
 //!   and so is `unmatched`, which a `match` that no arm takes calls.
-//!   `abort` is an `unreachable`, which traps.
+//!   `abort` is a `trap`. An `unreachable` is only where Bolt can promise
+//!   that nothing gets, like after a call of a function that never
+//!   returns.
 //!
 //! - A lambda is lifted to a function of its own, which takes what it
 //!   captures first, as `boltlang-lower` finds it, then its parameters. A
