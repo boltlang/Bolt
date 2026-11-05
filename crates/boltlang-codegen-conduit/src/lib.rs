@@ -198,17 +198,18 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         externs: HashMap::new(),
         erased: p.erased.clone(),
     };
-    // 1 and up, as the text format's examples number them.
+    // From 0, in the order they're defined, so that the text format can
+    // write each by its name alone.
     let mut names = BTreeMap::new();
     for (i, iu) in p.instances.iter().enumerate() {
-        let id = FuncId(1 + i as u64);
+        let id = FuncId(i as u64);
         cx.funcs.insert(iu.instance, id);
         names.insert(id, iu.instance.display(db).to_string());
     }
     // The lambdas, lifted, after the instances.
     for iu in &p.instances {
         for (k, lambda) in body_lambdas(db, iu.instance.body(db)).iter().enumerate() {
-            let id = FuncId(1 + names.len() as u64);
+            let id = FuncId(names.len() as u64);
             cx.lambdas.insert((iu.instance, lambda.expr), id);
             names.insert(id, format!("{}::lambda{k}", iu.instance.display(db)));
         }
@@ -269,11 +270,17 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             .any(|(_, d)| d.as_ref().is_ok_and(|d| d.nodes.contains(&Node::Fail)))
     });
     if can_fail {
-        let unmatched = ExternId(1 + module.externs.len() as u64);
-        let sig = Sig { params: Vec::new(), results: Vec::new() };
-        module
-            .externs
-            .insert(unmatched, Extern { module: "bolt".into(), name: "unmatched".into(), sig });
+        let unmatched = ExternId(module.externs.len() as u64);
+        let sig = Sig::new(Vec::new(), Vec::new());
+        module.externs.insert(
+            unmatched,
+            Extern {
+                module: "bolt".into(),
+                name: "unmatched".into(),
+                sig,
+                debug_name: Some("unmatched".into()),
+            },
+        );
         cx.externs.insert(ExternKey::Bolt("unmatched"), unmatched);
     }
     module.data = types.decls.clone();
@@ -298,7 +305,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     if !errors.is_empty() {
         return Err(errors);
     }
-    for (id, f) in built {
+    for (id, mut f) in built {
+        f.debug.name = Some(ident(&names[&id]).into());
         module.funcs.insert(id, f);
     }
     if let Err(es) = conduit_ir::verify::verify_module(&module) {
@@ -331,7 +339,7 @@ fn instance_sig<'db>(
     root: File,
 ) -> Result<(Sig, MutParams), ErrorKind> {
     let db = lcx.db;
-    let mut sig = Sig { params: Vec::new(), results: Vec::new() };
+    let mut sig = Sig::new(Vec::new(), Vec::new());
     match lcx.instance.body(db).def(db) {
         DefWithBody::Function(_) => {
             let MonoTy::Fn(params, ret, _) = lcx.instance_ty()? else {
@@ -360,7 +368,7 @@ fn lambda_sig<'db>(
 ) -> Result<(Sig, MutParams), ErrorKind> {
     let db = lcx.db;
     let (body, _) = body_with_source_map(db, lcx.instance.body(db));
-    let mut sig = Sig { params: Vec::new(), results: Vec::new() };
+    let mut sig = Sig::new(Vec::new(), Vec::new());
     for &b in lambda.captures.iter() {
         if let Some(t) = types.value(db, root, &lcx.binding_ty(b)?)? {
             let mutable = body.bindings[b].mutable;
@@ -410,13 +418,68 @@ fn declare_extern<'db>(
     let MonoTy::Fn(params, ret, _) = lcx.expr_ty(*callee)? else {
         return Err(ErrorKind::unsupported("a host function whose type isn't a function"));
     };
-    let mut sig = Sig { params: Vec::new(), results: Vec::new() };
+    let mut sig = Sig::new(Vec::new(), Vec::new());
     for t in params.iter() {
         sig.params.extend(types.value(db, cx.root, t)?);
     }
     sig.results.extend(types.value(db, cx.root, &ret)?);
-    let id = ExternId(1 + module.externs.len() as u64);
-    module.externs.insert(id, Extern { module: module_name.into(), name: name.into(), sig });
+    let id = ExternId(module.externs.len() as u64);
+    let debug_name = Some(name.as_str().into());
+    module
+        .externs
+        .insert(id, Extern { module: module_name.into(), name: name.into(), sig, debug_name });
     cx.externs.insert(key, id);
     Ok(())
+}
+
+/// A name of Bolt's, like `Mul[i32].mul` or `*[i32]`, as an identifier,
+/// which is what Conduit's text format can name things by: `Mul_i32_mul`
+/// and `star_i32`. The code of a file, `<file>`, is `file`, and so its
+/// lambdas are `file_lambda0` and so on.
+pub(crate) fn ident(name: &str) -> String {
+    let name = name.replace("<file>", "file");
+    let mut out = String::new();
+    let word = |c: char| match c {
+        '+' => Some("plus"),
+        '-' => Some("minus"),
+        '*' => Some("star"),
+        '/' => Some("slash"),
+        '%' => Some("percent"),
+        '<' => Some("lt"),
+        '>' => Some("gt"),
+        '=' => Some("eq"),
+        '!' => Some("not"),
+        '&' => Some("and"),
+        '|' => Some("or"),
+        '^' => Some("xor"),
+        '~' => Some("tilde"),
+        _ => None,
+    };
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            out.push(c);
+        } else {
+            if !out.is_empty() && !out.ends_with('_') {
+                out.push('_');
+            }
+            if let Some(w) = word(c) {
+                out.push_str(w);
+                out.push('_');
+            }
+        }
+    }
+    let mut out = out.trim_end_matches('_').to_string();
+    if out.is_empty() {
+        out.push('_');
+    }
+    // Words of the text format, which a name can't be.
+    const KEYWORDS: &[&str] = &[
+        "Any", "Nothing", "and", "any", "cont", "does", "env", "f32", "f32_bits", "f64",
+        "f64_bits", "fn", "for", "i16", "i32", "i64", "i8", "imm", "in", "inherit", "labels",
+        "mut", "ops", "rec", "ref", "ret", "ro", "vars", "where",
+    ];
+    if KEYWORDS.contains(&out.as_str()) {
+        out.push('_');
+    }
+    out
 }

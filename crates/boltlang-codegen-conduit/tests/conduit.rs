@@ -6,8 +6,8 @@
 //! A case is a title between two lines of `=`, the Bolt code, then two
 //! sections of output, each after a line of `-`:
 //!
-//! 1. The Conduit IR the code lowers to, after a line for each function
-//!    with what it's an instance of, like `// fn2: id[i32]`. Or why it
+//! 1. The Conduit IR the code lowers to, with functions named after what
+//!    they're instances of, like `id_i32` for `id[i32]`. Or why it
 //!    couldn't be lowered, as lines starting with `error`.
 //! 2. What running it does, in Conduit's evaluator: the entry file's
 //!    top-level statements, then each test. Every call of a host function
@@ -110,11 +110,14 @@ impl Host for Log {
 
 fn show_value(v: &Value) -> String {
     match v {
+        Value::I8(n) => n.to_string(),
+        Value::I16(n) => n.to_string(),
         Value::I32(n) => n.to_string(),
         Value::I64(n) => n.to_string(),
         Value::F32(x) => x.to_string(),
         Value::F64(x) => x.to_string(),
         Value::Obj(id) => format!("#{}", id.0),
+        Value::Unset => "unset".to_string(),
     }
 }
 
@@ -143,12 +146,7 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
             return Ok((lines.join("\n"), String::new()));
         }
     };
-    let mut ir = String::new();
-    for (id, name) in &lowered.names {
-        ir.push_str(&format!("// {id}: {name}\n"));
-    }
-    ir.push('\n');
-    ir.push_str(&conduit_ir::text::print(&lowered.module));
+    let ir = conduit_ir::text::print(&lowered.module);
     let mut run = Vec::new();
     run.extend(execute(&lowered.module, lowered.entry, None));
     for (name, f) in &lowered.tests {

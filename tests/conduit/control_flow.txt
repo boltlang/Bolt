@@ -11,57 +11,51 @@ while i < 5 {
 }
 log(sum);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: <[i32]
-// fn3: +[i32]
-// fn4: PartialOrd[i32].lt
-// fn5: Add[i32].add
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(0i32)
-  let %1: ref i32 = ref_new(0i32)
+fn file() -> () {
+  let %i: ref i32 = ref_new(0i32)
+  let %sum: ref i32 = ref_new(0i32)
   join j1() =
-    let %9: i32 = ref_get(%1)
-    let = call_extern extern1(%9)
+    let %9: i32 = ref_get(%sum)
+    let = call_extern log(%9)
     jump ret()
   in
   join rec j2() =
-    let %2: i32 = ref_get(%0)
-    let %3: i32 = call fn2(%2, 5i32)
+    let %2: i32 = ref_get(%i)
+    let %3: i32 = call lt_i32(%2, 5i32)
     case %3 {
       0 => jump j1()
       _ =>
-        let %4: i32 = ref_get(%0)
-        let %5: i32 = ref_get(%1)
-        let %6: i32 = call fn3(%5, %4)
-        let = ref_set(%1, %6)
-        let %7: i32 = ref_get(%0)
-        let %8: i32 = call fn3(%7, 1i32)
-        let = ref_set(%0, %8)
+        let %4: i32 = ref_get(%i)
+        let %5: i32 = ref_get(%sum)
+        let %6: i32 = call plus_i32(%5, %4)
+        let = ref_set(%sum, %6)
+        let %7: i32 = ref_get(%i)
+        let %8: i32 = call plus_i32(%7, 1i32)
+        let = ref_set(%i, %8)
         jump j2()
     }
   in jump j2()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn4(%0, %1)
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = lt.s(%0, %1)
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -80,39 +74,31 @@ loop {
   log(i);
 }
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: ==[i32]
-// fn4: >[i32]
-// fn5: Add[i32].add
-// fn6: Eq[i32].eq
-// fn7: PartialOrd[i32].gt
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(0i32)
+fn file() -> () {
+  let %i: ref i32 = ref_new(0i32)
   join j1() = jump ret()
   in
   join rec j2() =
-    let %1: i32 = ref_get(%0)
-    let %2: i32 = call fn2(%1, 1i32)
-    let = ref_set(%0, %2)
+    let %1: i32 = ref_get(%i)
+    let %2: i32 = call plus_i32(%1, 1i32)
+    let = ref_set(%i, %2)
     join j3() =
       join j4() =
-        let %7: i32 = ref_get(%0)
-        let = call_extern extern1(%7)
+        let %7: i32 = ref_get(%i)
+        let = call_extern log(%7)
         jump j2()
       in
-      let %5: i32 = ref_get(%0)
-      let %6: i32 = call fn4(%5, 4i32)
+      let %5: i32 = ref_get(%i)
+      let %6: i32 = call gt_i32(%5, 4i32)
       case %6 {
         0 => jump j4()
         _ => jump j1()
       }
     in
-    let %3: i32 = ref_get(%0)
-    let %4: i32 = call fn3(%3, 2i32)
+    let %3: i32 = ref_get(%i)
+    let %4: i32 = call eq_eq_i32(%3, 2i32)
     case %4 {
       0 => jump j3()
       _ => jump j2()
@@ -120,33 +106,33 @@ fn fn1() -> () {
   in jump j2()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn6(%0, %1)
+fn eq_eq_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Eq_i32_eq(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn7(%0, %1)
+fn gt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_gt(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = eq(%0, %1)
+fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = eq(%a, %b)
   jump ret(%2)
 }
 
-fn fn7(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = gt.s(%0, %1)
+fn PartialOrd_i32_gt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = gt.s(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -166,69 +152,61 @@ let n = loop {
 };
 log(n);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: *[i32]
-// fn3: >[i32]
-// fn4: +[i32]
-// fn5: Mul[i32].mul
-// fn6: PartialOrd[i32].gt
-// fn7: Add[i32].add
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(1i32)
-  join j1(%1: i32) =
-    let = call_extern extern1(%1)
+fn file() -> () {
+  let %i: ref i32 = ref_new(1i32)
+  join j1(%n: i32) =
+    let = call_extern log(%n)
     jump ret()
   in
   join rec j2() =
     join j3() =
-      let %7: i32 = ref_get(%0)
-      let %8: i32 = call fn4(%7, 1i32)
-      let = ref_set(%0, %8)
+      let %7: i32 = ref_get(%i)
+      let %8: i32 = call plus_i32(%7, 1i32)
+      let = ref_set(%i, %8)
       jump j2()
     in
-    let %2: i32 = ref_get(%0)
-    let %3: i32 = ref_get(%0)
-    let %4: i32 = call fn2(%2, %3)
-    let %5: i32 = call fn3(%4, 50i32)
+    let %2: i32 = ref_get(%i)
+    let %3: i32 = ref_get(%i)
+    let %4: i32 = call star_i32(%2, %3)
+    let %5: i32 = call gt_i32(%4, 50i32)
     case %5 {
       0 => jump j3()
       _ =>
-        let %6: i32 = ref_get(%0)
+        let %6: i32 = ref_get(%i)
         jump j1(%6)
     }
   in jump j2()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn6(%0, %1)
+fn gt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_gt(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn7(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = mul(%0, %1)
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = gt.s(%0, %1)
+fn PartialOrd_i32_gt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = gt.s(%a, %b)
   jump ret(%2)
 }
 
-fn fn7(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -249,23 +227,16 @@ fn first_over(limit: i32) -> i32 {
 }
 log(first_over(10));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: first_over
-// fn3: >[i32]
-// fn4: +[i32]
-// fn5: PartialOrd[i32].gt
-// fn6: Add[i32].add
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: i32 = call fn2(10i32)
-  let = call_extern extern1(%0)
+fn file() -> () {
+  let %0: i32 = call first_over(10i32)
+  let = call_extern log(%0)
   jump ret()
 }
 
-fn fn2(%0: i32) -> (i32) {
-  let %1: ref i32 = ref_new(0i32)
+fn first_over(%limit: i32) -> (i32) {
+  let %i: ref i32 = ref_new(0i32)
   join j1() = jump ret(0i32)
   in
   join rec j2() =
@@ -273,40 +244,40 @@ fn fn2(%0: i32) -> (i32) {
       0 => jump j1()
       _ =>
         join j3() =
-          let %5: i32 = ref_get(%1)
-          let %6: i32 = call fn4(%5, 3i32)
-          let = ref_set(%1, %6)
+          let %5: i32 = ref_get(%i)
+          let %6: i32 = call plus_i32(%5, 3i32)
+          let = ref_set(%i, %6)
           jump j2()
         in
-        let %2: i32 = ref_get(%1)
-        let %3: i32 = call fn3(%2, %0)
+        let %2: i32 = ref_get(%i)
+        let %3: i32 = call gt_i32(%2, %limit)
         case %3 {
           0 => jump j3()
           _ =>
-            let %4: i32 = ref_get(%1)
+            let %4: i32 = ref_get(%i)
             jump ret(%4)
         }
     }
   in jump j2()
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn gt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_gt(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn6(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = gt.s(%0, %1)
+fn PartialOrd_i32_gt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = gt.s(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -322,56 +293,52 @@ fn no(n: i32) -> Bool { log(n); False }
 if no(1) && yes(2) { log(10); }
 if yes(3) || no(4) { log(20); }
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: no
-// fn3: yes
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
+fn file() -> () {
   join j1() =
     join j3() = jump ret()
     in
-    let %3: i32 = call fn3(3i32)
+    let %3: i32 = call yes(3i32)
     join j4(%4: i32) =
       case %4 {
         0 => jump j3()
         _ =>
-          let = call_extern extern1(20i32)
+          let = call_extern log(20i32)
           jump j3()
       }
     in
     case %3 {
       1 => jump j4(1i32)
       _ =>
-        let %5: i32 = call fn2(4i32)
+        let %5: i32 = call no(4i32)
         jump j4(%5)
     }
   in
-  let %0: i32 = call fn2(1i32)
+  let %0: i32 = call no(1i32)
   join j2(%1: i32) =
     case %1 {
       0 => jump j1()
       _ =>
-        let = call_extern extern1(10i32)
+        let = call_extern log(10i32)
         jump j1()
     }
   in
   case %0 {
     0 => jump j2(0i32)
     _ =>
-      let %2: i32 = call fn3(2i32)
+      let %2: i32 = call yes(2i32)
       jump j2(%2)
   }
 }
 
-fn fn2(%0: i32) -> (i32) {
-  let = call_extern extern1(%0)
+fn no(%n: i32) -> (i32) {
+  let = call_extern log(%n)
   jump ret(0i32)
 }
 
-fn fn3(%0: i32) -> (i32) {
-  let = call_extern extern1(%0)
+fn yes(%n: i32) -> (i32) {
+  let = call_extern log(%n)
   jump ret(1i32)
 }
 --------------------------------------------------------------------------------

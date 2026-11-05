@@ -99,6 +99,7 @@ pub(crate) fn lower_body<'db>(
         targets: Vec::new(),
         at: None,
         mut_literals: lcx.infer.mut_literals.iter().map(|&(outer, inner)| (inner, outer)).collect(),
+        var_names: Default::default(),
     };
     let error = |l: &Lower<'_, '_, 'db>, kind: ErrorKind| Error {
         instance: iu.instance.display(db).to_string(),
@@ -109,13 +110,16 @@ pub(crate) fn lower_body<'db>(
         return Err(error(&l, kind));
     }
     let instance = iu.instance.display(db).to_string();
-    l.b.finish().map_err(|es| Error {
+    let var_names = std::mem::take(&mut l.var_names);
+    let mut f = l.b.finish().map_err(|es| Error {
         instance,
         at: None,
         kind: ErrorKind::Invalid(
             es.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "),
         ),
-    })
+    })?;
+    f.debug.vars.extend(var_names.into_iter().map(|(v, n)| (v, n.into())));
+    Ok(f)
 }
 
 struct Lower<'a, 'm, 'db> {
@@ -135,6 +139,8 @@ struct Lower<'a, 'm, 'db> {
     at: Option<ExprId>,
     /// The `e` of each `mut e` that makes a literal `mut`, with the `mut e`.
     mut_literals: HashMap<ExprId, ExprId>,
+    /// The names of the variables of locals, for the text format.
+    var_names: std::collections::BTreeMap<conduit_ir::Var, String>,
 }
 
 impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
@@ -194,6 +200,8 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Some(_) => {
                     next += 1;
                     let p = self.b.param(next - 1);
+                    let name = crate::ident(self.body.bindings[b].name.as_str());
+                    self.var_names.entry(p).or_insert(name);
                     if self.body.bindings[b].mutable {
                         Local::Ref(p)
                     } else {
@@ -272,6 +280,15 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         } else {
             Local::Value(value)
         };
+        // The variable is shown by the local's name, unless it has one.
+        let var = match &local {
+            Local::Ref(v) | Local::Value(Some(Atom::Var(v))) => Some(*v),
+            Local::Value(_) => None,
+        };
+        if let Some(v) = var {
+            let name = crate::ident(self.body.bindings[id].name.as_str());
+            self.var_names.entry(v).or_insert(name);
+        }
         self.locals.insert(id, local);
         Ok(())
     }

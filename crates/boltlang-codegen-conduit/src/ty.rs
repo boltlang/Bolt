@@ -140,7 +140,7 @@ impl<'db> Types<'db> {
                 None => return Err(ErrorKind::unsupported("an array of a type with no values")),
             },
             MonoTy::Fn(params, ret, m) => {
-                let mut sig = Sig { params: Vec::new(), results: Vec::new() };
+                let mut sig = Sig::new(Vec::new(), Vec::new());
                 for p in params {
                     sig.params.extend(self.value(db, root, p)?);
                 }
@@ -163,8 +163,9 @@ impl<'db> Types<'db> {
         if let Some(&id) = self.keys.get(&key) {
             return Ok(id);
         }
-        // 10 and up, as the text format's examples number them.
-        let id = DataId(10 + self.keys.len() as u64);
+        // From 0, in the order they're met, so that the text format can
+        // write each by its name alone.
+        let id = DataId(self.keys.len() as u64);
         // Known before its fields are, for a type that holds itself.
         self.keys.insert(key.clone(), id);
         let result = self.declare(db, root, &key);
@@ -202,7 +203,11 @@ impl<'db> Types<'db> {
         Ok(match key {
             DataKey::Tuple(elems) => {
                 let params = count_params(elems);
-                DataDecl { params, ctors: vec![fields_of(self, elems.to_vec())?] }
+                DataDecl {
+                    params,
+                    ctors: vec![fields_of(self, elems.to_vec())?],
+                    debug_name: Some(data_name(db, "Tuple", elems).into()),
+                }
             }
             DataKey::Adt(AdtId::Struct(s), args) => {
                 let declared = boltlang_hir_ty::lower::named_mutabilities(
@@ -217,6 +222,11 @@ impl<'db> Types<'db> {
                 DataDecl {
                     params: declared + count_params(args),
                     ctors: vec![fields_of(self, tys)?],
+                    debug_name: s
+                        .item(db)
+                        .name
+                        .as_ref()
+                        .map(|n| data_name(db, n.as_str(), args).into()),
                 }
             }
             DataKey::Adt(AdtId::Enum(e), args) => {
@@ -229,10 +239,27 @@ impl<'db> Types<'db> {
                             .map_err(unknown)?;
                     ctors.push(fields_of(self, tys)?);
                 }
-                DataDecl { params: count_params(args), ctors }
+                DataDecl {
+                    params: count_params(args),
+                    ctors,
+                    debug_name: e
+                        .item(db)
+                        .name
+                        .as_ref()
+                        .map(|n| data_name(db, n.as_str(), args).into()),
+                }
             }
         })
     }
+}
+
+/// The name of a data type, like `Option_i32` for `Option[i32]`.
+fn data_name(db: &dyn Db, name: &str, args: &[MonoTy<'_>]) -> String {
+    if args.is_empty() {
+        return crate::ident(name);
+    }
+    let args: Vec<String> = args.iter().map(|a| a.display(db).to_string()).collect();
+    crate::ident(&format!("{name}[{}]", args.join(", ")))
 }
 
 /// Whether no variant of the enum has fields, so that a value is the index

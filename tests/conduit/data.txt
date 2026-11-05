@@ -8,33 +8,29 @@ let p = mut Point { x: 1, y: 2 };
 p.x = 10;
 log(p.x + p.y);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Add[i32].add
-
-data data10 {
+data Point {
   (i32, i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: mut data10 = new data10.0(1i32, 2i32)
-  let = set data10.0.0(%0, 10i32)
-  let %1: i32 = get data10.0.0(%0)
-  let %2: i32 = get data10.0.1(%0)
-  let %3: i32 = call fn2(%1, %2)
-  let = call_extern extern1(%3)
+fn file() -> () {
+  let %p: mut Point = new Point.0(1i32, 2i32)
+  let = set Point.0.0(%p, 10i32)
+  let %1: i32 = get Point.0.0(%p)
+  let %2: i32 = get Point.0.1(%p)
+  let %3: i32 = call plus_i32(%1, %2)
+  let = call_extern log(%3)
   jump ret()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -49,27 +45,24 @@ fn swap(p: (i32, i32)) -> (i32, i32) = (p.1, p.0);
 let q = swap((1, 2));
 log(q.0);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: swap
-
-data data10 {
+data Tuple_i32_i32 {
   (i32, i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data10 = new data10.0(1i32, 2i32)
-  let %1: imm data10 = call fn2(%0)
-  let %2: i32 = get data10.0.0(%1)
-  let = call_extern extern1(%2)
+fn file() -> () {
+  let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
+  let %q: imm Tuple_i32_i32 = call swap(%0)
+  let %2: i32 = get Tuple_i32_i32.0.0(%q)
+  let = call_extern log(%2)
   jump ret()
 }
 
-fn fn2(%0: imm data10) -> (imm data10) {
-  let %1: i32 = get data10.0.1(%0)
-  let %2: i32 = get data10.0.0(%0)
-  let %3: imm data10 = new data10.0(%1, %2)
+fn swap(%p: imm Tuple_i32_i32) -> (imm Tuple_i32_i32) {
+  let %1: i32 = get Tuple_i32_i32.0.1(%p)
+  let %2: i32 = get Tuple_i32_i32.0.0(%p)
+  let %3: imm Tuple_i32_i32 = new Tuple_i32_i32.0(%1, %2)
   jump ret(%3)
 }
 --------------------------------------------------------------------------------
@@ -84,43 +77,37 @@ let xs = mut [1, 2, 3];
 xs[1] = 20;
 log(xs[0] + xs[1] + xs[2]);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: IndexMut[mut [T]].set_index[i32]
-// fn3: Index[[T]].index[i32]
-// fn4: +[i32]
-// fn5: Add[i32].add
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: mut [i32] = array_new(1i32, 2i32, 3i32)
-  let = call fn2(%0, 1i32, 20i32)
-  let %1: i32 = call fn3[mut](%0, 0i32)
-  let %2: i32 = call fn3[mut](%0, 1i32)
-  let %3: i32 = call fn4(%1, %2)
-  let %4: i32 = call fn3[mut](%0, 2i32)
-  let %5: i32 = call fn4(%3, %4)
-  let = call_extern extern1(%5)
+fn file() -> () {
+  let %xs: mut [i32] = array_new(1i32, 2i32, 3i32)
+  let = call IndexMut_mut_T_set_index_i32(%xs, 1i32, 20i32)
+  let %1: i32 = call Index_T_index_i32[mut](%xs, 0i32)
+  let %2: i32 = call Index_T_index_i32[mut](%xs, 1i32)
+  let %3: i32 = call plus_i32(%1, %2)
+  let %4: i32 = call Index_T_index_i32[mut](%xs, 2i32)
+  let %5: i32 = call plus_i32(%3, %4)
+  let = call_extern log(%5)
   jump ret()
 }
 
-fn fn2(%0: mut [i32], %1: i32, %2: i32) -> () {
-  let = array_set(%0, %1, %2)
+fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
+  let = array_set(%xs, %i, %x)
   jump ret()
 }
 
-fn fn3['m1](%0: 'm1 [i32], %1: i32) -> (i32) {
-  let %2: i32 = array_get(%0, %1)
+fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
+  let %2: i32 = array_get(%xs, %i)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -141,57 +128,52 @@ log(area(Shape.Circle(2)));
 log(area(Shape.Rect(3, 4)));
 log(area(Shape.Empty));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: area
-// fn3: *[i32]
-// fn4: Mul[i32].mul
-
-data data10 {
+data Shape {
   (i32)
   (i32, i32)
   ()
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data10 = new data10.0(2i32)
-  let %1: i32 = call fn2(%0)
-  let = call_extern extern1(%1)
-  let %2: imm data10 = new data10.1(3i32, 4i32)
-  let %3: i32 = call fn2(%2)
-  let = call_extern extern1(%3)
-  let %4: imm data10 = new data10.2()
-  let %5: i32 = call fn2(%4)
-  let = call_extern extern1(%5)
+fn file() -> () {
+  let %0: imm Shape = new Shape.0(2i32)
+  let %1: i32 = call area(%0)
+  let = call_extern log(%1)
+  let %2: imm Shape = new Shape.1(3i32, 4i32)
+  let %3: i32 = call area(%2)
+  let = call_extern log(%3)
+  let %4: imm Shape = new Shape.2()
+  let %5: i32 = call area(%4)
+  let = call_extern log(%5)
   jump ret()
 }
 
-fn fn2(%0: imm data10) -> (i32) {
+fn area(%s: imm Shape) -> (i32) {
   join j1(%1: i32) = jump ret(%1)
   in
-  case %0 {
-    data10.0 =>
-      let %2: i32 = get data10.0.0(%0)
-      let %3: i32 = call fn3(3i32, %2)
-      let %4: i32 = call fn3(%3, %2)
+  case %s {
+    Shape.0 =>
+      let %r: i32 = get Shape.0.0(%s)
+      let %3: i32 = call star_i32(3i32, %r)
+      let %4: i32 = call star_i32(%3, %r)
       jump j1(%4)
-    data10.1 =>
-      let %5: i32 = get data10.1.0(%0)
-      let %6: i32 = get data10.1.1(%0)
-      let %7: i32 = call fn3(%5, %6)
+    Shape.1 =>
+      let %w: i32 = get Shape.1.0(%s)
+      let %h: i32 = get Shape.1.1(%s)
+      let %7: i32 = call star_i32(%w, %h)
       jump j1(%7)
-    data10.2 => jump j1(0i32)
+    Shape.2 => jump j1(0i32)
   }
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn4(%0, %1)
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = mul(%0, %1)
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -215,44 +197,37 @@ log(classify(5));
 log(classify(-3));
 log(classify(42));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: classify
-// fn3: -[i32]
-// fn4: <[i32]
-// fn5: Neg[i32].neg
-// fn6: PartialOrd[i32].lt
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: i32 = call fn2(0i32)
-  let = call_extern extern1(%0)
-  let %1: i32 = call fn2(5i32)
-  let = call_extern extern1(%1)
-  let %2: i32 = call fn3(3i32)
-  let %3: i32 = call fn2(%2)
-  let = call_extern extern1(%3)
-  let %4: i32 = call fn2(42i32)
-  let = call_extern extern1(%4)
+fn file() -> () {
+  let %0: i32 = call classify(0i32)
+  let = call_extern log(%0)
+  let %1: i32 = call classify(5i32)
+  let = call_extern log(%1)
+  let %2: i32 = call minus_i32(3i32)
+  let %3: i32 = call classify(%2)
+  let = call_extern log(%3)
+  let %4: i32 = call classify(42i32)
+  let = call_extern log(%4)
   jump ret()
 }
 
-fn fn2(%0: i32) -> (i32) {
+fn classify(%n: i32) -> (i32) {
   join j1(%1: i32) = jump ret(%1)
   in
-  case %0 {
+  case %n {
     0 => jump j1(0i32)
     _ =>
-      let %2: i32 = ge.s(%0, 1i32)
-      let %3: i32 = le.s(%0, 9i32)
+      let %2: i32 = ge.s(%n, 1i32)
+      let %3: i32 = le.s(%n, 9i32)
       let %4: i32 = and(%2, %3)
       case %4 {
         0 =>
-          let %5: i32 = call fn4(%0, 0i32)
+          let %5: i32 = call lt_i32(%n, 0i32)
           case %5 {
             0 => jump j1(2i32)
             _ =>
-              let %6: i32 = call fn3(1i32)
+              let %6: i32 = call minus_i32(1i32)
               jump j1(%6)
           }
         _ => jump j1(1i32)
@@ -260,23 +235,23 @@ fn fn2(%0: i32) -> (i32) {
   }
 }
 
-fn fn3(%0: i32) -> (i32) {
-  let %1: i32 = call fn5(%0)
+fn minus_i32(%a: i32) -> (i32) {
+  let %1: i32 = call Neg_i32_neg(%a)
   jump ret(%1)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn6(%0, %1)
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32) -> (i32) {
-  let %1: i32 = sub(0i32, %0)
+fn Neg_i32_neg(%a: i32) -> (i32) {
+  let %1: i32 = sub(0i32, %a)
   jump ret(%1)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = lt.s(%0, %1)
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -294,21 +269,18 @@ enum Color { Red, Green, Blue }
 fn code(c: Color) -> i32 = match c { Color.Red => 1, Color.Green => 2, Color.Blue => 3 };
 log(code(Color.Blue));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: code
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: i32 = call fn2(2i32)
-  let = call_extern extern1(%0)
+fn file() -> () {
+  let %0: i32 = call code(2i32)
+  let = call_extern log(%0)
   jump ret()
 }
 
-fn fn2(%0: i32) -> (i32) {
+fn code(%c: i32) -> (i32) {
   join j1(%1: i32) = jump ret(%1)
   in
-  case %0 {
+  case %c {
     0 => jump j1(1i32)
     1 => jump j1(2i32)
     2 => jump j1(3i32)
@@ -326,32 +298,29 @@ extern "env" { fn log(x: i32); }
 fn f(n: i32) -> i32 = match n { 0 => 0 };
 log(f(1));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: f
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
+extern unmatched "bolt" "unmatched" () -> ()
 
-extern extern2 "bolt" "unmatched" () -> ()
-
-fn fn1() -> () {
-  let %0: i32 = call fn2(1i32)
-  let = call_extern extern1(%0)
+fn file() -> () {
+  let %0: i32 = call f(1i32)
+  let = call_extern log(%0)
   jump ret()
 }
 
-fn fn2(%0: i32) -> (i32) {
+fn f(%n: i32) -> (i32) {
   join j1(%1: i32) = jump ret(%1)
   in
-  case %0 {
+  case %n {
     0 => jump j1(0i32)
     _ =>
-      let = call_extern extern2()
+      let = call_extern unmatched()
       unreachable
   }
 }
 --------------------------------------------------------------------------------
 bolt.unmatched()
-error: fn2: reached unreachable code
+error: fn1: reached unreachable code
 
 ================================================================================
 A let with a pattern
@@ -363,47 +332,43 @@ let (a, b) = (1, 2);
 let Point { x, y } = Point { x: 10, y: 20 };
 log(a + b + x + y);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Add[i32].add
-
-data data10 {
+data Tuple_i32_i32 {
   (i32, i32)
 }
 
-data data11 {
+data Point {
   (i32, i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data10 = new data10.0(1i32, 2i32)
-  join j1(%1: i32, %2: i32) =
-    let %5: imm data11 = new data11.0(10i32, 20i32)
-    join j2(%6: i32, %7: i32) =
-      let %10: i32 = call fn2(%1, %2)
-      let %11: i32 = call fn2(%10, %6)
-      let %12: i32 = call fn2(%11, %7)
-      let = call_extern extern1(%12)
+fn file() -> () {
+  let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
+  join j1(%a#1: i32, %b#2: i32) =
+    let %5: imm Point = new Point.0(10i32, 20i32)
+    join j2(%x#6: i32, %y#7: i32) =
+      let %10: i32 = call plus_i32(%a#1, %b#2)
+      let %11: i32 = call plus_i32(%10, %x#6)
+      let %12: i32 = call plus_i32(%11, %y#7)
+      let = call_extern log(%12)
       jump ret()
     in
-    let %8: i32 = get data11.0.0(%5)
-    let %9: i32 = get data11.0.1(%5)
-    jump j2(%8, %9)
+    let %x#8: i32 = get Point.0.0(%5)
+    let %y#9: i32 = get Point.0.1(%5)
+    jump j2(%x#8, %y#9)
   in
-  let %3: i32 = get data10.0.0(%0)
-  let %4: i32 = get data10.0.1(%0)
-  jump j1(%3, %4)
+  let %a#3: i32 = get Tuple_i32_i32.0.0(%0)
+  let %b#4: i32 = get Tuple_i32_i32.0.1(%0)
+  jump j1(%a#3, %b#4)
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -422,48 +387,43 @@ fn get(m: Maybe) -> i32 {
 log(get(Maybe.Just(5)));
 log(get(Maybe.Nothing));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: get
-// fn3: -[i32]
-// fn4: Neg[i32].neg
-
-data data10 {
+data Maybe {
   (i32)
   ()
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data10 = new data10.0(5i32)
-  let %1: i32 = call fn2(%0)
-  let = call_extern extern1(%1)
-  let %2: imm data10 = new data10.1()
-  let %3: i32 = call fn2(%2)
-  let = call_extern extern1(%3)
+fn file() -> () {
+  let %0: imm Maybe = new Maybe.0(5i32)
+  let %1: i32 = call get(%0)
+  let = call_extern log(%1)
+  let %2: imm Maybe = new Maybe.1()
+  let %3: i32 = call get(%2)
+  let = call_extern log(%3)
   jump ret()
 }
 
-fn fn2(%0: imm data10) -> (i32) {
-  join j1(%1: i32) = jump ret(%1)
+fn get(%m: imm Maybe) -> (i32) {
+  join j1(%n#1: i32) = jump ret(%n#1)
   in
-  case %0 {
-    data10.0 =>
-      let %2: i32 = get data10.0.0(%0)
-      jump j1(%2)
+  case %m {
+    Maybe.0 =>
+      let %n#2: i32 = get Maybe.0.0(%m)
+      jump j1(%n#2)
     _ =>
-      let %3: i32 = call fn3(1i32)
+      let %3: i32 = call minus_i32(1i32)
       jump ret(%3)
   }
 }
 
-fn fn3(%0: i32) -> (i32) {
-  let %1: i32 = call fn4(%0)
+fn minus_i32(%a: i32) -> (i32) {
+  let %1: i32 = call Neg_i32_neg(%a)
   jump ret(%1)
 }
 
-fn fn4(%0: i32) -> (i32) {
-  let %1: i32 = sub(0i32, %0)
+fn Neg_i32_neg(%a: i32) -> (i32) {
+  let %1: i32 = sub(0i32, %a)
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
@@ -484,96 +444,87 @@ while let Maybe.Just(n) = countdown(i) {
   i -= 1;
 }
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: countdown
-// fn3: *[i32]
-// fn4: -[i32]
-// fn5: >[i32]
-// fn6: Mul[i32].mul
-// fn7: Sub[i32].sub
-// fn8: PartialOrd[i32].gt
-
-data data10 {
+data Maybe {
   (i32)
   ()
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
+fn file() -> () {
   join j1() =
-    let %2: ref i32 = ref_new(2i32)
+    let %i: ref i32 = ref_new(2i32)
     join j2() = jump ret()
     in
     join rec j3() =
-      let %3: i32 = ref_get(%2)
-      let %4: imm data10 = call fn2(%3)
+      let %3: i32 = ref_get(%i)
+      let %4: imm Maybe = call countdown(%3)
       case %4 {
-        data10.0 =>
-          let %5: i32 = get data10.0.0(%4)
-          let %6: i32 = call fn3(%5, 10i32)
-          let = call_extern extern1(%6)
-          let %7: i32 = ref_get(%2)
-          let %8: i32 = call fn4(%7, 1i32)
-          let = ref_set(%2, %8)
+        Maybe.0 =>
+          let %n#5: i32 = get Maybe.0.0(%4)
+          let %6: i32 = call star_i32(%n#5, 10i32)
+          let = call_extern log(%6)
+          let %7: i32 = ref_get(%i)
+          let %8: i32 = call minus_i32(%7, 1i32)
+          let = ref_set(%i, %8)
           jump j3()
         _ => jump j2()
       }
     in jump j3()
   in
-  let %0: imm data10 = call fn2(3i32)
+  let %0: imm Maybe = call countdown(3i32)
   case %0 {
-    data10.0 =>
-      let %1: i32 = get data10.0.0(%0)
-      let = call_extern extern1(%1)
+    Maybe.0 =>
+      let %n#1: i32 = get Maybe.0.0(%0)
+      let = call_extern log(%n#1)
       jump j1()
     _ =>
-      let = call_extern extern1(0i32)
+      let = call_extern log(0i32)
       jump j1()
   }
 }
 
-fn fn2(%0: i32) -> (imm data10) {
-  join j1(%1: imm data10) = jump ret(%1)
+fn countdown(%n: i32) -> (imm Maybe) {
+  join j1(%1: imm Maybe) = jump ret(%1)
   in
-  let %2: i32 = call fn5(%0, 0i32)
+  let %2: i32 = call gt_i32(%n, 0i32)
   case %2 {
     0 =>
-      let %3: imm data10 = new data10.1()
+      let %3: imm Maybe = new Maybe.1()
       jump j1(%3)
     _ =>
-      let %4: imm data10 = new data10.0(%0)
+      let %4: imm Maybe = new Maybe.0(%n)
       jump j1(%4)
   }
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn6(%0, %1)
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn7(%0, %1)
+fn minus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Sub_i32_sub(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn8(%0, %1)
+fn gt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_gt(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = mul(%0, %1)
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn7(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = sub(%0, %1)
+fn Sub_i32_sub(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = sub(%a, %b)
   jump ret(%2)
 }
 
-fn fn8(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = gt.s(%0, %1)
+fn PartialOrd_i32_gt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = gt.s(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -594,64 +545,59 @@ fn both(p: (Maybe, Maybe)) -> i32 = match p {
 log(both((Maybe.Just(1), Maybe.Just(2))));
 log(both((Maybe.Just(1), Maybe.Nothing)));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: both
-// fn3: +[i32]
-// fn4: Add[i32].add
-
-data data10 {
-  (imm data11, imm data11)
+data Tuple_Maybe_Maybe {
+  (imm Maybe, imm Maybe)
 }
 
-data data11 {
+data Maybe {
   (i32)
   ()
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data11 = new data11.0(1i32)
-  let %1: imm data11 = new data11.0(2i32)
-  let %2: imm data10 = new data10.0(%0, %1)
-  let %3: i32 = call fn2(%2)
-  let = call_extern extern1(%3)
-  let %4: imm data11 = new data11.0(1i32)
-  let %5: imm data11 = new data11.1()
-  let %6: imm data10 = new data10.0(%4, %5)
-  let %7: i32 = call fn2(%6)
-  let = call_extern extern1(%7)
+fn file() -> () {
+  let %0: imm Maybe = new Maybe.0(1i32)
+  let %1: imm Maybe = new Maybe.0(2i32)
+  let %2: imm Tuple_Maybe_Maybe = new Tuple_Maybe_Maybe.0(%0, %1)
+  let %3: i32 = call both(%2)
+  let = call_extern log(%3)
+  let %4: imm Maybe = new Maybe.0(1i32)
+  let %5: imm Maybe = new Maybe.1()
+  let %6: imm Tuple_Maybe_Maybe = new Tuple_Maybe_Maybe.0(%4, %5)
+  let %7: i32 = call both(%6)
+  let = call_extern log(%7)
   jump ret()
 }
 
-fn fn2(%0: imm data10) -> (i32) {
+fn both(%p: imm Tuple_Maybe_Maybe) -> (i32) {
   join j1(%1: i32) = jump ret(%1)
   in
   join j2() = jump j1(0i32)
   in
-  let %2: imm data11 = get data10.0.0(%0)
+  let %2: imm Maybe = get Tuple_Maybe_Maybe.0.0(%p)
   case %2 {
-    data11.0 =>
-      let %3: imm data11 = get data10.0.1(%0)
+    Maybe.0 =>
+      let %3: imm Maybe = get Tuple_Maybe_Maybe.0.1(%p)
       case %3 {
-        data11.0 =>
-          let %4: i32 = get data11.0.0(%2)
-          let %5: i32 = get data11.0.0(%3)
-          let %6: i32 = call fn3(%4, %5)
+        Maybe.0 =>
+          let %a: i32 = get Maybe.0.0(%2)
+          let %b: i32 = get Maybe.0.0(%3)
+          let %6: i32 = call plus_i32(%a, %b)
           jump j1(%6)
-        data11.1 => jump j2()
+        Maybe.1 => jump j2()
       }
-    data11.1 => jump j2()
+    Maybe.1 => jump j2()
   }
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn4(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -684,95 +630,87 @@ let r = Range { start: 1, end: 4 };
 for x in r { sum += x; }
 log(sum);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Iterable[Range].iter
-// fn4: Iterator[mut Upto].next
-// fn5: Add[i32].add
-// fn6: <[i32]
-// fn7: PartialOrd[i32].lt
-
-data data10 {
+data Range {
   (i32, i32)
 }
 
-data data11 {
+data Upto {
   (i32, i32)
 }
 
-data data12 {
+data Option_i32 {
   ()
   (i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(0i32)
-  let %1: imm data10 = new data10.0(1i32, 4i32)
-  let %2: mut data11 = call fn3[imm](%1)
+fn file() -> () {
+  let %sum: ref i32 = ref_new(0i32)
+  let %r: imm Range = new Range.0(1i32, 4i32)
+  let %2: mut Upto = call Iterable_Range_iter[imm](%r)
   join j1() =
-    let %7: i32 = ref_get(%0)
-    let = call_extern extern1(%7)
+    let %7: i32 = ref_get(%sum)
+    let = call_extern log(%7)
     jump ret()
   in
   join rec j2() =
-    let %3: imm data12 = call fn4(%2)
+    let %3: imm Option_i32 = call Iterator_mut_Upto_next(%2)
     case %3 {
-      data12.1 =>
-        let %4: i32 = get data12.1.0(%3)
-        let %5: i32 = ref_get(%0)
-        let %6: i32 = call fn2(%5, %4)
-        let = ref_set(%0, %6)
+      Option_i32.1 =>
+        let %x: i32 = get Option_i32.1.0(%3)
+        let %5: i32 = ref_get(%sum)
+        let %6: i32 = call plus_i32(%5, %x)
+        let = ref_set(%sum, %6)
         jump j2()
       _ => jump j1()
     }
   in jump j2()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3['m1](%0: 'm1 data10) -> (mut data11) {
-  let %1: i32 = get data10.0.0(%0)
-  let %2: i32 = get data10.0.1(%0)
-  let %3: mut data11 = new data11.0(%1, %2)
+fn Iterable_Range_iter['m1](%r: 'm1 Range) -> (mut Upto) {
+  let %1: i32 = get Range.0.0(%r)
+  let %2: i32 = get Range.0.1(%r)
+  let %3: mut Upto = new Upto.0(%1, %2)
   jump ret(%3)
 }
 
-fn fn4(%0: mut data11) -> (imm data12) {
-  join j1(%1: imm data12) = jump ret(%1)
+fn Iterator_mut_Upto_next(%it: mut Upto) -> (imm Option_i32) {
+  join j1(%1: imm Option_i32) = jump ret(%1)
   in
-  let %2: i32 = get data11.0.0(%0)
-  let %3: i32 = get data11.0.1(%0)
-  let %4: i32 = call fn6(%2, %3)
+  let %2: i32 = get Upto.0.0(%it)
+  let %3: i32 = get Upto.0.1(%it)
+  let %4: i32 = call lt_i32(%2, %3)
   case %4 {
     0 =>
-      let %5: imm data12 = new data12.0()
+      let %5: imm Option_i32 = new Option_i32.0()
       jump j1(%5)
     _ =>
-      let %6: i32 = get data11.0.0(%0)
-      let %7: i32 = call fn2(%6, 1i32)
-      let = set data11.0.0(%0, %7)
-      let %8: imm data12 = new data12.1(%6)
+      let %n: i32 = get Upto.0.0(%it)
+      let %7: i32 = call plus_i32(%n, 1i32)
+      let = set Upto.0.0(%it, %7)
+      let %8: imm Option_i32 = new Option_i32.1(%n)
       jump j1(%8)
   }
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn7(%0, %1)
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
   jump ret(%2)
 }
 
-fn fn7(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = lt.s(%0, %1)
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -787,106 +725,96 @@ let mut sum = 0;
 for x in [1, 2, 3] { sum += x; }
 log(sum);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Iterable['v [T]].iter[i32]
-// fn4: Iterator[mut ArrayIter[T]].next[i32]
-// fn5: Add[i32].add
-// fn6: <[i32]
-// fn7: -[i32]
-// fn8: PartialOrd[i32].lt
-// fn9: Sub[i32].sub
-
-data data10['m1] {
+data ArrayIter_i32['m1] {
   ('m1 [i32], i32)
 }
 
-data data11 {
+data Option_i32 {
   ()
   (i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(0i32)
+fn file() -> () {
+  let %sum: ref i32 = ref_new(0i32)
   let %1: imm [i32] = array_new(1i32, 2i32, 3i32)
-  let %2: mut data10[imm] = call fn3[imm](%1)
+  let %2: mut ArrayIter_i32[imm] = call Iterable_v_T_iter_i32[imm](%1)
   join j1() =
-    let %7: i32 = ref_get(%0)
-    let = call_extern extern1(%7)
+    let %7: i32 = ref_get(%sum)
+    let = call_extern log(%7)
     jump ret()
   in
   join rec j2() =
-    let %3: imm data11 = call fn4[imm](%2)
+    let %3: imm Option_i32 = call Iterator_mut_ArrayIter_T_next_i32[imm](%2)
     case %3 {
-      data11.1 =>
-        let %4: i32 = get data11.1.0(%3)
-        let %5: i32 = ref_get(%0)
-        let %6: i32 = call fn2(%5, %4)
-        let = ref_set(%0, %6)
+      Option_i32.1 =>
+        let %x: i32 = get Option_i32.1.0(%3)
+        let %5: i32 = ref_get(%sum)
+        let %6: i32 = call plus_i32(%5, %x)
+        let = ref_set(%sum, %6)
         jump j2()
       _ => jump j1()
     }
   in jump j2()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3['m1](%0: 'm1 [i32]) -> (mut data10['m1]) {
-  let %1: mut data10['m1] = new data10.0(%0, 0i32)
+fn Iterable_v_T_iter_i32['m1](%array: 'm1 [i32]) -> (mut ArrayIter_i32['m1]) {
+  let %1: mut ArrayIter_i32['m1] = new ArrayIter_i32.0(%array, 0i32)
   jump ret(%1)
 }
 
-fn fn4['m1](%0: mut data10['m1]) -> (imm data11) {
-  join j1(%1: imm data11) = jump ret(%1)
+fn Iterator_mut_ArrayIter_T_next_i32['m1](%self: mut ArrayIter_i32['m1]) -> (imm Option_i32) {
+  join j1(%1: imm Option_i32) = jump ret(%1)
   in
-  let %2: i32 = get data10.0.1(%0)
-  let %3: 'm1 [i32] = get data10.0.0(%0)
+  let %2: i32 = get ArrayIter_i32.0.1(%self)
+  let %3: 'm1 [i32] = get ArrayIter_i32.0.0(%self)
   let %4: i32 = array_len(%3)
-  let %5: i32 = call fn6(%2, %4)
+  let %5: i32 = call lt_i32(%2, %4)
   case %5 {
     0 =>
-      let %6: imm data11 = new data11.0()
+      let %6: imm Option_i32 = new Option_i32.0()
       jump j1(%6)
     _ =>
-      let %7: i32 = get data10.0.1(%0)
-      let %8: i32 = call fn2(%7, 1i32)
-      let = set data10.0.1(%0, %8)
-      let %9: 'm1 [i32] = get data10.0.0(%0)
-      let %10: i32 = get data10.0.1(%0)
-      let %11: i32 = call fn7(%10, 1i32)
+      let %7: i32 = get ArrayIter_i32.0.1(%self)
+      let %8: i32 = call plus_i32(%7, 1i32)
+      let = set ArrayIter_i32.0.1(%self, %8)
+      let %9: 'm1 [i32] = get ArrayIter_i32.0.0(%self)
+      let %10: i32 = get ArrayIter_i32.0.1(%self)
+      let %11: i32 = call minus_i32(%10, 1i32)
       let %12: i32 = array_get(%9, %11)
-      let %13: imm data11 = new data11.1(%12)
+      let %13: imm Option_i32 = new Option_i32.1(%12)
       jump j1(%13)
   }
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn8(%0, %1)
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
   jump ret(%2)
 }
 
-fn fn7(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn9(%0, %1)
+fn minus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Sub_i32_sub(%a, %b)
   jump ret(%2)
 }
 
-fn fn8(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = lt.s(%0, %1)
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
   jump ret(%2)
 }
 
-fn fn9(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = sub(%0, %1)
+fn Sub_i32_sub(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = sub(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -902,34 +830,30 @@ let s = mut Stack { items: mut [0, 0], len: 0 };
 s.items[0] = 7;
 log(s.items[0]);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: IndexMut[mut [T]].set_index[i32]
-// fn3: Index[[T]].index[i32]
-
-data data10 {
+data Stack {
   (inherit [i32], i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
+fn file() -> () {
   let %0: mut [i32] = array_new(0i32, 0i32)
-  let %1: mut data10 = new data10.0(%0, 0i32)
-  let %2: mut [i32] = get data10.0.0(%1)
-  let = call fn2(%2, 0i32, 7i32)
-  let %3: mut [i32] = get data10.0.0(%1)
-  let %4: i32 = call fn3[mut](%3, 0i32)
-  let = call_extern extern1(%4)
+  let %s: mut Stack = new Stack.0(%0, 0i32)
+  let %2: mut [i32] = get Stack.0.0(%s)
+  let = call IndexMut_mut_T_set_index_i32(%2, 0i32, 7i32)
+  let %3: mut [i32] = get Stack.0.0(%s)
+  let %4: i32 = call Index_T_index_i32[mut](%3, 0i32)
+  let = call_extern log(%4)
   jump ret()
 }
 
-fn fn2(%0: mut [i32], %1: i32, %2: i32) -> () {
-  let = array_set(%0, %1, %2)
+fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
+  let = array_set(%xs, %i, %x)
   jump ret()
 }
 
-fn fn3['m1](%0: 'm1 [i32], %1: i32) -> (i32) {
-  let %2: i32 = array_get(%0, %1)
+fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
+  let %2: i32 = array_get(%xs, %i)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -947,40 +871,36 @@ match h {
   Holder.Zero => {},
 };
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: IndexMut[mut [T]].set_index[i32]
-// fn3: Index[[T]].index[i32]
-
-data data10['m1] {
+data Holder_0_i32['m1] {
   ('m1 [i32])
   ()
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
+fn file() -> () {
   let %0: mut [i32] = array_new(1i32, 2i32)
-  let %1: mut data10[mut] = new data10.0(%0)
+  let %h: mut Holder_0_i32[mut] = new Holder_0_i32.0(%0)
   join j1() = jump ret()
   in
-  case %1 {
-    data10.0 =>
-      let %2: mut [i32] = get data10.0.0(%1)
-      let = call fn2(%2, 0i32, 5i32)
-      let %3: i32 = call fn3[mut](%2, 0i32)
-      let = call_extern extern1(%3)
+  case %h {
+    Holder_0_i32.0 =>
+      let %xs: mut [i32] = get Holder_0_i32.0.0(%h)
+      let = call IndexMut_mut_T_set_index_i32(%xs, 0i32, 5i32)
+      let %3: i32 = call Index_T_index_i32[mut](%xs, 0i32)
+      let = call_extern log(%3)
       jump j1()
-    data10.1 => jump j1()
+    Holder_0_i32.1 => jump j1()
   }
 }
 
-fn fn2(%0: mut [i32], %1: i32, %2: i32) -> () {
-  let = array_set(%0, %1, %2)
+fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
+  let = array_set(%xs, %i, %x)
   jump ret()
 }
 
-fn fn3['m1](%0: 'm1 [i32], %1: i32) -> (i32) {
-  let %2: i32 = array_get(%0, %1)
+fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
+  let %2: i32 = array_get(%xs, %i)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -997,41 +917,38 @@ log(get(E.A(1)));
 log(get(E.B(2)));
 log(get(E.C));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: get
-
-data data10 {
+data E {
   (i32)
   (i32)
   ()
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data10 = new data10.0(1i32)
-  let %1: i32 = call fn2(%0)
-  let = call_extern extern1(%1)
-  let %2: imm data10 = new data10.1(2i32)
-  let %3: i32 = call fn2(%2)
-  let = call_extern extern1(%3)
-  let %4: imm data10 = new data10.2()
-  let %5: i32 = call fn2(%4)
-  let = call_extern extern1(%5)
+fn file() -> () {
+  let %0: imm E = new E.0(1i32)
+  let %1: i32 = call get(%0)
+  let = call_extern log(%1)
+  let %2: imm E = new E.1(2i32)
+  let %3: i32 = call get(%2)
+  let = call_extern log(%3)
+  let %4: imm E = new E.2()
+  let %5: i32 = call get(%4)
+  let = call_extern log(%5)
   jump ret()
 }
 
-fn fn2(%0: imm data10) -> (i32) {
+fn get(%e: imm E) -> (i32) {
   join j1(%1: i32) = jump ret(%1)
   in
-  case %0 {
-    data10.0 =>
-      let %2: i32 = get data10.0.0(%0)
-      jump j1(%2)
-    data10.1 =>
-      let %3: i32 = get data10.1.0(%0)
-      jump j1(%3)
-    data10.2 => jump j1(0i32)
+  case %e {
+    E.0 =>
+      let %x#2: i32 = get E.0.0(%e)
+      jump j1(%x#2)
+    E.1 =>
+      let %x#3: i32 = get E.1.0(%e)
+      jump j1(%x#3)
+    E.2 => jump j1(0i32)
   }
 }
 --------------------------------------------------------------------------------

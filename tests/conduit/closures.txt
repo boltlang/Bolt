@@ -7,32 +7,27 @@ let n = 10;
 let add = |x| x + n;
 log(add(1));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Add[i32].add
-// fn4: <file>::lambda0
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: imm fn(i32) -> (i32) = closure fn4(10i32)
-  let %1: i32 = apply(%0, 1i32)
-  let = call_extern extern1(%1)
+fn file() -> () {
+  let %add: imm fn(i32) -> (i32) = closure file_lambda0(10i32)
+  let %1: i32 = apply(%add, 1i32)
+  let = call_extern log(%1)
   jump ret()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn2(%1, %0)
+fn file_lambda0(%n: i32, %x: i32) -> (i32) {
+  let %2: i32 = call plus_i32(%x, %n)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -49,37 +44,32 @@ tick();
 tick();
 log(count);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Add[i32].add
-// fn4: <file>::lambda0
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(0i32)
-  let %1: mut fn() -> () = closure fn4(%0)
-  let = apply(%1)
-  let = apply(%1)
-  let %2: i32 = ref_get(%0)
-  let = call_extern extern1(%2)
+fn file() -> () {
+  let %count: ref i32 = ref_new(0i32)
+  let %tick: mut fn() -> () = closure file_lambda0(%count)
+  let = apply(%tick)
+  let = apply(%tick)
+  let %2: i32 = ref_get(%count)
+  let = call_extern log(%2)
   jump ret()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: ref i32) -> () {
-  let %1: i32 = ref_get(%0)
-  let %2: i32 = call fn2(%1, 1i32)
-  let = ref_set(%0, %2)
+fn file_lambda0(%count: ref i32) -> () {
+  let %1: i32 = ref_get(%count)
+  let %2: i32 = call plus_i32(%1, 1i32)
+  let = ref_set(%count, %2)
   jump ret()
 }
 --------------------------------------------------------------------------------
@@ -94,38 +84,32 @@ fn adder(n: i32) -> fn(i32) -> i32 = |x| x + n;
 let add2 = adder(2);
 log(add2(5));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: adder
-// fn3: +[i32]
-// fn4: Add[i32].add
-// fn5: adder::lambda0
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: imm fn(i32) -> (i32) = call fn2[imm](2i32)
-  let %1: i32 = apply(%0, 5i32)
-  let = call_extern extern1(%1)
+fn file() -> () {
+  let %add2: imm fn(i32) -> (i32) = call adder[imm](2i32)
+  let %1: i32 = apply(%add2, 5i32)
+  let = call_extern log(%1)
   jump ret()
 }
 
-fn fn2['m1](%0: i32) -> ('m1 fn(i32) -> (i32)) {
-  let %1: 'm1 fn(i32) -> (i32) = closure fn5['m1](%0)
+fn adder['m1](%n: i32) -> ('m1 fn(i32) -> (i32)) {
+  let %1: 'm1 fn(i32) -> (i32) = closure adder_lambda0['m1](%n)
   jump ret(%1)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn4(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn5['m1](%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%1, %0)
+fn adder_lambda0['m1](%n: i32, %x: i32) -> (i32) {
+  let %2: i32 = call plus_i32(%x, %n)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -140,39 +124,33 @@ fn twice(f: fn(i32) -> i32, x: i32) -> i32 = f(f(x));
 let k = 3;
 log(twice(|x| x * k, 2));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: twice
-// fn3: *[i32]
-// fn4: Mul[i32].mul
-// fn5: <file>::lambda0
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: imm fn(i32) -> (i32) = closure fn5(3i32)
-  let %1: i32 = call fn2[imm](%0, 2i32)
-  let = call_extern extern1(%1)
+fn file() -> () {
+  let %0: imm fn(i32) -> (i32) = closure file_lambda0(3i32)
+  let %1: i32 = call twice[imm](%0, 2i32)
+  let = call_extern log(%1)
   jump ret()
 }
 
-fn fn2['m1](%0: 'm1 fn(i32) -> (i32), %1: i32) -> (i32) {
-  let %2: i32 = apply(%0, %1)
-  let %3: i32 = apply(%0, %2)
+fn twice['m1](%f: 'm1 fn(i32) -> (i32), %x: i32) -> (i32) {
+  let %2: i32 = apply(%f, %x)
+  let %3: i32 = apply(%f, %2)
   jump ret(%3)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn4(%0, %1)
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = mul(%0, %1)
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%1, %0)
+fn file_lambda0(%k: i32, %x: i32) -> (i32) {
+  let %2: i32 = call star_i32(%x, %k)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -187,38 +165,32 @@ fn inc(x: i32) -> i32 = x + 1;
 fn apply(f: fn(i32) -> i32, x: i32) -> i32 = f(x);
 log(apply(inc, 41));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: apply
-// fn3: inc
-// fn4: +[i32]
-// fn5: Add[i32].add
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: imm fn(i32) -> (i32) = closure fn3()
-  let %1: i32 = call fn2[imm](%0, 41i32)
-  let = call_extern extern1(%1)
+fn file() -> () {
+  let %0: imm fn(i32) -> (i32) = closure inc()
+  let %1: i32 = call apply[imm](%0, 41i32)
+  let = call_extern log(%1)
   jump ret()
 }
 
-fn fn2['m1](%0: 'm1 fn(i32) -> (i32), %1: i32) -> (i32) {
-  let %2: i32 = apply(%0, %1)
+fn apply['m1](%f: 'm1 fn(i32) -> (i32), %x: i32) -> (i32) {
+  let %2: i32 = apply(%f, %x)
   jump ret(%2)
 }
 
-fn fn3(%0: i32) -> (i32) {
-  let %1: i32 = call fn4(%0, 1i32)
+fn inc(%x: i32) -> (i32) {
+  let %1: i32 = call plus_i32(%x, 1i32)
   jump ret(%1)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -236,40 +208,34 @@ let outer = |x| {
 };
 log(outer(10));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Add[i32].add
-// fn4: <file>::lambda0
-// fn5: <file>::lambda1
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
-  let %0: imm fn(i32) -> (i32) = closure fn4(100i32)
-  let %1: i32 = apply(%0, 10i32)
-  let = call_extern extern1(%1)
+fn file() -> () {
+  let %outer: imm fn(i32) -> (i32) = closure file_lambda0(100i32)
+  let %1: i32 = apply(%outer, 10i32)
+  let = call_extern log(%1)
   jump ret()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: imm fn(i32) -> (i32) = closure fn5(%1, %0)
-  let %3: i32 = apply(%2, 1i32)
+fn file_lambda0(%n: i32, %x: i32) -> (i32) {
+  let %inner: imm fn(i32) -> (i32) = closure file_lambda1(%x, %n)
+  let %3: i32 = apply(%inner, 1i32)
   jump ret(%3)
 }
 
-fn fn5(%0: i32, %1: i32, %2: i32) -> (i32) {
-  let %3: i32 = call fn2(%2, %0)
-  let %4: i32 = call fn2(%3, %1)
+fn file_lambda1(%x: i32, %n: i32, %y: i32) -> (i32) {
+  let %3: i32 = call plus_i32(%y, %x)
+  let %4: i32 = call plus_i32(%3, %n)
   jump ret(%4)
 }
 --------------------------------------------------------------------------------
@@ -286,44 +252,39 @@ let c = mut Counter { next: || { n += 1; n } };
 (c.next)();
 log((c.next)());
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: +[i32]
-// fn3: Add[i32].add
-// fn4: <file>::lambda0
-
-data data10 {
+data Counter {
   (inherit fn() -> (i32))
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: ref i32 = ref_new(0i32)
-  let %1: mut fn() -> (i32) = closure fn4(%0)
-  let %2: mut data10 = new data10.0(%1)
-  let %3: mut fn() -> (i32) = get data10.0.0(%2)
+fn file() -> () {
+  let %n: ref i32 = ref_new(0i32)
+  let %1: mut fn() -> (i32) = closure file_lambda0(%n)
+  let %c: mut Counter = new Counter.0(%1)
+  let %3: mut fn() -> (i32) = get Counter.0.0(%c)
   let %4: i32 = apply(%3)
-  let %5: mut fn() -> (i32) = get data10.0.0(%2)
+  let %5: mut fn() -> (i32) = get Counter.0.0(%c)
   let %6: i32 = apply(%5)
-  let = call_extern extern1(%6)
+  let = call_extern log(%6)
   jump ret()
 }
 
-fn fn2(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn3(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: ref i32) -> (i32) {
-  let %1: i32 = ref_get(%0)
-  let %2: i32 = call fn2(%1, 1i32)
-  let = ref_set(%0, %2)
-  let %3: i32 = ref_get(%0)
+fn file_lambda0(%n: ref i32) -> (i32) {
+  let %1: i32 = ref_get(%n)
+  let %2: i32 = call plus_i32(%1, 1i32)
+  let = ref_set(%n, %2)
+  let %3: i32 = ref_get(%n)
   jump ret(%3)
 }
 --------------------------------------------------------------------------------
@@ -338,62 +299,54 @@ fn map_pair[A, B](p: (A, A), f: fn(A) -> B) -> (B, B) = (f(p.0), f(p.1));
 let q = map_pair((1, 2), |x| x * 10);
 log(q.0 + q.1);
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: map_pair[i32, i32]
-// fn3: *[i32]
-// fn4: +[i32]
-// fn5: Mul[i32].mul
-// fn6: Add[i32].add
-// fn7: <file>::lambda0
-
-data data10 {
+data Tuple_i32_i32 {
   (i32, i32)
 }
 
-extern extern1 "env" "log" (i32) -> ()
+extern log "env" "log" (i32) -> ()
 
-fn fn1() -> () {
-  let %0: imm data10 = new data10.0(1i32, 2i32)
-  let %1: imm fn(i32) -> (i32) = closure fn7()
-  let %2: imm data10 = call fn2[imm](%0, %1)
-  let %3: i32 = get data10.0.0(%2)
-  let %4: i32 = get data10.0.1(%2)
-  let %5: i32 = call fn4(%3, %4)
-  let = call_extern extern1(%5)
+fn file() -> () {
+  let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
+  let %1: imm fn(i32) -> (i32) = closure file_lambda0()
+  let %q: imm Tuple_i32_i32 = call map_pair_i32_i32[imm](%0, %1)
+  let %3: i32 = get Tuple_i32_i32.0.0(%q)
+  let %4: i32 = get Tuple_i32_i32.0.1(%q)
+  let %5: i32 = call plus_i32(%3, %4)
+  let = call_extern log(%5)
   jump ret()
 }
 
-fn fn2['m1](%0: imm data10, %1: 'm1 fn(i32) -> (i32)) -> (imm data10) {
-  let %2: i32 = get data10.0.0(%0)
-  let %3: i32 = apply(%1, %2)
-  let %4: i32 = get data10.0.1(%0)
-  let %5: i32 = apply(%1, %4)
-  let %6: imm data10 = new data10.0(%3, %5)
+fn map_pair_i32_i32['m1](%p: imm Tuple_i32_i32, %f: 'm1 fn(i32) -> (i32)) -> (imm Tuple_i32_i32) {
+  let %2: i32 = get Tuple_i32_i32.0.0(%p)
+  let %3: i32 = apply(%f, %2)
+  let %4: i32 = get Tuple_i32_i32.0.1(%p)
+  let %5: i32 = apply(%f, %4)
+  let %6: imm Tuple_i32_i32 = new Tuple_i32_i32.0(%3, %5)
   jump ret(%6)
 }
 
-fn fn3(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn5(%0, %1)
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn4(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = call fn6(%0, %1)
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn fn5(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = mul(%0, %1)
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
   jump ret(%2)
 }
 
-fn fn6(%0: i32, %1: i32) -> (i32) {
-  let %2: i32 = add(%0, %1)
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 
-fn fn7(%0: i32) -> (i32) {
-  let %1: i32 = call fn3(%0, 10i32)
+fn file_lambda0(%x: i32) -> (i32) {
+  let %1: i32 = call star_i32(%x, 10i32)
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
@@ -411,36 +364,31 @@ fn first(xs: 'm [i32]) -> i32 {
 log(first(mut [4, 5]));
 log(first([6]));
 --------------------------------------------------------------------------------
-// fn1: <file>
-// fn2: first
-// fn3: Index[[T]].index[i32]
-// fn4: first::lambda0
+extern log "env" "log" (i32) -> ()
 
-extern extern1 "env" "log" (i32) -> ()
-
-fn fn1() -> () {
+fn file() -> () {
   let %0: mut [i32] = array_new(4i32, 5i32)
-  let %1: i32 = call fn2[mut](%0)
-  let = call_extern extern1(%1)
+  let %1: i32 = call first[mut](%0)
+  let = call_extern log(%1)
   let %2: imm [i32] = array_new(6i32)
-  let %3: i32 = call fn2[imm](%2)
-  let = call_extern extern1(%3)
+  let %3: i32 = call first[imm](%2)
+  let = call_extern log(%3)
   jump ret()
 }
 
-fn fn2['m1](%0: 'm1 [i32]) -> (i32) {
-  let %1: mut fn() -> (i32) = closure fn4['m1](%0)
-  let %2: i32 = apply(%1)
+fn first['m1](%xs: 'm1 [i32]) -> (i32) {
+  let %get: mut fn() -> (i32) = closure first_lambda0['m1](%xs)
+  let %2: i32 = apply(%get)
   jump ret(%2)
 }
 
-fn fn3['m1](%0: 'm1 [i32], %1: i32) -> (i32) {
-  let %2: i32 = array_get(%0, %1)
+fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
+  let %2: i32 = array_get(%xs, %i)
   jump ret(%2)
 }
 
-fn fn4['m1](%0: 'm1 [i32]) -> (i32) {
-  let %1: i32 = call fn3['m1](%0, 0i32)
+fn first_lambda0['m1](%xs: 'm1 [i32]) -> (i32) {
+  let %1: i32 = call Index_T_index_i32['m1](%xs, 0i32)
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
