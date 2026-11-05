@@ -1,0 +1,251 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="100%" height="100%" style="background-color: #0d0d0d; font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bg-glow" cx="80%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#FFD700" stop-opacity="0.08" />
+      <stop offset="50%" stop-color="#1a1a1a" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#0d0d0d" stop-opacity="1" />
+    </radialGradient>
+
+    <!-- Swatch Shadows and Glows -->
+    <filter id="yellow-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    
+    <filter id="card-shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.6" />
+    </filter>
+
+    <!-- Palette Gradients -->
+    <linearGradient id="grad-bold-energy" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1A1A1A" />
+      <stop offset="100%" stop-color="#FFD700" />
+    </linearGradient>
+
+    <linearGradient id="grad-subtle-depth" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1A1A1A" />
+      <stop offset="100%" stop-color="#4D4D4D" />
+    </linearGradient>
+
+    <linearGradient id="lightning-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFD700" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#F9A602" stop-opacity="0.02" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="900" fill="#0d0d0d" />
+  <rect width="1600" height="900" fill="url(#bg-glow)" />
+
+  <!-- Abstract Decorative Lightning Background Shapes -->
+  <path d="M1250 -50 L1100 350 L1220 350 L1020 850 L1400 300 L1260 300 Z" fill="url(#lightning-grad)" stroke="#FFD700" stroke-opacity="0.1" stroke-width="2" />
+  <path d="M100 -100 L20 200 L70 200 L-30 500 L180 150 L110 150 Z" fill="url(#lightning-grad)" opacity="0.5" />
+
+  <!-- MAIN CONTAINER -->
+  <g transform="translate(80, 70)">
+    
+    <!-- HEADER SECTION -->
+    <g id="header">
+      <!-- Decorative Tag -->
+      <rect x="0" y="0" width="14" height="42" rx="4" fill="#FFD700" />
+      <text x="30" y="32" fill="#FFFFFF" font-size="34" font-weight="800" letter-spacing="1.5">BOLT PROGRAMMING LANGUAGE</text>
+      <text x="30" y="68" fill="#4D4D4D" font-size="20" font-weight="600" letter-spacing="3">COLOR PALETTE &amp; DESIGN SYSTEM</text>
+    </g>
+
+    <!-- LEFT COLUMN: PALETTE & GRADIENTS -->
+    <g id="palette-system" transform="translate(0, 150)">
+      
+      <!-- Section Label -->
+      <text x="0" y="0" fill="#F9A602" font-size="14" font-weight="700" letter-spacing="2">01 / CORE COLOR PALETTE</text>
+
+      <!-- COLOR SWATCHES -->
+      <g id="swatches" transform="translate(0, 40)">
+        
+        <!-- Swatch 1: Bolt Yellow -->
+        <g transform="translate(0, 0)">
+          <circle cx="65" cy="65" r="65" fill="#FFD700" filter="url(#yellow-glow)" />
+          <text x="65" y="165" fill="#FFFFFF" font-size="18" font-weight="700" text-anchor="middle">Bolt Yellow</text>
+          <text x="65" y="190" fill="#FFD700" font-size="15" font-weight="600" text-anchor="middle">#FFD700</text>
+          <text x="65" y="220" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">Primary action,</text>
+          <text x="65" y="238" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">accents, highlights</text>
+        </g>
+
+        <!-- Swatch 2: Deep Charcoal -->
+        <g transform="translate(170, 0)">
+          <circle cx="65" cy="65" r="65" fill="#1A1A1A" stroke="#333333" stroke-width="3" />
+          <text x="65" y="165" fill="#FFFFFF" font-size="18" font-weight="700" text-anchor="middle">Deep Charcoal</text>
+          <text x="65" y="190" fill="#888888" font-size="15" font-weight="600" text-anchor="middle">#1A1A1A</text>
+          <text x="65" y="220" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">Background,</text>
+          <text x="65" y="238" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">main containers</text>
+        </g>
+
+        <!-- Swatch 3: Electric Gold -->
+        <g transform="translate(340, 0)">
+          <circle cx="65" cy="65" r="65" fill="#F9A602" />
+          <text x="65" y="165" fill="#FFFFFF" font-size="18" font-weight="700" text-anchor="middle">Electric Gold</text>
+          <text x="65" y="190" fill="#F9A602" font-size="15" font-weight="600" text-anchor="middle">#F9A602</text>
+          <text x="65" y="220" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">Secondary actions,</text>
+          <text x="65" y="238" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">hover states</text>
+        </g>
+
+        <!-- Swatch 4: Graphite -->
+        <g transform="translate(510, 0)">
+          <circle cx="65" cy="65" r="65" fill="#4D4D4D" />
+          <text x="65" y="165" fill="#FFFFFF" font-size="18" font-weight="700" text-anchor="middle">Graphite</text>
+          <text x="65" y="190" fill="#AAAAAA" font-size="15" font-weight="600" text-anchor="middle">#4D4D4D</text>
+          <text x="65" y="220" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">Secondary text,</text>
+          <text x="65" y="238" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">code borders/details</text>
+        </g>
+
+        <!-- Swatch 5: Snow White -->
+        <g transform="translate(680, 0)">
+          <circle cx="65" cy="65" r="65" fill="#FFFFFF" />
+          <text x="65" y="165" fill="#FFFFFF" font-size="18" font-weight="700" text-anchor="middle">Snow White</text>
+          <text x="65" y="190" fill="#FFFFFF" font-size="15" font-weight="600" text-anchor="middle">#FFFFFF</text>
+          <text x="65" y="220" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">Cards, dark mode text,</text>
+          <text x="65" y="238" fill="#4D4D4D" font-size="13" font-weight="500" text-anchor="middle">foreground elements</text>
+        </g>
+      </g>
+
+      <!-- GRADIENTS SECTION -->
+      <g id="gradients" transform="translate(0, 340)">
+        <text x="0" y="0" fill="#F9A602" font-size="14" font-weight="700" letter-spacing="2">02 / BRAND GRADIENTS</text>
+        
+        <!-- Gradient 1 -->
+        <g transform="translate(0, 30)">
+          <rect x="0" y="0" width="380" height="50" rx="12" fill="url(#grad-bold-energy)" stroke="#333" stroke-width="1" />
+          <text x="0" y="75" fill="#FFFFFF" font-size="15" font-weight="600">Gradient 1: Bold Energy</text>
+          <text x="0" y="95" fill="#4D4D4D" font-size="13">#1A1A1A &#x2192; #FFD700</text>
+        </g>
+
+        <!-- Gradient 2 -->
+        <g transform="translate(430, 030)">
+          <rect x="0" y="0" width="380" height="50" rx="12" fill="url(#grad-subtle-depth)" stroke="#333" stroke-width="1" />
+          <text x="0" y="75" fill="#FFFFFF" font-size="15" font-weight="600">Gradient 2: Subtle Depth</text>
+          <text x="0" y="95" fill="#4D4D4D" font-size="13">#1A1A1A &#x2192; #4D4D4D</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- RIGHT COLUMN: UI COMPONENT PREVIEWS -->
+    <g id="ui-preview" transform="translate(930, 20)" filter="url(#card-shadow)">
+      
+      <text x="0" y="130" fill="#F9A602" font-size="14" font-weight="700" letter-spacing="2">03 / UI COMPONENT APPLICATION</text>
+
+      <!-- UI Container Window -->
+      <g transform="translate(0, 150)">
+        
+        <!-- Web Browser / App Frame -->
+        <rect x="0" y="0" width="510" height="530" rx="16" fill="#121212" stroke="#262626" stroke-width="2" />
+        
+        <!-- Navbar Mockup -->
+        <g id="navbar" transform="translate(0, 0)">
+          <path d="M 0 16 A 16 16 0 0 1 16 0 L 494 0 A 16 16 0 0 1 510 16 L 510 65 L 0 65 Z" fill="#1A1A1A" />
+          <line x1="0" y1="65" x2="510" y2="65" stroke="#262626" stroke-width="1" />
+          
+          <!-- Logo -->
+          <path d="M 25 25 L 35 25 L 28 37 L 37 37 L 23 52 L 27 41 L 20 41 Z" fill="#FFD700" />
+          <text x="45" y="42" fill="#FFFFFF" font-size="16" font-weight="800" letter-spacing="1">BOLT</text>
+          
+          <!-- Nav Links -->
+          <text x="170" y="40" fill="#FFFFFF" font-size="12" font-weight="500">Docs</text>
+          <text x="220" y="40" fill="#4D4D4D" font-size="12" font-weight="500">Examples</text>
+          <text x="295" y="40" fill="#4D4D4D" font-size="12" font-weight="500">Ecosystem</text>
+
+          <!-- CTA Button -->
+          <rect x="385" y="20" width="105" height="30" rx="6" fill="#FFD700" />
+          <text x="437" y="40" fill="#1A1A1A" font-size="12" font-weight="700" text-anchor="middle">Get Started</text>
+        </g>
+
+        <!-- Code Terminal Mockup -->
+        <g id="terminal" transform="translate(25, 90)">
+          <rect x="0" y="0" width="460" height="230" rx="10" fill="#1A1A1A" stroke="#333333" stroke-width="1" />
+          
+          <!-- Terminal Header -->
+          <path d="M 0 10 A 10 10 0 0 1 10 0 L 450 0 A 10 10 0 0 1 460 10 L 460 30 L 0 30 Z" fill="#0D0D0D" />
+          <circle cx="20" cy="15" r="4" fill="#FF5F56" />
+          <circle cx="35" cy="15" r="4" fill="#FFBD2E" />
+          <circle cx="50" cy="15" r="4" fill="#27C93F" />
+          <text x="230" y="19" fill="#4D4D4D" font-size="11" font-weight="600" text-anchor="middle">main.blt</text>
+
+          <!-- Code Snippet -->
+          <g transform="translate(20, 55)" font-family="monospace" font-size="12">
+            <!-- Line 1 -->
+            <text x="0" y="0">
+              <tspan fill="#F9A602">import</tspan>
+              <tspan fill="#FFFFFF"> { stdout, Network } </tspan>
+              <tspan fill="#F9A602">from</tspan>
+              <tspan fill="#FFD700"> "bolt/sys"</tspan>
+            </text>
+
+            <!-- Line 2 -->
+            <text x="0" y="25">
+              <tspan fill="#4D4D4D">// Fast asynchronous server definition</tspan>
+            </text>
+
+            <!-- Line 3 -->
+            <text x="0" y="50">
+              <tspan fill="#F9A602">fn</tspan>
+              <tspan fill="#FFD700"> main</tspan>
+              <tspan fill="#FFFFFF">() </tspan>
+              <tspan fill="#F9A602">async</tspan>
+              <tspan fill="#FFFFFF"> {</tspan>
+            </text>
+
+            <!-- Line 4 -->
+            <text x="15" y="75">
+              <tspan fill="#F9A602">let</tspan>
+              <tspan fill="#FFFFFF"> server = Network.</tspan>
+              <tspan fill="#FFD700">bind</tspan>
+              <tspan fill="#FFFFFF">(</tspan>
+              <tspan fill="#F9A602">"127.0.0.1:8080"</tspan>
+              <tspan fill="#FFFFFF">);</tspan>
+            </text>
+
+            <!-- Line 5 -->
+            <text x="15" y="100">
+              <tspan fill="#FFFFFF">stdout.</tspan>
+              <tspan fill="#FFD700">println</tspan>
+              <tspan fill="#FFFFFF">(</tspan>
+              <tspan fill="#FFD700">"⚡ Bolt running on :8080"</tspan>
+              <tspan fill="#FFFFFF">);</tspan>
+            </text>
+
+            <!-- Line 6 -->
+            <text x="0" y="125">
+              <tspan fill="#FFFFFF">}</tspan>
+            </text>
+          </g>
+
+          <!-- Run Code Action Overlay Button -->
+          <g transform="translate(365, 175)">
+            <rect x="0" y="0" width="80" height="40" rx="6" fill="#F9A602" />
+            <path d="M 25 15 L 25 25 L 35 20 Z" fill="#1A1A1A" />
+            <text x="43" y="24" fill="#1A1A1A" font-family="sans-serif" font-size="11" font-weight="800">RUN</text>
+          </g>
+        </g>
+
+        <!-- Feature Card Mockup -->
+        <g id="feature-card" transform="translate(25, 340)">
+          <rect x="0" y="0" width="460" height="150" rx="12" fill="#FFFFFF" filter="url(#card-shadow)" />
+          
+          <!-- Card Content -->
+          <g transform="translate(25, 30)">
+            <rect x="0" y="0" width="36" height="36" rx="8" fill="#1A1A1A" />
+            <path d="M 18 8 L 24 8 L 19 18 L 25 18 L 13 30 L 16 20 L 11 20 Z" fill="#FFD700" />
+
+            <text x="50" y="18" fill="#1A1A1A" font-size="16" font-weight="800" letter-spacing="0.5">FAST. SIMPLE. POWERFUL.</text>
+            <text x="50" y="38" fill="#4D4D4D" font-size="13" font-weight="500">Built for high-performance concurrent systems.</text>
+            
+            <text x="0" y="75" fill="#1A1A1A" font-size="12" font-weight="600">Zero-cost abstractions with memory safety guarantees.</text>
+            
+            <!-- Link Arrow -->
+            <text x="0" y="98" fill="#F9A602" font-size="12" font-weight="700">Read the benchmark report &#x2192;</text>
+          </g>
+        </g>
+      </g>
+    </g>
+
+  </g>
+</svg>

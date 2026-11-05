@@ -196,3 +196,20 @@ job: fn() -> i32 does State + Config
 run: fn() -> i32
 --------------------------------------------------------------------------------
 error at `get()`: ambiguous operation
+
+================================================================================
+A handler needs arms for all the operations of its effects
+:test-prelude
+:error
+================================================================================
+effect State[S] { fn get() -> S; fn set(value: S); fn reset(); }
+fn count() -> i32 does State[i32] { set(get() + 1); get() }
+fn run() = match count() {
+  v => v,
+  effect get(), k => resume(k, 0),
+};
+--------------------------------------------------------------------------------
+count: fn() -> i32 does State[i32]
+run: fn() -> i32
+--------------------------------------------------------------------------------
+error at `get()`: no arms for set, reset

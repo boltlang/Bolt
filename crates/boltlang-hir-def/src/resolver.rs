@@ -549,8 +549,21 @@ pub fn impl_class<'db>(db: &'db dyn Db, id: ImplId<'db>) -> Option<ClassId<'db>>
     }
 }
 
-/// The file and name of a type that can have functions in its namespace,
-/// like `Vec` for `Vec.new`.
+/// The operations of `effect`, in order.
+pub fn effect_operations<'db>(db: &'db dyn Db, effect: EffectId<'db>) -> Vec<FunctionId<'db>> {
+    effect
+        .item(db)
+        .items
+        .iter()
+        .filter_map(|item| match *item {
+            AssocItem::Function(idx) => {
+                Some(FunctionId::new(db, ItemContainerId::Effect(effect), idx))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// The operation `name` of `effect`.
 fn effect_operation<'db>(
     db: &'db dyn Db,
@@ -567,6 +580,8 @@ fn effect_operation<'db>(
     })
 }
 
+/// The file and name of a type that can have functions in its namespace,
+/// like `Vec` for `Vec.new`.
 fn owner_of<'db>(db: &'db dyn Db, ty: TypeNs<'db>) -> Option<(File, &'db Name)> {
     match ty {
         TypeNs::Struct(id) => Some((id.file(db), id.item(db).name.as_ref()?)),

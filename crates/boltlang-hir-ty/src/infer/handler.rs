@@ -9,9 +9,10 @@
 //! have arms. `ρ` is what's left for the code around the `match` to do.
 
 use boltlang_hir_def::{
+    Name,
     hir::{EffectArm, ExprId, Pat, PatId, Path},
     ids::{EffectId, FunctionId, ItemContainerId},
-    resolver::{GenericDefId, ValueNs, ValueResolution},
+    resolver::{GenericDefId, ValueNs, ValueResolution, effect_operations},
 };
 
 use super::{InferenceContext, InferenceDiagnostic};
@@ -46,6 +47,8 @@ impl<'db> InferenceContext<'_, 'db> {
         }
         // Each effect with arms, and the first operation of it in the arms.
         let mut handled: Vec<(EffectTy<'db>, PatId)> = Vec::new();
+        // The operations with arms.
+        let mut covered: Vec<FunctionId<'db>> = Vec::new();
         for arm in arms {
             for &op in arm.ops.iter() {
                 let body = self.body;
@@ -60,6 +63,8 @@ impl<'db> InferenceContext<'_, 'db> {
                     self.check_pat(arm.cont, &Ty::Error);
                     continue;
                 };
+                self.result.operations.insert(op, f);
+                covered.push(f);
                 // The arms of one effect share its arguments, like the `S`
                 // of `State[S]` for `get` and `set`.
                 let effect_args = match handled.iter().find(|(h, _)| h.effect == effect) {
@@ -108,6 +113,23 @@ impl<'db> InferenceContext<'_, 'db> {
                 self.check_expr(guard, &Ty::bool());
             }
             self.check_expr(arm.expr, ty);
+        }
+        // A match that handles an effect handles all of it, so it needs
+        // arms for all of its operations.
+        for (effect, op) in &handled {
+            let missing: Vec<Name> = effect_operations(db, effect.effect)
+                .into_iter()
+                .filter(|f| !covered.contains(f))
+                .filter_map(|f| f.item(db).name.as_ref().map(|n| n.name().clone()))
+                .collect();
+            if !missing.is_empty() {
+                let name = effect.effect.item(db).name.clone();
+                self.result.diagnostics.push(InferenceDiagnostic::MissingOperations {
+                    pat: *op,
+                    effect: name,
+                    missing,
+                });
+            }
         }
         // One effect is taken out at a time, so that an effect whose
         // arguments in the scrutinee aren't those the arms use is reported

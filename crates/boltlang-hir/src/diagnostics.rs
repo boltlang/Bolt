@@ -140,6 +140,12 @@ pub enum DiagnosticKind<'db> {
     /// An effect arm whose operation is the name of operations of several
     /// effects, which it has to tell apart, as in `State.get()`.
     AmbiguousOperation,
+    /// A match with arms for some operations of `effect`, and not for
+    /// `missing`, at its first arm for the effect.
+    MissingOperations {
+        effect: Option<Name>,
+        missing: Vec<Name>,
+    },
     /// A path that names something other than a type, like a class.
     NotAType,
     /// A bound or `where` predicate that isn't a class.
@@ -1299,6 +1305,9 @@ impl<'db> Collector<'db> {
                 }
                 InferenceDiagnostic::AmbiguousOperation { pat } => {
                     (at(ExprOrPat::Pat(pat)), DiagnosticKind::AmbiguousOperation)
+                }
+                InferenceDiagnostic::MissingOperations { pat, effect, missing } => {
+                    (at(ExprOrPat::Pat(pat)), DiagnosticKind::MissingOperations { effect, missing })
                 }
                 InferenceDiagnostic::NotAFunction { expr, ty } => {
                     if has_error(&ty) {

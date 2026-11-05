@@ -50,6 +50,9 @@ pub struct InferenceResult<'db> {
     pub expr_types: ArenaMap<Expr, Ty<'db>>,
     pub pat_types: ArenaMap<Pat, Ty<'db>>,
     pub binding_types: ArenaMap<Binding, Ty<'db>>,
+    /// The operation each operation pattern of an effect arm names, like
+    /// the `yield(x)` of `effect yield(x), k`.
+    pub operations: ArenaMap<Pat, FunctionId<'db>>,
     /// The function a call like `x.f(y)` calls, when it's `f(x, y)`.
     pub method_calls: ArenaMap<Expr, FunctionId<'db>>,
     /// The impl that a use of a class method or constant uses, by the
@@ -268,6 +271,13 @@ pub enum InferenceDiagnostic<'db> {
     /// names something that isn't an operation of an effect.
     NotAnOperation {
         pat: PatId,
+    },
+    /// A match with arms for some operations of an effect, but not all,
+    /// reported at its first arm for the effect.
+    MissingOperations {
+        pat: PatId,
+        effect: Option<Name>,
+        missing: Vec<Name>,
     },
     /// An effect arm whose operation is the name of operations of several
     /// effects, like `get` for `State` and `Config`.

@@ -38,3 +38,17 @@ fn run(body: fn() -> i32 does State + Config) -> i32 = match body() {
   effect State.get(), k => resume(k, 0),
   effect Config.get(key), k => resume(k, key),
 };
+
+================================================================================
+A handler needs arms for all the operations of its effects
+:test-prelude
+================================================================================
+effect State { fn get() -> i32; fn set(value: i32); fn reset(); }
+effect Log { fn info(m: String); fn warn(m: String); }
+fn run(body: fn() -> i32 does State + Log) -> i32 = match body() {
+  v => v,
+  effect get(), k => resume(k, 0),
+       //^^^^^ error: this match handles `State`, so it needs arms for `set` and `reset` too
+  effect info(m), k => resume(k, ()),
+       //^^^^^^^ error: this match handles `Log`, so it needs an arm for `warn` too
+};

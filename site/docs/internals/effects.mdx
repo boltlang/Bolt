@@ -328,7 +328,7 @@ A `match` that has an arm for an operation of an effect handles that whole
 effect, and must have arms for all its operations:
 
 ```text
-error: this `match` handles `State`, but has no arm for `set`
+error[E0249]: this match handles `State`, so it needs an arm for `set` too
 ```
 
 Otherwise the effect couldn't leave the row, and whether it does would

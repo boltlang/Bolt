@@ -119,6 +119,7 @@ impl DiagnosticCode {
     pub const EFFECTS_NOT_ALLOWED: Self = Self("E0246");
     pub const NOT_AN_OPERATION: Self = Self("E0247");
     pub const AMBIGUOUS_OPERATION: Self = Self("E0248");
+    pub const MISSING_OPERATIONS: Self = Self("E0249");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -534,6 +535,18 @@ fn describe(
             C::AMBIGUOUS_OPERATION,
             "several effects have an operation of this name; write the effect too, like `State.get()`".to_string(),
         ),
+        K::MissingOperations { effect, missing } => {
+            let names: Vec<String> = missing.iter().map(|n| n.to_string()).collect();
+            let effect = effect.as_ref().map_or("this effect".into(), |e| format!("`{e}`"));
+            let arms = if names.len() == 1 { "an arm" } else { "arms" };
+            (
+                C::MISSING_OPERATIONS,
+                format!(
+                    "this match handles {effect}, so it needs {arms} for {} too",
+                    list_types(&names)
+                ),
+            )
+        }
         K::OwnerNotTopLevel => (
             C::OWNER_NOT_TOP_LEVEL,
             "a function can only be put in the namespace of a type at the top level of a file".to_string(),

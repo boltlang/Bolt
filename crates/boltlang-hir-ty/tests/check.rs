@@ -539,6 +539,14 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::NotAnOperation { pat } => {
                         format!("error at `{}`: not an operation", at(ExprOrPat::Pat(*pat)))
                     }
+                    InferenceDiagnostic::MissingOperations { pat, missing, .. } => {
+                        let missing: Vec<&str> = missing.iter().map(|n| n.as_str()).collect();
+                        format!(
+                            "error at `{}`: no arms for {}",
+                            at(ExprOrPat::Pat(*pat)),
+                            missing.join(", ")
+                        )
+                    }
                     InferenceDiagnostic::AmbiguousOperation { pat } => {
                         format!("error at `{}`: ambiguous operation", at(ExprOrPat::Pat(*pat)))
                     }
