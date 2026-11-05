@@ -34,6 +34,10 @@ pub enum RowConstraint<'db> {
     Contains { sub: Ty<'db>, sup: Ty<'db> },
     /// `goal` has the effects of all of `parts`, and no others.
     Combine { parts: Box<[Ty<'db>]>, goal: Ty<'db> },
+    /// `rest` is `row` without the effects of `handled`, which have the same
+    /// arguments in `row`: what's left of the effects of a handler's
+    /// scrutinee once its `match` handles its own.
+    Without { row: Ty<'db>, handled: Box<[EffectTy<'db>]>, rest: Ty<'db> },
 }
 
 impl<'db> RowConstraint<'db> {
@@ -49,6 +53,28 @@ impl<'db> RowConstraint<'db> {
             RowConstraint::Combine { parts, goal } => {
                 RowConstraint::Combine { parts: parts.iter().map(&mut f).collect(), goal: f(goal) }
             }
+            RowConstraint::Without { row, handled, rest } => RowConstraint::Without {
+                row: f(row),
+                handled: handled
+                    .iter()
+                    .map(|e| EffectTy {
+                        effect: e.effect,
+                        args: e.args.iter().map(&mut f).collect(),
+                    })
+                    .collect(),
+                rest: f(rest),
+            },
+        }
+    }
+
+    /// The row that the constraint decides, which isn't free to be given its
+    /// least solution: the goal of a combination, or what's left after a
+    /// handler.
+    fn decided(&self) -> Option<&Ty<'db>> {
+        match self {
+            RowConstraint::Contains { .. } => None,
+            RowConstraint::Combine { goal, .. } => Some(goal),
+            RowConstraint::Without { rest, .. } => Some(rest),
         }
     }
 
@@ -57,6 +83,7 @@ impl<'db> RowConstraint<'db> {
         match self {
             RowConstraint::Contains { sub, sup } => vec![sub, sup],
             RowConstraint::Combine { parts, goal } => parts.iter().chain([goal]).collect(),
+            RowConstraint::Without { row, rest, .. } => vec![row, rest],
         }
     }
 }
@@ -68,7 +95,36 @@ impl<'db> Solver<'db> {
         match c {
             RowConstraint::Contains { sub, sup } => self.solve_contains(sub, sup, origin),
             RowConstraint::Combine { parts, goal } => self.solve_combine(parts, goal, origin),
+            RowConstraint::Without { row, handled, rest } => {
+                self.solve_without(row, handled, rest, origin)
+            }
         }
+    }
+
+    fn solve_without(
+        &mut self,
+        row: &Ty<'db>,
+        handled: &[EffectTy<'db>],
+        rest: &Ty<'db>,
+        origin: Origin<'db>,
+    ) -> bool {
+        let row = self.unifier.resolve(row);
+        if row == Ty::Error {
+            self.equal(rest, &Ty::Error, origin);
+            return true;
+        }
+        let Some((effects, parts)) = row.row_parts() else { return false };
+        let mut left = Vec::new();
+        for e in effects {
+            match handled.iter().find(|h| h.effect == e.effect) {
+                // What the scrutinee does is what the arms are expected to
+                // handle.
+                Some(h) => self.same_args(h, e, origin),
+                None => left.push(e.clone()),
+            }
+        }
+        self.equal(rest, &Ty::row_of(left, parts), origin);
+        true
     }
 
     fn solve_contains(&mut self, sub: &Ty<'db>, sup: &Ty<'db>, origin: Origin<'db>) -> bool {
@@ -197,49 +253,60 @@ impl<'db> Solver<'db> {
         opened
     }
 
-    /// Make the rows of combinations whose goal stays part of a type, in
-    /// `keep`, and that can't be solved, made of their parts: for `Log ⊙ e ~
-    /// g` with `g` a parameter's row, `g` becomes `Log + e`, as Rose and
-    /// Koka have it, and `e` is kept too. Without it, `e` would get no
-    /// effects, and the type would only take functions that do `Log`.
-    pub(crate) fn open_kept_combinations(&mut self, keep: &mut Vec<TyVar>) {
+    /// Give rows that stay part of a type, in `keep`, the shape that a
+    /// constraint that can't be solved asks of them, as Rose and Koka have
+    /// it. For a combination `Log ⊙ e ~ g` with `g` a parameter's row, `g`
+    /// becomes `Log + e`. For a handler of `Log` whose scrutinee's row is a
+    /// parameter's row `r`, with `e` left, `r` becomes `Log + e`. The
+    /// variables in the new rows are kept too. Without it, `e` would get no
+    /// effects, and the type would only take functions that do just `Log`.
+    /// Returns whether it changed anything.
+    pub(crate) fn open_kept_rows(&mut self, keep: &mut Vec<TyVar>) -> bool {
+        let mut changed = false;
         loop {
             self.solve();
             let mut opened = None;
             for (c, _) in &self.pending_rows {
-                let RowConstraint::Combine { parts, goal } = c else { continue };
-                let Ty::Var(g) = self.unifier.resolve(goal) else { continue };
+                // The row that stays in the type, and what it's made of.
+                let (row, parts): (&Ty<'db>, Vec<Ty<'db>>) = match c {
+                    RowConstraint::Combine { parts, goal } => (goal, parts.to_vec()),
+                    RowConstraint::Without { row, handled, rest } => {
+                        (row, vec![Ty::row(handled.iter().cloned()), rest.clone()])
+                    }
+                    RowConstraint::Contains { .. } => continue,
+                };
+                let Ty::Var(g) = self.unifier.resolve(row) else { continue };
                 if !keep.contains(&g) {
                     continue;
                 }
-                let parts: Vec<Ty<'db>> = parts.iter().map(|p| self.unifier.resolve(p)).collect();
                 let mut effects: Vec<EffectTy<'db>> = Vec::new();
                 let mut rest: Vec<Ty<'db>> = Vec::new();
-                for part in &parts {
+                for part in parts.iter().map(|p| self.unifier.resolve(p)) {
                     match part.row_parts() {
                         Some((es, rs)) => {
                             effects = Ty::union_rows(&effects, es, |_, _| {});
                             rest.extend(rs);
                         }
-                        None => rest.push(part.clone()),
+                        None => rest.push(part),
                     }
                 }
                 let vars: Vec<TyVar> = rest
                     .iter()
                     .filter_map(|r| if let Ty::Var(v) = r { Some(*v) } else { None })
                     .collect();
-                // A goal that's one of its own parts says nothing new.
+                // A row that's one of its own parts says nothing new.
                 if vars.contains(&g) {
                     continue;
                 }
                 opened = Some((g, Ty::Row(effects.into(), rest.into()), vars));
                 break;
             }
-            let Some((g, row, vars)) = opened else { return };
+            let Some((g, row, vars)) = opened else { return changed };
             if self.unifier.unify(&Ty::Var(g), &row).is_err() {
-                return;
+                return changed;
             }
             keep.extend(vars);
+            changed = true;
         }
     }
 
@@ -256,12 +323,10 @@ impl<'db> Solver<'db> {
                 if keep.contains(&var) || !self.is_unbound(var) {
                     continue;
                 }
-                // A row that a combination decides isn't free to choose.
-                let combined = self.pending_rows.iter().any(|(c, _)| match c {
-                    RowConstraint::Combine { goal, .. } => {
-                        self.unifier.resolve(goal) == Ty::Var(var)
-                    }
-                    RowConstraint::Contains { .. } => false,
+                // A row that a combination or a handler decides isn't free
+                // to choose.
+                let combined = self.pending_rows.iter().any(|(c, _)| {
+                    c.decided().is_some_and(|row| self.unifier.resolve(row) == Ty::Var(var))
                 });
                 if combined {
                     continue;
@@ -362,7 +427,7 @@ impl<'db> Solver<'db> {
             .filter_map(|(c, _)| {
                 let row = match c {
                     RowConstraint::Contains { sup, .. } => sup,
-                    RowConstraint::Combine { goal, .. } => goal,
+                    c => c.decided()?,
                 };
                 match self.unifier.resolve(row) {
                     Ty::Var(v) => Some(v),

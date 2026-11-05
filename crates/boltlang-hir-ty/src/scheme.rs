@@ -268,6 +268,12 @@ impl<'db> Scheme<'db> {
                     let parts: Vec<String> = parts.iter().map(|p| names.row_name(db, p)).collect();
                     format!("{} ~ {}", parts.join(" ⊙ "), names.row_name(db, goal))
                 }
+                RowConstraint::Without { row, handled, rest } => format!(
+                    "{} ∖ {} ~ {}",
+                    names.row_name(db, row),
+                    names.row_name(db, &Ty::row(handled.iter().cloned())),
+                    names.row_name(db, rest)
+                ),
             };
             out.push_str(&format!("{row} => "));
         }

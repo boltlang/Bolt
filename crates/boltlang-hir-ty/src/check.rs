@@ -378,7 +378,7 @@ fn infer_group<'db>(
     for f in group {
         vars_in(&solver.unifier.resolve(&env.mono[f]), &mut keep);
     }
-    solver.open_kept_combinations(&mut keep);
+    solver.open_kept_rows(&mut keep);
     solver.settle_at_most(&keep, true);
     // A function's effects, and other rows only in positive places, get the
     // least row that holds what's in them. Rows that only the calls inside
@@ -391,8 +391,14 @@ fn infer_group<'db>(
     }
     let mut candidates = positive.clone();
     candidates.extend(solver.pending_row_vars());
-    let keep_rows: Vec<TyVar> = keep.iter().copied().filter(|v| !positive.contains(v)).collect();
+    let mut keep_rows: Vec<TyVar> =
+        keep.iter().copied().filter(|v| !positive.contains(v)).collect();
     solver.settle_rows(&candidates, &keep_rows);
+    // Settling can make the scrutinee of a handler a parameter's row, which
+    // then gets the shape the handler asks of it.
+    if solver.open_kept_rows(&mut keep_rows) {
+        solver.settle_rows(&candidates, &keep_rows);
+    }
     solver.default_free_rows(&keep_rows);
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
