@@ -8,8 +8,8 @@ description: A design for effect types in Bolt, with does and +, effects with pa
 
 :::warning[Partly implemented]
 The syntax parses, and the type checker infers and checks effects: rows,
-`does`, containment, combination and `Nothing`. Effect arms are in HIR,
-apart from the value arms of a `match`. **Not implemented yet**: typing
+`does`, containment, combination and `Nothing`. Effect arms, also with
+several operations, are in HIR, apart from the value arms of a `match`. **Not implemented yet**: typing
 handlers against their operations, and running effects. Algebraic
 effects are tracked in [#40](https://github.com/boltlang/bolt/issues/40).
 :::
@@ -356,7 +356,30 @@ The arms of each operation must be exhaustive, like value arms:
 
 An arm names its operation by its bare name. When the effects of a `match`
 have two operations of the same name, the arm writes the effect too:
-`effect State.get(), k`.
+`effect State.get(), k`. An operation without arguments keeps its
+parentheses, as in `effect get(), k`; whether `effect get, k` should mean
+the same is open in [#354](https://github.com/boltlang/bolt/issues/354).
+
+### Several operations in one arm
+
+An arm can handle several operations, separated by `|`, with one
+continuation:
+
+```bolt
+match job() {
+    v => v,
+    effect info(m) | warn(m), k => { print(m); resume(k, ()) },
+    effect raise(e) | State.fail(e), _ => Err(e),
+}
+```
+
+The operations are the alternatives of an or-pattern, and follow the same
+rules: a name bound in one alternative is bound in all of them, with the
+same type. That includes `k`: a named continuation has the type
+`Cont[B, U, R]` of each operation, so they must all resume with the same
+$B$. With `_`, they can return different types, like `raise` and `fail`
+above. Or-patterns don't check this yet
+([#355](https://github.com/boltlang/bolt/issues/355)).
 
 ### Typing
 
