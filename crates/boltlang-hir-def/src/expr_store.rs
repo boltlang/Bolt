@@ -30,6 +30,43 @@ pub struct ExpressionStore {
     pub labels: Arena<Label>,
 }
 
+impl ExpressionStore {
+    /// The binding patterns in `pats` and inside them, with what they bind,
+    /// in the order they're written.
+    pub fn binds_in(&self, pats: &[PatId]) -> Vec<(PatId, BindingId)> {
+        let mut out = Vec::new();
+        let mut stack: Vec<PatId> = pats.iter().rev().copied().collect();
+        while let Some(pat) = stack.pop() {
+            let p = &self.pats[pat];
+            if let Pat::Bind { id, .. } = p {
+                out.push((pat, *id));
+            }
+            stack.extend(p.children().into_iter().rev());
+        }
+        out
+    }
+
+    /// The alternatives of the or-patterns of this store, and of the effect
+    /// arms with several operations, each a list of patterns: the arguments
+    /// of an operation, or one alternative of an or-pattern. Each
+    /// alternative must bind the same names.
+    pub fn alternatives(&self) -> Vec<Vec<&[PatId]>> {
+        let ors = self.pats.iter().filter_map(|(_, pat)| match pat {
+            Pat::Or(alts) => Some(alts.iter().map(std::slice::from_ref).collect()),
+            _ => None,
+        });
+        let arms = self.exprs.iter().flat_map(|(_, expr)| match expr {
+            Expr::Match { effect_arms, .. } => effect_arms
+                .iter()
+                .filter(|arm| arm.ops.len() > 1)
+                .map(|arm| arm.ops.iter().map(|op| &op.args[..]).collect())
+                .collect(),
+            _ => Vec::new(),
+        });
+        ors.chain(arms).collect()
+    }
+}
+
 impl std::ops::Index<ExprId> for ExpressionStore {
     type Output = Expr;
     fn index(&self, id: ExprId) -> &Expr {

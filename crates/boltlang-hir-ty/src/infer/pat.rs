@@ -25,8 +25,15 @@ impl<'db> InferenceContext<'_, 'db> {
         match &body[pat] {
             Pat::Missing | Pat::Wild | Pat::MacroCall { .. } => {}
             Pat::Bind { id, subpat } => {
-                self.result.binding_types.insert(*id, expected.clone());
-                self.declare(*id);
+                // The alternatives of an or-pattern share their bindings, so
+                // a binding seen before has the same type here.
+                match self.result.binding_types.get(*id).cloned() {
+                    Some(ty) => self.solver.equal(&ty, expected, self.pat_origin(pat)),
+                    None => {
+                        self.result.binding_types.insert(*id, expected.clone());
+                        self.declare(*id);
+                    }
+                }
                 if let Some(subpat) = subpat {
                     self.check_pat(*subpat, expected);
                 }

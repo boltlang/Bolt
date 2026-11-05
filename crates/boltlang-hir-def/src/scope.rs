@@ -120,6 +120,8 @@ impl ExprScopes {
     fn add_pat_bindings(&mut self, body: &Body, scope: ScopeId, pat: PatId) {
         match &body[pat] {
             Pat::Bind { id, .. } => self.add_binding(body, scope, *id),
+            // The alternatives share their bindings, so the first one's
+            // are all of them.
             Pat::Or(alternatives) => {
                 if let Some(&first) = alternatives.first() {
                     self.add_pat_bindings(body, scope, first);
@@ -229,8 +231,8 @@ impl ExprScopes {
                     for pat in arm.pats() {
                         self.walk_pat_exprs(body, pat, scope);
                     }
-                    // Like an or-pattern, the arm binds the names of its
-                    // first operation (#355).
+                    // Like the alternatives of an or-pattern, the operations
+                    // share their bindings, so the first one's are all.
                     let mut inner = self.new_scope(Some(scope));
                     let first = arm.ops.first().map_or(&[][..], |op| &op.args[..]);
                     for &pat in first.iter().chain([&arm.cont]) {

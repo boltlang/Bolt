@@ -14,8 +14,8 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     hir::{
-        BinaryOp, Binding, BlockKind, EffectArm, EffectOp, Expr, ExprId, GenericArg, Label,
-        LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
+        BinaryOp, Binding, BindingId, BlockKind, EffectArm, EffectOp, Expr, ExprId, GenericArg,
+        Label, LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
         PathSegment, RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
     },
 };
@@ -534,7 +534,9 @@ impl ExprCollector {
                 }
                 _ => EffectOp { path: None, args: Box::default(), rest: None },
             })
-            .collect();
+            .collect::<Box<[EffectOp]>>();
+        let lists: Vec<&[PatId]> = ops.iter().map(|op| &op.args[..]).collect();
+        self.share_bindings(&lists);
         EffectArm {
             ops,
             cont: self.lower_opt_pat(effect.continuation()),
@@ -622,7 +624,12 @@ impl ExprCollector {
                 let end = p.end().map(|s| self.lower_pat(s));
                 Pat::Range { start, end, inclusive }
             }
-            P::Or(p) => Pat::Or(p.patterns().map(|s| self.lower_pat(s)).collect()),
+            P::Or(p) => {
+                let alternatives: Box<[PatId]> = p.patterns().map(|s| self.lower_pat(s)).collect();
+                let lists: Vec<&[PatId]> = alternatives.iter().map(std::slice::from_ref).collect();
+                self.share_bindings(&lists);
+                Pat::Or(alternatives)
+            }
             P::ConstBlock(p) => match p.block() {
                 Some(block) => Pat::ConstBlock(self.lower_block(&block)),
                 None => Pat::Missing,
@@ -663,6 +670,30 @@ impl ExprCollector {
     }
 
     /// Make the bindings in a pattern mutable, but not the ones after an `@`.
+    /// Make the alternatives of an or-pattern share the bindings of the
+    /// first one, by name, so that the `x` of `A(x) | B(x)` is one binding.
+    /// Each alternative is a list of patterns, to also cover the arguments of
+    /// the operations in an effect arm. A name with another mutability than
+    /// in the first alternative keeps a binding of its own, and so does a
+    /// name the first doesn't bind: diagnostics report both.
+    fn share_bindings(&mut self, alternatives: &[&[PatId]]) {
+        let Some((first, rest)) = alternatives.split_first() else { return };
+        let mut shared: HashMap<Name, BindingId> = HashMap::new();
+        for (_, id) in self.store.binds_in(first) {
+            shared.entry(self.store.bindings[id].name.clone()).or_insert(id);
+        }
+        for alternative in rest {
+            for (pat, id) in self.store.binds_in(alternative) {
+                let binding = &self.store.bindings[id];
+                let Some(&to) = shared.get(&binding.name) else { continue };
+                if to != id && self.store.bindings[to].mutable == binding.mutable {
+                    let Pat::Bind { id, .. } = &mut self.store.pats[pat] else { unreachable!() };
+                    *id = to;
+                }
+            }
+        }
+    }
+
     fn mark_mutable(&mut self, pat: PatId) {
         let mut stack = vec![pat];
         while let Some(pat) = stack.pop() {

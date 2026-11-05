@@ -985,3 +985,56 @@ fn fn3['m1](%0: 'm1 [i32], %1: i32) -> (i32) {
 }
 --------------------------------------------------------------------------------
 env.log(5)
+
+================================================================================
+The alternatives of an or-pattern bind the same name
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+enum E { A(i32), B(i32), C }
+fn get(e: E) -> i32 = match e { E.A(x) | E.B(x) => x, E.C => 0 };
+log(get(E.A(1)));
+log(get(E.B(2)));
+log(get(E.C));
+--------------------------------------------------------------------------------
+// fn1: <file>
+// fn2: get
+
+data data10 {
+  (i32)
+  (i32)
+  ()
+}
+
+extern extern1 "env" "log" (i32) -> ()
+
+fn fn1() -> () {
+  let %0: imm data10 = new data10.0(1i32)
+  let %1: i32 = call fn2(%0)
+  let = call_extern extern1(%1)
+  let %2: imm data10 = new data10.1(2i32)
+  let %3: i32 = call fn2(%2)
+  let = call_extern extern1(%3)
+  let %4: imm data10 = new data10.2()
+  let %5: i32 = call fn2(%4)
+  let = call_extern extern1(%5)
+  jump ret()
+}
+
+fn fn2(%0: imm data10) -> (i32) {
+  join j1(%1: i32) = jump ret(%1)
+  in
+  case %0 {
+    data10.0 =>
+      let %2: i32 = get data10.0.0(%0)
+      jump j1(%2)
+    data10.1 =>
+      let %3: i32 = get data10.1.0(%0)
+      jump j1(%3)
+    data10.2 => jump j1(0i32)
+  }
+}
+--------------------------------------------------------------------------------
+env.log(1)
+env.log(2)
+env.log(0)
