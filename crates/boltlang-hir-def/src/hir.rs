@@ -227,19 +227,37 @@ pub struct MatchArm {
 }
 
 /// `effect yield(x), k if guard => value` in a `match`: an arm that handles
-/// an operation, with patterns for its arguments and the continuation.
+/// one or more operations, like `effect info(m) | warn(m), k`, with a
+/// continuation. The operations work like the alternatives of an
+/// or-pattern.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct EffectArm {
-    /// The operation, like `yield` or `State.get`. Type checking resolves
-    /// it, because a bare name can only be told apart with the effects of
-    /// the scrutinee. `None` when it's missing in the source.
-    pub op: Option<Path>,
-    pub args: Box<[PatId]>,
-    /// Where `..` is in the arguments, like in a tuple struct pattern.
-    pub rest: Option<u32>,
+    /// At least one, unless the source is missing them.
+    pub ops: Box<[EffectOp]>,
     pub cont: PatId,
     pub guard: Option<ExprId>,
     pub expr: ExprId,
+}
+
+impl EffectArm {
+    /// The patterns of the arm: the arguments of each operation, then the
+    /// continuation.
+    pub fn pats(&self) -> impl Iterator<Item = PatId> + '_ {
+        self.ops.iter().flat_map(|op| op.args.iter().copied()).chain([self.cont])
+    }
+}
+
+/// An operation in an effect arm, like `yield(x)`, with patterns for its
+/// arguments.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct EffectOp {
+    /// The operation, like `yield` or `State.get`. Type checking resolves
+    /// it, because a bare name can only be told apart with the effects of
+    /// the scrutinee. `None` when it's missing in the source.
+    pub path: Option<Path>,
+    pub args: Box<[PatId]>,
+    /// Where `..` is in the arguments, like in a tuple struct pattern.
+    pub rest: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -406,7 +424,7 @@ impl Expr {
             Expr::Match { arms, effect_arms, .. } => arms
                 .iter()
                 .map(|a| a.pat)
-                .chain(effect_arms.iter().flat_map(|a| a.args.iter().copied().chain([a.cont])))
+                .chain(effect_arms.iter().flat_map(EffectArm::pats))
                 .collect(),
             Expr::Lambda { params, .. } => params.to_vec(),
             _ => Vec::new(),

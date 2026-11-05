@@ -874,7 +874,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 // patterns get types of their own, and their values the type
                 // of the match.
                 for arm in effect_arms.iter() {
-                    for &pat in arm.args.iter().chain([&arm.cont]) {
+                    for pat in arm.pats() {
                         let var = self.new_var();
                         self.check_pat(pat, &var);
                     }

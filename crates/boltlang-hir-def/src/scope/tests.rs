@@ -90,6 +90,14 @@ fn effect_arms_bind_their_arguments_and_continuation() {
 }
 
 #[test]
+fn effect_arms_with_several_operations_bind_the_names_of_the_first() {
+    assert_eq!(
+        resolutions("fn f(o) { match o { v => v, effect info(m) | warn(m), k => resume(k, m) } }"),
+        ["o@5", "v@20", "resume-", "k@54", "m@40"]
+    );
+}
+
+#[test]
 fn let_chains_bind_for_the_rest_of_the_condition() {
     assert_eq!(
         resolutions("fn f(o) { if let Some(x) = o && x > 0 { x } else { x } }"),

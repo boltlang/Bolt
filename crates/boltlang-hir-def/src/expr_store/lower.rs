@@ -14,9 +14,9 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     hir::{
-        BinaryOp, Binding, BlockKind, EffectArm, Expr, ExprId, GenericArg, Label, LambdaKind,
-        Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment,
-        RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
+        BinaryOp, Binding, BlockKind, EffectArm, EffectOp, Expr, ExprId, GenericArg, Label,
+        LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
+        PathSegment, RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
     },
 };
 
@@ -519,22 +519,24 @@ impl ExprCollector {
 
     // Patterns
 
-    /// `effect op(args), cont if guard => expr`. The parser only accepts an
-    /// operation written like a tuple struct pattern; anything else is
-    /// lowered as an arm without an operation.
+    /// `effect op(args), cont if guard => expr`, or with several operations,
+    /// like `effect a(x) | b(x), k`. The parser only accepts operations
+    /// written like tuple struct patterns; anything else is lowered as an
+    /// operation without a path.
     fn lower_effect_arm(&mut self, arm: &ast::MatchArm, effect: ast::EffectPattern) -> EffectArm {
-        let (op, args, rest) = match effect.operation() {
-            Some(ast::Pattern::TupleStruct(p)) => {
-                let op = p.path().and_then(|p| self.lower_path(p));
-                let (args, rest) = self.lower_pat_list(p.fields());
-                (op, args, rest)
-            }
-            _ => (None, Box::default(), None),
-        };
+        let ops = effect
+            .operations()
+            .map(|op| match op {
+                ast::Pattern::TupleStruct(p) => {
+                    let path = p.path().and_then(|p| self.lower_path(p));
+                    let (args, rest) = self.lower_pat_list(p.fields());
+                    EffectOp { path, args, rest }
+                }
+                _ => EffectOp { path: None, args: Box::default(), rest: None },
+            })
+            .collect();
         EffectArm {
-            op,
-            args,
-            rest,
+            ops,
             cont: self.lower_opt_pat(effect.continuation()),
             guard: arm.guard().map(|g| self.lower_opt_expr(g.condition())),
             expr: self.lower_opt_expr(arm.expr()),

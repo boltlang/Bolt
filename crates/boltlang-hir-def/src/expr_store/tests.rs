@@ -186,14 +186,20 @@ impl Printer<'_> {
                     format!("[{}{} => {}]", self.pat(a.pat), guard(a.guard), self.expr(a.expr))
                 });
                 let effect_arms = effect_arms.iter().map(|a| {
-                    let mut args: Vec<String> = a.args.iter().map(|p| self.pat(*p)).collect();
-                    if let Some(i) = a.rest {
-                        args.insert(i as usize, "..".into());
-                    }
+                    let ops = a.ops.iter().map(|op| {
+                        let mut args: Vec<String> = op.args.iter().map(|p| self.pat(*p)).collect();
+                        if let Some(i) = op.rest {
+                            args.insert(i as usize, "..".into());
+                        }
+                        format!(
+                            "{}({})",
+                            op.path.as_ref().map_or("<missing>".into(), |p| self.path(p)),
+                            args.join(", ")
+                        )
+                    });
                     format!(
-                        "[effect {}({}), {}{} => {}]",
-                        a.op.as_ref().map_or("<missing>".into(), |p| self.path(p)),
-                        args.join(", "),
+                        "[effect {}, {}{} => {}]",
+                        ops.collect::<Vec<_>>().join(" | "),
                         self.pat(a.cont),
                         guard(a.guard),
                         self.expr(a.expr)
@@ -578,9 +584,9 @@ fn effect_arms() {
     assert_eq!(
         render(
             "match f() { effect yield(n), k if n > 0 => resume(k, ()), v => v, \
-             effect State.get(), _ => 0, effect log(m, ..), k => k }"
+             effect State.get(), _ => 0, effect log(m, ..) | warn(m), k => k }"
         ),
         "(match (call f ) [v => v] [effect yield(n), k if (> n 0) => (call resume k (tuple ))] \
-         [effect State.get(), _ => 0] [effect log(m, ..), k => k])"
+         [effect State.get(), _ => 0] [effect log(m, ..) | warn(m), k => k])"
     );
 }
