@@ -71,3 +71,12 @@ match body() {
   () => 0,
   effect yield(x) => x,
 }
+
+================================================================================
+An effect arm needs the parentheses of its operation
+:error
+================================================================================
+match body() {
+  v => v,
+  effect get, k => resume(k, 0),
+}

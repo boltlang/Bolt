@@ -485,10 +485,16 @@ fn match_arm(p: &mut Parser) {
 /// `effect yield(x), k` at the start of a match arm: the operation the arm
 /// handles, with patterns for its arguments, and the continuation. The
 /// operation is a tuple struct pattern, like `yield(x)` or `State.get()`.
+/// An operation without arguments still needs its parentheses, as in
+/// `get()`: whether `get` alone is allowed is undecided (#354).
 fn effect_patt(p: &mut Parser) {
     let m = p.start();
     p.bump(T![effect]);
-    pattern_single(p);
+    if let Some(op) = pattern_single(p)
+        && op.kind() != TUPLE_STRUCT_PATT
+    {
+        p.error("expected an operation with parentheses, like `get()`");
+    }
     p.expect(T![,]);
     pattern_single(p);
     m.complete(p, EFFECT_PATT);
