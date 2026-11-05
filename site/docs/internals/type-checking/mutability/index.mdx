@@ -106,7 +106,8 @@ be changed. Variables only pass it on:
   copies all of it. Each type says how with an impl of `ToMut` or
   `ToMutDeep`, so a `Vec` copies only its elements, not the room it has
   to grow. `imm e` stays built in, since it must be deep: it copies
-  what's `mut`.
+  what's `mut`. `to_imm_deep(e)` does the same through each type's impl
+  of `ToImmDeep`.
 
   A literal is told apart by the checker, not the parser: `mut` before an
   array, a struct literal or a call of a tuple struct's constructor makes

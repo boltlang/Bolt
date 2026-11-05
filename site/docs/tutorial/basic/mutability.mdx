@@ -256,6 +256,25 @@ editable[0][1] = 1;
 ([[0, 0], [0, 0]], [[0, 1], [0, 0]])
 ```
 
+The other way, `to_imm_deep` gives a copy that can't be changed all the way
+down, even when the original holds arrays that can:
+
+```bolt
+let rows = mut [mut [1, 2], mut [3]];
+let frozen = to_imm_deep(rows);
+rows[0][0] = 9;
+frozen[0][0];
+```
+
+```text
+1
+```
+
+Each type says how it's copied with an impl of `ToImmDeep`, as with
+`ToMutDeep`: a `Vec` copies only its elements. A type of your own gets one
+the same way, and a value that holds a function has none, since a closure
+can't be copied.
+
 [Mutability](../advanced/mutability.mdx) in the advanced part goes on with
 values that hold other values, generic functions and closures. The
 [internals](../../internals/type-checking/mutability/index.mdx) explain how
