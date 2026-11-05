@@ -186,17 +186,7 @@ impl Printer<'_> {
                     format!("[{}{} => {}]", self.pat(a.pat), guard(a.guard), self.expr(a.expr))
                 });
                 let effect_arms = effect_arms.iter().map(|a| {
-                    let ops = a.ops.iter().map(|op| {
-                        let mut args: Vec<String> = op.args.iter().map(|p| self.pat(*p)).collect();
-                        if let Some(i) = op.rest {
-                            args.insert(i as usize, "..".into());
-                        }
-                        format!(
-                            "{}({})",
-                            op.path.as_ref().map_or("<missing>".into(), |p| self.path(p)),
-                            args.join(", ")
-                        )
-                    });
+                    let ops = a.ops.iter().map(|op| self.pat(*op));
                     format!(
                         "[effect {}, {}{} => {}]",
                         ops.collect::<Vec<_>>().join(" | "),

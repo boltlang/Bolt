@@ -228,36 +228,26 @@ pub struct MatchArm {
 
 /// `effect yield(x), k if guard => value` in a `match`: an arm that handles
 /// one or more operations, like `effect info(m) | warn(m), k`, with a
-/// continuation. The operations work like the alternatives of an
-/// or-pattern.
+/// continuation.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct EffectArm {
-    /// At least one, unless the source is missing them.
-    pub ops: Box<[EffectOp]>,
+    /// The operations, each a [`Pat::TupleStruct`] like `yield(x)`, whose
+    /// path names the operation and whose arguments are patterns for its
+    /// arguments, or [`Pat::Missing`]. They're never matched as patterns:
+    /// type checking resolves the path, because a bare name can only be told
+    /// apart with the effects of the scrutinee. Like the alternatives of an
+    /// or-pattern, they share their bindings.
+    pub ops: Box<[PatId]>,
     pub cont: PatId,
     pub guard: Option<ExprId>,
     pub expr: ExprId,
 }
 
 impl EffectArm {
-    /// The patterns of the arm: the arguments of each operation, then the
-    /// continuation.
+    /// The patterns of the arm: its operations, then the continuation.
     pub fn pats(&self) -> impl Iterator<Item = PatId> + '_ {
-        self.ops.iter().flat_map(|op| op.args.iter().copied()).chain([self.cont])
+        self.ops.iter().copied().chain([self.cont])
     }
-}
-
-/// An operation in an effect arm, like `yield(x)`, with patterns for its
-/// arguments.
-#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
-pub struct EffectOp {
-    /// The operation, like `yield` or `State.get`. Type checking resolves
-    /// it, because a bare name can only be told apart with the effects of
-    /// the scrutinee. `None` when it's missing in the source.
-    pub path: Option<Path>,
-    pub args: Box<[PatId]>,
-    /// Where `..` is in the arguments, like in a tuple struct pattern.
-    pub rest: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]

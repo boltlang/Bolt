@@ -117,6 +117,8 @@ impl DiagnosticCode {
     pub const INVALID_CAST: Self = Self("E0244");
     pub const EFFECT_TWICE: Self = Self("E0245");
     pub const EFFECTS_NOT_ALLOWED: Self = Self("E0246");
+    pub const NOT_AN_OPERATION: Self = Self("E0247");
+    pub const AMBIGUOUS_OPERATION: Self = Self("E0248");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -523,6 +525,14 @@ fn describe(
         K::UnresolvedOwner { name } => (
             C::UNRESOLVED_OWNER,
             format!("cannot find a struct or enum `{name}` in this file; only the file that defines a type can add functions to it"),
+        ),
+        K::NotAnOperation => (
+            C::NOT_AN_OPERATION,
+            "this isn't an operation of an effect, so an effect arm can't handle it".to_string(),
+        ),
+        K::AmbiguousOperation => (
+            C::AMBIGUOUS_OPERATION,
+            "several effects have an operation of this name; write the effect too, like `State.get()`".to_string(),
         ),
         K::OwnerNotTopLevel => (
             C::OWNER_NOT_TOP_LEVEL,

@@ -21,3 +21,20 @@ fn quiet() -> () { log("hi"); }
                  //^^^^^^^^^ error: this does `Log`, but the code it's in has no effects
 fn greet() -> () does Log { wait(); }
                           //^^^^^^ error: this does `Async`, but the code it's in only does `Log`
+
+================================================================================
+An effect arm handles an operation of an effect
+:test-prelude
+================================================================================
+effect State { fn get() -> i32; }
+effect Config { fn get(key: String) -> String; }
+fn helper() -> i32 = 0;
+fn run(body: fn() -> i32 does State + Config) -> i32 = match body() {
+  v => v,
+  effect helper(), k => 0,
+       //^^^^^^^^ error: this isn't an operation of an effect, so an effect arm can't handle it
+  effect get(), k => resume(k, 0),
+       //^^^^^ error: several effects have an operation of this name; write the effect too, like `State.get()`
+  effect State.get(), k => resume(k, 0),
+  effect Config.get(key), k => resume(k, key),
+};

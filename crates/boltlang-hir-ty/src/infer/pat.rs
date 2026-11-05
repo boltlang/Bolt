@@ -140,7 +140,7 @@ impl<'db> InferenceContext<'_, 'db> {
 
     /// Check the patterns of a tuple or tuple struct, where `..` at `rest`
     /// stands for the elements not matched.
-    fn check_pat_list(&mut self, args: &[PatId], rest: Option<u32>, elems: &[Ty<'db>]) {
+    pub(super) fn check_pat_list(&mut self, args: &[PatId], rest: Option<u32>, elems: &[Ty<'db>]) {
         let split = rest.map_or(args.len(), |r| r as usize);
         let after = args.len() - split;
         for (i, &arg) in args.iter().enumerate() {

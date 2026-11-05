@@ -536,6 +536,12 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }
                     InferenceDiagnostic::Lower(lower) => lower_line(lower, &at_type),
+                    InferenceDiagnostic::NotAnOperation { pat } => {
+                        format!("error at `{}`: not an operation", at(ExprOrPat::Pat(*pat)))
+                    }
+                    InferenceDiagnostic::AmbiguousOperation { pat } => {
+                        format!("error at `{}`: ambiguous operation", at(ExprOrPat::Pat(*pat)))
+                    }
                     InferenceDiagnostic::CyclicInference => {
                         "error: cyclic inference between files".to_string()
                     }

@@ -234,8 +234,7 @@ impl ExprScopes {
                     // Like the alternatives of an or-pattern, the operations
                     // share their bindings, so the first one's are all.
                     let mut inner = self.new_scope(Some(scope));
-                    let first = arm.ops.first().map_or(&[][..], |op| &op.args[..]);
-                    for &pat in first.iter().chain([&arm.cont]) {
+                    for &pat in arm.ops.first().into_iter().chain([&arm.cont]) {
                         self.add_pat_bindings(body, inner, pat);
                     }
                     if let Some(guard) = arm.guard {

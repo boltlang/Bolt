@@ -46,9 +46,8 @@ impl ExpressionStore {
         out
     }
 
-    /// The alternatives of the or-patterns of this store, and of the effect
-    /// arms with several operations, each a list of patterns: the arguments
-    /// of an operation, or one alternative of an or-pattern. Each
+    /// The alternatives of the or-patterns of this store, and the operations
+    /// of the effect arms with several, each a list of patterns. Each
     /// alternative must bind the same names.
     pub fn alternatives(&self) -> Vec<Vec<&[PatId]>> {
         let ors = self.pats.iter().filter_map(|(_, pat)| match pat {
@@ -59,7 +58,7 @@ impl ExpressionStore {
             Expr::Match { effect_arms, .. } => effect_arms
                 .iter()
                 .filter(|arm| arm.ops.len() > 1)
-                .map(|arm| arm.ops.iter().map(|op| &op.args[..]).collect())
+                .map(|arm| arm.ops.iter().map(std::slice::from_ref).collect())
                 .collect(),
             _ => Vec::new(),
         });

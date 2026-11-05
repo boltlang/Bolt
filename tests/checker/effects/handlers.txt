@@ -1,0 +1,198 @@
+================================================================================
+A handler takes its effect out of the row
+:test-prelude
+================================================================================
+effect Yield { fn yield(value: i32); }
+fn numbers() -> () does Yield { yield(1); yield(2); }
+fn sum() -> i32 = match numbers() {
+  () => 0,
+  effect yield(x), k => x + resume(k, ()),
+};
+--------------------------------------------------------------------------------
+numbers: fn() -> () does Yield
+sum: fn() -> i32
+
+================================================================================
+A handler leaves the effects it has no arms for
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn job() -> i32 does Log + Async { log("start"); wait(); 1 }
+fn quiet() = match job() {
+  v => v,
+  effect log(m), k => resume(k, ()),
+};
+--------------------------------------------------------------------------------
+job: fn() -> i32 does Log + Async
+quiet: fn() -> i32 does Async
+
+================================================================================
+The arms of one effect share its arguments
+:test-prelude
+================================================================================
+effect State[S] { fn get() -> S; fn set(value: S); }
+fn count() -> i32 does State[i32] { set(get() + 1); get() }
+fn run() = match count() {
+  v => |_| v,
+  effect get(), k => |s| resume(k, s)(s),
+  effect set(s), k => |_| resume(k, ())(s),
+};
+--------------------------------------------------------------------------------
+count: fn() -> i32 does State[i32]
+run: fn() -> fn(i32) -> i32
+
+================================================================================
+An inferred handler of a function it's given
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn quiet(f) = match f() {
+  v => v,
+  effect log(m), k => resume(k, ()),
+};
+fn both() -> i32 does Log + Async { log("a"); wait(); 1 }
+fn h() = quiet(both);
+--------------------------------------------------------------------------------
+quiet: forall a e. fn(fn() -> a does Log + e) -> a does e
+both: fn() -> i32 does Log + Async
+h: fn() -> i32 does Async
+
+================================================================================
+An operation in an arm goes to the next handler out
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+fn inner() -> () does Log { log("hi"); }
+fn tagged() = match inner() {
+  v => v,
+  effect log(m), k => { log(m); resume(k, ()) },
+};
+--------------------------------------------------------------------------------
+inner: fn() -> () does Log
+tagged: fn() -> () does Log
+
+================================================================================
+Resuming with a value of the wrong type
+:test-prelude
+:error
+================================================================================
+effect State[S] { fn get() -> S; }
+fn read() -> i32 does State[i32] = get();
+fn run() -> i32 = match read() {
+  v => v,
+  effect get(), k => resume(k, "zero"),
+};
+--------------------------------------------------------------------------------
+read: fn() -> i32 does State[i32]
+run: fn() -> i32
+--------------------------------------------------------------------------------
+error at `get()`: expected i32, found String
+
+================================================================================
+Several operations in one arm
+:test-prelude
+================================================================================
+effect Log { fn info(message: String); fn warn(message: String); }
+effect Raise { fn raise[T](error: String) -> T; fn fail(error: String) -> i32; }
+fn job() -> i32 does Log + Raise { info("a"); warn("b"); fail("c") }
+fn run() = match job() {
+  v => Some(v),
+  effect info(m) | warn(m), k => resume(k, ()),
+  effect raise(e) | fail(e), _ => None,
+};
+--------------------------------------------------------------------------------
+job: fn() -> i32 does Log + Raise
+run: fn() -> Option[i32]
+
+================================================================================
+A named continuation needs the operations to give the same type
+:test-prelude
+:error
+================================================================================
+effect Raise { fn raise[T](error: String) -> T; fn fail(error: String) -> i32; }
+fn job() -> i32 does Raise = fail("c");
+fn run() = match job() {
+  v => v,
+  effect raise(e) | fail(e), k => resume(k, 0),
+};
+--------------------------------------------------------------------------------
+job: fn() -> i32 does Raise
+run: fn() -> i32
+--------------------------------------------------------------------------------
+error at `k`: expected Cont[T, i32, Nothing], found Cont[i32, i32, Nothing]
+error at `0`: expected T, found {integer}
+
+================================================================================
+An operation's own type parameter can't be chosen by the handler
+:test-prelude
+:error
+================================================================================
+effect Raise { fn raise[T](error: String) -> T; }
+fn job() -> i32 does Raise = raise("no");
+fn run() = match job() {
+  v => v,
+  effect raise(e), k => resume(k, 0),
+};
+--------------------------------------------------------------------------------
+job: fn() -> i32 does Raise
+run: fn() -> i32
+--------------------------------------------------------------------------------
+error at `0`: expected T, found {integer}
+
+================================================================================
+An arm needs an operation of an effect
+:test-prelude
+:error
+================================================================================
+effect Log { fn log(message: String); }
+fn helper(x: i32) -> i32 = x;
+fn run() = match 1 {
+  v => v,
+  effect helper(x), k => 0,
+  effect missing(), k => 0,
+  effect log(a, b), k => 0,
+};
+--------------------------------------------------------------------------------
+helper: fn(i32) -> i32
+run: fn() -> i32
+--------------------------------------------------------------------------------
+error at `helper(x)`: not an operation
+error at `missing()`: unresolved
+error at `log(a, b)`: expected 1 arguments, found 2
+
+================================================================================
+An inferred handler of two effects
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect State[S] { fn get() -> S; fn set(value: S); }
+fn run(f) = match f() {
+  v => v,
+  effect log(m), k => resume(k, ()),
+  effect get(), k => resume(k, 0),
+  effect set(s), k => resume(k, ()),
+};
+--------------------------------------------------------------------------------
+run: forall a e. fn(fn() -> a does Log + State[i32] + e) -> a does e
+
+================================================================================
+Two effects with operations of the same name
+:test-prelude
+:error
+================================================================================
+effect State { fn get() -> i32; }
+effect Config { fn get(key: String) -> String; }
+fn job() -> i32 does State + Config { get(); get("k"); 1 }
+fn run() = match job() {
+  v => v,
+  effect get(), k => resume(k, 0),
+  effect State.get(), k => resume(k, 0),
+  effect Config.get(key), k => resume(k, key),
+};
+--------------------------------------------------------------------------------
+job: fn() -> i32 does State + Config
+run: fn() -> i32
+--------------------------------------------------------------------------------
+error at `get()`: ambiguous operation

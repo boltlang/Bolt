@@ -2,6 +2,7 @@
 //! checking them against an expected type where one is known, and gives
 //! the constraints it finds to the [`Solver`].
 
+mod handler;
 mod pat;
 
 use std::collections::HashMap;
@@ -262,6 +263,16 @@ pub enum InferenceDiagnostic<'db> {
     NoLangClass {
         expr: ExprId,
         class: &'static str,
+    },
+    /// An effect arm whose operation, like the `f` of `effect f(x), k`,
+    /// names something that isn't an operation of an effect.
+    NotAnOperation {
+        pat: PatId,
+    },
+    /// An effect arm whose operation is the name of operations of several
+    /// effects, like `get` for `State` and `Config`.
+    AmbiguousOperation {
+        pat: PatId,
     },
     /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
     /// without a prelude that defines it.
@@ -861,7 +872,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::bool()
             }
             Expr::Match { expr: scrutinee, arms, effect_arms } => {
+                // With effect arms, the match handles what its scrutinee does:
+                // that runs with effects of its own.
+                let inner = (!effect_arms.is_empty()).then(|| self.solver.new_var(VarKind::Effect));
+                let outer = inner.clone().map(|inner| std::mem::replace(&mut self.effects, inner));
                 let scrutinee_ty = self.infer_expr(*scrutinee);
+                if let Some(outer) = outer {
+                    self.effects = outer;
+                }
                 let ty = self.expected_or_var(expected);
                 for (i, arm) in arms.iter().enumerate() {
                     self.check_pat(arm.pat, &scrutinee_ty);
@@ -870,18 +888,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     }
                     self.check_expr_because(arm.expr, &ty, reason_for_nth(reason, arms[0].expr, i));
                 }
-                // Effect arms aren't typed against their operation yet: their
-                // patterns get types of their own, and their values the type
-                // of the match.
-                for arm in effect_arms.iter() {
-                    for pat in arm.pats() {
-                        let var = self.new_var();
-                        self.check_pat(pat, &var);
-                    }
-                    if let Some(guard) = arm.guard {
-                        self.check_expr(guard, &Ty::bool());
-                    }
-                    self.check_expr(arm.expr, &ty);
+                if let Some(inner) = inner {
+                    self.check_effect_arms(expr, effect_arms, inner, &ty);
                 }
                 if arms.is_empty() { Ty::Never } else { ty }
             }

@@ -14,8 +14,8 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     hir::{
-        BinaryOp, Binding, BindingId, BlockKind, EffectArm, EffectOp, Expr, ExprId, GenericArg,
-        Label, LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
+        BinaryOp, Binding, BindingId, BlockKind, EffectArm, Expr, ExprId, GenericArg, Label,
+        LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
         PathSegment, RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
     },
 };
@@ -521,21 +521,17 @@ impl ExprCollector {
 
     /// `effect op(args), cont if guard => expr`, or with several operations,
     /// like `effect a(x) | b(x), k`. The parser only accepts operations
-    /// written like tuple struct patterns; anything else is lowered as an
-    /// operation without a path.
+    /// written like tuple struct patterns; anything else is lowered as a
+    /// missing pattern.
     fn lower_effect_arm(&mut self, arm: &ast::MatchArm, effect: ast::EffectPattern) -> EffectArm {
-        let ops = effect
+        let ops: Box<[PatId]> = effect
             .operations()
             .map(|op| match op {
-                ast::Pattern::TupleStruct(p) => {
-                    let path = p.path().and_then(|p| self.lower_path(p));
-                    let (args, rest) = self.lower_pat_list(p.fields());
-                    EffectOp { path, args, rest }
-                }
-                _ => EffectOp { path: None, args: Box::default(), rest: None },
+                ast::Pattern::TupleStruct(_) => self.lower_pat(op),
+                _ => self.alloc_pat(Pat::Missing, Some(op.syntax())),
             })
-            .collect::<Box<[EffectOp]>>();
-        let lists: Vec<&[PatId]> = ops.iter().map(|op| &op.args[..]).collect();
+            .collect();
+        let lists: Vec<&[PatId]> = ops.iter().map(std::slice::from_ref).collect();
         self.share_bindings(&lists);
         EffectArm {
             ops,

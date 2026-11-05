@@ -134,6 +134,12 @@ pub enum DiagnosticKind<'db> {
     },
     UnresolvedName,
     UnresolvedType,
+    /// An effect arm whose operation, like the `f` of `effect f(x), k`,
+    /// isn't an operation of an effect.
+    NotAnOperation,
+    /// An effect arm whose operation is the name of operations of several
+    /// effects, which it has to tell apart, as in `State.get()`.
+    AmbiguousOperation,
     /// A path that names something other than a type, like a class.
     NotAType,
     /// A bound or `where` predicate that isn't a class.
@@ -1288,6 +1294,12 @@ impl<'db> Collector<'db> {
                         package_only: hidden.package_only,
                     },
                 ),
+                InferenceDiagnostic::NotAnOperation { pat } => {
+                    (at(ExprOrPat::Pat(pat)), DiagnosticKind::NotAnOperation)
+                }
+                InferenceDiagnostic::AmbiguousOperation { pat } => {
+                    (at(ExprOrPat::Pat(pat)), DiagnosticKind::AmbiguousOperation)
+                }
                 InferenceDiagnostic::NotAFunction { expr, ty } => {
                     if has_error(&ty) {
                         continue;
