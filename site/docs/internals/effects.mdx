@@ -8,9 +8,9 @@ description: A design for effect types in Bolt, with does and +, effects with pa
 
 :::warning[Partly implemented]
 The syntax parses, and the type checker infers and checks effects: rows,
-`does`, containment, combination, `Nothing` and handlers. **Not
-implemented yet**: checking that a handler has arms for all the
-operations of its effects, and running effects. Algebraic
+`does`, containment, combination, `Nothing` and handlers, with their
+arms for every operation and for every value of its arguments. **Not
+implemented yet**: running effects. Algebraic
 effects are tracked in [#40](https://github.com/boltlang/bolt/issues/40).
 :::
 
