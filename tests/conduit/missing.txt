@@ -1,15 +1,4 @@
 ================================================================================
-A Vec needs an array of elements that aren't set yet
-:prelude
-:error
-================================================================================
-let v = Vec.new();
-v.push(1);
---------------------------------------------------------------------------------
-error in Vec.with_capacity[i32] at `array_alloc(capacity)`: needs what Conduit doesn't have yet: an array whose elements aren't set yet, for `array_alloc`
-error in grow[i32] at `array_alloc(new_capacity)`: needs what Conduit doesn't have yet: an array whose elements aren't set yet, for `array_alloc`
-
-================================================================================
 Imm needs a deep copy
 :test-prelude
 :error

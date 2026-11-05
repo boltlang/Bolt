@@ -932,12 +932,24 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Ok(None)
             }
             Builtin::ArrayAlloc => {
-                Err(ErrorKind::missing("an array whose elements aren't set yet, for `array_alloc`"))
+                let Some(Ty::Array(elem, _)) = self.cty(result)? else {
+                    return Err(ErrorKind::unsupported("an array of a type with no values"));
+                };
+                one(self.b.array_alloc(*elem, args[0].clone()))
             }
-            Builtin::ArrayCopy => Err(ErrorKind::missing(
-                "copying a range of an array into another or within one, unset elements \
-                 included, for `array_copy`",
-            )),
+            Builtin::ArrayCopy => {
+                let [dst, dst_start, src, src_start, count] = &args[..] else {
+                    return Err(ErrorKind::unsupported("this call of `array_copy`"));
+                };
+                self.b.array_copy(
+                    dst.clone(),
+                    dst_start.clone(),
+                    src.clone(),
+                    src_start.clone(),
+                    count.clone(),
+                );
+                Ok(None)
+            }
         }
     }
 

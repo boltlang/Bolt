@@ -22,9 +22,9 @@
 //!   `closure` of that function, and calling a value that isn't a named
 //!   function is an `apply`.
 //!
-//! What's left out: erased code and dictionaries, variants as functions, patterns in
-//! parameters, and what needs something Conduit doesn't have yet: `imm e`,
-//! `array_alloc`, `array_copy` and 128-bit integers. Using one is an
+//! What's left out: erased code and dictionaries, variants as functions,
+//! patterns in parameters, handlers, and what needs something Conduit
+//! doesn't have yet: `imm e` and 128-bit integers. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
 mod func;
