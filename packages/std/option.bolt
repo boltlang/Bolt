@@ -1,5 +1,6 @@
 import "./io" (panic, assert);
 import "./ops" *;
+import "./mutability" (ToImmDeep, to_imm_deep);
 
 pub enum Option[T] {
   None,
@@ -7,6 +8,16 @@ pub enum Option[T] {
 }
 
 pub import Option.*;
+
+/// A copy of an `Option` that can't be changed all the way down: what it
+/// holds is copied with its own `to_imm_deep`.
+impl[T: ToImmDeep] ToImmDeep[Option[T]] {
+  type ImmDeep = Option[T.ImmDeep];
+  fn to_imm_deep(o) = match o {
+    None => None,
+    Some(x) => Some(to_imm_deep(x)),
+  };
+}
 
 /// Options are equal when both are `None`, or both are `Some` of equal
 /// values.

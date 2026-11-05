@@ -62,3 +62,53 @@ impl ToMutDeep[u128] { type MutDeep = u128; fn to_mut_deep(x) = x; }
 impl ToMutDeep[usize] { type MutDeep = usize; fn to_mut_deep(x) = x; }
 impl ToMutDeep[f32] { type MutDeep = f32; fn to_mut_deep(x) = x; }
 impl ToMutDeep[f64] { type MutDeep = f64; fn to_mut_deep(x) = x; }
+
+/// Types that have a copy that can't be changed all the way down, even if
+/// the original can: the arrays and structs it holds are copied too, not
+/// shared as with [ToImm], so it can hold what's `mut`.
+///
+/// Each path to an object gets its own copy, so two references to one
+/// `mut` object become two `imm` objects, and a cycle is copied forever. A
+/// type whose values can be cyclic says what its copy does with its own
+/// impl.
+///
+/// Values that are `imm` all the way down, like numbers, `String` and
+/// `Char`, are given back as they are: they have nothing to copy.
+pub class ToImmDeep[T] {
+  /// The `imm` version of `T`, all the way down, like `imm [imm [i32]]`
+  /// for `[[i32]]`.
+  type ImmDeep;
+
+  /// A copy of `x` that can't be changed all the way down.
+  fn to_imm_deep(x: T) -> ImmDeep;
+}
+
+impl ToImmDeep[Bool] { type ImmDeep = Bool; fn to_imm_deep(x) = x; }
+impl ToImmDeep[i8] { type ImmDeep = i8; fn to_imm_deep(x) = x; }
+impl ToImmDeep[i16] { type ImmDeep = i16; fn to_imm_deep(x) = x; }
+impl ToImmDeep[i32] { type ImmDeep = i32; fn to_imm_deep(x) = x; }
+impl ToImmDeep[i64] { type ImmDeep = i64; fn to_imm_deep(x) = x; }
+impl ToImmDeep[i128] { type ImmDeep = i128; fn to_imm_deep(x) = x; }
+impl ToImmDeep[isize] { type ImmDeep = isize; fn to_imm_deep(x) = x; }
+impl ToImmDeep[u8] { type ImmDeep = u8; fn to_imm_deep(x) = x; }
+impl ToImmDeep[u16] { type ImmDeep = u16; fn to_imm_deep(x) = x; }
+impl ToImmDeep[u32] { type ImmDeep = u32; fn to_imm_deep(x) = x; }
+impl ToImmDeep[u64] { type ImmDeep = u64; fn to_imm_deep(x) = x; }
+impl ToImmDeep[u128] { type ImmDeep = u128; fn to_imm_deep(x) = x; }
+impl ToImmDeep[usize] { type ImmDeep = usize; fn to_imm_deep(x) = x; }
+impl ToImmDeep[f32] { type ImmDeep = f32; fn to_imm_deep(x) = x; }
+impl ToImmDeep[f64] { type ImmDeep = f64; fn to_imm_deep(x) = x; }
+impl ToImmDeep[()] { type ImmDeep = (); fn to_imm_deep(x) = x; }
+
+/// A tuple is copied element by element.
+impl[A: ToImmDeep, B: ToImmDeep] ToImmDeep[(A, B)] {
+  type ImmDeep = (A.ImmDeep, B.ImmDeep);
+  fn to_imm_deep(p) = match p { (a, b) => (to_imm_deep(a), to_imm_deep(b)) };
+}
+
+impl[A: ToImmDeep, B: ToImmDeep, C: ToImmDeep] ToImmDeep[(A, B, C)] {
+  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep);
+  fn to_imm_deep(t) = match t {
+    (a, b, c) => (to_imm_deep(a), to_imm_deep(b), to_imm_deep(c)),
+  };
+}

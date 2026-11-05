@@ -3,6 +3,7 @@
 
 import "./option" (Option, None, Some);
 import "./prim" *;
+import "./mutability" (ToImmDeep);
 
 /// Types whose elements can be read by position, with `c[i]`.
 pub class Index[C] {
@@ -51,6 +52,9 @@ pub enum Ordering {
   Equal = 0,
   Greater = 1,
 }
+
+/// An `Ordering` never changes, so its deep copy is itself.
+impl ToImmDeep[Ordering] { type ImmDeep = Ordering; fn to_imm_deep(o) = o; }
 
 impl Eq[Ordering] {
   fn eq(a, b) = match (a, b) {

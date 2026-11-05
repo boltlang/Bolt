@@ -3,6 +3,7 @@ import "./functor" (Functor);
 import "./semigroup" (Semigroup);
 import "./monoid" (Monoid);
 import "./option" (None, Some, Option);
+import "./mutability" (ToImmDeep, to_imm_deep);
 
 pub enum List[T] {
   Cons(T, List[T]),
@@ -10,6 +11,16 @@ pub enum List[T] {
 }
 
 import List.*;
+
+/// A copy of a list that can't be changed all the way down: each element is
+/// copied with its own `to_imm_deep`.
+impl[T: ToImmDeep] ToImmDeep[List[T]] {
+  type ImmDeep = List[T.ImmDeep];
+  fn to_imm_deep(xs) = match xs {
+    Nil => Nil,
+    Cons(h, t) => Cons(to_imm_deep(h), to_imm_deep(t)),
+  };
+}
 
 impl Functor[List] {
   fn fmap[T, R](f: fn (T) -> R, xs: List[T]) -> List[R] = match xs {

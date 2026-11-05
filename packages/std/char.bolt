@@ -5,7 +5,7 @@ import "./option" (Option, Some, None);
 import "./vec" (Vec, push);
 import "./string" (StringBuilder, push, push_str);
 import "./debug" (Debug, push_hex);
-import "./mutability" (ToMutDeep);
+import "./mutability" (ToMutDeep, ToImmDeep);
 
 /// A Unicode code point that isn't a surrogate, like Rust's `char`. The
 /// type of literals like `'a'`.
@@ -13,6 +13,7 @@ pub imm struct Char(pub(package) u32);
 
 /// A `Char` never changes, so its deep copy is the `Char` itself.
 impl ToMutDeep[Char] { type MutDeep = Char; fn to_mut_deep(c) = c; }
+impl ToImmDeep[Char] { type ImmDeep = Char; fn to_imm_deep(c) = c; }
 
 impl Eq[Char] { fn eq(a, b) = a.0 == b.0; }
 impl Ord[Char] { fn cmp(a, b) = a.0.cmp(b.0); }

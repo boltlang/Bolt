@@ -56,3 +56,49 @@ to_imm(1): {error}
 --------------------------------------------------------------------------------
 error at `to_mut`: no instance ToMut[imm Point]
 error at `to_imm`: no instance ToImm[i32]
+
+================================================================================
+The types of deep copies that can't be changed
+:prelude
+================================================================================
+let a = to_imm_deep(mut [mut [1, 2], mut [3]]);
+let v = Vec.new();
+v.push(mut [1]);
+let b = to_imm_deep(v);
+let c = to_imm_deep(Some(mut [True]));
+let d = to_imm_deep((mut [1], 'x', "s"));
+let e = to_imm_deep(List.Cons(mut [1], List.Nil));
+let f = to_imm_deep(5);
+--------------------------------------------------------------------------------
+let a: imm [imm [i32]]
+let v: mut Vec[mut [i32]]
+v.push(mut [1]): ()
+let b: imm Vec[imm [i32]]
+let c: Option[imm [Bool]]
+let d: (imm [i32], Char, String)
+let e: List[imm [i32]]
+let f: i32
+
+================================================================================
+A deep copy that can't be changed can't be changed inside either
+:error
+:prelude
+================================================================================
+let a = to_imm_deep(mut [mut [1, 2]]);
+a[0][0] = 3;
+--------------------------------------------------------------------------------
+let a: imm [imm [i32]]
+a[0][0] = 3: ()
+--------------------------------------------------------------------------------
+error at `a[0]`: can't change imm [i32]
+
+================================================================================
+A function has no deep copy
+:error
+:prelude
+================================================================================
+let f = to_imm_deep(|x: i32| x);
+--------------------------------------------------------------------------------
+let f: ToImmDeep[fn(i32) -> i32].ImmDeep
+--------------------------------------------------------------------------------
+error at `to_imm_deep`: no instance ToImmDeep[fn(i32) -> i32]

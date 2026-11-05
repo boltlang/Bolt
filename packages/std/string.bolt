@@ -1,5 +1,5 @@
 
-import "./mutability" (ToMutDeep, to_mut, to_imm);
+import "./mutability" (ToMutDeep, ToImmDeep, to_mut, to_imm);
 import "./array" (array_len);
 import "./option" (Some, unwrap);
 import "./vec" (Vec, last, push, extend, to_array, len);
@@ -15,6 +15,7 @@ pub imm struct String([u8]);
 
 /// A `String` never changes, so its deep copy is the `String` itself.
 impl ToMutDeep[String] { type MutDeep = String; fn to_mut_deep(s) = s; }
+impl ToImmDeep[String] { type ImmDeep = String; fn to_imm_deep(s) = s; }
 
 /// The text of `bytes`, which must be UTF-8.
 pub fn String.from_bytes(bytes: imm [u8]) -> String {

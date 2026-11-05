@@ -1,6 +1,8 @@
 // A growable array.
 
-import "./mutability" (ToMut, ToImm, ToMutDeep, to_mut, to_imm, to_mut_deep);
+import "./mutability" (
+  ToMut, ToImm, ToMutDeep, ToImmDeep, to_mut, to_imm, to_mut_deep, to_imm_deep
+);
 import "./option" (Option, None, Some);
 import "./ops" *;
 import "./array" (array_alloc, array_copy, array_freeze, array_get, array_len, array_set);
@@ -252,6 +254,22 @@ impl[T: ToMutDeep] ToMutDeep[Vec[T]] {
       i = i + 1;
     }
     mut Vec { items, len: v.len }
+  }
+}
+
+/// A copy of a `Vec` that can't be changed all the way down: each element
+/// is copied with its own `to_imm_deep`. It has no room to grow, since it
+/// can't.
+impl[T: ToImmDeep] ToImmDeep[Vec[T]] where T.ImmDeep: imm {
+  type ImmDeep = imm Vec[T.ImmDeep];
+  fn to_imm_deep(v) {
+    let items = array_alloc(v.len);
+    let mut i = 0;
+    while i < v.len {
+      array_set(items, i, to_imm_deep(array_get(v.items, i)));
+      i = i + 1;
+    }
+    Vec { items: array_freeze(items), len: v.len }
   }
 }
 
