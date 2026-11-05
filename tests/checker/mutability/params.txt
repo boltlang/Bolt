@@ -242,17 +242,17 @@ b.vec.push(5);
 a.vec.push(5);
 let c = VecIter { vec: frozen, next: 0 };
 let d = VecIter { vec: growing, next: 0 };
-fn remaining[T](it: VecIter[T]) -> i32 = it.vec.len - it.next;
-fn reset[T](it: VecIter[T]) { it.vec.push(it.vec.items[0]); }
-fn drain[T](it: VecIter[T, mut]) { it.vec.push(it.vec.items[0]); }
+fn remaining[T](it: VecIter[T]) -> i32 = it.vec.len() - it.next;
+fn reset[T](it: VecIter[T]) { it.vec.push(it.vec[0]); }
+fn drain[T](it: VecIter[T, mut]) { it.vec.push(it.vec[0]); }
 drain(b);
 drain(a);
-fn bump(it) { it.next += 1; it.vec.len }
+fn bump(it) { it.next += 1; it.vec }
 --------------------------------------------------------------------------------
 remaining: forall T. fn(VecIter[T]) -> i32
 reset: forall T. fn(VecIter[T]) -> ()
 drain: forall T. fn(VecIter[T, mut]) -> ()
-bump: forall a b c. mut a.next: i32 => a.vec: c => c.len: b => fn(a) -> b
+bump: forall a b. mut a.next: i32 => a.vec: b => fn(a) -> b
 let frozen: imm Vec[i32]
 let growing: mut Vec[i32]
 let a: mut VecIter[i32, imm]

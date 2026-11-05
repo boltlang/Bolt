@@ -70,6 +70,7 @@ impl DiagnosticCode {
     pub const OWNER_NOT_TOP_LEVEL: Self = Self("E0115");
     pub const NOT_BOUND_IN_ALL_ALTERNATIVES: Self = Self("E0116");
     pub const MUTABILITY_DIFFERS_IN_ALTERNATIVES: Self = Self("E0117");
+    pub const PRIVATE_FIELD: Self = Self("E0118");
 
     pub const TYPE_MISMATCH: Self = Self("E0201");
     pub const INFINITE_TYPE: Self = Self("E0202");
@@ -551,6 +552,18 @@ fn describe(
             C::OWNER_NOT_TOP_LEVEL,
             "a function can only be put in the namespace of a type at the top level of a file".to_string(),
         ),
+        K::PrivateField { strukt, name, package_only } => {
+            let field = match strukt {
+                Some(s) => format!("`{s}.{name}`"),
+                None => format!("`{name}`"),
+            };
+            let message = if package_only {
+                format!("the field {field} is only visible inside its package; make it `pub` to use it here")
+            } else {
+                format!("the field {field} is private to the file of its struct; make it `pub` to use it here")
+            };
+            (C::PRIVATE_FIELD, message)
+        }
         K::NotBoundInAllAlternatives { name } => (
             C::NOT_BOUND_IN_ALL_ALTERNATIVES,
             format!("`{name}` is bound in some alternatives of this pattern, but not in all of them"),

@@ -4,8 +4,7 @@
 /// The rest of a computation that a handler stopped at an operation: `B` is
 /// what the operation gives, `U` what the handler's `match` gives, and `R`
 /// the effects left once the `match` handles its own. Only `resume` uses
-/// it: its field is how the compiler sees its type, and isn't for code to
-/// use (#356).
+/// it: its field is private, and only gives its parameters their kinds.
 pub imm struct Cont[B, U, R] {
   resume: fn(B) -> U does R,
 }

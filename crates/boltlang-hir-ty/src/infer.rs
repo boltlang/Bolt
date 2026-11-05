@@ -17,7 +17,7 @@ use boltlang_hir_def::{
         BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path,
         PathSegment, RecordField, Statement, TypeRefId,
     },
-    ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
+    ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId, StructId},
     resolver::{
         GenericDefId, Hidden, OverloadSet, Resolver, TypeNs, TypeResolution, ValueNs,
         ValueResolution,
@@ -32,8 +32,8 @@ use crate::{
     lang::{LangClass, char_ty, string_ty},
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty,
-        field_types, generic_predicates, identity_args, named_mutabilities, struct_args,
-        struct_mutability, subst_params,
+        field_types, field_visible, generic_predicates, identity_args, named_mutabilities,
+        private_field, struct_args, struct_mutability, subst_params,
     },
     rows::RowConstraint,
     scheme::{Scheme, generic_param_ids},
@@ -266,6 +266,14 @@ pub enum InferenceDiagnostic<'db> {
     NoLangClass {
         expr: ExprId,
         class: &'static str,
+    },
+    /// A field of a struct that's private to another file or package, used
+    /// at `at`: written in a struct literal or a pattern, copied with `..`,
+    /// or given to a tuple struct's constructor.
+    PrivateField {
+        at: ExprOrPat,
+        strukt: StructId<'db>,
+        name: Name,
     },
     /// An effect arm whose operation, like the `f` of `effect f(x), k`,
     /// names something that isn't an operation of an effect.
@@ -1285,6 +1293,17 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match fields.kind {
             FieldsKind::Unit => adt_ty,
             FieldsKind::Tuple => {
+                // Making a tuple struct gives all of its fields.
+                let file = self.def.def(self.db).file(self.db);
+                if let (VariantDef::Struct(strukt), Some(name)) =
+                    (def, private_field(self.db, def, file))
+                {
+                    self.result.diagnostics.push(InferenceDiagnostic::PrivateField {
+                        at: ExprOrPat::Expr(expr),
+                        strukt,
+                        name,
+                    });
+                }
                 let params: Box<[Ty<'db>]> = fields
                     .fields
                     .iter()
@@ -1294,6 +1313,22 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             // A record struct can't be used as a value.
             FieldsKind::Record => Ty::Error,
+        }
+    }
+
+    /// Report the field `index` of `def` at `at` if it's private here.
+    pub(crate) fn check_field_visible(
+        &mut self,
+        at: ExprOrPat,
+        def: VariantDef<'db>,
+        index: usize,
+    ) {
+        let file = self.def.def(self.db).file(self.db);
+        if let VariantDef::Struct(strukt) = def
+            && !field_visible(self.db, def, index, file)
+        {
+            let name = field_types(self.db, def).fields[index].0.clone();
+            self.result.diagnostics.push(InferenceDiagnostic::PrivateField { at, strukt, name });
         }
     }
 
@@ -1417,8 +1452,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             if self.path_extended(receiver, &name).is_none() {
                 let receiver_ty = self.infer_expr(receiver);
                 let is_field = match self.solver.unifier.shallow_resolve(&receiver_ty) {
+                    // A private field isn't one here, so `x.f(y)` is `f(x, y)`.
                     Ty::Adt(AdtId::Struct(s), ..) => {
-                        field_types(self.db, VariantDef::Struct(s)).field(&name).is_some()
+                        let def = VariantDef::Struct(s);
+                        let file = self.def.def(self.db).file(self.db);
+                        field_types(self.db, def)
+                            .field(&name)
+                            .is_some_and(|(i, _)| field_visible(self.db, def, i, file))
                     }
                     _ => false,
                 };
@@ -1885,6 +1925,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             match field_tys.field(&field.name) {
                 Some((index, field_ty)) => {
                     seen.push(index);
+                    self.check_field_visible(ExprOrPat::Expr(field.expr), def, index);
                     let field_ty = subst_params(field_ty, generic_def, &args);
                     let reason = Reason::Field { variant: def, index: index as u32 };
                     self.check_expr_because(field.expr, &field_ty, reason);
@@ -1905,6 +1946,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // such field has the struct's own, or `Line { ..l }` with a
             // `mut` `l` would be an `imm Line` holding `l`'s `mut Point`.
             Some(spread) => {
+                // The fields not given are copied, so they must be visible.
+                let file = self.def.def(self.db).file(self.db);
+                let hidden = (0..field_tys.fields.len())
+                    .find(|&i| !seen.contains(&i) && !field_visible(self.db, def, i, file));
+                if let Some(hidden) = hidden {
+                    self.check_field_visible(ExprOrPat::Expr(spread), def, hidden);
+                }
                 let base = match (&ty, def) {
                     // The fields not given that have a mutability the struct
                     // declares are shared too, so `base` has the same ones.

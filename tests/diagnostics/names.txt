@@ -72,3 +72,31 @@ fn f(body: fn() does Log) -> () does Log = match body() {
   effect tick() | note(n), _ => (),
                      //^ error: `n` is bound in some alternatives of this pattern, but not in all of them
 };
+
+================================================================================
+A field is private to the file of its struct
+:test-prelude
+================================================================================
+//- /shapes.bolt
+pub struct Point { pub x: i32, y: i32 }
+pub struct Meters(i32);
+pub struct Tagged(pub i32, i32);
+pub fn origin() -> Point = Point { x: 0, y: 0 };
+//- /main.bolt
+import "./shapes" (Point, Meters, Tagged, origin);
+let p = origin();
+p.x;
+p.y;
+//^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
+let q = Point { x: 1, y: 2 };
+                       //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
+let r = Point { x: 1, ..p };
+                      //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
+let Point { x, .. } = p;
+let Point { y, .. } = p;
+          //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
+let m = Meters(3);
+      //^^^^^^ error: the field `Meters.0` is private to the file of its struct; make it `pub` to use it here
+fn first(t: Tagged) -> i32 = match t { Tagged(a, ..) => a };
+fn second(t: Tagged) -> i32 = match t { Tagged(_, b) => b };
+                                                //^ error: the field `Tagged.1` is private to the file of its struct; make it `pub` to use it here

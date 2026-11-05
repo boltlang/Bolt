@@ -1,7 +1,7 @@
 //! Turning type references, as written, into [`Ty`]s, and the signatures
 //! of items into the types the checker uses.
 
-use boltlang_base_db::Db;
+use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
@@ -11,6 +11,7 @@ use boltlang_hir_def::{
         StructId, TypeAliasId,
     },
     item_tree::AssocItem,
+    nameres::is_visible_from,
     resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution},
     signatures::{
         self, FieldList, GenericParams, class_signature, const_signature, effect_signature,
@@ -1377,6 +1378,24 @@ impl<'db> FieldTypes<'db> {
     pub fn field(&self, name: &Name) -> Option<(usize, &Ty<'db>)> {
         self.fields.iter().enumerate().find(|(_, (n, _))| n == name).map(|(i, (_, ty))| (i, ty))
     }
+}
+
+/// Whether the field `index` of `def` can be used in `from`: a struct's
+/// field only in its own file, unless it's `pub` or `pub(package)`, like an
+/// item. A variant's fields are always visible, as in Rust.
+pub fn field_visible<'db>(db: &'db dyn Db, def: VariantDef<'db>, index: usize, from: File) -> bool {
+    let VariantDef::Struct(s) = def else { return true };
+    let fields = match &struct_signature(db, s).fields {
+        FieldList::Record(fields) | FieldList::Tuple(fields) => fields,
+        FieldList::Unit => return true,
+    };
+    fields.get(index).is_none_or(|f| is_visible_from(db, f.visibility, s.file(db), from))
+}
+
+/// The first field of `def` that can't be used in `from`, if there is one.
+pub fn private_field<'db>(db: &'db dyn Db, def: VariantDef<'db>, from: File) -> Option<Name> {
+    let fields = &field_types(db, def).fields;
+    (0..fields.len()).find(|&i| !field_visible(db, def, i, from)).map(|i| fields[i].0.clone())
 }
 
 /// The types of the fields of a struct or variant, in terms of the type

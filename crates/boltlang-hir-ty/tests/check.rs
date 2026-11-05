@@ -439,6 +439,9 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                             candidates.len()
                         )
                     }
+                    InferenceDiagnostic::Type(TypeError::PrivateField { origin, name, .. }) => {
+                        format!("error at `{}`: private field {name}", at(origin.node))
+                    }
                     InferenceDiagnostic::Type(TypeError::NoSuchField { origin, ty, name }) => {
                         format!(
                             "error at `{}`: {} has no field {name}",
@@ -538,6 +541,9 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::Lower(lower) => lower_line(lower, &at_type),
                     InferenceDiagnostic::NotAnOperation { pat } => {
                         format!("error at `{}`: not an operation", at(ExprOrPat::Pat(*pat)))
+                    }
+                    InferenceDiagnostic::PrivateField { at: node, name, .. } => {
+                        format!("error at `{}`: private field {name}", at(*node))
                     }
                     InferenceDiagnostic::MissingOperations { pat, missing, .. } => {
                         let missing: Vec<&str> = missing.iter().map(|n| n.as_str()).collect();

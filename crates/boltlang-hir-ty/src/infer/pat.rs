@@ -90,6 +90,20 @@ impl<'db> InferenceContext<'_, 'db> {
                         found: args.len(),
                     });
                 }
+                // The fields the pattern names must be visible; `..` can
+                // stand for private ones.
+                let split = rest.map_or(args.len(), |r| r as usize);
+                let after = args.len() - split;
+                for (i, &arg) in args.iter().enumerate() {
+                    let index = if i < split {
+                        Some(i)
+                    } else {
+                        field_tys.len().checked_sub(after - (i - split))
+                    };
+                    if let Some(index) = index.filter(|&i| i < field_tys.len()) {
+                        self.check_field_visible(ExprOrPat::Pat(arg), def, index);
+                    }
+                }
                 self.check_pat_list(args, *rest, &field_tys);
             }
             Pat::Record { path, fields, .. } => {
@@ -162,7 +176,10 @@ impl<'db> InferenceContext<'_, 'db> {
         let field_tys = field_types(self.db, def);
         for field in fields {
             let ty = match field_tys.field(&field.name) {
-                Some((_, ty)) => subst_params(ty, generic_def, args),
+                Some((index, ty)) => {
+                    self.check_field_visible(ExprOrPat::Pat(field.pat), def, index);
+                    subst_params(ty, generic_def, args)
+                }
                 None => {
                     self.result.diagnostics.push(InferenceDiagnostic::NoSuchField {
                         expr: ExprOrPat::Pat(pat),

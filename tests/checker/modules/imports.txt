@@ -52,7 +52,7 @@ Imported types and constructors
 :test-prelude
 ================================================================================
 //- /shapes.bolt
-pub struct Point { x: i32, y: i32 }
+pub struct Point { pub x: i32, pub y: i32 }
 pub enum Shape { Circle(f64), Square(f64) }
 //- /main.bolt
 import "./shapes" (Point, Shape);
@@ -88,7 +88,7 @@ Files imported with as
 ================================================================================
 //- /math.bolt
 pub fn double(x: i32) -> i32 = x * 2;
-pub struct V { x: i32 }
+pub struct V { pub x: i32 }
 //- /main.bolt
 import "./math" as m;
 m.double(2);
@@ -283,7 +283,7 @@ A type and a function with the same name from two files
 //- /a.bolt
 pub fn thing() -> i32 = 1;
 //- /b.bolt
-pub struct Thing { x: i32 }
+pub struct Thing { pub x: i32 }
 //- /main.bolt
 import "./a" (thing);
 import "./b" (Thing);
@@ -348,7 +348,7 @@ Imported operators
 :test-prelude
 ================================================================================
 //- /ops.bolt
-pub struct V { x: i32 }
+pub struct V { pub x: i32 }
 pub fn (a: V) <> (b: V) = V { x: a.x + b.x };
 pub fn (a: V) <+> (b: V) = V { x: a.x * b.x };
 //- /main.bolt
@@ -362,3 +362,19 @@ fn g(a: V, b: V) = a <+> b;
 /main.bolt: g: fn(V, V) -> {error}
 --------------------------------------------------------------------------------
 /main.bolt: error at `a <+> b`: unresolved
+
+================================================================================
+A private field isn't called like a method
+:test-prelude
+================================================================================
+//- /task.bolt
+pub struct Task { run: fn(i32) -> i32 }
+pub fn new_task() -> Task = Task { run: |x| x + 1 };
+pub fn run(t: Task, x: i32) -> Bool = True;
+//- /main.bolt
+import "./task" (Task, new_task, run);
+new_task().run(1);
+--------------------------------------------------------------------------------
+/task.bolt: new_task: fn() -> imm Task
+/task.bolt: run: fn(Task, i32) -> Bool
+/main.bolt: new_task().run(1): Bool

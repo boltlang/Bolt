@@ -9,7 +9,7 @@ use boltlang_hir_def::{
     Name,
     body::DefWithBodyId,
     hir::{ExprId, PatId, TypeRefId},
-    ids::{ClassId, FunctionId, ImplId, ItemContainerId, TypeAliasId},
+    ids::{ClassId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     nameres::{file_scope, files_used_by},
     resolver::GenericDefId,
 };
@@ -17,9 +17,9 @@ use boltlang_hir_def::{
 use crate::{
     holds::struct_atoms_of,
     lower::{
-        ClassConstraint, VariantDef, enum_field_types, field_types, generic_predicates,
-        impl_assoc_ty, impl_header, implied_by, implied_equalities, struct_args, subst_params,
-        with_superclasses,
+        ClassConstraint, VariantDef, enum_field_types, field_types, field_visible,
+        generic_predicates, impl_assoc_ty, impl_header, implied_by, implied_equalities,
+        struct_args, subst_params, with_superclasses,
     },
     rows::RowConstraint,
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
@@ -275,6 +275,12 @@ pub enum TypeError<'db> {
         ty: Ty<'db>,
         name: Name,
     },
+    /// A field of a struct that's private to another file or package.
+    PrivateField {
+        origin: Origin<'db>,
+        strukt: StructId<'db>,
+        name: Name,
+    },
     /// The type of a value whose field is used was never found.
     TypeNeeded {
         origin: Origin<'db>,
@@ -315,6 +321,7 @@ impl<'db> TypeError<'db> {
             | TypeError::NoInstance { origin, .. }
             | TypeError::Ambiguous { origin, .. }
             | TypeError::NoSuchField { origin, .. }
+            | TypeError::PrivateField { origin, .. }
             | TypeError::CannotChange { origin, .. }
             | TypeError::NotAtMost { origin, .. }
             | TypeError::NoOverload { origin, .. }
@@ -344,7 +351,7 @@ impl<'db> TypeError<'db> {
                 *found = f(found);
                 *allowed = f(allowed);
             }
-            TypeError::TypeNeeded { .. } => {}
+            TypeError::TypeNeeded { .. } | TypeError::PrivateField { .. } => {}
         }
     }
 }
@@ -1087,6 +1094,16 @@ impl<'db> Solver<'db> {
                 }
                 let fields = field_types(self.db, VariantDef::Struct(*s));
                 let args = struct_args(args, mutabilities, mutability);
+                let from = origin.body.def(self.db).file(self.db);
+                if let Some((index, _)) = fields.field(&constraint.name)
+                    && !field_visible(self.db, VariantDef::Struct(*s), index, from)
+                {
+                    self.errors.push(TypeError::PrivateField {
+                        origin,
+                        strukt: *s,
+                        name: constraint.name.clone(),
+                    });
+                }
                 fields
                     .field(&constraint.name)
                     .map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))

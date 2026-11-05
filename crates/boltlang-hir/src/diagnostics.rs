@@ -20,14 +20,14 @@ use boltlang_hir_def::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
         ItemContainerId, StructId, TypeAliasId,
     },
-    item_tree::{AssocItem, AstId, ModItem, item_tree},
+    item_tree::{AssocItem, AstId, ModItem, RawVisibility, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
         FieldList, class_signature_with_source_map, const_signature_with_source_map,
         effect_signature_with_source_map, enum_signature_with_source_map, function_signature,
         function_signature_with_source_map, impl_signature, impl_signature_with_source_map,
-        struct_signature_with_source_map, type_alias_signature_with_source_map,
+        struct_signature, struct_signature_with_source_map, type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
@@ -120,6 +120,13 @@ pub enum DiagnosticKind<'db> {
     },
     /// `fn Vec.new()` somewhere other than the top level of a file.
     OwnerNotTopLevel,
+    /// A field of a struct that's private to its file, or to its package
+    /// with `package_only`, used elsewhere.
+    PrivateField {
+        strukt: Option<Name>,
+        name: Name,
+        package_only: bool,
+    },
     /// A name bound in some alternatives of an or-pattern but not all, like
     /// the `x` of `A(x) | B`, reported where it's bound first. The
     /// operations of an effect arm count as alternatives too.
@@ -1264,6 +1271,12 @@ impl<'db> Collector<'db> {
                             );
                             continue;
                         }
+                        TypeError::PrivateField { origin, strukt, name } => {
+                            // At the name of the field, for `p.x`.
+                            let range = self.unresolved_range(map, origin.node);
+                            self.push(range, self.private_field(strukt, name));
+                            continue;
+                        }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
                         TypeError::CannotChange { origin, ty } => {
                             (origin, DiagnosticKind::CannotChange { ty })
@@ -1311,6 +1324,9 @@ impl<'db> Collector<'db> {
                 }
                 InferenceDiagnostic::AmbiguousOperation { pat } => {
                     (at(ExprOrPat::Pat(pat)), DiagnosticKind::AmbiguousOperation)
+                }
+                InferenceDiagnostic::PrivateField { at: node, strukt, name } => {
+                    (at(node), self.private_field(strukt, name))
                 }
                 InferenceDiagnostic::MissingOperations { pat, effect, missing } => {
                     (at(ExprOrPat::Pat(pat)), DiagnosticKind::MissingOperations { effect, missing })
@@ -1372,6 +1388,20 @@ impl<'db> Collector<'db> {
         }
         self.matches(id, body, map);
         self.alternatives(body, map);
+    }
+
+    /// That the field `name` of `strukt` is private here.
+    fn private_field(&self, strukt: StructId<'db>, name: Name) -> DiagnosticKind<'db> {
+        let db = self.db;
+        let package_only = match &struct_signature(db, strukt).fields {
+            FieldList::Record(fields) | FieldList::Tuple(fields) => fields
+                .iter()
+                .find(|f| f.name == name)
+                .is_some_and(|f| f.visibility == RawVisibility::Package),
+            FieldList::Unit => false,
+        };
+        let strukt = strukt.item(db).name.clone();
+        DiagnosticKind::PrivateField { strukt, name, package_only }
     }
 
     /// The or-patterns of a body, and effect arms with several operations,
