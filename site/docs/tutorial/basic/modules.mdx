@@ -15,7 +15,7 @@ file.
 Here's a file with some geometry:
 
 ```bolt title="geometry.bolt"
-pub struct Point { x: i32, y: i32 }
+pub struct Point { pub x: i32, pub y: i32 }
 
 pub fn origin() -> Point = Point { x: 0, y: 0 };
 
@@ -52,6 +52,30 @@ private, so `main.bolt` can't import it:
 
 `pub(package)` is in between: the item can be used by the files of the same
 [package](#packages), but not by other packages.
+
+The fields of a struct are private in the same way, even when the struct
+is `pub`. That's why `Point`'s fields are `pub`: `main.bolt` builds a
+`Point` with them. Outside its file, a private field can't be read or
+changed, given in `Point { … }` or to a tuple struct like `Meters(3)`,
+copied with `..`, or matched by a pattern. A pattern can still leave it
+to `..`, as in `Point { x, .. }`. This lets a type keep its fields to
+itself, so that only its own functions make and change its values:
+
+```bolt
+pub struct Celsius(f64);
+
+pub fn Celsius.new(degrees: f64) -> Celsius =
+  Celsius(if degrees < -273.15 { -273.15 } else { degrees });
+```
+
+Other files make one with `Celsius.new(20.0)`, and `Celsius(-500.0)` is an
+error there:
+
+```text
+[E0118] Error: the field `Celsius.0` is private to the file of its struct; make it `pub` to use it here
+```
+
+The fields of an enum's variants are always as visible as the enum.
 
 ## Kinds of imports
 
