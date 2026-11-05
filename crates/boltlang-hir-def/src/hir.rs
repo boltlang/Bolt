@@ -161,9 +161,14 @@ pub enum Expr {
         pat: PatId,
         expr: ExprId,
     },
+    /// A `match`, with arms for values and arms for operations of effects.
+    /// The two kinds are kept apart: one is taken when `expr` gives a value
+    /// and the other when it calls an operation, so their order relative to
+    /// each other doesn't matter.
     Match {
         expr: ExprId,
         arms: Box<[MatchArm]>,
+        effect_arms: Box<[EffectArm]>,
     },
     While {
         condition: ExprId,
@@ -217,6 +222,22 @@ pub struct RecordField {
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct MatchArm {
     pub pat: PatId,
+    pub guard: Option<ExprId>,
+    pub expr: ExprId,
+}
+
+/// `effect yield(x), k if guard => value` in a `match`: an arm that handles
+/// an operation, with patterns for its arguments and the continuation.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct EffectArm {
+    /// The operation, like `yield` or `State.get`. Type checking resolves
+    /// it, because a bare name can only be told apart with the effects of
+    /// the scrutinee. `None` when it's missing in the source.
+    pub op: Option<Path>,
+    pub args: Box<[PatId]>,
+    /// Where `..` is in the arguments, like in a tuple struct pattern.
+    pub rest: Option<u32>,
+    pub cont: PatId,
     pub guard: Option<ExprId>,
     pub expr: ExprId,
 }
@@ -350,9 +371,13 @@ impl Expr {
                 out.extend([*condition, *then_branch]);
                 out.extend(else_branch.iter());
             }
-            Expr::Match { expr, arms } => {
+            Expr::Match { expr, arms, effect_arms } => {
                 out.push(*expr);
                 for arm in arms.iter() {
+                    out.extend(arm.guard.iter());
+                    out.push(arm.expr);
+                }
+                for arm in effect_arms.iter() {
                     out.extend(arm.guard.iter());
                     out.push(arm.expr);
                 }
@@ -378,7 +403,11 @@ impl Expr {
                 })
                 .collect(),
             Expr::Let { pat, .. } | Expr::For { pat, .. } => vec![*pat],
-            Expr::Match { arms, .. } => arms.iter().map(|a| a.pat).collect(),
+            Expr::Match { arms, effect_arms, .. } => arms
+                .iter()
+                .map(|a| a.pat)
+                .chain(effect_arms.iter().flat_map(|a| a.args.iter().copied().chain([a.cont])))
+                .collect(),
             Expr::Lambda { params, .. } => params.to_vec(),
             _ => Vec::new(),
         }

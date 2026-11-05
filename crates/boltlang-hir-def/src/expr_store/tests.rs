@@ -178,19 +178,33 @@ impl Printer<'_> {
                 else_branch.map_or(String::new(), |e| format!(" {}", self.expr(e)))
             ),
             Expr::Let { pat, expr } => format!("(let {} {})", self.pat(*pat), self.expr(*expr)),
-            Expr::Match { expr, arms } => format!(
-                "(match {} {})",
-                self.expr(*expr),
-                arms.iter()
-                    .map(|a| format!(
-                        "[{}{} => {}]",
-                        self.pat(a.pat),
-                        a.guard.map_or(String::new(), |g| format!(" if {}", self.expr(g))),
+            Expr::Match { expr, arms, effect_arms } => {
+                let guard = |g: Option<ExprId>| {
+                    g.map_or(String::new(), |g| format!(" if {}", self.expr(g)))
+                };
+                let value_arms = arms.iter().map(|a| {
+                    format!("[{}{} => {}]", self.pat(a.pat), guard(a.guard), self.expr(a.expr))
+                });
+                let effect_arms = effect_arms.iter().map(|a| {
+                    let mut args: Vec<String> = a.args.iter().map(|p| self.pat(*p)).collect();
+                    if let Some(i) = a.rest {
+                        args.insert(i as usize, "..".into());
+                    }
+                    format!(
+                        "[effect {}({}), {}{} => {}]",
+                        a.op.as_ref().map_or("<missing>".into(), |p| self.path(p)),
+                        args.join(", "),
+                        self.pat(a.cont),
+                        guard(a.guard),
                         self.expr(a.expr)
-                    ))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
+                    )
+                });
+                format!(
+                    "(match {} {})",
+                    self.expr(*expr),
+                    value_arms.chain(effect_arms).collect::<Vec<_>>().join(" ")
+                )
+            }
             Expr::While { condition, body, label } => {
                 format!(
                     "({}while {} {})",
@@ -559,9 +573,14 @@ fn source_map_points_back_to_the_syntax() {
 }
 
 #[test]
-fn effect_arms_are_left_out() {
+fn effect_arms() {
+    // Effect arms come after the value arms, wherever they were written.
     assert_eq!(
-        render("match f() { v => v, effect yield(n), k => resume(k, ()) }"),
-        "(match (call f ) [v => v])"
+        render(
+            "match f() { effect yield(n), k if n > 0 => resume(k, ()), v => v, \
+             effect State.get(), _ => 0, effect log(m, ..), k => k }"
+        ),
+        "(match (call f ) [v => v] [effect yield(n), k if (> n 0) => (call resume k (tuple ))] \
+         [effect State.get(), _ => 0] [effect log(m, ..), k => k])"
     );
 }

@@ -214,12 +214,26 @@ impl ExprScopes {
                 self.add_pat_bindings(body, inner, *pat);
                 self.walk_expr(body, *loop_body, inner);
             }
-            Expr::Match { expr, arms } => {
+            Expr::Match { expr, arms, effect_arms } => {
                 self.walk_expr(body, *expr, scope);
                 for arm in arms.iter() {
                     self.walk_pat_exprs(body, arm.pat, scope);
                     let mut inner = self.new_scope(Some(scope));
                     self.add_pat_bindings(body, inner, arm.pat);
+                    if let Some(guard) = arm.guard {
+                        inner = self.walk_expr(body, guard, inner);
+                    }
+                    self.walk_expr(body, arm.expr, inner);
+                }
+                for arm in effect_arms.iter() {
+                    let pats = || arm.args.iter().copied().chain([arm.cont]);
+                    for pat in pats() {
+                        self.walk_pat_exprs(body, pat, scope);
+                    }
+                    let mut inner = self.new_scope(Some(scope));
+                    for pat in pats() {
+                        self.add_pat_bindings(body, inner, pat);
+                    }
                     if let Some(guard) = arm.guard {
                         inner = self.walk_expr(body, guard, inner);
                     }

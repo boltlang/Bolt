@@ -79,6 +79,17 @@ fn match_arms_lambdas_and_loops() {
 }
 
 #[test]
+fn effect_arms_bind_their_arguments_and_continuation() {
+    assert_eq!(
+        resolutions(
+            "fn f(o) { match o { v => n, effect yield(n), k if n > 0 => resume(k, n), \
+             effect get(), _ => n } }"
+        ),
+        ["o@5", "n-", "n@41", "resume-", "k@45", "n@41", "n-"]
+    );
+}
+
+#[test]
 fn let_chains_bind_for_the_rest_of_the_condition() {
     assert_eq!(
         resolutions("fn f(o) { if let Some(x) = o && x > 0 { x } else { x } }"),

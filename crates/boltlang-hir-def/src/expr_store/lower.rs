@@ -14,9 +14,9 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     hir::{
-        BinaryOp, Binding, BlockKind, Expr, ExprId, GenericArg, Label, LambdaKind, Literal,
-        LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment, RecordField,
-        RecordFieldPat, Statement, TypeRef, TypeRefId,
+        BinaryOp, Binding, BlockKind, EffectArm, Expr, ExprId, GenericArg, Label, LambdaKind,
+        Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment,
+        RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
     },
 };
 
@@ -376,18 +376,19 @@ impl ExprCollector {
             }
             E::Match(e) => {
                 let expr = self.lower_opt_expr(e.expr());
-                // Effect arms only parse so far, and are left out.
-                let arms = e
-                    .arms()
-                    .into_iter()
-                    .filter(|arm| arm.effect_pattern().is_none())
-                    .map(|arm| MatchArm {
-                        pat: self.lower_opt_pat(arm.pattern()),
-                        guard: arm.guard().map(|g| self.lower_opt_expr(g.condition())),
-                        expr: self.lower_opt_expr(arm.expr()),
-                    })
-                    .collect();
-                Expr::Match { expr, arms }
+                let mut arms = Vec::new();
+                let mut effect_arms = Vec::new();
+                for arm in e.arms() {
+                    match arm.effect_pattern() {
+                        Some(effect) => effect_arms.push(self.lower_effect_arm(&arm, effect)),
+                        None => arms.push(MatchArm {
+                            pat: self.lower_opt_pat(arm.pattern()),
+                            guard: arm.guard().map(|g| self.lower_opt_expr(g.condition())),
+                            expr: self.lower_opt_expr(arm.expr()),
+                        }),
+                    }
+                }
+                Expr::Match { expr, arms: arms.into(), effect_arms: effect_arms.into() }
             }
             E::While(e) => {
                 let label = self.lower_label(e.label());
@@ -517,6 +518,28 @@ impl ExprCollector {
     }
 
     // Patterns
+
+    /// `effect op(args), cont if guard => expr`. The parser only accepts an
+    /// operation written like a tuple struct pattern; anything else is
+    /// lowered as an arm without an operation.
+    fn lower_effect_arm(&mut self, arm: &ast::MatchArm, effect: ast::EffectPattern) -> EffectArm {
+        let (op, args, rest) = match effect.operation() {
+            Some(ast::Pattern::TupleStruct(p)) => {
+                let op = p.path().and_then(|p| self.lower_path(p));
+                let (args, rest) = self.lower_pat_list(p.fields());
+                (op, args, rest)
+            }
+            _ => (None, Box::default(), None),
+        };
+        EffectArm {
+            op,
+            args,
+            rest,
+            cont: self.lower_opt_pat(effect.continuation()),
+            guard: arm.guard().map(|g| self.lower_opt_expr(g.condition())),
+            expr: self.lower_opt_expr(arm.expr()),
+        }
+    }
 
     pub fn lower_opt_pat(&mut self, pat: Option<ast::Pattern>) -> PatId {
         match pat {

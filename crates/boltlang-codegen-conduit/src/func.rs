@@ -476,7 +476,10 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Expr::If { condition, then_branch, else_branch } => {
                 self.if_expr(e, *condition, *then_branch, *else_branch)
             }
-            Expr::Match { expr: scrut, arms } => self.match_expr(e, *scrut, arms),
+            Expr::Match { effect_arms, .. } if !effect_arms.is_empty() => {
+                Err(ErrorKind::unsupported("a match with effect arms"))
+            }
+            Expr::Match { expr: scrut, arms, .. } => self.match_expr(e, *scrut, arms),
             Expr::While { condition, body: inner, label } => {
                 let exit = self.b.join(&[]);
                 let next = self.b.join_rec(&[]);

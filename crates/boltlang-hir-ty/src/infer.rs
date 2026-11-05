@@ -860,7 +860,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_pat(*pat, &ty);
                 Ty::bool()
             }
-            Expr::Match { expr: scrutinee, arms } => {
+            Expr::Match { expr: scrutinee, arms, effect_arms } => {
                 let scrutinee_ty = self.infer_expr(*scrutinee);
                 let ty = self.expected_or_var(expected);
                 for (i, arm) in arms.iter().enumerate() {
@@ -869,6 +869,19 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         self.check_expr(guard, &Ty::bool());
                     }
                     self.check_expr_because(arm.expr, &ty, reason_for_nth(reason, arms[0].expr, i));
+                }
+                // Effect arms aren't typed against their operation yet: their
+                // patterns get types of their own, and their values the type
+                // of the match.
+                for arm in effect_arms.iter() {
+                    for &pat in arm.args.iter().chain([&arm.cont]) {
+                        let var = self.new_var();
+                        self.check_pat(pat, &var);
+                    }
+                    if let Some(guard) = arm.guard {
+                        self.check_expr(guard, &Ty::bool());
+                    }
+                    self.check_expr(arm.expr, &ty);
                 }
                 if arms.is_empty() { Ty::Never } else { ty }
             }

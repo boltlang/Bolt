@@ -6,3 +6,13 @@ effect Log { fn log(x: i32); }
 log(1);
 --------------------------------------------------------------------------------
 error in Log.log: calling an operation of an effect isn't supported yet
+
+================================================================================
+Handlers aren't lowered yet
+:error
+================================================================================
+effect Yield { fn yield(n: i32); }
+fn f() -> i32 = match 1 { v => v, effect yield(n), k => n };
+f();
+--------------------------------------------------------------------------------
+error in f at `match 1 { v => v, effect yield(n), k => n }`: a match with effect arms isn't supported yet
