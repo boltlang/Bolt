@@ -29,7 +29,7 @@ use boltlang_hir_def::{
 use crate::{
     check::{InferenceCycle, function_scheme},
     holds::struct_atoms_of,
-    lang::{LangClass, char_ty, range_struct, string_ty},
+    lang::{LangClass, char_ty, range_inclusive_struct, range_struct, string_ty},
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty,
         field_types, field_visible, generic_predicates, identity_args, named_mutabilities,
@@ -837,10 +837,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
-            // `a..b` is the prelude's `Range { start: a, end: b }`. The other
-            // ranges have no types in std yet.
-            Expr::Range { lhs: Some(start), rhs: Some(end), inclusive: false } => {
-                self.infer_range(expr, *start, *end)
+            // `a..b` is the prelude's `Range { start: a, end: b }`, and `a..=b`
+            // its `RangeInclusive`. The other ranges have no types in std
+            // yet.
+            Expr::Range { lhs: Some(start), rhs: Some(end), inclusive } => {
+                self.infer_range(expr, *start, *end, *inclusive)
             }
             Expr::Range { lhs, rhs, .. } => {
                 for e in lhs.iter().chain(rhs.iter()) {
@@ -1337,14 +1338,25 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    /// `start..end`: the prelude's `Range`, made like a struct literal.
-    fn infer_range(&mut self, expr: ExprId, start: ExprId, end: ExprId) -> Ty<'db> {
+    /// `start..end` or `start..=end`: the prelude's `Range` or
+    /// `RangeInclusive`, made like a struct literal.
+    fn infer_range(
+        &mut self,
+        expr: ExprId,
+        start: ExprId,
+        end: ExprId,
+        inclusive: bool,
+    ) -> Ty<'db> {
         let file = self.def.def(self.db).file(self.db);
-        let Some(s) = range_struct(self.db, file) else {
+        let (found, name) = match inclusive {
+            false => (range_struct(self.db, file), "Range"),
+            true => (range_inclusive_struct(self.db, file), "RangeInclusive"),
+        };
+        let Some(s) = found else {
             self.infer_expr(start);
             self.infer_expr(end);
             let at = ExprOrPat::Expr(expr);
-            self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: "Range" });
+            self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: name });
             return Ty::Error;
         };
         let def = VariantDef::Struct(s);

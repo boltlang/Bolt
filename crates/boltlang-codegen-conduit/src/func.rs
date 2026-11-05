@@ -573,8 +573,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Expr::Lambda { .. } => self.closure(e),
             Expr::Let { .. } => Err(ErrorKind::unsupported("`let` here")),
             Expr::Missing => Err(ErrorKind::unsupported("code with syntax errors")),
-            // `a..b`: the prelude's `Range { start: a, end: b }`.
-            Expr::Range { lhs: Some(start), rhs: Some(end), inclusive: false } => {
+            // `a..b` or `a..=b`: the prelude's `Range { start: a, end: b }`, or
+            // its `RangeInclusive`, whose fields are the same.
+            Expr::Range { lhs: Some(start), rhs: Some(end), .. } => {
                 let (start, end) = (*start, *end);
                 let start = val!(self.expr(start));
                 let end = val!(self.expr(end));
