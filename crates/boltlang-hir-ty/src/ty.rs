@@ -785,7 +785,13 @@ impl DisplayTy<'_, '_> {
     /// State[i32]` or a name like `e` for an unknown row that's shared.
     /// `None` for no effects, or an unknown row used once.
     fn shown_effects(&self, row: &Ty<'_>) -> Option<String> {
-        let shared = |unknown| self.names.and_then(|n| n.effect(unknown)).map(str::to_string);
+        // A row that's also a type argument, like the `R` of `Cont[B, U, R]`,
+        // has the name it has there.
+        let shared = |unknown| {
+            self.names
+                .and_then(|n| n.effect(unknown).or_else(|| n.get(unknown)))
+                .map(str::to_string)
+        };
         match row {
             Ty::Row(effects, rest) if effects.is_empty() && rest.is_empty() => None,
             Ty::Row(effects, rest) => {

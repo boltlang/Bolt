@@ -42,6 +42,14 @@ pub fn string_struct<'db>(db: &'db dyn Db, file: File) -> Option<StructId<'db>> 
     prelude_struct(db, file, "String")
 }
 
+/// The type of continuations: the struct `Cont[B, U, R]` of the prelude, as
+/// `file` sees it, which the `k` of an effect arm like `effect get(), k`
+/// has. `B` is what the operation gives, `U` what the handler's `match`
+/// gives, and `R` the effects left after it.
+pub fn cont_struct<'db>(db: &'db dyn Db, file: File) -> Option<StructId<'db>> {
+    prelude_struct(db, file, "Cont")
+}
+
 /// [`string_struct`] as a type: an `imm String`.
 pub fn string_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
     string_struct(db, file).map(imm_struct_ty)

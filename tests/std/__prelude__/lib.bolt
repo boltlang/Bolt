@@ -3,8 +3,8 @@
 // `xs[i] = x`, `for x in xs`, and the operators like `a + b` and `a == b`,
 // with their impls for the primitive types, arrays, tuples, `String` and
 // `Char`, the types of string and character literals, `Debug`, which the
-// evaluator shows characters with, and a few functions the compiler
-// provides. It's a copy of what `packages/std` has of them, so that a case
+// evaluator shows characters with, `Cont` and `resume` for handlers, and a
+// few functions the compiler provides. It's a copy of what `packages/std` has of them, so that a case
 // that only needs these doesn't change when `std` does.
 
 extern "bolt" {
@@ -927,4 +927,13 @@ impl[T] Iterator[mut ArrayIter[T]] {
 impl[T, 'v] Iterable['v [T]] {
   type Iter = mut ArrayIter[T, 'v];
   fn iter(array) = mut ArrayIter { array, index: 0 };
+}
+
+/// The `k` of an effect arm: see `packages/std/effect.bolt`.
+pub imm struct Cont[B, U, R] {
+  resume: fn(B) -> U does R,
+}
+
+extern "bolt" {
+  pub fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R;
 }

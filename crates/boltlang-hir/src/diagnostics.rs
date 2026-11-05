@@ -1003,9 +1003,10 @@ impl<'db> Collector<'db> {
                 continue;
             };
             let sig = fn_sig(db, f);
-            let declared = Ty::func(
+            let declared = Ty::func_does(
                 sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect::<Box<[_]>>(),
                 sig.ret.clone().unwrap_or(Ty::Error),
+                sig.effects.clone().unwrap_or_else(Ty::nothing),
             );
             let file = block.file(db);
             if !builtin.has_signature(db, file, &declared) && !has_error(&declared) {

@@ -27,7 +27,11 @@ use boltlang_hir_def::{
     item_tree::FunctionName,
 };
 
-use crate::{AdtId, lang::string_struct, ty::Ty};
+use crate::{
+    AdtId,
+    lang::{cont_struct, string_struct},
+    ty::Ty,
+};
 
 /// What a builtin of a primitive type for a prefix operator does, like
 /// `i32_neg`.
@@ -98,6 +102,13 @@ pub enum Builtin {
     /// be changed. Code can't make an `imm` array with computed elements
     /// otherwise, since one that's built is `mut`.
     ArrayFreeze,
+    /// `fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R`: go on
+    /// with the computation a handler stopped, with `value` as the result of
+    /// the operation. It gives what the handler's `match` gives for the
+    /// rest of the computation, and does what the computation does besides
+    /// the effects the `match` handles. `Cont` is the prelude's struct
+    /// ([`cont_struct`]).
+    Resume,
     /// An operation of a primitive type, like `fn i32_add(a: i32, b: i32) ->
     /// i32`: what the operator does on that type.
     Prim(PrimOp, BuiltinType),
@@ -250,6 +261,7 @@ impl Builtin {
         Builtin::ArraySet,
         Builtin::ArrayCopy,
         Builtin::ArrayFreeze,
+        Builtin::Resume,
     ];
 
     /// The builtins that compiled code imports from the host. The others
@@ -282,6 +294,7 @@ impl Builtin {
             Builtin::ArraySet => "array_set",
             Builtin::ArrayCopy => "array_copy",
             Builtin::ArrayFreeze => "array_freeze",
+            Builtin::Resume => "resume",
         }
     }
 
@@ -302,6 +315,8 @@ impl Builtin {
             | Builtin::ArraySet
             | Builtin::ArrayCopy
             | Builtin::ArrayFreeze
+            // What the computation does is in its effects.
+            | Builtin::Resume
             | Builtin::Prim(..) => false,
         }
     }
@@ -344,6 +359,19 @@ impl Builtin {
                 [Ty::array(Ty::Bound(0), Ty::Bound(1))],
                 Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1)),
             ),
+            Builtin::Resume => {
+                let (b, u, r) = (Ty::Bound(0), Ty::Bound(1), Ty::Bound(2));
+                let cont = match cont_struct(db, file) {
+                    Some(id) => Ty::adt(
+                        AdtId::Struct(id),
+                        [b.clone(), u.clone(), r.clone()],
+                        [],
+                        Ty::Mutability(Mutability::Imm),
+                    ),
+                    None => Ty::Error,
+                };
+                Ty::func_does([cont, b], u, r)
+            }
             Builtin::Prim(op, ty) => {
                 let t = Ty::Builtin(ty);
                 match op {

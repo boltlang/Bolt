@@ -10,7 +10,7 @@ pub imm struct String(i32);
 extern "bolt" {
   fn print(text: String);
   fn prnt(text: String);
-   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`, and the operations of the primitive types, like `i32_add`
+   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`, `resume`, and the operations of the primitive types, like `i32_add`
   fn panic(message: String) -> i32;
    //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
 }
@@ -49,4 +49,25 @@ A builtin array_alloc that gives an imm array
 extern "bolt" {
   fn array_alloc[T](len: i32) -> [T];
    //^^^^^^^^^^^ error: the builtin `array_alloc` must have the type `fn(i32) -> mut [a]`
+}
+
+================================================================================
+A builtin resume takes the prelude's Cont
+:prelude
+================================================================================
+//- /toolchain/std/__prelude__.bolt
+pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
+//- /main.bolt
+extern "bolt" { fn resume[A, B, E](k: Cont[A, B, E], value: A) -> B does E; }
+
+================================================================================
+A builtin resume without the effects of the computation
+:prelude
+================================================================================
+//- /toolchain/std/__prelude__.bolt
+pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
+//- /main.bolt
+extern "bolt" {
+  fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U;
+   //^^^^^^ error: the builtin `resume` must have the type `fn(Cont[a, b, c], a) -> b does c`
 }

@@ -1,0 +1,20 @@
+// Handlers: what the `k` of an effect arm like `effect get(), k` is, and how
+// the arm goes on with the computation it stopped.
+
+/// The rest of a computation that a handler stopped at an operation: `B` is
+/// what the operation gives, `U` what the handler's `match` gives, and `R`
+/// the effects left once the `match` handles its own. Only `resume` uses
+/// it: its field is how the compiler sees its type, and isn't for code to
+/// use (#356).
+pub imm struct Cont[B, U, R] {
+  resume: fn(B) -> U does R,
+}
+
+extern "bolt" {
+
+  /// Go on with the computation `k` stopped, with `value` as the result of
+  /// its operation. It gives what the handler's `match` gives for the rest
+  /// of the computation.
+  pub fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R;
+
+}

@@ -16,5 +16,8 @@ pub import "./string" *;
 pub import "./char" *;
 pub import "./list" *;
 
+// Effects
+pub import "./effect" *;
+
 // Interfacing with the system
 pub import "./io" *;

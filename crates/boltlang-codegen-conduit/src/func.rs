@@ -895,6 +895,8 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let one = |v: conduit_ir::Var| Ok(Some(Atom::Var(v)));
         match builtin {
             Builtin::Prim(op, t) => self.prim(op, Scalar::of(&MonoTy::Builtin(t))?.unwrap(), args),
+            // Only a handler has a continuation, and handlers aren't lowered.
+            Builtin::Resume => Err(ErrorKind::unsupported("resuming a continuation")),
             Builtin::ArrayLen => one(self.b.array_len(args[0].clone())),
             Builtin::ArrayGet => one(self.b.array_get(args[0].clone(), args[1].clone())),
             Builtin::ArraySet => {
