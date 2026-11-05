@@ -1,0 +1,31 @@
+================================================================================
+A Range is looped over with for
+:prelude
+================================================================================
+let r = Range { start: 0, end: 3 };
+let mut sum = 0;
+for i in r { sum += i; }
+for i in r { sum += i; }
+let bytes = Range { start: 1u8, end: 4u8 };
+for b in bytes { b; }
+--------------------------------------------------------------------------------
+let r: imm Range[i32]
+let sum: i32
+for i in r { sum += i; }: ()
+for i in r { sum += i; }: ()
+let bytes: imm Range[u8]
+for b in bytes { b; }: ()
+
+================================================================================
+A Range needs values that come one after another
+:error
+:prelude
+================================================================================
+let words = Range { start: "a", end: "c" };
+for s in words { s; }
+--------------------------------------------------------------------------------
+let words: imm Range[String]
+for s in words { s; }: ()
+--------------------------------------------------------------------------------
+error at `words`: no instance Step[String]
+error at `for s in words { s; }`: no instance Step[String]
