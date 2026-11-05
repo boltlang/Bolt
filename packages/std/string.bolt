@@ -2,7 +2,7 @@
 import "./mutability" (ToMutDeep, to_mut, to_imm);
 import "./array" (array_len);
 import "./option" (Some, unwrap);
-import "./vec" (Vec, last, push, extend, to_array);
+import "./vec" (Vec, last, push, extend, to_array, len);
 import "./ops" *;
 import "./semigroup" (Semigroup);
 import "./char" (Char, to_utf8, push_escaped);
@@ -108,7 +108,7 @@ pub fn push_str(b: mut StringBuilder, s: String) {
 }
 
 /// The number of bytes added so far.
-pub fn len(b: StringBuilder) -> i32 = b.bytes.len;
+pub fn len(b: StringBuilder) -> i32 = b.bytes.len();
 
 /// The text added so far, as a `String`. It's a copy of only the bytes
 /// added, without the room the builder has for more, so the builder can

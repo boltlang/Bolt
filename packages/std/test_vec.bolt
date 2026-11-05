@@ -212,7 +212,7 @@ fn a_deep_copy_of_a_vec_can_be_changed_all_the_way_down() {
   copy.push(mut [3]);
   assert(rows[0][0] == 1);
   assert(copy[0][0] == 5);
-  assert(copy.len == 3);
+  assert(copy.len() == 3);
 }
 
 #[test]

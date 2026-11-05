@@ -31,10 +31,10 @@ fn surrogates_and_numbers_past_unicode_are_no_characters() {
 
 #[test]
 fn characters_take_one_to_four_bytes_in_utf8() {
-  assert('a'.to_utf8().len == 1);
-  assert('é'.to_utf8().len == 2);
-  assert('✓'.to_utf8().len == 3);
-  assert('😀'.to_utf8().len == 4);
+  assert('a'.to_utf8().len() == 1);
+  assert('é'.to_utf8().len() == 2);
+  assert('✓'.to_utf8().len() == 3);
+  assert('😀'.to_utf8().len() == 4);
 }
 
 #[test]
