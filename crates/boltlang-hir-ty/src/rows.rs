@@ -113,8 +113,36 @@ impl<'db> Solver<'db> {
     }
 
     fn solve_combine(&mut self, parts: &[Ty<'db>], goal: &Ty<'db>, origin: Origin<'db>) -> bool {
-        let parts: Vec<Ty<'db>> = parts.iter().map(|p| self.unifier.resolve(p)).collect();
-        if parts.iter().any(|p| p.row_parts().is_none() && *p != Ty::Error) {
+        let mut parts: Vec<Ty<'db>> = parts.iter().map(|p| self.unifier.resolve(p)).collect();
+        let unknown: Vec<usize> = (0..parts.len())
+            .filter(|&i| parts[i].row_parts().is_none() && parts[i] != Ty::Error)
+            .collect();
+        if let [i] = unknown[..] {
+            // With the goal known and one part not, that part is the least
+            // row that gives the goal: what the goal has that the other parts
+            // don't. So `Log ⊙ e ~ Log + Async` gives `e` just `Async`. Then
+            // the combination is checked as if all its parts were known.
+            let goal = self.unifier.resolve(goal);
+            let Some((goal_effects, goal_rest)) = goal.row_parts() else { return false };
+            let known: Vec<(Ty<'db>, Origin<'db>)> = parts
+                .iter()
+                .enumerate()
+                .filter(|&(j, _)| j != i)
+                .map(|(_, p)| (p.clone(), origin))
+                .collect();
+            let known = self.union(&known);
+            let (known_effects, known_rest) = known.row_parts().unwrap_or((&[], Vec::new()));
+            let effects: Vec<EffectTy<'db>> = goal_effects
+                .iter()
+                .filter(|e| !known_effects.iter().any(|k| k.effect == e.effect))
+                .cloned()
+                .collect();
+            let rest: Vec<Ty<'db>> =
+                goal_rest.into_iter().filter(|r| !known_rest.contains(r)).collect();
+            let solution = Ty::row_of(effects, rest);
+            self.equal(&parts[i], &solution, origin);
+            parts[i] = solution;
+        } else if !unknown.is_empty() {
             return false;
         }
         let parts: Vec<(Ty<'db>, Origin<'db>)> = parts.into_iter().map(|p| (p, origin)).collect();
@@ -167,6 +195,52 @@ impl<'db> Solver<'db> {
             self.add(Constraint::Row { constraint, origin });
         }
         opened
+    }
+
+    /// Make the rows of combinations whose goal stays part of a type, in
+    /// `keep`, and that can't be solved, made of their parts: for `Log ⊙ e ~
+    /// g` with `g` a parameter's row, `g` becomes `Log + e`, as Rose and
+    /// Koka have it, and `e` is kept too. Without it, `e` would get no
+    /// effects, and the type would only take functions that do `Log`.
+    pub(crate) fn open_kept_combinations(&mut self, keep: &mut Vec<TyVar>) {
+        loop {
+            self.solve();
+            let mut opened = None;
+            for (c, _) in &self.pending_rows {
+                let RowConstraint::Combine { parts, goal } = c else { continue };
+                let Ty::Var(g) = self.unifier.resolve(goal) else { continue };
+                if !keep.contains(&g) {
+                    continue;
+                }
+                let parts: Vec<Ty<'db>> = parts.iter().map(|p| self.unifier.resolve(p)).collect();
+                let mut effects: Vec<EffectTy<'db>> = Vec::new();
+                let mut rest: Vec<Ty<'db>> = Vec::new();
+                for part in &parts {
+                    match part.row_parts() {
+                        Some((es, rs)) => {
+                            effects = Ty::union_rows(&effects, es, |_, _| {});
+                            rest.extend(rs);
+                        }
+                        None => rest.push(part.clone()),
+                    }
+                }
+                let vars: Vec<TyVar> = rest
+                    .iter()
+                    .filter_map(|r| if let Ty::Var(v) = r { Some(*v) } else { None })
+                    .collect();
+                // A goal that's one of its own parts says nothing new.
+                if vars.contains(&g) {
+                    continue;
+                }
+                opened = Some((g, Ty::Row(effects.into(), rest.into()), vars));
+                break;
+            }
+            let Some((g, row, vars)) = opened else { return };
+            if self.unifier.unify(&Ty::Var(g), &row).is_err() {
+                return;
+            }
+            keep.extend(vars);
+        }
     }
 
     /// Give each row variable in `candidates` that `keep` doesn't have its

@@ -154,6 +154,26 @@ both: forall E F. fn(fn() -> () does E, fn() -> () does F) -> () does E + F
 h: fn() -> () does Log + Async
 
 ================================================================================
+The rest of a row comes from the function given
+:test-prelude
+================================================================================
+effect Log { fn log(message: String); }
+effect Async { fn wait(); }
+fn quiet[E](f: fn() -> () does Log + E) -> () does E;
+fn both() -> () does Log + Async { log("a"); wait(); }
+fn h() = quiet(both);
+fn i() = quiet(|| log("b"));
+fn pass(f) = quiet(f);
+--------------------------------------------------------------------------------
+quiet: forall E. fn(fn() -> () does Log + E) -> () does E
+both: fn() -> () does Log + Async
+h: fn() -> () does Async
+i: fn() -> ()
+pass: forall e. fn(fn() -> () does Log + e) -> () does e
+--------------------------------------------------------------------------------
+error at `quiet`: expected Log + a, found Log
+
+================================================================================
 An inferred row made of an effect and an effect variable
 :test-prelude
 ================================================================================

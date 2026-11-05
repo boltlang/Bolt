@@ -378,6 +378,7 @@ fn infer_group<'db>(
     for f in group {
         vars_in(&solver.unifier.resolve(&env.mono[f]), &mut keep);
     }
+    solver.open_kept_combinations(&mut keep);
     solver.settle_at_most(&keep, true);
     // A function's effects, and other rows only in positive places, get the
     // least row that holds what's in them. Rows that only the calls inside
