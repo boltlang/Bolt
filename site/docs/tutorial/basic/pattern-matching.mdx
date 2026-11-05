@@ -92,6 +92,21 @@ fn label(o: Option[i32]) -> String = match o {
 ["zero", "a digit", "a big number", "nothing"]
 ```
 
+The alternatives of `a | b` must name the same variables, with the same
+types, so that the arm can use them whichever alternative matched:
+
+```bolt
+enum Shape { Square(i32), Circle(i32), Empty }
+
+fn size(s: Shape) -> i32 = match s {
+  Shape.Square(n) | Shape.Circle(n) => n,
+  Shape.Empty => 0,
+};
+```
+
+`Shape.Square(n) | Shape.Empty` is an error, because `n` would have no
+value when the shape is empty.
+
 ## Guards
 
 An arm can have a *guard*: an extra condition after `if`. The arm is only

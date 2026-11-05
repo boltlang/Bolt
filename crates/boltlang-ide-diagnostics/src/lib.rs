@@ -68,6 +68,8 @@ impl DiagnosticCode {
     pub const BAD_MANIFEST: Self = Self("E0113");
     pub const UNRESOLVED_OWNER: Self = Self("E0114");
     pub const OWNER_NOT_TOP_LEVEL: Self = Self("E0115");
+    pub const NOT_BOUND_IN_ALL_ALTERNATIVES: Self = Self("E0116");
+    pub const MUTABILITY_DIFFERS_IN_ALTERNATIVES: Self = Self("E0117");
 
     pub const TYPE_MISMATCH: Self = Self("E0201");
     pub const INFINITE_TYPE: Self = Self("E0202");
@@ -525,6 +527,14 @@ fn describe(
         K::OwnerNotTopLevel => (
             C::OWNER_NOT_TOP_LEVEL,
             "a function can only be put in the namespace of a type at the top level of a file".to_string(),
+        ),
+        K::NotBoundInAllAlternatives { name } => (
+            C::NOT_BOUND_IN_ALL_ALTERNATIVES,
+            format!("`{name}` is bound in some alternatives of this pattern, but not in all of them"),
+        ),
+        K::MutabilityDiffersInAlternatives { name } => (
+            C::MUTABILITY_DIFFERS_IN_ALTERNATIVES,
+            format!("`{name}` is `mut` in some alternatives of this pattern, but not in all of them"),
         ),
         K::UnresolvedPrelude { package, error } => {
             let message = match error {

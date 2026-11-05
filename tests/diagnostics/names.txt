@@ -39,3 +39,36 @@ Unknown fields are reported at their name
                     //^ error: there is no field `z`
   fn f(p: Point) = match p { Point { x, v, .. } => x };
                                       //^ error: there is no field `v`
+
+================================================================================
+The alternatives of an or-pattern bind the same names
+:test-prelude
+================================================================================
+enum E { A(i32), B(i32), C(Bool) }
+fn f(e: E) -> i32 = match e { E.A(x) | E.B(x) => x, E.C(_) => 0 };
+fn g(e: E) -> i32 = match e { E.A(x) | E.C(_) => 1, E.B(_) => 2 };
+                                //^ error: `x` is bound in some alternatives of this pattern, but not in all of them
+fn h(e: E) -> i32 = match e { E.A(_) | E.B(y) => 1, E.C(_) => 2 };
+                                         //^ error: `y` is bound in some alternatives of this pattern, but not in all of them
+fn i(e: E) -> i32 = match e { E.A(mut x) | E.B(x) => x, E.C(_) => 0 };
+                                             //^ error: `x` is `mut` in some alternatives of this pattern, but not in all of them
+
+================================================================================
+A name has one type in all the alternatives
+:test-prelude
+================================================================================
+enum E { A(i32), B(Bool), C }
+fn f(e: E) = match e { E.A(x) | E.B(x) => 1, E.C => 0 };
+                                  //^ error: expected `i32`, found `Bool`
+
+================================================================================
+The operations of an effect arm bind the same names
+:test-prelude
+================================================================================
+effect Log { fn info(m: String); fn warn(m: String); fn tick(); }
+fn f(body: fn() does Log) -> () does Log = match body() {
+  v => v,
+  effect info(m) | warn(m), _ => (),
+  effect tick() | warn(n), _ => (),
+                     //^ error: `n` is bound in some alternatives of this pattern, but not in all of them
+};

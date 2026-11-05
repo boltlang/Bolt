@@ -15,7 +15,7 @@ use boltlang_hir_def::{
     Name,
     body::{Body, DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
-    hir::{Expr, MutabilityRef, TypeRef, TypeRefId},
+    hir::{BindingId, Expr, MutabilityRef, PatId, TypeRef, TypeRefId},
     ids::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
         ItemContainerId, StructId, TypeAliasId,
@@ -120,6 +120,18 @@ pub enum DiagnosticKind<'db> {
     },
     /// `fn Vec.new()` somewhere other than the top level of a file.
     OwnerNotTopLevel,
+    /// A name bound in some alternatives of an or-pattern but not all, like
+    /// the `x` of `A(x) | B`, reported where it's bound first. The
+    /// operations of an effect arm count as alternatives too.
+    NotBoundInAllAlternatives {
+        name: Name,
+    },
+    /// A name that's `mut` in some alternatives of an or-pattern and not in
+    /// others, like the `x` of `A(mut x) | B(x)`, reported where it differs
+    /// from the first alternative.
+    MutabilityDiffersInAlternatives {
+        name: Name,
+    },
     UnresolvedName,
     UnresolvedType,
     /// A path that names something other than a type, like a class.
@@ -1331,6 +1343,49 @@ impl<'db> Collector<'db> {
             self.push(range, kind);
         }
         self.matches(id, body, map);
+        self.alternatives(body, map);
+    }
+
+    /// The or-patterns of a body, and effect arms with several operations,
+    /// whose alternatives don't bind the same names the same way.
+    fn alternatives(&mut self, body: &Body, map: &ExpressionStoreSourceMap) {
+        for alternatives in body.alternatives() {
+            // For each alternative, the first binding of each name in it.
+            let binds: Vec<Vec<(Name, PatId, BindingId)>> = alternatives
+                .iter()
+                .map(|pats| {
+                    let mut seen: Vec<(Name, PatId, BindingId)> = Vec::new();
+                    for (pat, id) in body.binds_in(pats) {
+                        let name = &body.bindings[id].name;
+                        if !seen.iter().any(|(n, ..)| n == name) {
+                            seen.push((name.clone(), pat, id));
+                        }
+                    }
+                    seen
+                })
+                .collect();
+            let mut names: Vec<(Name, PatId, BindingId)> = Vec::new();
+            for (name, pat, id) in binds.iter().flatten() {
+                if !names.iter().any(|(n, ..)| n == name) {
+                    names.push((name.clone(), *pat, *id));
+                }
+            }
+            for (name, first_pat, first_id) in names {
+                let found: Vec<Option<(PatId, BindingId)>> = binds
+                    .iter()
+                    .map(|alt| alt.iter().find(|(n, ..)| *n == name).map(|(_, p, i)| (*p, *i)))
+                    .collect();
+                if found.iter().any(Option::is_none) {
+                    let range = node_range(map, ExprOrPat::Pat(first_pat));
+                    self.push(range, DiagnosticKind::NotBoundInAllAlternatives { name });
+                } else if let Some((pat, _)) =
+                    found.iter().flatten().find(|(_, id)| *id != first_id)
+                {
+                    let range = node_range(map, ExprOrPat::Pat(*pat));
+                    self.push(range, DiagnosticKind::MutabilityDiffersInAlternatives { name });
+                }
+            }
+        }
     }
 
     /// The `match`es of a body that miss values, and their arms that are

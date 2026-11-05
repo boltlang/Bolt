@@ -378,8 +378,7 @@ rules: a name bound in one alternative is bound in all of them, with the
 same type. That includes `k`: a named continuation has the type
 `Cont[B, U, R]` of each operation, so they must all resume with the same
 $B$. With `_`, they can return different types, like `raise` and `fail`
-above. Or-patterns don't check this yet
-([#355](https://github.com/boltlang/bolt/issues/355)).
+above.
 
 ### Typing
 
