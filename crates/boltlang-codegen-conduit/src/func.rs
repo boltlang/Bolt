@@ -923,12 +923,14 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             // A copy that can't be changed. Conduit's `copies` pass makes it
             // a freeze when nothing else has the array.
             Builtin::ArrayFreeze => one(self.b.array_clone(Mutability::Imm, args[0].clone())),
-            Builtin::Print | Builtin::Panic => {
-                let name = if builtin == Builtin::Print { "print" } else { "panic" };
-                self.b.call_extern(self.cx.externs[&ExternKey::Bolt(name)], args);
-                if matches!(result, MonoTy::Never) {
-                    self.b.unreachable();
-                }
+            Builtin::Print => {
+                self.b.call_extern(self.cx.externs[&ExternKey::Bolt("print")], args);
+                Ok(None)
+            }
+            // Conduit's `unreachable` traps when it's reached, so it's all
+            // that aborting needs.
+            Builtin::Abort => {
+                self.b.unreachable();
                 Ok(None)
             }
             Builtin::ArrayAlloc => {

@@ -12,9 +12,9 @@
 //! - A `match`, and a `let` with a pattern, in a statement or a condition,
 //!   follow the decision that `boltlang-lower` makes for them.
 //! - The host functions of an `extern` block are Conduit externs, in the
-//!   module the block names. `print` and `panic` are the host's, in the
-//!   module `bolt`, and so is `unmatched`, which a `match` that no arm
-//!   takes calls.
+//!   module the block names. `print` is the host's, in the module `bolt`,
+//!   and so is `unmatched`, which a `match` that no arm takes calls.
+//!   `abort` is an `unreachable`, which traps.
 //!
 //! - A lambda is lifted to a function of its own, which takes what it
 //!   captures first, as `boltlang-lower` finds it, then its parameters. A
@@ -408,7 +408,6 @@ fn declare_extern<'db>(
             (ExternKey::Function(*f), abi, name)
         }
         Use::Builtin(Builtin::Print) => (ExternKey::Bolt("print"), "bolt".into(), "print".into()),
-        Use::Builtin(Builtin::Panic) => (ExternKey::Bolt("panic"), "bolt".into(), "panic".into()),
         _ => return Ok(()),
     };
     if cx.externs.contains_key(&key) {

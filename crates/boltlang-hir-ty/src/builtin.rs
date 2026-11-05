@@ -77,8 +77,9 @@ pub const ABI: &str = "bolt";
 pub enum Builtin {
     /// `fn print(text: String)`: write the text and a newline.
     Print,
-    /// `fn panic(message: String) -> !`: stop the program with an error.
-    Panic,
+    /// `fn abort() -> !`: stop the program with an error, at once. std's
+    /// `panic` prints its message, then aborts.
+    Abort,
     /// `fn array_len[T](xs: [T]) -> i32`: the number of elements of an array
     /// of either mutability.
     ArrayLen,
@@ -254,7 +255,7 @@ impl Builtin {
     /// The builtins other than the operations of primitive types.
     pub const BASE: &[Builtin] = &[
         Builtin::Print,
-        Builtin::Panic,
+        Builtin::Abort,
         Builtin::ArrayLen,
         Builtin::ArrayAlloc,
         Builtin::ArrayGet,
@@ -266,7 +267,7 @@ impl Builtin {
 
     /// The builtins that compiled code imports from the host. The others
     /// work on arrays, which the code generator doesn't compile yet.
-    pub const HOST: &[Builtin] = &[Builtin::Print, Builtin::Panic];
+    pub const HOST: &[Builtin] = &[Builtin::Print];
 
     /// Every builtin: those of [`Builtin::BASE`], then the operations of
     /// each primitive type.
@@ -287,7 +288,7 @@ impl Builtin {
         match self {
             Builtin::Prim(..) => unreachable!("named in `all_builtins`"),
             Builtin::Print => "print",
-            Builtin::Panic => "panic",
+            Builtin::Abort => "abort",
             Builtin::ArrayLen => "array_len",
             Builtin::ArrayAlloc => "array_alloc",
             Builtin::ArrayGet => "array_get",
@@ -308,7 +309,7 @@ impl Builtin {
         match self {
             Builtin::Print => true,
             // Stopping with an error is fine anywhere.
-            Builtin::Panic
+            Builtin::Abort
             | Builtin::ArrayLen
             | Builtin::ArrayAlloc
             | Builtin::ArrayGet
@@ -338,7 +339,7 @@ impl Builtin {
         let i32_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
         match self {
             Builtin::Print => Ty::func([str_ty], Ty::unit()),
-            Builtin::Panic => Ty::func([str_ty], Ty::Never),
+            Builtin::Abort => Ty::func([], Ty::Never),
             Builtin::ArrayLen => Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1))], i32_ty),
             Builtin::ArrayAlloc => {
                 Ty::func([i32_ty], Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0)))

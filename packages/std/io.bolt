@@ -7,9 +7,15 @@ extern "bolt" {
   /// Write `text` and a newline.
   pub fn print(text: String);
 
-  /// Stop the program with an error, with `message`.
-  pub fn panic(message: String) -> !;
+  /// Stop the program with an error, at once.
+  pub fn abort() -> !;
 
+}
+
+/// Stop the program with an error, after writing `message`.
+pub fn panic(message: String) -> ! {
+  print(message);
+  abort()
 }
 
 /// Stop the program with an error unless `cond` holds. For tests: a test

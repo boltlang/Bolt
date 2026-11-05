@@ -978,7 +978,7 @@ data String {
 
 extern log "env" "log" (i32) -> ()
 
-extern panic "bolt" "panic" (imm String) -> ()
+extern print "bolt" "print" (imm String) -> ()
 
 fn file() -> () {
   let %v: mut Vec_i32 = call Vec_new_i32()
@@ -1075,7 +1075,7 @@ fn Vec_with_capacity_i32(%capacity: i32) -> (mut Vec_i32) {
     _ =>
       let %2: imm [i32] = array_new(97i32, 32i32, 99i32, 97i32, 112i32, 97i32, 99i32, 105i32, 116i32, 121i32, 32i32, 99i32, 97i32, 110i32, 39i32, 116i32, 32i32, 98i32, 101i32, 32i32, 110i32, 101i32, 103i32, 97i32, 116i32, 105i32, 118i32, 101i32)
       let %3: imm String = new String.0(%2)
-      let = call_extern panic(%3)
+      let = call panic(%3)
       unreachable
   }
 }
@@ -1155,6 +1155,11 @@ fn get_i32['m1](%v: 'm1 Vec_i32, %index: i32) -> (i32) {
   jump ret(%3)
 }
 
+fn panic(%message: imm String) -> () {
+  let = call_extern print(%message)
+  unreachable
+}
+
 fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
   let %2: i32 = eq(%a, %b)
   jump ret(%2)
@@ -1170,7 +1175,7 @@ fn check_index_i32['m1](%v: 'm1 Vec_i32, %index: i32) -> () {
       _ =>
         let %6: imm [i32] = array_new(105i32, 110i32, 100i32, 101i32, 120i32, 32i32, 111i32, 117i32, 116i32, 32i32, 111i32, 102i32, 32i32, 98i32, 111i32, 117i32, 110i32, 100i32, 115i32)
         let %7: imm String = new String.0(%6)
-        let = call_extern panic(%7)
+        let = call panic(%7)
         unreachable
     }
   in
@@ -1229,7 +1234,7 @@ data String {
 
 extern log "env" "log" (i32) -> ()
 
-extern panic "bolt" "panic" (imm String) -> ()
+extern print "bolt" "print" (imm String) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32, 2i32)
@@ -1428,7 +1433,7 @@ fn Vec_with_capacity_mut_i32(%capacity: i32) -> (mut Vec_0_i32[mut]) {
     _ =>
       let %2: imm [i32] = array_new(97i32, 32i32, 99i32, 97i32, 112i32, 97i32, 99i32, 105i32, 116i32, 121i32, 32i32, 99i32, 97i32, 110i32, 39i32, 116i32, 32i32, 98i32, 101i32, 32i32, 110i32, 101i32, 103i32, 97i32, 116i32, 105i32, 118i32, 101i32)
       let %3: imm String = new String.0(%2)
-      let = call_extern panic(%3)
+      let = call panic(%3)
       unreachable
   }
 }
@@ -1514,6 +1519,11 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
+fn panic(%message: imm String) -> () {
+  let = call_extern print(%message)
+  unreachable
+}
+
 fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
   let %2: i32 = eq(%a, %b)
   jump ret(%2)
@@ -1534,7 +1544,7 @@ fn check_index_mut_i32['m1](%v: 'm1 Vec_0_i32[mut], %index: i32) -> () {
       _ =>
         let %6: imm [i32] = array_new(105i32, 110i32, 100i32, 101i32, 120i32, 32i32, 111i32, 117i32, 116i32, 32i32, 111i32, 102i32, 32i32, 98i32, 111i32, 117i32, 110i32, 100i32, 115i32)
         let %7: imm String = new String.0(%6)
-        let = call_extern panic(%7)
+        let = call panic(%7)
         unreachable
     }
   in
@@ -1557,7 +1567,7 @@ fn check_index_imm_i32['m1](%v: 'm1 Vec_0_i32[imm], %index: i32) -> () {
       _ =>
         let %6: imm [i32] = array_new(105i32, 110i32, 100i32, 101i32, 120i32, 32i32, 111i32, 117i32, 116i32, 32i32, 111i32, 102i32, 32i32, 98i32, 111i32, 117i32, 110i32, 100i32, 115i32)
         let %7: imm String = new String.0(%6)
-        let = call_extern panic(%7)
+        let = call panic(%7)
         unreachable
     }
   in
