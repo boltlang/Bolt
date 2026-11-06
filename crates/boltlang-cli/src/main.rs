@@ -189,8 +189,95 @@ struct TestCommand {
     #[arg(long, value_name = "NAME")]
     filter: Option<String>,
     /// Stop a test after this many steps of the evaluator.
-    #[arg(long, value_name = "STEPS")]
+    #[arg(long, value_name = "STEPS", conflicts_with = "wasm")]
     fuel: Option<u64>,
+    /// Compile each file to WebAssembly, as `bolt build` does, and run its
+    /// tests with Node, each in an instance of its own, instead of with the
+    /// evaluator.
+    #[arg(long)]
+    wasm: bool,
+}
+
+/// The host that `bolt test --wasm` runs a test with, in Node: `node
+/// host.mjs <module> <test>`. It gives the module `bolt`'s `write_file` and
+/// `flush`, on stdout and stderr, and every other import a function that
+/// stops the program, as the evaluator does for a host function it doesn't
+/// have. It exits with 1 when the test stops with an error, and with 2
+/// when the module can't be run.
+const NODE_TEST_HOST: &str = r#"import fs from "node:fs";
+const [, , path, name] = process.argv;
+const pending = { 1: [], 2: [] };
+const files = { 1: process.stdout, 2: process.stderr };
+const flush = (f) => {
+  if (pending[f].length > 0) files[f].write(Buffer.from(pending[f]));
+  pending[f] = [];
+};
+const imports = { bolt: { write_file: (f, b) => pending[f].push(b), flush } };
+let instance;
+try {
+  const module = await WebAssembly.compile(fs.readFileSync(path));
+  for (const i of WebAssembly.Module.imports(module)) {
+    if (i.module !== "bolt" && i.kind === "function") {
+      (imports[i.module] ??= {})[i.name] = () => {
+        throw new Error(`no host for ${i.module}.${i.name}`);
+      };
+    }
+  }
+  instance = await WebAssembly.instantiate(module, imports);
+} catch (e) {
+  process.stderr.write(`can't run the module: ${e.message}
+`);
+  process.exit(2);
+}
+try {
+  instance.exports[name]();
+} catch (e) {
+  flush(1);
+  flush(2);
+  process.stderr.write(`${e.message}
+`);
+  process.exit(1);
+}
+"#;
+
+/// Where `bolt test --wasm` puts the modules it runs, and its host.
+struct WasmTests {
+    dir: PathBuf,
+}
+
+impl WasmTests {
+    /// A new directory with the host, if there's a `node` to run it with.
+    fn new() -> anyhow::Result<Self> {
+        let found = std::process::Command::new("node").arg("--version").output();
+        if !found.is_ok_and(|o| o.status.success()) {
+            anyhow::bail!("`bolt test --wasm` runs tests with Node, but there's no `node`");
+        }
+        let dir = std::env::temp_dir().join(format!("bolt-test-wasm-{}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join("host.mjs"), NODE_TEST_HOST)?;
+        Ok(WasmTests { dir })
+    }
+
+    /// Run the test `name` of the module `module`, with its output on ours:
+    /// `Err` with why it stopped, if it didn't pass.
+    fn run(&self, module: &std::path::Path, name: &str) -> anyhow::Result<Result<(), String>> {
+        let status = std::process::Command::new("node")
+            .arg(self.dir.join("host.mjs"))
+            .arg(module)
+            .arg(name)
+            .status()?;
+        Ok(match status.code() {
+            Some(0) => Ok(()),
+            Some(2) => Err("the module couldn't be run".into()),
+            _ => Err("the program stopped with an error".into()),
+        })
+    }
+}
+
+impl Drop for WasmTests {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 /// Check a file, then compile it to a WebAssembly module, whose export
@@ -250,8 +337,9 @@ impl Exec for TestCommand {
             }
         }
         let selected = |name: &str| self.filter.as_ref().is_none_or(|f| name.contains(f.as_str()));
+        let wasm = if self.wasm { Some(WasmTests::new()?) } else { None };
         let (mut passed, mut failed, mut skipped) = (0, 0, 0);
-        for &file in &files {
+        for (index, &file) in files.iter().enumerate() {
             let count = test_functions(&db, file)
                 .iter()
                 .filter(|f| {
@@ -276,12 +364,43 @@ impl Exec for TestCommand {
                 ok = false;
                 continue;
             };
-            for (name, f) in program.tests.iter().filter(|(name, _)| selected(name)) {
+            let tests: Vec<&(String, _)> =
+                program.tests.iter().filter(|(name, _)| selected(name)).collect();
+            // With `--wasm`, the file is one module, which exports each test.
+            let module = match &wasm {
+                Some(wasm) => {
+                    let exports: Vec<_> = tests.iter().map(|(n, f)| (*f, n.as_str())).collect();
+                    match boltlang_codegen_conduit::wasm::build_exporting(&program, true, &exports)
+                    {
+                        Ok(bytes) => {
+                            let path = wasm.dir.join(format!("{index}.wasm"));
+                            std::fs::write(&path, bytes)?;
+                            Some(path)
+                        }
+                        Err(error) => {
+                            eprintln!("error: {error}");
+                            println!(
+                                "{}: not run, since it can't be compiled",
+                                display_path(&db, file)
+                            );
+                            skipped += count;
+                            ok = false;
+                            continue;
+                        }
+                    }
+                }
+                None => None,
+            };
+            for (name, f) in tests {
                 print!("test {}::{name} ... ", display_path(&db, file));
                 io::stdout().flush()?;
-                // Each test gets a machine of its own, so that tests don't
-                // see each other's objects.
-                match run(&program, *f, self.fuel) {
+                // Each test gets a machine, or an instance, of its own, so
+                // that tests don't see each other's objects.
+                let result = match (&wasm, &module) {
+                    (Some(wasm), Some(module)) => wasm.run(module, name)?,
+                    _ => run(&program, *f, self.fuel).map_err(|e| e.to_string()),
+                };
+                match result {
                     Ok(()) => {
                         println!("ok");
                         passed += 1;

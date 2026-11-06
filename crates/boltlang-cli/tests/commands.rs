@@ -219,6 +219,26 @@ fn test_runs_the_tests_of_files() {
     assert!(filtered.out.contains("test result: ok. 1 passed; 0 failed"), "{}", filtered.out);
 }
 
+#[test]
+fn test_runs_the_tests_compiled_to_wasm() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipped: no `node` to run the tests with");
+        return;
+    }
+    let source = "extern \"env\" { fn missing(); }\n\
+        fn double(x: i32) -> i32 = x * 2;\n\
+        #[test]\nfn doubles() { print(\"in doubles\"); assert(double(2) == 4); }\n\
+        #[test]\nfn fails() { assert(double(2) == 5); }\n\
+        #[test]\nfn calls_the_host() { missing(); }\n";
+    let dir = dir_with("test-wasm", &[("a.bolt", source)]);
+    let o = bolt_std(&dir, "test", &["--wasm"]);
+    assert!(!o.ok);
+    assert!(o.out.contains("a.bolt::doubles ... in doubles\nok"), "{}", o.out);
+    assert!(o.out.contains("a.bolt::fails ... "), "{}", o.out);
+    assert!(o.err.contains("no host for env.missing"), "{}", o.err);
+    assert!(o.out.contains("test result: FAILED. 1 passed; 2 failed"), "{}", o.out);
+}
+
 /// `bolt --version`, with `BOLT_PRELUDE_PATH` set to `std`, or unset.
 fn version(std: Option<&str>) -> String {
     let mut command = Command::new(env!("CARGO_BIN_EXE_bolt"));
