@@ -326,6 +326,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                         }
                     },
                 };
+                // `imm T` of a type that has no mutability of its own, like a
+                // type parameter, is a copy of it that can't be changed.
+                let deep = matches!(ty, Ty::Param(_) | Ty::Assoc(..) | Ty::App(..) | Ty::Imm(_));
+                if deep && kind == Some(Kind::Type) && written == Ty::Mutability(Mutability::Imm) {
+                    return (Ty::imm_of_unknown(ty), kind);
+                }
                 return (self.with_mutability(id, ty, written), kind);
             }
             TypeRef::Never => Ty::Never,

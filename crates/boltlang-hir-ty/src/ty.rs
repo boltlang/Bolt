@@ -128,6 +128,15 @@ pub enum Ty<'db> {
     /// `C` in `fn first[C](c: C) -> C.Item where Index[C]`, it stays as it
     /// is, and only equals itself.
     Assoc(TypeAliasId<'db>, Box<[Ty<'db>]>),
+    /// `imm T`: the type of a copy of a `T` that can't be changed, all the
+    /// way down, which `imm e` makes. It's only for a type that `imm` can't
+    /// be taken apart yet, like a type parameter: the checker gives `imm`
+    /// of a known type as that type, with its arrays and structs `imm`, so
+    /// that `imm (mut [mut [i32]])` is `imm [imm [i32]]`. Like an
+    /// associated type, it only equals itself, since two types can have the
+    /// same `imm`. In a body, the checker replaces it with a variable and a
+    /// constraint, which gives `T` itself when `T` is `imm`.
+    Imm(Box<Ty<'db>>),
     /// A type parameter as seen inside the item that declares it, where it
     /// stands for any type and only equals itself.
     Param(GenericParamId<'db>),
@@ -168,6 +177,15 @@ impl<'db> Ty<'db> {
             Box::new(Ty::Mutability(Mutability::Imm)),
             Box::new(effects),
         )
+    }
+
+    /// `imm T` of a type that `imm` can't take apart: `imm (imm T)` is
+    /// `imm T`.
+    pub fn imm_of_unknown(ty: Ty<'db>) -> Self {
+        match ty {
+            Ty::Imm(_) => ty,
+            ty => Ty::Imm(Box::new(ty)),
+        }
     }
 
     /// The row without effects, `Nothing`.
@@ -349,6 +367,7 @@ impl<'db> Ty<'db> {
                 rest.iter().for_each(f);
             }
             Ty::Assoc(_, args) => args.iter().for_each(f),
+            Ty::Imm(ty) => f(ty),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Mutability(_)
@@ -396,6 +415,7 @@ impl<'db> Ty<'db> {
                 fold_all(rest, f).into_vec(),
             ),
             Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
+            Ty::Imm(ty) => Ty::Imm(Box::new(ty.fold(f))),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Mutability(_)
@@ -768,6 +788,10 @@ impl fmt::Display for DisplayTy<'_, '_> {
                     }
                 }
             }
+            Ty::Imm(ty) => match ty.as_ref() {
+                Ty::Fn(..) | Ty::Imm(_) => write!(f, "imm ({})", show(ty)),
+                _ => write!(f, "imm {}", show(ty)),
+            },
             Ty::Bound(index) => match named(Unknown::Bound(*index)) {
                 Some(name) => f.write_str(name),
                 None => write!(f, "{}", bound_name(*index)),

@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
-    body::DefWithBodyId,
+    arena::Idx,
+    body::{DefWithBody, DefWithBodyId},
     hir::{ExprId, PatId, TypeRefId},
     ids::{ClassId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     nameres::{file_scope, files_used_by},
@@ -612,13 +613,22 @@ impl<'db> Solver<'db> {
                 if has_vars(&t) {
                     return false;
                 }
+                self.imm_unknown(&t, &c.to, origin);
+                true
+            }
+            // A closure can't be copied: it must already be `imm`.
+            t @ Ty::Fn(..) => {
                 self.imm_as_is(&t, &c.to, origin);
                 true
             }
-            // A closure can't be copied, and what a type parameter is isn't
-            // known.
-            t @ (Ty::Fn(..) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..)) => {
-                self.imm_as_is(&t, &c.to, origin);
+            // What a type parameter is isn't known.
+            t @ (Ty::Param(_) | Ty::Bound(_) | Ty::App(..)) => {
+                self.imm_unknown(&t, &c.to, origin);
+                true
+            }
+            // A copy of `imm T` is an `imm T` too.
+            t @ Ty::Imm(_) => {
+                self.equal(&c.to, &t, origin);
                 true
             }
             // A value that holds nothing that can be changed.
@@ -716,6 +726,17 @@ impl<'db> Solver<'db> {
         }
     }
 
+    /// `imm e` of a type that can't be taken apart, like a type parameter:
+    /// `imm T`, or `T` itself when it's assumed to be `imm`, like the `T` of
+    /// `[T: imm]`.
+    fn imm_unknown(&mut self, ty: &Ty<'db>, to: &Ty<'db>, origin: Origin<'db>) {
+        if self.type_assumed(ty, &Ty::Mutability(Mutability::Imm)) {
+            self.equal(to, ty, origin);
+        } else {
+            self.equal(to, &Ty::imm_of_unknown(ty.clone()), origin);
+        }
+    }
+
     /// `imm e` that gives `e` itself, of type `ty`: what it holds must
     /// already be `imm` all the way down.
     fn imm_as_is(&mut self, ty: &Ty<'db>, to: &Ty<'db>, origin: Origin<'db>) {
@@ -730,16 +751,15 @@ impl<'db> Solver<'db> {
 
     /// Settle the `imm` constraints whose type is still unknown once the
     /// body is solved, one at a time, since each can decide others. `imm e`
-    /// gives `e` itself, which must then be `imm` all the way down, like
-    /// `forall a. a ⊑ imm => fn(a) -> a` for `fn f(x) = imm x`. A scheme
-    /// can't say more, since what `imm` makes of a type isn't a type (#329).
+    /// of a type that's still unknown is `imm` of it, like `forall a. fn(a)
+    /// -> imm a` for `fn f(x) = imm x`.
     pub fn settle_copies(&mut self) {
         loop {
             self.solve();
             if !self.pending_imm.is_empty() {
                 let (c, origin) = self.pending_imm.remove(0);
                 let from = self.unifier.resolve(&c.from);
-                self.imm_as_is(&from, &c.to, origin);
+                self.equal(&c.to, &Ty::imm_of_unknown(from), origin);
             } else {
                 return;
             }
@@ -959,18 +979,29 @@ impl<'db> Solver<'db> {
     }
 
     /// `ty` with each associated type in it, like `Vec[?0].Item`, replaced
-    /// by a new variable that a [`Constraint::Assoc`] decides.
+    /// by a new variable that a [`Constraint::Assoc`] decides, and each
+    /// `imm T` by one that a [`Constraint::Imm`] decides, so that `imm T` is
+    /// `T` itself where `T` is `imm`.
     pub fn flatten_assoc(&mut self, ty: &Ty<'db>, origin: Origin<'db>) -> Ty<'db> {
-        if !ty.any(&mut |t| matches!(t, Ty::Assoc(..))) {
+        if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_))) {
             return ty.clone();
         }
-        ty.fold(&mut |t| {
-            let Ty::Assoc(alias, args) = t else { return None };
-            let args = args.iter().map(|a| self.flatten_assoc(a, origin)).collect();
-            let var = self.new_var(VarKind::General);
-            let constraint = AssocConstraint { alias: *alias, args, ty: var.clone() };
-            self.add(Constraint::Assoc { constraint, origin });
-            Some(var)
+        ty.fold(&mut |t| match t {
+            Ty::Assoc(alias, args) => {
+                let args = args.iter().map(|a| self.flatten_assoc(a, origin)).collect();
+                let var = self.new_var(VarKind::General);
+                let constraint = AssocConstraint { alias: *alias, args, ty: var.clone() };
+                self.add(Constraint::Assoc { constraint, origin });
+                Some(var)
+            }
+            Ty::Imm(inner) => {
+                let from = self.flatten_assoc(inner, origin);
+                let var = self.new_var(VarKind::General);
+                let constraint = ImmConstraint { from, to: var.clone() };
+                self.add(Constraint::Imm { constraint, origin });
+                Some(var)
+            }
+            _ => None,
         })
     }
 
@@ -1632,6 +1663,21 @@ pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<ImplId<'db>> {
         .chain(files_used_by(db, file).iter().copied())
         .flat_map(|f| file_scope(db, f).scope.impls().iter().copied())
         .collect()
+}
+
+/// What `imm` makes of `ty`, a type without variables, with the impls
+/// visible in `file`: `imm (mut [mut [i32]])` is `imm [imm [i32]]`, and
+/// `imm T` stays as it is.
+pub fn imm_of<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
+    let mut solver = Solver::new(db, file);
+    let to = solver.new_var(VarKind::General);
+    // Nothing is reported, so the origin doesn't matter.
+    let body = DefWithBodyId::new(db, DefWithBody::File(file));
+    let origin = Origin::new(body, ExprOrPat::Expr(Idx::new(0)));
+    let constraint = ImmConstraint { from: ty.clone(), to: to.clone() };
+    solver.add(Constraint::Imm { constraint, origin });
+    solver.settle_copies();
+    solver.unifier.resolve(&to)
 }
 
 /// `ty` with the associated types in it that an impl visible in `file`

@@ -90,7 +90,7 @@ let f: mut fn() -> ()
 error at `imm (|| { xs[0] = 1; })`: mut fn() -> () isn't at most imm
 
 ================================================================================
-Imm of a type parameter needs it to be imm
+Imm of a type parameter is imm T, which is T when T is imm
 :error
 ================================================================================
 fn f[T](x: T) -> T = imm x;
@@ -99,9 +99,60 @@ fn h(x) = imm x;
 --------------------------------------------------------------------------------
 f: forall T. fn(T) -> T
 g: forall T. T: imm => fn(T) -> T
-h: forall a. a: imm => fn(a) -> a
+h: forall a. fn(a) -> imm a
 --------------------------------------------------------------------------------
-error at `imm x`: T isn't at most imm
+error at `imm x`: expected T, found imm T
+
+================================================================================
+A copy of a type parameter is written imm T
+================================================================================
+fn f[T](x: T) -> imm T = imm x;
+fn g[T: imm](x: T) -> imm T = x;
+fn k[T](x: T) -> imm T = imm (imm x);
+fn wrap[T](x: T) = [imm x];
+--------------------------------------------------------------------------------
+f: forall T. fn(T) -> imm T
+g: forall T. T: imm => fn(T) -> imm T
+k: forall T. fn(T) -> imm T
+wrap: forall T. fn(T) -> imm [imm T]
+
+================================================================================
+Imm T of a known type is what imm makes of it
+:test-prelude
+================================================================================
+fn h(x) = imm x;
+let a = h(mut [mut [1]]);
+let b = h(1);
+let c = h(Some(mut [1]));
+--------------------------------------------------------------------------------
+h: forall a. fn(a) -> imm a
+let a: imm [imm [i32]]
+let b: i32
+let c: Option[imm [i32]]
+
+================================================================================
+Imm of an associated type
+:test-prelude
+================================================================================
+fn first[C](c: C) -> imm C.Item where Index[C] = imm c[0];
+let x = first(mut [mut [1]]);
+--------------------------------------------------------------------------------
+first: forall C. Index[C] => fn(C) -> imm C.Item
+let x: imm [i32]
+
+================================================================================
+Only imm, not mut, can be written before a type parameter
+:error
+================================================================================
+fn f[T](x: T) -> mut T = x;
+fn g[F](x: F[i32]) -> imm F = x;
+--------------------------------------------------------------------------------
+f: forall T. fn(T) -> T
+g: forall F. fn(F[i32]) -> {error}
+--------------------------------------------------------------------------------
+error at `mut T`: can't be mut or imm
+error at `imm F`: can't be mut or imm
+error at `imm F`: expected 1 type arguments, found 0
 
 ================================================================================
 A type argument held and in a function type must already be imm

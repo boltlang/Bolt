@@ -108,8 +108,10 @@ pub fn split<'db>(
             }
         }
         Ty::Fn(_, _, m, _) => push(out, Held::Mutability((**m).clone()), bound),
-        // A row of effects holds no values.
-        Ty::Builtin(_)
+        // A row of effects holds no values, and `imm T` nothing that can be
+        // changed.
+        Ty::Imm(_)
+        | Ty::Builtin(_)
         | Ty::Mutability(_)
         | Ty::Unwritten
         | Ty::Row(..)

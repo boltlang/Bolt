@@ -279,6 +279,9 @@ impl<'db> Unifier<'db> {
             (Ty::Assoc(x, xs), Ty::Assoc(y, ys)) if x == y && xs.len() == ys.len() => {
                 self.unify_all(xs, ys)
             }
+            // So does `imm T`, which the checker only keeps for types it can't
+            // take apart, like type parameters.
+            (Ty::Imm(x), Ty::Imm(y)) => self.unify(x, y),
             _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),
         }
     }
