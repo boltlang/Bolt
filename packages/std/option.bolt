@@ -12,7 +12,6 @@ pub import Option.*;
 /// A copy of an `Option` that can't be changed all the way down: what it
 /// holds is copied with its own `to_imm_deep`.
 impl[T: ToImmDeep] ToImmDeep[Option[T]] {
-  type ImmDeep = Option[T.ImmDeep];
   fn to_imm_deep(o) = match o {
     None => None,
     Some(x) => Some(to_imm_deep(x)),

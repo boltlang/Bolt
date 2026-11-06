@@ -102,8 +102,7 @@ impl[T: ToMutDeep] ToMutDeep[[T]] {
 
 /// A copy of an array that can't be changed all the way down: each element
 /// is copied with its own `to_imm_deep`.
-impl[T: ToImmDeep] ToImmDeep[[T]] where T.ImmDeep: imm {
-  type ImmDeep = imm [T.ImmDeep];
+impl[T: ToImmDeep] ToImmDeep[[T]] {
   fn to_imm_deep(xs) {
     let n = array_len(xs);
     let ys = array_alloc(n);

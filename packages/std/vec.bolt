@@ -260,8 +260,7 @@ impl[T: ToMutDeep] ToMutDeep[Vec[T]] {
 /// A copy of a `Vec` that can't be changed all the way down: each element
 /// is copied with its own `to_imm_deep`. It has no room to grow, since it
 /// can't.
-impl[T: ToImmDeep] ToImmDeep[Vec[T]] where T.ImmDeep: imm {
-  type ImmDeep = imm Vec[T.ImmDeep];
+impl[T: ToImmDeep] ToImmDeep[Vec[T]] {
   fn to_imm_deep(v) {
     let items = array_alloc(v.len);
     let mut i = 0;

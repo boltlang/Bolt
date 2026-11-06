@@ -271,47 +271,41 @@ impl[
 /// Values that are `imm` all the way down, like numbers, `String` and
 /// `Char`, are given back as they are: they have nothing to copy.
 pub class ToImmDeep[T] {
-  /// The `imm` version of `T`, all the way down, like `imm [imm [i32]]`
-  /// for `[[i32]]`.
-  type ImmDeep;
-
-  /// A copy of `x` that can't be changed all the way down.
-  fn to_imm_deep(x: T) -> ImmDeep;
+  /// A copy of `x` that can't be changed all the way down, like an `imm
+  /// [imm [i32]]` for a `[[i32]]`.
+  fn to_imm_deep(x: T) -> imm T;
 }
 
-impl ToImmDeep[Bool] { type ImmDeep = Bool; fn to_imm_deep(x) = x; }
-impl ToImmDeep[i8] { type ImmDeep = i8; fn to_imm_deep(x) = x; }
-impl ToImmDeep[i16] { type ImmDeep = i16; fn to_imm_deep(x) = x; }
-impl ToImmDeep[i32] { type ImmDeep = i32; fn to_imm_deep(x) = x; }
-impl ToImmDeep[i64] { type ImmDeep = i64; fn to_imm_deep(x) = x; }
-impl ToImmDeep[i128] { type ImmDeep = i128; fn to_imm_deep(x) = x; }
-impl ToImmDeep[isize] { type ImmDeep = isize; fn to_imm_deep(x) = x; }
-impl ToImmDeep[u8] { type ImmDeep = u8; fn to_imm_deep(x) = x; }
-impl ToImmDeep[u16] { type ImmDeep = u16; fn to_imm_deep(x) = x; }
-impl ToImmDeep[u32] { type ImmDeep = u32; fn to_imm_deep(x) = x; }
-impl ToImmDeep[u64] { type ImmDeep = u64; fn to_imm_deep(x) = x; }
-impl ToImmDeep[u128] { type ImmDeep = u128; fn to_imm_deep(x) = x; }
-impl ToImmDeep[usize] { type ImmDeep = usize; fn to_imm_deep(x) = x; }
-impl ToImmDeep[f32] { type ImmDeep = f32; fn to_imm_deep(x) = x; }
-impl ToImmDeep[f64] { type ImmDeep = f64; fn to_imm_deep(x) = x; }
-impl ToImmDeep[()] { type ImmDeep = (); fn to_imm_deep(x) = x; }
+impl ToImmDeep[Bool] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i8] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i16] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i32] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i64] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i128] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[isize] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u8] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u16] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u32] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u64] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u128] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[usize] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[f32] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[f64] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[()] { fn to_imm_deep(x) = x; }
 
 /// A tuple is copied element by element. There are impls up to ten elements:
 /// one for every length needs #363.
 impl[A: ToImmDeep, B: ToImmDeep] ToImmDeep[(A, B)] {
-  type ImmDeep = (A.ImmDeep, B.ImmDeep);
   fn to_imm_deep(p) = match p { (a, b) => (to_imm_deep(a), to_imm_deep(b)) };
 }
 
 impl[A: ToImmDeep, B: ToImmDeep, C: ToImmDeep] ToImmDeep[(A, B, C)] {
-  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep);
   fn to_imm_deep(t) = match t {
     (a, b, c) => (to_imm_deep(a), to_imm_deep(b), to_imm_deep(c)),
   };
 }
 
 impl[A: ToImmDeep, B: ToImmDeep, C: ToImmDeep, D: ToImmDeep] ToImmDeep[(A, B, C, D)] {
-  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep);
   fn to_imm_deep(t) = match t {
     (a, b, c, d) => (to_imm_deep(a), to_imm_deep(b), to_imm_deep(c), to_imm_deep(d)),
   };
@@ -324,7 +318,6 @@ impl[
   D: ToImmDeep,
   E: ToImmDeep,
 ] ToImmDeep[(A, B, C, D, E)] {
-  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep, E.ImmDeep);
   fn to_imm_deep(t) = match t {
     (a, b, c, d, e) => (
       to_imm_deep(a),
@@ -344,7 +337,6 @@ impl[
   E: ToImmDeep,
   F: ToImmDeep,
 ] ToImmDeep[(A, B, C, D, E, F)] {
-  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep, E.ImmDeep, F.ImmDeep);
   fn to_imm_deep(t) = match t {
     (a, b, c, d, e, f) => (
       to_imm_deep(a),
@@ -366,7 +358,6 @@ impl[
   F: ToImmDeep,
   G: ToImmDeep,
 ] ToImmDeep[(A, B, C, D, E, F, G)] {
-  type ImmDeep = (A.ImmDeep, B.ImmDeep, C.ImmDeep, D.ImmDeep, E.ImmDeep, F.ImmDeep, G.ImmDeep);
   fn to_imm_deep(t) = match t {
     (a, b, c, d, e, f, g) => (
       to_imm_deep(a),
@@ -390,16 +381,6 @@ impl[
   G: ToImmDeep,
   H: ToImmDeep,
 ] ToImmDeep[(A, B, C, D, E, F, G, H)] {
-  type ImmDeep = (
-    A.ImmDeep,
-    B.ImmDeep,
-    C.ImmDeep,
-    D.ImmDeep,
-    E.ImmDeep,
-    F.ImmDeep,
-    G.ImmDeep,
-    H.ImmDeep,
-  );
   fn to_imm_deep(t) = match t {
     (a, b, c, d, e, f, g, h) => (
       to_imm_deep(a),
@@ -425,17 +406,6 @@ impl[
   H: ToImmDeep,
   I: ToImmDeep,
 ] ToImmDeep[(A, B, C, D, E, F, G, H, I)] {
-  type ImmDeep = (
-    A.ImmDeep,
-    B.ImmDeep,
-    C.ImmDeep,
-    D.ImmDeep,
-    E.ImmDeep,
-    F.ImmDeep,
-    G.ImmDeep,
-    H.ImmDeep,
-    I.ImmDeep,
-  );
   fn to_imm_deep(t) = match t {
     (a, b, c, d, e, f, g, h, i) => (
       to_imm_deep(a),
@@ -463,18 +433,6 @@ impl[
   I: ToImmDeep,
   J: ToImmDeep,
 ] ToImmDeep[(A, B, C, D, E, F, G, H, I, J)] {
-  type ImmDeep = (
-    A.ImmDeep,
-    B.ImmDeep,
-    C.ImmDeep,
-    D.ImmDeep,
-    E.ImmDeep,
-    F.ImmDeep,
-    G.ImmDeep,
-    H.ImmDeep,
-    I.ImmDeep,
-    J.ImmDeep,
-  );
   fn to_imm_deep(t) = match t {
     (a, b, c, d, e, f, g, h, i, j) => (
       to_imm_deep(a),

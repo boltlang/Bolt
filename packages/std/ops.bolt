@@ -54,7 +54,7 @@ pub enum Ordering {
 }
 
 /// An `Ordering` never changes, so its deep copy is itself.
-impl ToImmDeep[Ordering] { type ImmDeep = Ordering; fn to_imm_deep(o) = o; }
+impl ToImmDeep[Ordering] { fn to_imm_deep(o) = o; }
 
 impl Eq[Ordering] {
   fn eq(a, b) = match (a, b) {

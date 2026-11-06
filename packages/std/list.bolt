@@ -15,7 +15,6 @@ import List.*;
 /// A copy of a list that can't be changed all the way down: each element is
 /// copied with its own `to_imm_deep`.
 impl[T: ToImmDeep] ToImmDeep[List[T]] {
-  type ImmDeep = List[T.ImmDeep];
   fn to_imm_deep(xs) = match xs {
     Nil => Nil,
     Cons(h, t) => Cons(to_imm_deep(h), to_imm_deep(t)),
