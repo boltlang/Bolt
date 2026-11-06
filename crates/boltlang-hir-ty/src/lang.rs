@@ -103,6 +103,9 @@ pub enum LangClass {
     /// `class Debug[T] { fn debug(x: T, out: mut StringBuilder); }`, which
     /// the evaluator shows values with.
     Debug,
+    /// `class ToImmDeep[T] { fn to_imm_deep(x: T) -> imm T; }`, which the
+    /// deep copy of `imm e` calls for a type that has an impl of it.
+    ToImmDeep,
 }
 
 impl LangClass {
@@ -113,6 +116,7 @@ impl LangClass {
             LangClass::Iterable => "Iterable",
             LangClass::Iterator => "Iterator",
             LangClass::Debug => "Debug",
+            LangClass::ToImmDeep => "ToImmDeep",
         }
     }
 
@@ -124,6 +128,7 @@ impl LangClass {
             LangClass::Iterable => "iter",
             LangClass::Iterator => "next",
             LangClass::Debug => "debug",
+            LangClass::ToImmDeep => "to_imm_deep",
         }
     }
 
@@ -133,7 +138,7 @@ impl LangClass {
         match self {
             LangClass::Index | LangClass::Iterator => Some("Item"),
             LangClass::Iterable => Some("Iter"),
-            LangClass::IndexMut | LangClass::Debug => None,
+            LangClass::IndexMut | LangClass::Debug | LangClass::ToImmDeep => None,
         }
     }
 

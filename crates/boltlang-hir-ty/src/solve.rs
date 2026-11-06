@@ -1680,6 +1680,33 @@ pub fn imm_of<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
     solver.unifier.resolve(&to)
 }
 
+/// The class constraints that `constraint` needs and that no impl visible
+/// in `file` gives, following the bounds of the impls it needs: none when
+/// it holds. `ToImmDeep[Vec[Point]]` needs `ToImmDeep[Point]`, by the
+/// bound of `impl[T: ToImmDeep] ToImmDeep[Vec[T]]`.
+pub fn missing_instances<'db>(
+    db: &'db dyn Db,
+    file: File,
+    constraint: ClassConstraint<'db>,
+) -> Vec<ClassConstraint<'db>> {
+    let mut solver = Solver::new(db, file);
+    // Nothing is reported, so the origin doesn't matter.
+    let body = DefWithBodyId::new(db, DefWithBody::File(file));
+    let origin = Origin::new(body, ExprOrPat::Expr(Idx::new(0)));
+    solver.add(Constraint::Class { constraint, origin });
+    solver.solve();
+    solver
+        .errors
+        .iter()
+        .filter_map(|e| match e {
+            TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. } => {
+                Some(constraint.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 /// `ty` with the associated types in it that an impl visible in `file`
 /// decides replaced by what the impl gives, like `Vec[i32].Item` by `i32`,
 /// and each `imm T` whose `T` is known by what `imm` makes of it, as after

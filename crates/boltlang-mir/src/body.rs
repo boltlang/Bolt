@@ -373,6 +373,34 @@ impl<'db> Body<'db> {
         LabelId(self.labels.len() as u32 - 1)
     }
 
+    /// A node that reads a local, of the local's type.
+    pub fn local_expr(&mut self, local: Local) -> ExprId {
+        let ty = self.local(local).map_or_else(|| Ty::Error, |d| d.ty.clone());
+        self.alloc(ExprKind::Local(local), ty, None)
+    }
+
+    /// A call of `item`, used at the type `fn(args) -> ret`, with `args`.
+    pub fn call(&mut self, item: ItemRef<'db>, args: Vec<ExprId>, ret: Ty<'db>) -> ExprId {
+        let params: Vec<Ty<'db>> = args.iter().map(|&a| self[a].ty.clone()).collect();
+        let callee = self.alloc(ExprKind::Item(item), Ty::func(params, ret.clone()), None);
+        self.alloc(ExprKind::Call { callee, args: args.into() }, ret, None)
+    }
+
+    /// A block without a label, of the type of its tail, or `()`.
+    pub fn block(&mut self, stmts: Vec<Stmt<'db>>, tail: Option<ExprId>) -> ExprId {
+        let ty = tail.map_or_else(Ty::unit, |t| self[t].ty.clone());
+        self.alloc(ExprKind::Block { stmts: stmts.into(), tail, label: None }, ty, None)
+    }
+
+    /// A new local, with the `let` that gives it `value`'s value.
+    pub fn let_temp(&mut self, name: &str, value: ExprId, mutable: bool) -> (Local, Stmt<'db>) {
+        let local = self.new_temp(Some(Name::new(name)), self[value].ty.clone());
+        if let Local::Temp(i) = local {
+            self.temps[i as usize].mutable = mutable;
+        }
+        (local, Stmt::Let { pat: Pattern::Local(Some(local)), init: Some(value), else_: None })
+    }
+
     pub fn local(&self, local: Local) -> Option<&LocalDecl<'db>> {
         match local {
             Local::Binding(b) => self.bindings.get(b),
