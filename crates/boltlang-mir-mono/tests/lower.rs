@@ -239,6 +239,7 @@ impl Program {
                     Role::Iter => format!(" at the `iter` of `{}`", snippet(s)),
                     Role::Next => format!(" at the `next` of `{}`", snippet(s)),
                     Role::Const(_) => format!(" at a constant in `{}`", snippet(s)),
+                    Role::Imm => format!(" at the copy of `{}`", snippet(s)),
                 },
                 None => String::new(),
             };

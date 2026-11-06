@@ -185,6 +185,36 @@ impl<'a, 'db> Cx<'a, 'db> {
         self.ty(infer.expr_ty(expr))
     }
 
+    /// What `imm e` is in the instance, for an `e` of type `from`: a call of
+    /// the deep copy of its type, a [`Shim::ImmDeep`], or `None` when `imm`
+    /// doesn't change the type, so that the value is shared as it is.
+    ///
+    /// The shim's type is the type it copies, with the mutability
+    /// parameters of the instance in it as its own bound variables, so that
+    /// every instance that copies the same type shares it.
+    pub fn imm_use(&self, from: &Ty<'db>) -> Result<Option<Use<'db>>, UseError> {
+        let from = self.ty(from)?;
+        let to = self.ty(&Ty::Imm(Box::new(self.subst().back(&from)?)))?;
+        if to == from {
+            return Ok(None);
+        }
+        let order = std::cell::RefCell::new(Vec::<u32>::new());
+        let key = from
+            .to_ty_with(&|i| {
+                let mut order = order.borrow_mut();
+                let at = order.iter().position(|&j| j == i).unwrap_or_else(|| {
+                    order.push(i);
+                    order.len() - 1
+                });
+                Ty::Bound(at as u32)
+            })
+            .ok_or(UseError::UnknownType)?;
+        let root = self.instance.root(self.db);
+        boltlang_mir_transform::check_imm_deep(self.db, root, &key).map_err(UseError::NoImpl)?;
+        let use_ty = MonoTy::Fn(Box::new([from]), Box::new(to), MonoMut::Imm);
+        self.instance_use(InstanceDef::Shim(Shim::ImmDeep(key)), &use_ty, &[]).map(Some)
+    }
+
     /// What a use in MIR is: `item`, used at the type `use_ty`, which is
     /// what its `Item` node or `Callee` has, in the instance.
     pub fn item_use(

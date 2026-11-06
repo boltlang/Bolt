@@ -61,6 +61,8 @@ pub enum Role<'db> {
     Set,
     /// A constant that a pattern of the node's decision compares with.
     Const(ConstId<'db>),
+    /// The deep copy of `imm e`.
+    Imm,
 }
 
 /// An instance and what each of its uses is.
@@ -303,7 +305,7 @@ pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
             std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
         }
         InstanceDef::Shim(s) => {
-            shim = shim_body(db, s);
+            shim = shim_body(db, s, cx.instance.root(db));
             vec![&shim]
         }
     };
@@ -321,6 +323,11 @@ pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
                 |item: &ItemRef<'db>, ty: &Ty<'db>| cx.ty(ty).and_then(|t| cx.item_use(item, &t));
             match &node.kind {
                 ExprKind::Item(item) => push(at(Role::Item), item_use(item, &node.ty)),
+                ExprKind::Imm { expr: inner } => match cx.imm_use(&mir[*inner].ty) {
+                    Ok(Some(u)) => push(at(Role::Imm), Ok(u)),
+                    Ok(None) => {}
+                    Err(e) => push(at(Role::Imm), Err(e)),
+                },
                 ExprKind::For { pat, iter, next, .. } => {
                     push(at(Role::Iter), item_use(&iter.item, &iter.ty));
                     push(at(Role::Next), item_use(&next.item, &next.ty));

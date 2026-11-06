@@ -65,7 +65,18 @@ analysis keeps the copy. Reading an integer field can't reach the array,
 so the analysis could see past such reads
 ([conduit#9](https://github.com/boltlang/conduit/issues/9)).
 
-The codegen doesn't lower `imm e` yet.
+`imm e` is a call of the deep copy of its type, a function the compiler
+makes for each type it copies, as rustc makes drop glue: a shim, built by
+`boltlang-mir-transform` when monomorphization finds the `imm e`. It calls
+the type's `to_imm_deep` if an impl of `ToImmDeep` is for it, and
+otherwise copies each part with `imm`: a struct or a tuple field by field,
+an enum by a `match` on its variants, and an array with a loop. An impl
+that's for the type but whose bounds don't hold is an error, found where
+the instance is made: `imm` of a `Vec[Point]` needs `ToImmDeep[Point]`, as
+`to_imm_deep` would. What `imm` doesn't
+change, like an `imm [i32]`, is given back as it is, with no call. Each
+path to a `mut` object gets its own copy, so a cyclic value is copied
+forever, as `ToImmDeep` says.
 
 ## Effects
 

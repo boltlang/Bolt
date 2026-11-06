@@ -72,7 +72,7 @@ pub(crate) fn lower_body<'db>(
     // A shim's MIR, which the compiler makes, rather than a body's.
     let (bodies, shim) = match iu.instance.def(db) {
         InstanceDef::Body(body) => (Some(mir_bodies(db, *body)), None),
-        InstanceDef::Shim(s) => (None, Some(shim_body(db, s))),
+        InstanceDef::Shim(s) => (None, Some(shim_body(db, s, iu.instance.root(db)))),
     };
     let lcx = Cx::new(db, iu.instance, &cx.erased).map_err(|e| Error {
         instance: iu.instance.display(db).to_string(),
@@ -382,10 +382,15 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 };
                 Ok(Some(Atom::Var(self.b.array_fill(*elem, m, n, v))))
             }
-            ExprKind::Field { base, index, .. } => {
+            ExprKind::Field { base, ctor, index } => {
                 let t = self.mono(*base)?;
                 let obj = val!(self.expr(*base));
-                let ctor = self.data_ctor(&t)?;
+                let mut data = self.data_ctor(&t)?;
+                // A variant's field, which is read where a `case` found it.
+                if let Ctor::Variant(v) = ctor {
+                    data.index = v.index;
+                }
+                let ctor = data;
                 let obj = obj.ok_or_else(|| ErrorKind::unsupported("a field of `()`"))?;
                 Ok(Some(Atom::Var(self.b.get(ctor, *index, obj))))
             }
@@ -394,10 +399,21 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 self.cast(*inner, e, v)
             }
             ExprKind::Closure { lambda, .. } => self.closure(e, *lambda),
-            ExprKind::Imm { .. } => Err(ErrorKind::missing(
-                "a deep copy that keeps what's shared and cycles, for `imm e`: it has to tell \
-                 objects apart",
-            )),
+            // A call of the deep copy of its type, unless `imm` doesn't change
+            // it, when the value is shared as it is.
+            ExprKind::Imm { expr: inner } => {
+                let v = val!(self.expr(*inner));
+                match self.lcx.imm_use(&mir[*inner].ty)? {
+                    None => Ok(v),
+                    Some(Use::Instance { instance, mutabilities, dicts }) if dicts.is_empty() => {
+                        let f = self.cx.funcs[&instance];
+                        let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
+                        let results = self.b.call_at(f, margs, v.into_iter().collect::<Vec<_>>());
+                        Ok(results.first().map(|&r| Atom::Var(r)))
+                    }
+                    Some(_) => Err(ErrorKind::unsupported("this copy")),
+                }
+            }
             ExprKind::Block { stmts, tail, label } => {
                 let exit = match label {
                     Some(label) => {

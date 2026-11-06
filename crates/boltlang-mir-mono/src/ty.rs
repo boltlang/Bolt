@@ -381,7 +381,7 @@ impl<'db> Subst<'_, 'db> {
     /// mutability parameter stays the body's own, as the checker would have
     /// it, so that what it gives can use it, like the `'v` of `VecIter[T,
     /// 'v]` that an impl gives, and maps back to the instance's.
-    fn back(&self, t: &MonoTy<'db>) -> Result<Ty<'db>, TyError> {
+    pub(crate) fn back(&self, t: &MonoTy<'db>) -> Result<Ty<'db>, TyError> {
         let param = |i: u32| -> Ty<'db> {
             let at = self.slots.iter().position(|s| *s == Slot::Mut(MonoMut::Param(i)));
             match at {

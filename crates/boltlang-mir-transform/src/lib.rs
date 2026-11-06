@@ -1,6 +1,7 @@
 //! Passes over MIR: rewrites of a body that run after it's built, like
 //! desugarings, and the shims the compiler makes, like the constructors of
-//! tuple structs and variants used as functions.
+//! tuple structs and variants used as functions, and the deep copy of
+//! `imm e`.
 //!
 //! - [`shim`]: the bodies of [`boltlang_mir::Shim`]s.
 //!
@@ -9,7 +10,7 @@
 
 pub mod shim;
 
-pub use shim::{CtorSig, ctor_sig, shim_body};
+pub use shim::{CtorSig, check_imm_deep, ctor_sig, shim_body};
 
 #[cfg(test)]
 mod tests;

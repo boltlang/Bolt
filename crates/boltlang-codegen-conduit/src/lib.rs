@@ -29,9 +29,12 @@
 //!   `xs.map(Some)`, is a closure of its constructor's shim, a function
 //!   that `boltlang-mir-transform` makes, once for each instance.
 //!
+//! - `imm e` is a call of the deep copy of its type, a shim that
+//!   `boltlang-mir-transform` makes, unless `imm` doesn't change the type.
+//!
 //! What's left out: erased code and dictionaries, patterns in parameters,
-//! handlers, and what needs something Conduit
-//! doesn't have yet: `imm e` and 128-bit integers. Using one is an
+//! handlers, and what needs something Conduit doesn't have yet: 128-bit
+//! integers. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
 mod func;
@@ -250,7 +253,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
             }
             InstanceDef::Shim(s) => {
-                shim = shim_body(db, s);
+                shim = shim_body(db, s, iu.instance.root(db));
                 vec![&shim]
             }
         };

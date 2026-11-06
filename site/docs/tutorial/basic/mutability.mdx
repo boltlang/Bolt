@@ -282,7 +282,10 @@ frozen[0][0];
 Each type says how it's copied with an impl of `ToImmDeep`, as with
 `ToMutDeep`: a `Vec` copies only its elements. A type of your own gets one
 the same way, and a value that holds a function has none, since a closure
-can't be copied.
+can't be copied. `imm` uses a type's impl if it has one, and otherwise
+copies its fields one by one, so `imm` works on a type of your own without
+an impl. Inside a type that has one, like a `Vec`, your type needs one
+too.
 
 [Mutability](../advanced/mutability.mdx) in the advanced part goes on with
 values that hold other values, generic functions and closures. The

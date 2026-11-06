@@ -319,7 +319,20 @@ pub fn instance_generics<'db>(
             };
             Ok(Generics { params: sig.params, kinds, predicates, ty: sig.ty })
         }
-        InstanceDef::Shim(Shim::ImmDeep(_)) => Ok(Generics::none(Ty::unit())),
+        // `fn(T) -> imm T` for the type `T` it copies, whose bound variables
+        // are the mutabilities of the code that copies.
+        InstanceDef::Shim(Shim::ImmDeep(ty)) => {
+            let mut bound = 0;
+            ty.any(&mut |t| {
+                if let Ty::Bound(i) = t {
+                    bound = bound.max(i + 1);
+                }
+                false
+            });
+            let ty = Ty::func([ty.clone()], Ty::Imm(Box::new(ty.clone())));
+            let kinds = (0..bound).map(|_| Kind::Mut).collect();
+            Ok(Generics { params: Box::new([]), kinds, predicates: Box::new([]), ty })
+        }
     }
 }
 
