@@ -12,6 +12,7 @@ members = [
   "crates/boltlang-mir",
   "crates/boltlang-mir-build",
   "crates/boltlang-mir-mono",
+  "crates/boltlang-mir-transform",
   "crates/boltlang-codegen-conduit",
   "crates/boltlang-corpus",
   "crates/boltlang-ide-diagnostics",

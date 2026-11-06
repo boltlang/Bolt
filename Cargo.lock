@@ -258,6 +258,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "boltlang-mir-transform"
+version = "0.2.0"
+
+[[package]]
 name = "boltlang-parser"
 version = "0.2.0"
 dependencies = [
