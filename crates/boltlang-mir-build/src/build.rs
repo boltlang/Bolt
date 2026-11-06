@@ -517,22 +517,24 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 let item = self.const_ref(e, c);
                 self.node(e, ExprKind::Item(item))
             }
-            ValueResolution::Value(ValueNs::Variant(v)) => {
-                if !matches!(self.ty(e), Ty::Adt(..)) {
-                    return self.unsupported(e, "a variant as a function");
-                }
-                let fields = Box::new([]);
-                self.literal(e, ExprKind::Construct { ctor: Ctor::Variant(v), fields })
-            }
+            // A variant or struct with fields, used as a function, is its
+            // constructor; without fields, it's a value.
+            ValueResolution::Value(ValueNs::Variant(v)) => self.ctor_value(e, Ctor::Variant(v)),
             ValueResolution::Type(r) if r.unresolved.is_none() => match r.ty {
-                TypeNs::Struct(s) if matches!(self.ty(e), Ty::Adt(..)) => {
-                    let fields = Box::new([]);
-                    self.literal(e, ExprKind::Construct { ctor: Ctor::Struct(s), fields })
-                }
-                TypeNs::Struct(_) => self.unsupported(e, "a tuple struct as a function"),
+                TypeNs::Struct(s) => self.ctor_value(e, Ctor::Struct(s)),
                 _ => self.unsupported(e, "this name"),
             },
             _ => self.unsupported(e, "this name"),
+        }
+    }
+
+    /// A variant or a struct named as a value: the value, if it has no
+    /// fields, and its constructor as a function if it has some.
+    fn ctor_value(&mut self, e: hir::ExprId, ctor: Ctor<'db>) -> ExprId {
+        match self.ty(e) {
+            Ty::Adt(..) => self.literal(e, ExprKind::Construct { ctor, fields: Box::new([]) }),
+            Ty::Fn(..) => self.node(e, ExprKind::Item(ItemRef::Ctor(ctor))),
+            _ => self.unsupported(e, "this constructor"),
         }
     }
 

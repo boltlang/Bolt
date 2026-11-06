@@ -16,10 +16,15 @@ use boltlang_hir_ty::{
     ty::is_hidden_param,
 };
 
+use boltlang_mir::Shim;
+use boltlang_mir_transform::ctor_sig;
+use boltlang_pattern::decision::Ctor;
+
 use crate::ty::{MonoMut, MonoTy, Slot, Subst, TyError};
 
-/// A body compiled for concrete types: a function, a constant, or the
-/// statements at the top level of a file.
+/// A body compiled for concrete types: a function, a constant, the
+/// statements at the top level of a file, or a shim that the compiler
+/// makes, like a constructor used as a function.
 ///
 /// `args` has a type for each parameter of the body's scheme that's a type,
 /// in order: its declared ones, then those it was generalized over. Where a
@@ -28,8 +33,8 @@ use crate::ty::{MonoMut, MonoTy, Slot, Subst, TyError};
 /// the `i`th one is [`MonoMut::Param`]`(i)` in the instance's types.
 #[salsa::interned(debug)]
 pub struct Instance<'db> {
-    #[returns(copy)]
-    pub body: DefWithBodyId<'db>,
+    #[returns(ref)]
+    pub def: InstanceDef<'db>,
     #[returns(ref)]
     pub args: Box<[MonoTy<'db>]>,
     /// The entry file of the program, whose visible impls are those that a
@@ -38,17 +43,53 @@ pub struct Instance<'db> {
     pub root: File,
 }
 
+/// What an instance is of: a body in the source, or a shim.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum InstanceDef<'db> {
+    Body(DefWithBodyId<'db>),
+    Shim(Shim<'db>),
+}
+
 impl<'db> Instance<'db> {
+    /// The instance of a body in the source.
+    pub fn of_body(
+        db: &'db dyn Db,
+        body: DefWithBodyId<'db>,
+        args: Box<[MonoTy<'db>]>,
+        root: File,
+    ) -> Self {
+        Instance::new(db, InstanceDef::Body(body), args, root)
+    }
+
     /// The instance for the top-level statements of `file`.
     pub fn entry(db: &'db dyn Db, file: File) -> Self {
-        Instance::new(db, DefWithBodyId::new(db, DefWithBody::File(file)), Box::default(), file)
+        Instance::of_body(db, DefWithBodyId::new(db, DefWithBody::File(file)), Box::default(), file)
+    }
+
+    /// The body in the source the instance is of, unless it's a shim.
+    pub fn body(self, db: &'db dyn Db) -> Option<DefWithBodyId<'db>> {
+        match self.def(db) {
+            InstanceDef::Body(body) => Some(*body),
+            InstanceDef::Shim(_) => None,
+        }
     }
 
     /// The function the instance is of, if it is one.
     pub fn function(self, db: &'db dyn Db) -> Option<FunctionId<'db>> {
-        match self.body(db).def(db) {
+        match self.body(db)?.def(db) {
             DefWithBody::Function(f) => Some(f),
             _ => None,
+        }
+    }
+
+    /// The file the instance's code is in: its body's, or for a shim, the
+    /// file of what it's made for.
+    pub fn file(self, db: &'db dyn Db) -> Option<File> {
+        match self.def(db) {
+            InstanceDef::Body(body) => Some(body.def(db).file(db)),
+            InstanceDef::Shim(Shim::Ctor(Ctor::Struct(s))) => Some(s.file(db)),
+            InstanceDef::Shim(Shim::Ctor(Ctor::Variant(v))) => Some(v.parent.file(db)),
+            InstanceDef::Shim(_) => None,
         }
     }
 
@@ -75,8 +116,8 @@ impl<'db> Instance<'db> {
     /// scheme that an erased type is in, which its callers give dictionaries
     /// for, in order.
     pub fn dict_params(self, db: &'db dyn Db) -> Vec<MonoConstraint<'db>> {
-        let Ok(generics) = generics(db, self.body(db)) else { return Vec::new() };
-        let slots = self.slots(db, generics);
+        let Ok(generics) = instance_generics(db, self.def(db)) else { return Vec::new() };
+        let slots = self.slots(db, &generics);
         let subst = Subst { db, root: self.root(db), params: &generics.params, slots: &slots };
         generics
             .predicates
@@ -88,8 +129,7 @@ impl<'db> Instance<'db> {
 
     /// How many mutability parameters the instance has.
     pub fn mut_params(self, db: &'db dyn Db) -> usize {
-        generics(db, self.body(db))
-            .as_ref()
+        instance_generics(db, self.def(db))
             .map_or(0, |g| g.kinds.iter().filter(|k| **k == Kind::Mut).count())
     }
 
@@ -106,7 +146,24 @@ struct DisplayInstance<'db> {
 impl fmt::Display for DisplayInstance<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let db = self.db;
-        let def = self.instance.body(db).def(db);
+        let def = match self.instance.def(db) {
+            InstanceDef::Body(body) => body.def(db),
+            InstanceDef::Shim(Shim::Ctor(ctor)) => {
+                let name = match ctor {
+                    Ctor::Struct(s) => s.item(db).name.clone(),
+                    Ctor::Variant(v) => {
+                        let parent = v.parent.item(db).name.as_ref().map_or("?", |n| n.as_str());
+                        Some(boltlang_hir_def::Name::new(format!("{parent}.{}", v.name(db))))
+                    }
+                    Ctor::Tuple(_) => None,
+                };
+                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
+                return self.args(f);
+            }
+            InstanceDef::Shim(Shim::ImmDeep(t)) => {
+                return write!(f, "imm_deep[{}]", t.display(db));
+            }
+        };
         match def {
             DefWithBody::File(_) => write!(f, "<file>")?,
             DefWithBody::Function(id) => {
@@ -121,6 +178,13 @@ impl fmt::Display for DisplayInstance<'_> {
             }
             DefWithBody::Variant(_) => write!(f, "<discriminant>")?,
         }
+        self.args(f)
+    }
+}
+
+impl DisplayInstance<'_> {
+    fn args(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let db = self.db;
         let args = self.instance.args(db);
         if !args.is_empty() {
             write!(f, "[")?;
@@ -235,6 +299,28 @@ pub enum GenericsError {
     /// Its type couldn't be inferred: see
     /// [`boltlang_hir_ty::InferenceCycle`].
     Cycle,
+}
+
+/// What an instance's body or shim is generic over.
+pub fn instance_generics<'db>(
+    db: &'db dyn Db,
+    def: &InstanceDef<'db>,
+) -> Result<Generics<'db>, GenericsError> {
+    match def {
+        InstanceDef::Body(body) => generics(db, *body).clone(),
+        InstanceDef::Shim(Shim::Ctor(ctor)) => {
+            let Some(sig) = ctor_sig(db, *ctor) else { return Ok(Generics::none(Ty::unit())) };
+            let kinds = (0..sig.params.len())
+                .map(|i| if i < sig.type_params { Kind::Ty } else { Kind::Mut })
+                .collect();
+            let predicates = match sig.params.first() {
+                Some(p) => boltlang_hir_ty::lower::generic_predicates(db, p.def).predicates.clone(),
+                None => Box::default(),
+            };
+            Ok(Generics { params: sig.params, kinds, predicates, ty: sig.ty })
+        }
+        InstanceDef::Shim(Shim::ImmDeep(_)) => Ok(Generics::none(Ty::unit())),
+    }
 }
 
 /// What `body` is generic over.

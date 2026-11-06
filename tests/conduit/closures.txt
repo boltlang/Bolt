@@ -394,3 +394,72 @@ fn first_lambda0['m1](%xs: 'm1 [i32]) -> (i32) {
 --------------------------------------------------------------------------------
 env.log(4)
 env.log(6)
+
+================================================================================
+A constructor used as a function is a shim
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+struct Wrapper(i32);
+fn apply[A, B](f: fn(A) -> B, x: A) -> B = f(x);
+let w = apply(Wrapper, 5);
+log(w.0);
+let o = apply(Some, 7);
+match o {
+  Some(n) => log(n),
+  None => log(0),
+};
+--------------------------------------------------------------------------------
+data Wrapper {
+  (i32)
+}
+
+data Option_i32 {
+  ()
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+fn file() -> () {
+  let %0: imm fn(i32) -> (imm Wrapper) = closure Wrapper()
+  let %w: imm Wrapper = call apply_i32_Wrapper[imm](%0, 5i32)
+  let %2: i32 = get Wrapper.0.0(%w)
+  let = call_extern log(%2)
+  let %3: imm fn(i32) -> (imm Option_i32) = closure Option_Some_i32()
+  let %o: imm Option_i32 = call apply_i32_Option_i32[imm](%3, 7i32)
+  join j1() = jump ret()
+  in
+  case %o {
+    Option_i32.1 =>
+      let %n: i32 = get Option_i32.1.0(%o)
+      let = call_extern log(%n)
+      jump j1()
+    Option_i32.0 =>
+      let = call_extern log(0i32)
+      jump j1()
+  }
+}
+
+fn apply_i32_Wrapper['m1](%f: 'm1 fn(i32) -> (imm Wrapper), %x: i32) -> (imm Wrapper) {
+  let %2: imm Wrapper = apply(%f, %x)
+  jump ret(%2)
+}
+
+fn Wrapper(%0: i32) -> (imm Wrapper) {
+  let %1: imm Wrapper = new Wrapper.0(%0)
+  jump ret(%1)
+}
+
+fn apply_i32_Option_i32['m1](%f: 'm1 fn(i32) -> (imm Option_i32), %x: i32) -> (imm Option_i32) {
+  let %2: imm Option_i32 = apply(%f, %x)
+  jump ret(%2)
+}
+
+fn Option_Some_i32(%0: i32) -> (imm Option_i32) {
+  let %1: imm Option_i32 = new Option_i32.1(%0)
+  jump ret(%1)
+}
+--------------------------------------------------------------------------------
+env.log(5)
+env.log(7)

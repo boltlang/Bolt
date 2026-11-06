@@ -76,3 +76,19 @@ id(nope);
 --------------------------------------------------------------------------------
 <file>
 error in <file> at `id`: a type isn't known
+
+================================================================================
+A constructor used as a function is an instance of its shim
+:test-prelude
+================================================================================
+fn apply[A, B](f: fn(A) -> B, x: A) -> B = f(x);
+let a = apply(Some, 1);
+let b = apply(Some, True);
+--------------------------------------------------------------------------------
+<file>
+  -> apply[i32, Option[i32]] with imm
+  -> Option.Some[i32]
+  -> apply[Bool, Option[Bool]] with imm
+  -> Option.Some[Bool]
+apply[i32, Option[i32]]
+apply[Bool, Option[Bool]]

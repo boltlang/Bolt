@@ -25,8 +25,12 @@
 //!   `closure` of that function, and calling a value that isn't a named
 //!   function is an `apply`.
 //!
-//! What's left out: erased code and dictionaries, variants as functions,
-//! patterns in parameters, handlers, and what needs something Conduit
+//! - A tuple struct or a variant used as a function, like `Some` in
+//!   `xs.map(Some)`, is a closure of its constructor's shim, a function
+//!   that `boltlang-mir-transform` makes, once for each instance.
+//!
+//! What's left out: erased code and dictionaries, patterns in parameters,
+//! handlers, and what needs something Conduit
 //! doesn't have yet: `imm e` and 128-bit integers. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
@@ -51,7 +55,8 @@ use boltlang_mir_build::{
     lambda::{Lambda, body_lambdas},
     mir_bodies,
 };
-use boltlang_mir_mono::{Cx, Instance, MonoTy, Site, Use, UseError, program};
+use boltlang_mir_mono::{Cx, Instance, InstanceDef, MonoTy, Site, Use, UseError, program};
+use boltlang_mir_transform::shim_body;
 use boltlang_pattern::decision::{Node, body_decisions};
 use conduit_ir::{Extern, ExternId, Func, FuncId, Module, MutParams, Sig};
 
@@ -154,7 +159,7 @@ pub(crate) struct Ctx<'db> {
 pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     let p = program(db, entry);
     let snippet = |instance: Instance<'_>, site: Option<&Site<'_>>| -> Option<String> {
-        let def = instance.body(db);
+        let def = instance.body(db)?;
         let (_, map) = body_with_source_map(db, def);
         let ptr = map.expr_syntax(site?.origin(db, def)?)?;
         let text = source_text(db, def.def(db).file(db));
@@ -180,7 +185,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     // Operations have no body: what they do is up to a handler, and there are
     // no handlers yet.
     for iu in &p.instances {
-        if let DefWithBody::Function(f) = iu.instance.body(db).def(db)
+        if let Some(DefWithBody::Function(f)) = iu.instance.body(db).map(|b| b.def(db))
             && let ItemContainerId::Effect(_) = f.container(db)
         {
             errors.push(Error {
@@ -213,7 +218,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     // The lambdas, lifted, after the instances.
     for iu in &p.instances {
-        for (k, lambda) in body_lambdas(db, iu.instance.body(db)).iter().enumerate() {
+        let Some(body) = iu.instance.body(db) else { continue };
+        for (k, lambda) in body_lambdas(db, body).iter().enumerate() {
             let id = FuncId(names.len() as u64);
             cx.lambdas.insert((iu.instance, lambda.expr), id);
             names.insert(id, format!("{}::lambda{k}", iu.instance.display(db)));
@@ -237,8 +243,18 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 continue;
             }
         };
-        let bodies = mir_bodies(db, iu.instance.body(db));
-        for mir in std::iter::once(&bodies.body).chain(&bodies.lambdas) {
+        let shim;
+        let mirs: Vec<&boltlang_mir::Body<'_>> = match iu.instance.def(db) {
+            InstanceDef::Body(body) => {
+                let bodies = mir_bodies(db, *body);
+                std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
+            }
+            InstanceDef::Shim(s) => {
+                shim = shim_body(db, s);
+                vec![&shim]
+            }
+        };
+        for mir in mirs {
             let locals =
                 mir.bindings.iter().map(|(_, d)| &d.ty).chain(mir.temps.iter().map(|d| &d.ty));
             for ty in mir.exprs().map(|(_, node)| &node.ty).chain(locals) {
@@ -251,7 +267,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             Ok(sig) => sigs.push((cx.funcs[&iu.instance], sig)),
             Err(kind) => errors.push(error(kind)),
         }
-        for lambda in body_lambdas(db, iu.instance.body(db)) {
+        let lambdas = iu.instance.body(db).map_or(&[][..], |b| body_lambdas(db, b));
+        for lambda in lambdas {
             match lambda_sig(&mut types, &lcx, entry, lambda) {
                 Ok(sig) => sigs.push((cx.lambdas[&(iu.instance, lambda.expr)], sig)),
                 Err(kind) => errors.push(error(kind)),
@@ -274,8 +291,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         sigs.push((id, (Sig::new(vec![string.clone()], Vec::new()), MutParams::default())));
         cx.helpers.print = Some(id);
     }
-    let can_fail = p.instances.iter().any(|iu| {
-        body_decisions(db, iu.instance.body(db))
+    let can_fail = p.instances.iter().filter_map(|iu| iu.instance.body(db)).any(|body| {
+        body_decisions(db, body)
             .matches
             .iter()
             .any(|(_, d)| d.as_ref().is_ok_and(|d| d.nodes.contains(&Node::Fail)))
@@ -299,7 +316,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             Ok(f) => built.push((cx.funcs[&iu.instance], f)),
             Err(e) => errors.push(e),
         }
-        for lambda in body_lambdas(db, iu.instance.body(db)) {
+        let lambdas = iu.instance.body(db).map_or(&[][..], |b| body_lambdas(db, b));
+        for lambda in lambdas {
             match func::lower_body(&cx, &module, &mut types, iu, Some(lambda)) {
                 Ok(f) => built.push((cx.lambdas[&(iu.instance, lambda.expr)], f)),
                 Err(e) => errors.push(e),
@@ -357,8 +375,13 @@ fn instance_sig<'db>(
 ) -> Result<(Sig, MutParams), ErrorKind> {
     let db = lcx.db;
     let mut sig = Sig::new(Vec::new(), Vec::new());
-    match lcx.instance.body(db).def(db) {
-        DefWithBody::Function(_) => {
+    let def = match lcx.instance.def(db) {
+        InstanceDef::Body(body) => Some(body.def(db)),
+        InstanceDef::Shim(_) => None,
+    };
+    match def {
+        // A shim is a function too.
+        Some(DefWithBody::Function(_)) | None => {
             let MonoTy::Fn(params, ret, _) = lcx.instance_ty()? else {
                 return Err(ErrorKind::unsupported("a function whose type isn't a function"));
             };
@@ -367,9 +390,13 @@ fn instance_sig<'db>(
             }
             sig.results.extend(types.value(db, root, &ret)?);
         }
-        DefWithBody::Const(_) => sig.results.extend(types.value(db, root, &lcx.instance_ty()?)?),
-        DefWithBody::File(_) => {}
-        DefWithBody::Variant(_) => return Err(ErrorKind::unsupported("the value of a variant")),
+        Some(DefWithBody::Const(_)) => {
+            sig.results.extend(types.value(db, root, &lcx.instance_ty()?)?)
+        }
+        Some(DefWithBody::File(_)) => {}
+        Some(DefWithBody::Variant(_)) => {
+            return Err(ErrorKind::unsupported("the value of a variant"));
+        }
     }
     let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
     Ok((sig, mut_params))
@@ -384,7 +411,8 @@ fn lambda_sig<'db>(
     lambda: &Lambda,
 ) -> Result<(Sig, MutParams), ErrorKind> {
     let db = lcx.db;
-    let Some(mir) = mir_bodies(db, lcx.instance.body(db)).lambda(lambda.expr) else {
+    let Some(mir) = lcx.instance.body(db).and_then(|b| mir_bodies(db, b).lambda(lambda.expr))
+    else {
         return Err(ErrorKind::unsupported("a lambda without a body"));
     };
     let mut sig = Sig::new(Vec::new(), Vec::new());
@@ -416,8 +444,10 @@ fn declare_extern<'db>(
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
     let use_ty = |site: &Site<'db>| -> Result<MonoTy<'db>, ErrorKind> {
-        let ty = site
-            .use_ty(db, lcx.instance.body(db))
+        let ty = lcx
+            .instance
+            .body(db)
+            .and_then(|body| site.use_ty(db, body))
             .ok_or_else(|| ErrorKind::unsupported("a use without a type"))?;
         Ok(lcx.ty(&ty)?)
     };

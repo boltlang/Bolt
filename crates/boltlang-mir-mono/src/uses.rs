@@ -38,10 +38,13 @@ use boltlang_hir_ty::{
 };
 
 pub use boltlang_mir::ClassItem;
-use boltlang_mir::ItemRef;
+use boltlang_mir::{ItemRef, Shim};
 
 use crate::{
-    instance::{Generics, GenericsError, Instance, Kind, MonoConstraint, generics},
+    instance::{
+        Generics, GenericsError, Instance, InstanceDef, Kind, MonoConstraint, generics,
+        instance_generics,
+    },
     ty::{MonoMut, MonoTy, Slot, Subst, TyError},
 };
 
@@ -137,8 +140,9 @@ impl From<GenericsError> for UseError {
 pub struct Cx<'a, 'db> {
     pub db: &'db dyn boltlang_base_db::Db,
     pub instance: Instance<'db>,
-    pub infer: &'db InferenceResult<'db>,
-    generics: &'db Generics<'db>,
+    /// What the checker found in the instance's body, unless it's a shim.
+    pub infer: Option<&'db InferenceResult<'db>>,
+    generics: Generics<'db>,
     slots: Vec<Slot<'db>>,
     dict_params: Vec<MonoConstraint<'db>>,
     erased: &'a [FunctionId<'db>],
@@ -150,9 +154,9 @@ impl<'a, 'db> Cx<'a, 'db> {
         instance: Instance<'db>,
         erased: &'a [FunctionId<'db>],
     ) -> Result<Self, UseError> {
-        let generics = generics(db, instance.body(db)).as_ref().map_err(|e| UseError::from(*e))?;
-        let slots = instance.slots(db, generics);
-        let infer = boltlang_hir_ty::infer_body(db, instance.body(db));
+        let generics = instance_generics(db, instance.def(db)).map_err(UseError::from)?;
+        let slots = instance.slots(db, &generics);
+        let infer = instance.body(db).map(|body| boltlang_hir_ty::infer_body(db, body));
         let dict_params = instance.dict_params(db);
         Ok(Cx { db, instance, infer, generics, slots, dict_params, erased })
     }
@@ -177,7 +181,8 @@ impl<'a, 'db> Cx<'a, 'db> {
     }
 
     pub fn expr_ty(&self, expr: ExprId) -> Result<MonoTy<'db>, UseError> {
-        self.ty(self.infer.expr_ty(expr))
+        let infer = self.infer.ok_or(UseError::UnknownType)?;
+        self.ty(infer.expr_ty(expr))
     }
 
     /// What a use in MIR is: `item`, used at the type `use_ty`, which is
@@ -191,8 +196,9 @@ impl<'a, 'db> Cx<'a, 'db> {
         match item {
             ItemRef::Builtin(b) => Ok(Use::Builtin(*b)),
             ItemRef::Extern(f) => Ok(Use::Extern(*f)),
-            ItemRef::Fn(f) => self.instance_use(DefWithBody::Function(*f), use_ty, &[]),
-            ItemRef::Const(c) => self.instance_use(DefWithBody::Const(*c), use_ty, &[]),
+            ItemRef::Fn(f) => self.body_use(DefWithBody::Function(*f), use_ty, &[]),
+            ItemRef::Const(c) => self.body_use(DefWithBody::Const(*c), use_ty, &[]),
+            ItemRef::Ctor(c) => self.instance_use(InstanceDef::Shim(Shim::Ctor(*c)), use_ty, &[]),
             ItemRef::Method { item, class_args, imp } => {
                 let container = match item {
                     ClassItem::Function(f) => f.container(db),
@@ -250,12 +256,12 @@ impl<'a, 'db> Cx<'a, 'db> {
             ClassItem::Function(f) => {
                 let target = impl_method(db, imp, f);
                 let given = if target == f { self.class_slots(class, args) } else { header };
-                self.instance_use(DefWithBody::Function(target), use_ty, &given)
+                self.body_use(DefWithBody::Function(target), use_ty, &given)
             }
             ClassItem::Const(c) => {
                 let target = impl_const(db, imp, c);
                 let given = if target == c { self.class_slots(class, args) } else { header };
-                self.instance_use(DefWithBody::Const(target), use_ty, &given)
+                self.body_use(DefWithBody::Const(target), use_ty, &given)
             }
         }
     }
@@ -342,24 +348,39 @@ impl<'a, 'db> Cx<'a, 'db> {
         tys.map(|t| self.ty(t)).collect()
     }
 
-    /// The use of a body with the type `use_ty`, with what's already known
-    /// of its slots in `given`, like an impl's parameters.
-    fn instance_use(
+    /// The use of a body in the source with the type `use_ty`.
+    fn body_use(
         &self,
         def: DefWithBody<'db>,
         use_ty: &MonoTy<'db>,
         given: &[Option<Slot<'db>>],
     ) -> Result<Use<'db>, UseError> {
+        let body = DefWithBodyId::new(self.db, def);
+        self.instance_use(InstanceDef::Body(body), use_ty, given)
+    }
+
+    /// The use of a body or shim with the type `use_ty`, with what's
+    /// already known of its slots in `given`, like an impl's parameters.
+    fn instance_use(
+        &self,
+        def: InstanceDef<'db>,
+        use_ty: &MonoTy<'db>,
+        given: &[Option<Slot<'db>>],
+    ) -> Result<Use<'db>, UseError> {
         let db = self.db;
-        let body = DefWithBodyId::new(db, def);
-        let callee = generics(db, body).as_ref().map_err(|e| UseError::from(*e))?;
+        let callee = &instance_generics(db, &def).map_err(UseError::from)?;
         let mut found: Vec<Option<Slot<'db>>> = vec![None; callee.kinds.len()];
         for (slot, g) in found.iter_mut().zip(given) {
             *slot = g.clone();
         }
         bind(&callee.params, &callee.ty, use_ty, &mut found);
         let actual = fill(callee, found);
-        let is_erased = matches!(def, DefWithBody::Function(f) if self.erased.contains(&f));
+        let is_erased = match &def {
+            InstanceDef::Body(body) => {
+                matches!(body.def(db), DefWithBody::Function(f) if self.erased.contains(&f))
+            }
+            InstanceDef::Shim(_) => false,
+        };
         let erased = erase(&actual, is_erased);
         let mut dicts = Vec::new();
         for c in callee.predicates.iter() {
@@ -379,7 +400,7 @@ impl<'a, 'db> Cx<'a, 'db> {
                 Slot::Ty(_) | Slot::Row => None,
             })
             .collect();
-        let instance = Instance::new(db, body, canonical(&args), self.instance.root(db));
+        let instance = Instance::new(db, def, canonical(&args), self.instance.root(db));
         Ok(Use::Instance { instance, mutabilities, dicts: dicts.into() })
     }
 
@@ -600,7 +621,7 @@ pub fn dict_entries<'db>(
                 MonoTy::Erased(u32::MAX - fresh)
             }));
         }
-        out.push((item, Instance::new(db, body, canonical(&instance_args), root)));
+        out.push((item, Instance::of_body(db, body, canonical(&instance_args), root)));
     }
     Ok(out)
 }

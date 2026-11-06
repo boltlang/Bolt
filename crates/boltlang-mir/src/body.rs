@@ -33,11 +33,16 @@ pub enum BodyOwner<'db> {
     Shim(Shim<'db>),
 }
 
-/// A body that a pass makes, rather than one written in the source.
+/// A body that the compiler makes, rather than one written in the source,
+/// as rustc's shims are.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Shim<'db> {
     /// The deep copy of `imm e` for values of this type.
     ImmDeep(Ty<'db>),
+    /// The constructor of a tuple struct or a variant with fields, as a
+    /// function: `Some` in `xs.map(Some)`. It takes the fields, in order,
+    /// and makes the value.
+    Ctor(Ctor<'db>),
 }
 
 /// A body: its nodes, from [`Body::root`], and its locals.
@@ -245,6 +250,10 @@ pub enum ItemRef<'db> {
     Builtin(Builtin),
     /// A function of the host, in an `extern` block.
     Extern(FunctionId<'db>),
+    /// The constructor of a tuple struct or a variant, used as a function,
+    /// which is a [`Shim::Ctor`]. Calling it directly is a
+    /// [`ExprKind::Construct`] instead.
+    Ctor(Ctor<'db>),
 }
 
 /// A function that something other than a call calls, like the `next` of a

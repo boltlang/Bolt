@@ -17,7 +17,8 @@ use boltlang_mir::{
     Body, Callee, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place as MirPlace, Stmt,
 };
 use boltlang_mir_build::{lambda::Lambda, mir_bodies};
-use boltlang_mir_mono::{Cx, InstanceUses, MonoTy, Use, field_types};
+use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoTy, Use, field_types};
+use boltlang_mir_transform::shim_body;
 use boltlang_pattern::decision::{
     Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value,
 };
@@ -67,15 +68,21 @@ pub(crate) fn lower_body<'db>(
 ) -> Result<Func, Error> {
     let db = cx.db;
     let def = iu.instance.body(db);
-    let (_, map) = body_with_source_map(db, def);
+    let map = def.map(|def| &body_with_source_map(db, def).1);
+    // A shim's MIR, which the compiler makes, rather than a body's.
+    let (bodies, shim) = match iu.instance.def(db) {
+        InstanceDef::Body(body) => (Some(mir_bodies(db, *body)), None),
+        InstanceDef::Shim(s) => (None, Some(shim_body(db, s))),
+    };
     let lcx = Cx::new(db, iu.instance, &cx.erased).map_err(|e| Error {
         instance: iu.instance.display(db).to_string(),
         at: None,
         kind: e.into(),
     })?;
-    let bodies = mir_bodies(db, def);
-    let (id, mir) = match lambda {
-        Some(lambda) => {
+    let (id, mir) = match (lambda, bodies, &shim) {
+        (_, _, Some(shim)) => (cx.funcs[&iu.instance], shim),
+        (_, None, None) => unreachable!("an instance is of a body or a shim"),
+        (Some(lambda), Some(bodies), None) => {
             let Some(mir) = bodies.lambda(lambda.expr) else {
                 return Err(Error {
                     instance: iu.instance.display(db).to_string(),
@@ -85,7 +92,7 @@ pub(crate) fn lower_body<'db>(
             };
             (cx.lambdas[&(iu.instance, lambda.expr)], mir)
         }
-        None => (cx.funcs[&iu.instance], &bodies.body),
+        (None, Some(bodies), None) => (cx.funcs[&iu.instance], &bodies.body),
     };
     let sig = &module.funcs[&id];
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
@@ -129,9 +136,10 @@ struct Lower<'a, 'm, 'db> {
     cx: &'a Ctx<'db>,
     lcx: &'a Cx<'a, 'db>,
     types: &'a mut Types<'db>,
-    def: DefWithBodyId<'db>,
-    mir: &'db Body<'db>,
-    map: &'db ExpressionStoreSourceMap,
+    /// The body in the source, unless this is a shim.
+    def: Option<DefWithBodyId<'db>>,
+    mir: &'a Body<'db>,
+    map: Option<&'db ExpressionStoreSourceMap>,
     b: FuncBuilder<'m, Module>,
     /// Whether this is the function of a lambda, which takes its captures
     /// first.
@@ -148,10 +156,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     /// The source of a node, for errors: that of the HIR it came from.
     fn snippet(&self, e: ExprId) -> String {
         let db = self.cx.db;
-        let text = source_text(db, self.def.def(db).file(db));
+        let (Some(def), Some(map)) = (self.def, self.map) else { return "?".to_string() };
+        let text = source_text(db, def.def(db).file(db));
         self.mir[e]
             .origin
-            .and_then(|o| self.map.expr_syntax(o))
+            .and_then(|o| map.expr_syntax(o))
             .map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
     }
 
@@ -222,9 +231,10 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         }
         let result = self.expr(self.mir.root)?;
         if !self.ended() {
-            // A constant, a function or a lambda: its value, if it has one.
-            match self.lcx.instance.body(db).def(db) {
-                DefWithBody::File(_) if !self.is_lambda => self.b.ret(()),
+            // A constant, a function, a lambda or a shim: its value, if it
+            // has one.
+            match self.lcx.instance.body(db).map(|body| body.def(db)) {
+                Some(DefWithBody::File(_)) if !self.is_lambda => self.b.ret(()),
                 _ => self.b.ret(result.into_iter().collect::<Vec<_>>()),
             }
         }
@@ -539,7 +549,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         }
         let f = self.cx.funcs[&instance];
         let margs: Vec<Mutability> = mutabilities.iter().map(|&m| mutability(m)).collect();
-        if let DefWithBody::Const(_) = instance.body(self.cx.db).def(self.cx.db) {
+        if let Some(DefWithBody::Const(_)) = instance.body(self.cx.db).map(|b| b.def(self.cx.db)) {
             let results = self.b.call_at(f, margs, Vec::<Atom>::new());
             return Ok(results.first().map(|&v| Atom::Var(v)));
         }

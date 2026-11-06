@@ -11,6 +11,7 @@ boltlang-hir-ty.workspace = true
 boltlang-mir.workspace = true
 boltlang-mir-build.workspace = true
 boltlang-mir-mono.workspace = true
+boltlang-mir-transform.workspace = true
 boltlang-pattern.workspace = true
 # Conduit, at a commit of its `main`: bump `rev` to use newer changes.
 conduit-ir = { git = "https://github.com/boltlang/conduit", rev = "00bfbda" }

@@ -19,7 +19,7 @@ pub mod ty;
 pub mod uses;
 
 pub use collect::{InstanceUses, Program, Role, Site, program};
-pub use instance::{Instance, MonoConstraint};
+pub use instance::{Instance, InstanceDef, MonoConstraint};
 pub use ty::{MonoMut, MonoTy, TyError, field_types};
 pub use uses::{ClassItem, Cx, Dict, Use, UseError};
 

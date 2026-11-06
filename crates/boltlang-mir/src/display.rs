@@ -75,6 +75,7 @@ impl<'db> Printer<'_, 'db> {
             },
             BodyOwner::Lambda { expr, .. } => format!("lambda#{}", expr.index()),
             BodyOwner::Shim(Shim::ImmDeep(t)) => format!("shim imm_deep[{}]", self.ty(t)),
+            BodyOwner::Shim(Shim::Ctor(c)) => format!("shim {}", ctor_name(db, *c)),
         }
     }
 
@@ -362,6 +363,7 @@ impl<'db> Printer<'_, 'db> {
             }
             ItemRef::Builtin(b) => format!("builtin.{}", b.name()),
             ItemRef::Extern(f) => format!("extern.{}", fn_name(db, *f)),
+            ItemRef::Ctor(c) => ctor_name(db, *c),
         }
     }
 }

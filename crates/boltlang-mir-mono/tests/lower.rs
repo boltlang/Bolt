@@ -188,7 +188,7 @@ impl Program {
         let mut out = String::new();
         for i in &p.instances {
             // Those of `std` would drown out the program's.
-            let Some(prefix) = self.prefix(i.instance.body(db).def(db).file(db)) else { continue };
+            let Some(prefix) = i.instance.file(db).and_then(|f| self.prefix(f)) else { continue };
             out.push_str(&format!("{prefix}{}\n", i.instance.display(db)));
             for (_, u) in &i.uses {
                 match u {
@@ -224,8 +224,10 @@ impl Program {
         }
         for (i, site, e) in &p.errors {
             let body = i.body(db);
-            let snippet = |site: &boltlang_mir_mono::Site<'_>| match site.origin(db, body) {
-                Some(e) => self.snippet(body, Node::Expr(e)),
+            let snippet = |site: &boltlang_mir_mono::Site<'_>| match body
+                .and_then(|b| site.origin(db, b).zip(Some(b)))
+            {
+                Some((e, b)) => self.snippet(b, Node::Expr(e)),
                 None => "?".to_string(),
             };
             let at = match site {

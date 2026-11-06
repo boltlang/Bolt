@@ -26,8 +26,10 @@ use boltlang_mir::{Body as MirBody, ExprId, ExprKind, ItemRef, Pattern, Place, S
 use boltlang_mir_build::{MirBodies, mir_bodies};
 use boltlang_pattern::decision::{Bound, Decision, Node as DecisionNode, Value};
 
+use boltlang_mir_transform::shim_body;
+
 use crate::{
-    instance::{Instance, generics},
+    instance::{Instance, InstanceDef, generics},
     ty::MonoTy,
     uses::{ClassItem, Cx, Dict, Use, UseError, dict_entries},
 };
@@ -196,7 +198,7 @@ fn plain_instance<'db>(db: &'db dyn Db, f: FunctionId<'db>, root: File) -> Insta
     let count = generics(db, body)
         .as_ref()
         .map_or(0, |g| g.kinds.iter().filter(|k| **k == crate::instance::Kind::Ty).count());
-    Instance::new(db, body, vec![MonoTy::unit(); count].into_boxed_slice(), root)
+    Instance::of_body(db, body, vec![MonoTy::unit(); count].into_boxed_slice(), root)
 }
 
 /// The instances a use needs, with those of the dictionaries it gives.
@@ -294,15 +296,24 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
 /// that can't be compiled.
 pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
     let db = cx.db;
-    let bodies = mir_bodies(db, cx.instance.body(db));
+    let shim;
+    let all: Vec<&MirBody<'db>> = match cx.instance.def(db) {
+        InstanceDef::Body(body) => {
+            let bodies = mir_bodies(db, *body);
+            std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
+        }
+        InstanceDef::Shim(s) => {
+            shim = shim_body(db, s);
+            vec![&shim]
+        }
+    };
     let mut uses = Vec::new();
     let mut errors = Vec::new();
     let mut push = |site: Site<'db>, found: Result<Use<'db>, UseError>| match found {
         Ok(u) => uses.push((site, u)),
         Err(e) => errors.push((site, e)),
     };
-    let all = std::iter::once(&bodies.body).chain(&bodies.lambdas);
-    for (index, mir) in all.enumerate() {
+    for (index, mir) in all.into_iter().enumerate() {
         let body = index as u32;
         for (expr, node) in mir.exprs() {
             let at = |role| Site { body, expr, role };
@@ -369,7 +380,7 @@ fn consts_in<'db>(
         };
         for c in consts {
             let body = DefWithBodyId::new(db, DefWithBody::Const(c));
-            let instance = Instance::new(db, body, Box::default(), cx.instance.root(db));
+            let instance = Instance::of_body(db, body, Box::default(), cx.instance.root(db));
             let u = Use::Instance { instance, mutabilities: Box::default(), dicts: Box::default() };
             push(at(Role::Const(c)), Ok(u));
         }

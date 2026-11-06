@@ -65,3 +65,12 @@ Casts and imm
 fn f(x: i32, xs: mut [i32]) = (x as i64, imm xs);
 --------------------------------------------------------------------------------
 fn f(x: i32, xs: mut [i32]) -> (i64, imm [i32]) = (x as i64, imm xs)
+
+================================================================================
+Constructors used as functions
+:test-prelude
+================================================================================
+struct Wrapper(i32);
+fn f() = (Some, Wrapper, None, Some(1));
+--------------------------------------------------------------------------------
+fn f() -> (fn(a) -> Option[a], fn(i32) -> imm Wrapper, Option[b], Option[i32]) = (Option.Some, Wrapper, Option.None, Option.Some(1))

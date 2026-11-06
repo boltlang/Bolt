@@ -10,6 +10,7 @@ boltlang-hir-def.workspace = true
 boltlang-hir-ty.workspace = true
 boltlang-mir.workspace = true
 boltlang-mir-build.workspace = true
+boltlang-mir-transform.workspace = true
 boltlang-pattern.workspace = true
 salsa = "0.28.5"
 
