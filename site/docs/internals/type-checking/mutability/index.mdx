@@ -106,11 +106,10 @@ be changed. Variables only pass it on:
   copies all of it. Each type says how with an impl of `ToMut` or
   `ToMutDeep`, so a `Vec` copies only its elements, not the room it has
   to grow. `imm e` stays built in, since it must be deep: it copies
-  what's `mut`, with the type's impl of `ToImmDeep` if it has one, and
-  otherwise part by part, so a type of your own needs no impl. When an
-  impl is for the type but its bounds don't hold, like for a `Vec[Point]`
-  without `ToImmDeep[Point]`, it's an error. `to_imm_deep(e)` calls the
-  impl itself.
+  what's `mut`, with the type's impl of `ToImmDeep`, which it needs: a
+  type without one, or a `Vec[Point]` without `ToImmDeep[Point]`, is an
+  error, unless `imm` doesn't change it. `to_imm_deep(e)` calls the impl
+  itself.
 
   A literal is told apart by the checker, not the parser: `mut` before an
   array, a struct literal or a call of a tuple struct's constructor makes

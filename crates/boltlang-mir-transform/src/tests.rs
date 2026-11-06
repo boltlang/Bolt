@@ -38,52 +38,27 @@ fn a_constructor_shim_makes_its_value() {
     );
 }
 
-/// The deep copy of a struct and an enum makes them again with `imm` of
-/// each field, and that of an array with a loop. An `imm` type needs none.
+/// The deep copy of `imm e` calls the type's `to_imm_deep`, and gives back
+/// as it is what `imm` doesn't change.
 #[test]
-fn the_deep_copy_of_imm_e_copies_part_by_part() {
+fn the_deep_copy_of_imm_e_calls_to_imm_deep() {
     use boltlang_hir_def::builtin_type::{BuiltinInt, BuiltinType};
-    use boltlang_hir_ty::{AdtId, Ty, ty::Mutability};
+    use boltlang_hir_ty::{Ty, ty::Mutability};
 
     let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
     db.add_test_std();
-    let file = db.file("/main.bolt", "struct Cell { items: [i32] }\nenum Two { A([i32]), B }\n");
-    let tree = item_tree(&db, file);
-    let (mut cell, mut two) = (None, None);
-    for item in &tree.top_level {
-        match *item {
-            ModItem::Struct(idx) => {
-                cell = Some(boltlang_hir_def::ids::StructId::new(&db, file, idx))
-            }
-            ModItem::Enum(idx) => two = Some(boltlang_hir_def::ids::EnumId::new(&db, file, idx)),
-            _ => {}
-        }
-    }
+    let file = db.file("/main.bolt", "");
     let int = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
-    let m = |m| Ty::Mutability(m);
-    let mut_ints = Ty::array(m(Mutability::Mut), int.clone());
     let tys = [
-        Ty::adt(AdtId::Struct(cell.unwrap()), [], [], m(Mutability::Mut)),
-        Ty::adt(AdtId::Enum(two.unwrap()), [], [], m(Mutability::Imm)),
-        mut_ints.clone(),
-        Ty::array(m(Mutability::Imm), int),
+        Ty::array(Ty::Mutability(Mutability::Mut), int.clone()),
+        Ty::array(Ty::Mutability(Mutability::Imm), int),
     ];
     let out: Vec<String> =
         tys.iter().map(|t| shim_body(&db, &Shim::ImmDeep(t.clone()), file).display(&db)).collect();
     assert_eq!(
         out.concat(),
-        "shim imm_deep[mut Cell](x: mut Cell) -> imm Cell = Cell(imm x.Cell.0)\n\
-         shim imm_deep[Two](x: Two) -> Two = x\n\
-         shim imm_deep[mut [i32]](x: mut [i32]) -> imm [i32] = {\n  \
-           let n = builtin.array_len(x);\n  \
-           let ys = builtin.array_alloc(n);\n  \
-           let mut i = 0;\n  \
-           'l0: while builtin.i32_lt(i, n) {\n    \
-             builtin.array_set(ys, i, imm builtin.array_get(x, i));\n    \
-             i = builtin.i32_add(i, 1);\n  \
-           };\n  \
-           builtin.array_freeze(ys)\n\
-         }\n\
+        "shim imm_deep[mut [i32]](x: mut [i32]) -> imm [i32] = ToImmDeep[mut [i32]].to_imm_deep(x)\n\
          shim imm_deep[imm [i32]](x: imm [i32]) -> imm [i32] = x\n"
     );
 }

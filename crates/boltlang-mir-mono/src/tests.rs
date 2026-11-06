@@ -38,6 +38,7 @@ fn the_tests_of_std_collect_without_errors() {
 #[test]
 fn imm_of_a_type_parameter_in_an_instance() {
     let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
     db.add_std();
     let file = db.file("/main.bolt", "fn h(x) = imm x;\nlet a = h(mut [mut [1]]);\n");
     let p = program(&db, file);

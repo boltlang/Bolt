@@ -23,29 +23,8 @@ fn file() -> () {
 }
 
 fn imm_deep_mut_i32(%x: mut [i32]) -> (imm [i32]) {
-  let %n: i32 = array_len(%x)
-  let %ys: mut [i32] = array_alloc(%n)
-  let %i: ref i32 = ref_new(0i32)
-  join j1() =
-    let %11: imm [i32] = array_clone(%ys)
-    jump ret(%11)
-  in
-  join rec j2() =
-    let %4: i32 = ref_get(%i)
-    let %5: i32 = lt.s(%4, %n)
-    case %5 {
-      0 => jump j1()
-      _ =>
-        let %6: i32 = ref_get(%i)
-        let %7: i32 = ref_get(%i)
-        let %8: i32 = array_get(%x, %7)
-        let = array_set(%ys, %6, %8)
-        let %9: i32 = ref_get(%i)
-        let %10: i32 = add(%9, 1i32)
-        let = ref_set(%i, %10)
-        jump j2()
-    }
-  in jump j2()
+  let %1: imm [i32] = call ToImmDeep_T_to_imm_deep_i32[mut](%x)
+  jump ret(%1)
 }
 
 fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
@@ -55,6 +34,57 @@ fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
 
 fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
   let %2: i32 = array_get(%xs, %i)
+  jump ret(%2)
+}
+
+fn ToImmDeep_T_to_imm_deep_i32['m1](%xs: 'm1 [i32]) -> (imm [i32]) {
+  let %n: i32 = array_len(%xs)
+  let %ys: mut [i32] = array_alloc(%n)
+  let %i: ref i32 = ref_new(0i32)
+  join j1() =
+    let %12: imm [i32] = array_clone(%ys)
+    jump ret(%12)
+  in
+  join rec j2() =
+    let %4: i32 = ref_get(%i)
+    let %5: i32 = call lt_i32(%4, %n)
+    case %5 {
+      0 => jump j1()
+      _ =>
+        let %6: i32 = ref_get(%i)
+        let %7: i32 = ref_get(%i)
+        let %8: i32 = array_get(%xs, %7)
+        let %9: i32 = call ToImmDeep_i32_to_imm_deep(%8)
+        let = array_set(%ys, %6, %9)
+        let %10: i32 = ref_get(%i)
+        let %11: i32 = call plus_i32(%10, 1i32)
+        let = ref_set(%i, %11)
+        jump j2()
+    }
+  in jump j2()
+}
+
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
+  jump ret(%2)
+}
+
+fn ToImmDeep_i32_to_imm_deep(%x: i32) -> (i32) {
+  jump ret(%x)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
@@ -87,30 +117,8 @@ fn file() -> () {
 }
 
 fn imm_deep_mut_mut_i32(%x: mut [mut [i32]]) -> (imm [imm [i32]]) {
-  let %n: i32 = array_len(%x)
-  let %ys: mut [imm [i32]] = array_alloc(%n)
-  let %i: ref i32 = ref_new(0i32)
-  join j1() =
-    let %12: imm [imm [i32]] = array_clone(%ys)
-    jump ret(%12)
-  in
-  join rec j2() =
-    let %4: i32 = ref_get(%i)
-    let %5: i32 = lt.s(%4, %n)
-    case %5 {
-      0 => jump j1()
-      _ =>
-        let %6: i32 = ref_get(%i)
-        let %7: i32 = ref_get(%i)
-        let %8: mut [i32] = array_get(%x, %7)
-        let %9: imm [i32] = call imm_deep_mut_i32(%8)
-        let = array_set(%ys, %6, %9)
-        let %10: i32 = ref_get(%i)
-        let %11: i32 = add(%10, 1i32)
-        let = ref_set(%i, %11)
-        jump j2()
-    }
-  in jump j2()
+  let %1: imm [imm [i32]] = call ToImmDeep_T_to_imm_deep_mut_i32[mut](%x)
+  jump ret(%1)
 }
 
 fn Index_T_index_mut_i32['m1](%xs: 'm1 [mut [i32]], %i: i32) -> (mut [i32]) {
@@ -133,40 +141,95 @@ fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn imm_deep_mut_i32(%x: mut [i32]) -> (imm [i32]) {
-  let %n: i32 = array_len(%x)
-  let %ys: mut [i32] = array_alloc(%n)
+fn ToImmDeep_T_to_imm_deep_mut_i32['m1](%xs: 'm1 [mut [i32]]) -> (imm [imm [i32]]) {
+  let %n: i32 = array_len(%xs)
+  let %ys: mut [imm [i32]] = array_alloc(%n)
   let %i: ref i32 = ref_new(0i32)
   join j1() =
-    let %11: imm [i32] = array_clone(%ys)
-    jump ret(%11)
+    let %12: imm [imm [i32]] = array_clone(%ys)
+    jump ret(%12)
   in
   join rec j2() =
     let %4: i32 = ref_get(%i)
-    let %5: i32 = lt.s(%4, %n)
+    let %5: i32 = call lt_i32(%4, %n)
     case %5 {
       0 => jump j1()
       _ =>
         let %6: i32 = ref_get(%i)
         let %7: i32 = ref_get(%i)
-        let %8: i32 = array_get(%x, %7)
-        let = array_set(%ys, %6, %8)
-        let %9: i32 = ref_get(%i)
-        let %10: i32 = add(%9, 1i32)
-        let = ref_set(%i, %10)
+        let %8: mut [i32] = array_get(%xs, %7)
+        let %9: imm [i32] = call ToImmDeep_T_to_imm_deep_i32[mut](%8)
+        let = array_set(%ys, %6, %9)
+        let %10: i32 = ref_get(%i)
+        let %11: i32 = call plus_i32(%10, 1i32)
+        let = ref_set(%i, %11)
         jump j2()
     }
   in jump j2()
+}
+
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
+  jump ret(%2)
+}
+
+fn ToImmDeep_T_to_imm_deep_i32['m1](%xs: 'm1 [i32]) -> (imm [i32]) {
+  let %n: i32 = array_len(%xs)
+  let %ys: mut [i32] = array_alloc(%n)
+  let %i: ref i32 = ref_new(0i32)
+  join j1() =
+    let %12: imm [i32] = array_clone(%ys)
+    jump ret(%12)
+  in
+  join rec j2() =
+    let %4: i32 = ref_get(%i)
+    let %5: i32 = call lt_i32(%4, %n)
+    case %5 {
+      0 => jump j1()
+      _ =>
+        let %6: i32 = ref_get(%i)
+        let %7: i32 = ref_get(%i)
+        let %8: i32 = array_get(%xs, %7)
+        let %9: i32 = call ToImmDeep_i32_to_imm_deep(%8)
+        let = array_set(%ys, %6, %9)
+        let %10: i32 = ref_get(%i)
+        let %11: i32 = call plus_i32(%10, 1i32)
+        let = ref_set(%i, %11)
+        jump j2()
+    }
+  in jump j2()
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
+  jump ret(%2)
+}
+
+fn ToImmDeep_i32_to_imm_deep(%x: i32) -> (i32) {
+  jump ret(%x)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
 }
 --------------------------------------------------------------------------------
 env.log(1)
 
 ================================================================================
-A struct and an enum are copied field by field
+A struct is copied with its own impl, and an Option with the prelude's
 :test-prelude
 ================================================================================
 extern "env" { fn log(x: i32); }
 struct Cell { items: [i32] }
+impl ToImmDeep[Cell] {
+  fn to_imm_deep(c) = Cell { items: to_imm_deep(c.items) };
+}
 let c = mut Cell { items: mut [1] };
 let d = imm c;
 c.items[0] = 9;
@@ -229,10 +292,8 @@ fn file() -> () {
 }
 
 fn imm_deep_mut_Cell(%x: mut Cell) -> (imm Cell) {
-  let %1: mut [i32] = get Cell.0.0(%x)
-  let %2: imm [i32] = call imm_deep_mut_i32(%1)
-  let %3: imm Cell = new Cell.0(%2)
-  jump ret(%3)
+  let %1: imm Cell = call ToImmDeep_Cell_to_imm_deep[mut](%x)
+  jump ret(%1)
 }
 
 fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
@@ -246,44 +307,81 @@ fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
 }
 
 fn imm_deep_Option_mut_i32(%x: mut Option_0_i32[mut]) -> (imm Option_0_i32[imm]) {
+  let %1: imm Option_0_i32[imm] = call ToImmDeep_Option_T_to_imm_deep_mut_i32(%x)
+  jump ret(%1)
+}
+
+fn ToImmDeep_Cell_to_imm_deep['m1](%c: 'm1 Cell) -> (imm Cell) {
+  let %1: 'm1 [i32] = get Cell.0.0(%c)
+  let %2: imm [i32] = call ToImmDeep_T_to_imm_deep_i32['m1](%1)
+  let %3: imm Cell = new Cell.0(%2)
+  jump ret(%3)
+}
+
+fn ToImmDeep_Option_T_to_imm_deep_mut_i32(%o: mut Option_0_i32[mut]) -> (imm Option_0_i32[imm]) {
   join j1(%1: imm Option_0_i32[imm]) = jump ret(%1)
   in
-  case %x {
+  case %o {
     Option_0_i32.0 =>
       let %2: imm Option_0_i32[imm] = new Option_0_i32.0()
       jump j1(%2)
     Option_0_i32.1 =>
-      let %3: mut [i32] = get Option_0_i32.1.0(%x)
-      let %4: imm [i32] = call imm_deep_mut_i32(%3)
+      let %x: mut [i32] = get Option_0_i32.1.0(%o)
+      let %4: imm [i32] = call ToImmDeep_T_to_imm_deep_i32[mut](%x)
       let %5: imm Option_0_i32[imm] = new Option_0_i32.1(%4)
       jump j1(%5)
   }
 }
 
-fn imm_deep_mut_i32(%x: mut [i32]) -> (imm [i32]) {
-  let %n: i32 = array_len(%x)
+fn ToImmDeep_T_to_imm_deep_i32['m1](%xs: 'm1 [i32]) -> (imm [i32]) {
+  let %n: i32 = array_len(%xs)
   let %ys: mut [i32] = array_alloc(%n)
   let %i: ref i32 = ref_new(0i32)
   join j1() =
-    let %11: imm [i32] = array_clone(%ys)
-    jump ret(%11)
+    let %12: imm [i32] = array_clone(%ys)
+    jump ret(%12)
   in
   join rec j2() =
     let %4: i32 = ref_get(%i)
-    let %5: i32 = lt.s(%4, %n)
+    let %5: i32 = call lt_i32(%4, %n)
     case %5 {
       0 => jump j1()
       _ =>
         let %6: i32 = ref_get(%i)
         let %7: i32 = ref_get(%i)
-        let %8: i32 = array_get(%x, %7)
-        let = array_set(%ys, %6, %8)
-        let %9: i32 = ref_get(%i)
-        let %10: i32 = add(%9, 1i32)
-        let = ref_set(%i, %10)
+        let %8: i32 = array_get(%xs, %7)
+        let %9: i32 = call ToImmDeep_i32_to_imm_deep(%8)
+        let = array_set(%ys, %6, %9)
+        let %10: i32 = ref_get(%i)
+        let %11: i32 = call plus_i32(%10, 1i32)
+        let = ref_set(%i, %11)
         jump j2()
     }
   in jump j2()
+}
+
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
+  jump ret(%2)
+}
+
+fn ToImmDeep_i32_to_imm_deep(%x: i32) -> (i32) {
+  jump ret(%x)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
 }
 --------------------------------------------------------------------------------
 env.log(1)
@@ -715,29 +813,59 @@ fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
 }
 
 fn imm_deep_mut_i32(%x: mut [i32]) -> (imm [i32]) {
-  let %n: i32 = array_len(%x)
+  let %1: imm [i32] = call ToImmDeep_T_to_imm_deep_i32[mut](%x)
+  jump ret(%1)
+}
+
+fn ToImmDeep_T_to_imm_deep_i32['m1](%xs: 'm1 [i32]) -> (imm [i32]) {
+  let %n: i32 = array_len(%xs)
   let %ys: mut [i32] = array_alloc(%n)
   let %i: ref i32 = ref_new(0i32)
   join j1() =
-    let %11: imm [i32] = array_clone(%ys)
-    jump ret(%11)
+    let %12: imm [i32] = array_clone(%ys)
+    jump ret(%12)
   in
   join rec j2() =
     let %4: i32 = ref_get(%i)
-    let %5: i32 = lt.s(%4, %n)
+    let %5: i32 = call lt_i32(%4, %n)
     case %5 {
       0 => jump j1()
       _ =>
         let %6: i32 = ref_get(%i)
         let %7: i32 = ref_get(%i)
-        let %8: i32 = array_get(%x, %7)
-        let = array_set(%ys, %6, %8)
-        let %9: i32 = ref_get(%i)
-        let %10: i32 = add(%9, 1i32)
-        let = ref_set(%i, %10)
+        let %8: i32 = array_get(%xs, %7)
+        let %9: i32 = call ToImmDeep_i32_to_imm_deep(%8)
+        let = array_set(%ys, %6, %9)
+        let %10: i32 = ref_get(%i)
+        let %11: i32 = call plus_i32(%10, 1i32)
+        let = ref_set(%i, %11)
         jump j2()
     }
   in jump j2()
+}
+
+fn lt_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
+  jump ret(%2)
+}
+
+fn ToImmDeep_i32_to_imm_deep(%x: i32) -> (i32) {
+  jump ret(%x)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = lt.s(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
 }
 --------------------------------------------------------------------------------
 env.log(1)
@@ -872,108 +1000,15 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
 env.log(1)
 
 ================================================================================
-A type that no impl is for is copied field by field, with the full prelude
-:prelude
+A copy of a type without an impl of ToImmDeep is an error
+:test-prelude
+:error
 ================================================================================
-extern "env" { fn log(x: i32); }
 struct Point { coords: [i32] }
 let p = mut Point { coords: mut [1] };
 let q = imm p;
-p.coords[0] = 9;
-log(q.coords[0]);
 --------------------------------------------------------------------------------
-data Point {
-  (inherit [i32])
-}
-
-extern log "env" "log" (i32) -> ()
-
-fn file() -> () {
-  let %0: mut [i32] = array_new(1i32)
-  let %p: mut Point = new Point.0(%0)
-  let %q: imm Point = call imm_deep_mut_Point(%p)
-  let %3: mut [i32] = get Point.0.0(%p)
-  let = call IndexMut_mut_T_set_index_i32(%3, 0i32, 9i32)
-  let %4: imm [i32] = get Point.0.0(%q)
-  let %5: i32 = call Index_T_index_i32[imm](%4, 0i32)
-  let = call_extern log(%5)
-  jump ret()
-}
-
-fn imm_deep_mut_Point(%x: mut Point) -> (imm Point) {
-  let %1: mut [i32] = get Point.0.0(%x)
-  let %2: imm [i32] = call imm_deep_mut_i32(%1)
-  let %3: imm Point = new Point.0(%2)
-  jump ret(%3)
-}
-
-fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
-  let = array_set(%xs, %i, %x)
-  jump ret()
-}
-
-fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
-  let %2: i32 = array_get(%xs, %i)
-  jump ret(%2)
-}
-
-fn imm_deep_mut_i32(%x: mut [i32]) -> (imm [i32]) {
-  let %1: imm [i32] = call ToImmDeep_T_to_imm_deep_i32[mut](%x)
-  jump ret(%1)
-}
-
-fn ToImmDeep_T_to_imm_deep_i32['m1](%xs: 'm1 [i32]) -> (imm [i32]) {
-  let %n: i32 = array_len(%xs)
-  let %ys: mut [i32] = array_alloc(%n)
-  let %i: ref i32 = ref_new(0i32)
-  join j1() =
-    let %12: imm [i32] = array_clone(%ys)
-    jump ret(%12)
-  in
-  join rec j2() =
-    let %4: i32 = ref_get(%i)
-    let %5: i32 = call lt_i32(%4, %n)
-    case %5 {
-      0 => jump j1()
-      _ =>
-        let %6: i32 = ref_get(%i)
-        let %7: i32 = ref_get(%i)
-        let %8: i32 = array_get(%xs, %7)
-        let %9: i32 = call ToImmDeep_i32_to_imm_deep(%8)
-        let = array_set(%ys, %6, %9)
-        let %10: i32 = ref_get(%i)
-        let %11: i32 = call plus_i32(%10, 1i32)
-        let = ref_set(%i, %11)
-        jump j2()
-    }
-  in jump j2()
-}
-
-fn lt_i32(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = call PartialOrd_i32_lt(%a, %b)
-  jump ret(%2)
-}
-
-fn ToImmDeep_i32_to_imm_deep(%x: i32) -> (i32) {
-  jump ret(%x)
-}
-
-fn plus_i32(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = call Add_i32_add(%a, %b)
-  jump ret(%2)
-}
-
-fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = lt.s(%a, %b)
-  jump ret(%2)
-}
-
-fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = add(%a, %b)
-  jump ret(%2)
-}
---------------------------------------------------------------------------------
-env.log(1)
+error in <file> at `imm p`: nothing gives `ToImmDeep[mut Point]`
 
 ================================================================================
 A copy that needs an impl its type doesn't have is an error
@@ -986,3 +1021,28 @@ v.push(mut Point { coords: mut [1] });
 let w = imm v;
 --------------------------------------------------------------------------------
 error in <file> at `imm v`: nothing gives `ToImmDeep[mut Point]`
+
+================================================================================
+A type that imm doesn't change needs no impl
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+struct Point { x: i32 }
+let p = Point { x: 3 };
+let q = imm p;
+log(q.x);
+--------------------------------------------------------------------------------
+data Point {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+fn file() -> () {
+  let %p: imm Point = new Point.0(3i32)
+  let %1: i32 = get Point.0.0(%p)
+  let = call_extern log(%1)
+  jump ret()
+}
+--------------------------------------------------------------------------------
+env.log(3)

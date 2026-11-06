@@ -386,21 +386,6 @@ impl<'db> Body<'db> {
         self.alloc(ExprKind::Call { callee, args: args.into() }, ret, None)
     }
 
-    /// A block without a label, of the type of its tail, or `()`.
-    pub fn block(&mut self, stmts: Vec<Stmt<'db>>, tail: Option<ExprId>) -> ExprId {
-        let ty = tail.map_or_else(Ty::unit, |t| self[t].ty.clone());
-        self.alloc(ExprKind::Block { stmts: stmts.into(), tail, label: None }, ty, None)
-    }
-
-    /// A new local, with the `let` that gives it `value`'s value.
-    pub fn let_temp(&mut self, name: &str, value: ExprId, mutable: bool) -> (Local, Stmt<'db>) {
-        let local = self.new_temp(Some(Name::new(name)), self[value].ty.clone());
-        if let Local::Temp(i) = local {
-            self.temps[i as usize].mutable = mutable;
-        }
-        (local, Stmt::Let { pat: Pattern::Local(Some(local)), init: Some(value), else_: None })
-    }
-
     pub fn local(&self, local: Local) -> Option<&LocalDecl<'db>> {
         match local {
             Local::Binding(b) => self.bindings.get(b),

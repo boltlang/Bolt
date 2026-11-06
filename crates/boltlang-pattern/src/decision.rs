@@ -25,9 +25,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBodyId, body},
     builtin_type::BuiltinValue,
     hir::{BindingId, Expr, ExprId, Literal, Pat, PatId, Path, Statement},
-    ids::{ConstId, EnumId, EnumVariantId, FunctionId, StructId},
+    ids::{ConstId, EnumVariantId, FunctionId, StructId},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
-    signatures::enum_signature,
 };
 use boltlang_hir_ty::{
     Ty, infer_body,
@@ -744,19 +743,6 @@ fn literal_test<'db>(literal: &Literal, negative: bool) -> Option<Test<'db>> {
 }
 
 impl<'db> Decision<'db> {
-    /// The decision that takes arm `i` for the `i`th variant of `e`, which
-    /// is what the compiler makes for code that has no patterns, like the
-    /// deep copy of an enum. Its arms bind nothing.
-    pub fn variants(db: &'db dyn Db, e: EnumId<'db>) -> Self {
-        let count = enum_signature(db, e).variants.len() as u32;
-        let cases = (0..count)
-            .map(|index| (Case::Variant(EnumVariantId { parent: e, index }), index + 1))
-            .collect();
-        let mut nodes = vec![Node::Switch { place: 0, cases, default: None }];
-        nodes.extend((0..count).map(|arm| Node::Arm { arm, bindings: Vec::new() }));
-        Decision { places: vec![Place::Scrutinee], nodes, root: 0, arms: count }
-    }
-
     /// Whether a value can match no arm.
     pub fn can_fail(&self) -> bool {
         self.reachable().iter().zip(&self.nodes).any(|(r, n)| *r && *n == Node::Fail)
