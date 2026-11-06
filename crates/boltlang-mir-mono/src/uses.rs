@@ -37,6 +37,8 @@ use boltlang_hir_ty::{
     solve::visible_impls,
 };
 
+pub use boltlang_mir::ClassItem;
+
 use crate::{
     instance::{Generics, GenericsError, Instance, Kind, MonoConstraint, generics},
     ty::{MonoMut, MonoTy, Slot, Subst, TyError},
@@ -57,13 +59,6 @@ pub enum Use<'db> {
     /// code. `item` is the class's method or constant, and `dicts` are the
     /// dictionaries for its own constraints.
     Method { dict: Dict<'db>, item: ClassItem<'db>, dicts: Box<[Dict<'db>]> },
-}
-
-/// A method or constant of a class.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
-pub enum ClassItem<'db> {
-    Function(FunctionId<'db>),
-    Const(ConstId<'db>),
 }
 
 /// A dictionary for a class constraint: see the module's documentation.
