@@ -151,6 +151,7 @@ dependencies = [
  "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "boltlang-mir",
  "boltlang-mir-build",
  "boltlang-mir-mono",
  "boltlang-pattern",

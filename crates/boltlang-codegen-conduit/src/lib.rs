@@ -3,7 +3,8 @@
 //! [`lower`] turns a program, its entry file and its tests, into a Conduit
 //! [`Module`]: one function per instance that `boltlang-mir-mono` finds, with
 //! the data types their types need. Conduit's functions are generic in
-//! mutabilities but not in types, as instances are.
+//! mutabilities but not in types, as instances are. Each body is lowered
+//! from its MIR, which `boltlang-mir-build` makes.
 //!
 //! - A function's parameters and results are its values: a parameter or a
 //!   result of type `()` or `!` has none.
