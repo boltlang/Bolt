@@ -233,7 +233,12 @@ name = "boltlang-mir-build"
 version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
+ "boltlang-corpus",
  "boltlang-hir-def",
+ "boltlang-hir-ty",
+ "boltlang-mir",
+ "boltlang-pattern",
+ "libtest-mimic",
  "salsa",
 ]
 

@@ -7,4 +7,15 @@ publish.workspace = true
 [dependencies]
 boltlang-base-db.workspace = true
 boltlang-hir-def.workspace = true
+boltlang-hir-ty.workspace = true
+boltlang-mir.workspace = true
+boltlang-pattern.workspace = true
 salsa = "0.28.5"
+
+[dev-dependencies]
+boltlang-corpus.workspace = true
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "mir"
+harness = false

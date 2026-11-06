@@ -1,0 +1,20 @@
+================================================================================
+What isn't supported yet
+:test-prelude
+================================================================================
+struct P { x: i32 }
+fn f(xs: mut [i32], p: P) {
+  let ys = mut xs;
+  let q = P { ..p };
+  ..;
+  xs?;
+}
+fn g((a, b): (i32, i32)) = a;
+--------------------------------------------------------------------------------
+fn f(xs: mut [i32], p: P) -> () = {
+  let ys = unsupported("`mut e` that isn't a literal");
+  let q = unsupported("`..` in a struct literal");
+  unsupported("a range without a start or an end");
+  unsupported("`e?`");
+}
+fn g() -> i32 = unsupported("patterns in parameters")
