@@ -1681,13 +1681,25 @@ pub fn imm_of<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
 }
 
 /// `ty` with the associated types in it that an impl visible in `file`
-/// decides replaced by what the impl gives, like `Vec[i32].Item` by `i32`.
-/// Those whose arguments aren't known well enough stay.
+/// decides replaced by what the impl gives, like `Vec[i32].Item` by `i32`,
+/// and each `imm T` whose `T` is known by what `imm` makes of it, as after
+/// a type parameter is replaced. Those whose arguments aren't known well
+/// enough stay.
 pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
-    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..))) {
+    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_))) {
         return ty.clone();
     }
     ty.fold(&mut |t| {
+        if let Ty::Imm(inner) = t {
+            let inner = normalize_assoc(db, file, inner);
+            return Some(match inner {
+                Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) => {
+                    Ty::imm_of_unknown(inner)
+                }
+                Ty::Var(_) => Ty::Imm(Box::new(inner)),
+                inner => imm_of(db, file, &inner),
+            });
+        }
         let Ty::Assoc(alias, args) = t else { return None };
         let args: Box<[Ty<'db>]> = args.iter().map(|a| normalize_assoc(db, file, a)).collect();
         let ItemContainerId::Class(class) = alias.container(db) else { return None };
