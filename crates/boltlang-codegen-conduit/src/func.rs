@@ -97,6 +97,7 @@ pub(crate) fn lower_body<'db>(
     let sig = &module.funcs[&id];
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
     b.set_mut_params(sig.mut_params.clone());
+    b.set_row(cx.row.clone());
     let mut l = Lower {
         cx,
         lcx: &lcx,
@@ -774,7 +775,12 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
             Use::Builtin(builtin) => return self.builtin(builtin, args, result_ty),
             Use::Method { .. } => return Err(ErrorKind::unsupported("dictionaries")),
-            Use::Op(_) => return Err(ErrorKind::unsupported("calling an operation of an effect")),
+            // A `perform`, which the nearest handler of its effect runs.
+            Use::Op(f) => {
+                let (effect, op) =
+                    self.cx.op(f).ok_or_else(|| ErrorKind::unsupported("this operation"))?;
+                self.b.perform(effect, op, args)
+            }
         };
         Ok(results.first().map(|&v| Atom::Var(v)))
     }
@@ -791,8 +797,10 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let one = |v: conduit_ir::Var| Ok(Some(Atom::Var(v)));
         match builtin {
             Builtin::Prim(op, t) => self.prim(op, Scalar::of(&MonoTy::Builtin(t))?.unwrap(), args),
-            // Only a handler has a continuation, and handlers aren't lowered.
-            Builtin::Resume => Err(ErrorKind::unsupported("resuming a continuation")),
+            Builtin::Resume => {
+                let results = self.b.resume(args[0].clone(), args[1..].to_vec());
+                Ok(results.first().map(|&v| Atom::Var(v)))
+            }
             Builtin::ArrayLen => one(self.b.array_len(args[0].clone())),
             Builtin::ArrayGet => one(self.b.array_get(args[0].clone(), args[1].clone())),
             Builtin::ArraySet => {

@@ -273,6 +273,12 @@ pub fn field_types<'db>(
     boltlang_hir_ty::lower::field_types(db, def).fields.iter().map(|(_, t)| subst.ty(t)).collect()
 }
 
+/// A type without parameters, like the signature of an operation, as a
+/// closed type, with the impls visible from `root`.
+pub fn closed_ty<'db>(db: &'db dyn Db, root: File, ty: &Ty<'db>) -> Result<MonoTy<'db>, TyError> {
+    Subst { db, root, params: &[], slots: &[] }.ty(ty)
+}
+
 /// What a parameter of a scheme is in an instance: a type, or one of the
 /// instance's mutabilities.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -317,6 +323,9 @@ impl<'db> Subst<'_, 'db> {
         Ok(match ty {
             Ty::Param(_) | Ty::Bound(_) => match self.slot(ty) {
                 Some(Slot::Ty(t)) => t.clone(),
+                // Instances don't keep rows of effects: a row that's a type
+                // argument, like the `R` of `Cont[B, U, R]`, is `()`.
+                Some(Slot::Row) => MonoTy::unit(),
                 _ => return Err(TyError::Unknown),
             },
             Ty::Builtin(b) => MonoTy::Builtin(*b),
@@ -353,8 +362,9 @@ impl<'db> Subst<'_, 'db> {
             // A type that nothing decides, like the elements of `[]`, can't
             // change what the code does.
             Ty::Var(_) => MonoTy::unit(),
-            // A row is only ever inside a function type, which drops it.
-            Ty::Mutability(_) | Ty::Unwritten | Ty::Row(..) | Ty::Number(_) | Ty::Error => {
+            // A row as a type argument, as for a parameter above.
+            Ty::Row(..) => MonoTy::unit(),
+            Ty::Mutability(_) | Ty::Unwritten | Ty::Number(_) | Ty::Error => {
                 return Err(TyError::Unknown);
             }
         })

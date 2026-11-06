@@ -1,11 +1,19 @@
 ================================================================================
-Operations need handlers, which aren't there yet
-:error
+An operation without a handler stops the program
 ================================================================================
 effect Log { fn log(x: i32); }
 log(1);
 --------------------------------------------------------------------------------
-error in <file> at `log(1)`: calling an operation of an effect isn't supported yet
+effect Log {
+  (i32) -> ()
+}
+
+fn file() -> () does Any {
+  let = perform Log.0(1i32)
+  jump ret()
+}
+--------------------------------------------------------------------------------
+error: fn0: no handler for effect0
 
 ================================================================================
 Handlers aren't lowered yet

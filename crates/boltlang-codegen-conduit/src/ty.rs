@@ -24,9 +24,9 @@ use boltlang_hir_def::{
     ids::{EnumId, EnumVariantId},
     signatures::{FieldList, enum_signature},
 };
-use boltlang_hir_ty::{AdtId, lower::VariantDef};
+use boltlang_hir_ty::{AdtId, lang::cont_struct, lower::VariantDef};
 use boltlang_mir_mono::{MonoMut, MonoTy, field_types};
-use conduit_ir::{CtorDecl, DataDecl, DataId, Mutability, Sig, Ty};
+use conduit_ir::{CtorDecl, DataDecl, DataId, Mutability, Row, Sig, Ty};
 
 use crate::ErrorKind;
 
@@ -98,6 +98,9 @@ enum DataKey<'db> {
 pub(crate) struct Types<'db> {
     keys: HashMap<DataKey<'db>, DataId>,
     pub decls: BTreeMap<DataId, DataDecl>,
+    /// The row of every closure and continuation type: `Any` in a program
+    /// with effects, since Bolt doesn't give Conduit its rows yet.
+    pub row: Row,
 }
 
 impl<'db> Types<'db> {
@@ -129,6 +132,16 @@ impl<'db> Types<'db> {
                 let own = held_mutability(&extracted)?;
                 Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect(), Vec::new())
             }
+            // A continuation, `Cont[B, U, R]`: resuming it with a `B` gives
+            // a `U`.
+            MonoTy::Adt(AdtId::Struct(s), args, ..) if Some(*s) == cont_struct(db, root) => {
+                let (Some(b), Some(u)) = (args.first(), args.get(1)) else {
+                    return Err(ErrorKind::unsupported("this continuation"));
+                };
+                let params = self.value(db, root, b)?.into_iter().collect();
+                let results = self.value(db, root, u)?.into_iter().collect();
+                Ty::Cont(Box::new(Sig { params, results, row: self.row.clone() }))
+            }
             MonoTy::Adt(adt @ AdtId::Struct(_), args, muts, own) => {
                 let (args, extracted) = abstract_muts(args, muts.len() as u32);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
@@ -145,6 +158,7 @@ impl<'db> Types<'db> {
                     sig.params.extend(self.value(db, root, p)?);
                 }
                 sig.results.extend(self.value(db, root, ret)?);
+                sig.row = self.row.clone();
                 Ty::Fn(Box::new(sig), mutability(*m))
             }
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => {
