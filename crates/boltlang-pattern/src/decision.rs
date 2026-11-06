@@ -482,6 +482,14 @@ impl<'db> Builder<'_, 'db> {
             Pat::TupleStruct { path, args, rest } => {
                 let VariantDef::Variant(v) = self.variant(pat, path)? else { return Err(unknown) };
                 let count = field_types(self.db, VariantDef::Variant(v)).fields.len();
+                // The checker reports the wrong number of fields (#365).
+                let fits = match rest {
+                    None => args.len() == count,
+                    Some(_) => args.len() <= count,
+                };
+                if !fits {
+                    return Err(unknown);
+                }
                 let mut fields = vec![None; count];
                 for (index, sub) in positional(args, *rest, count) {
                     fields[index as usize] = Some(sub);

@@ -127,3 +127,16 @@ n2 = arm 1
 n0 = switch $0 { 0 => n1, _ => n2 }
 n1 = arm 0
 n2 = arm 1
+
+================================================================================
+A variant pattern with the wrong number of fields has no decision
+:error
+================================================================================
+enum Shape { Circle(f64), Rect(f64, f64) }
+fn f(s: Shape) = match s {
+  Shape.Circle(r, extra) => 1,
+  Shape.Rect(w) => 2,
+};
+--------------------------------------------------------------------------------
+match `s`
+error: the pattern `Shape.Circle(r, extra)` isn't known
