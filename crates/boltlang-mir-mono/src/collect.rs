@@ -16,13 +16,15 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
-    body::{Body, DefWithBody, DefWithBodyId, body},
-    hir::{BinaryOp, Expr, ExprId, Pat, PatId, Path, PathSegment},
-    ids::{FunctionId, ImplId},
+    body::{DefWithBody, DefWithBodyId},
+    hir::ExprId as HirExprId,
+    ids::{ConstId, FunctionId, ImplId},
     nameres::test_functions,
-    resolver::{Resolver, ValueNs, ValueResolution},
 };
-use boltlang_hir_ty::{Ty, lang::LangClass};
+use boltlang_hir_ty::Ty;
+use boltlang_mir::{Body as MirBody, ExprId, ExprKind, ItemRef, Pattern, Place, Stmt};
+use boltlang_mir_build::{MirBodies, mir_bodies};
+use boltlang_pattern::decision::{Bound, Decision, Node as DecisionNode, Value};
 
 use crate::{
     instance::{Instance, generics},
@@ -30,27 +32,40 @@ use crate::{
     uses::{ClassItem, Cx, Dict, Use, UseError, dict_entries},
 };
 
-/// Where in a body a use is.
+/// Where a use is: a node of the MIR of a body, or of one of its lambdas,
+/// and which of the node's uses it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
-pub enum Site {
-    /// A path that names a function or constant, the method of a method
-    /// call (the callee), an operator, or an index `xs[i]` that's read.
-    Expr(ExprId),
-    /// A pattern that names a constant.
-    Pat(PatId),
-    /// The `set_index` of an assignment to `xs[i]`, at the assignment.
-    SetIndex(ExprId),
-    /// The `iter` of a `for`, at the `for`.
-    Iter(ExprId),
-    /// The `next` of a `for`, at the `for`.
-    Next(ExprId),
+pub struct Site<'db> {
+    /// 0 for the body, and `i + 1` for its `i`th lambda in `MirBodies`.
+    pub body: u32,
+    pub expr: ExprId,
+    pub role: Role<'db>,
+}
+
+/// Which use of a MIR node a [`Site`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Role<'db> {
+    /// The function or constant of an `Item` node.
+    Item,
+    /// The `iter` of a `for`.
+    Iter,
+    /// The `next` of a `for`.
+    Next,
+    /// The operator of a compound assignment, like the `+` of `+=`.
+    Op,
+    /// The `index` that a compound assignment to `xs[i]` reads with.
+    Get,
+    /// The `set_index` of an assignment to `xs[i]`.
+    Set,
+    /// A constant that a pattern of the node's decision compares with.
+    Const(ConstId<'db>),
 }
 
 /// An instance and what each of its uses is.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct InstanceUses<'db> {
     pub instance: Instance<'db>,
-    pub uses: Vec<(Site, Use<'db>)>,
+    pub uses: Vec<(Site<'db>, Use<'db>)>,
 }
 
 /// The instances of a program.
@@ -65,14 +80,14 @@ pub struct Program<'db> {
     /// The functions compiled once with their types erased.
     pub erased: Vec<FunctionId<'db>>,
     /// Uses that can't be compiled.
-    pub errors: Vec<(Instance<'db>, Option<Site>, UseError)>,
+    pub errors: Vec<(Instance<'db>, Option<Site<'db>>, UseError)>,
 }
 
 /// A dictionary of an impl at its type parameters.
 pub type DictKey<'db> = (ImplId<'db>, Box<[MonoTy<'db>]>);
 
 /// The uses in a body, and those that can't be compiled.
-pub type Scanned<'db> = (Vec<(Site, Use<'db>)>, Vec<(Site, UseError)>);
+pub type Scanned<'db> = (Vec<(Site<'db>, Use<'db>)>, Vec<(Site<'db>, UseError)>);
 
 /// How many instances a program can have before the collector gives up.
 const MAX_INSTANCES: usize = 100_000;
@@ -275,268 +290,121 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
     }
 }
 
-/// The uses in an instance's body, and those that can't be compiled.
+/// The uses in an instance's MIR, of its body and its lambdas, and those
+/// that can't be compiled.
 pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
     let db = cx.db;
-    let def = cx.instance.body(db);
-    let body = body(db, def);
-    let mut scanner = Scanner { cx, def, body, uses: Vec::new(), errors: Vec::new() };
-    scanner.run();
-    (scanner.uses, scanner.errors)
-}
-
-struct Scanner<'a, 'b, 'db> {
-    cx: &'a Cx<'b, 'db>,
-    def: DefWithBodyId<'db>,
-    body: &'a Body,
-    uses: Vec<(Site, Use<'db>)>,
-    errors: Vec<(Site, UseError)>,
-}
-
-impl<'db> Scanner<'_, '_, 'db> {
-    fn push(&mut self, site: Site, found: Result<Use<'db>, UseError>) {
-        match found {
-            Ok(u) => self.uses.push((site, u)),
-            Err(e) => self.errors.push((site, e)),
-        }
-    }
-
-    fn run(&mut self) {
-        let body = self.body;
-        // The `xs[i]` that are assigned to with `=`, which aren't read.
-        let mut written = Vec::new();
-        for (_, expr) in body.exprs.iter() {
-            if let Expr::Binary { op: BinaryOp::Assign(None), lhs, .. } = expr
-                && let Expr::Index { .. } = &body[*lhs]
-            {
-                written.push(*lhs);
-            }
-        }
-        for (id, expr) in body.exprs.iter() {
-            match expr {
-                Expr::Path(path) => self.path(id, path),
-                Expr::Field { .. } => {
-                    if let Some(path) = self.extended_path(id) {
-                        self.path(id, &path);
+    let bodies = mir_bodies(db, cx.instance.body(db));
+    let mut uses = Vec::new();
+    let mut errors = Vec::new();
+    let mut push = |site: Site<'db>, found: Result<Use<'db>, UseError>| match found {
+        Ok(u) => uses.push((site, u)),
+        Err(e) => errors.push((site, e)),
+    };
+    let all = std::iter::once(&bodies.body).chain(&bodies.lambdas);
+    for (index, mir) in all.enumerate() {
+        let body = index as u32;
+        for (expr, node) in mir.exprs() {
+            let at = |role| Site { body, expr, role };
+            let item_use =
+                |item: &ItemRef<'db>, ty: &Ty<'db>| cx.ty(ty).and_then(|t| cx.item_use(item, &t));
+            match &node.kind {
+                ExprKind::Item(item) => push(at(Role::Item), item_use(item, &node.ty)),
+                ExprKind::For { pat, iter, next, .. } => {
+                    push(at(Role::Iter), item_use(&iter.item, &iter.ty));
+                    push(at(Role::Next), item_use(&next.item, &next.ty));
+                    if let Pattern::Decision(d) = pat {
+                        consts_in(db, cx, d, at, &mut push);
                     }
                 }
-                Expr::Call { callee, args } => {
-                    if let Some(&f) = self.cx.infer.method_calls.get(id) {
-                        let Expr::Field { expr: receiver, .. } = &body[*callee] else { continue };
-                        let all: Vec<ExprId> =
-                            std::iter::once(*receiver).chain(args.iter().copied()).collect();
-                        let found = self
-                            .fn_ty(&all, self.cx.infer.expr_ty(id))
-                            .and_then(|t| self.cx.function_use(*callee, f, &t));
-                        self.push(Site::Expr(*callee), found);
+                ExprKind::Assign { place, op, .. } => {
+                    if let Some(op) = op {
+                        push(at(Role::Op), item_use(&op.item, &op.ty));
+                    }
+                    if let Place::Index { get, set, .. } = place {
+                        if let Some(get) = get {
+                            push(at(Role::Get), item_use(&get.item, &get.ty));
+                        }
+                        push(at(Role::Set), item_use(&set.item, &set.ty));
                     }
                 }
-                Expr::Binary { op: BinaryOp::Operator(name), lhs, rhs } => {
-                    self.operator(id, name, &[*lhs, *rhs], self.cx.infer.expr_ty(id));
+                ExprKind::Match { decision, .. } | ExprKind::Let { decision, .. } => {
+                    consts_in(db, cx, decision, at, &mut push);
                 }
-                Expr::Binary { op: BinaryOp::Assign(op), lhs, rhs } => {
-                    if let Some(name) = op {
-                        let ty = self.cx.infer.expr_ty(*lhs);
-                        self.operator(id, name, &[*lhs, *rhs], ty);
-                    }
-                    if let Expr::Index { base, .. } = &body[*lhs] {
-                        self.set_index(id, *base, *rhs);
+                ExprKind::Block { stmts, .. } => {
+                    for s in stmts.iter() {
+                        if let Stmt::Let { pat: Pattern::Decision(d), .. } = s {
+                            consts_in(db, cx, d, at, &mut push);
+                        }
                     }
                 }
-                Expr::Prefix { op, expr: inner } => {
-                    self.operator(id, op, &[*inner], self.cx.infer.expr_ty(id));
-                }
-                Expr::Index { base, .. } if !written.contains(&id) => self.index(id, *base),
-                Expr::For { iterable, .. } => self.for_loop(id, *iterable),
                 _ => {}
             }
         }
-        for (id, pat) in body.pats.iter() {
-            if let Pat::Path(path) = pat {
-                let resolution = Resolver::for_body(self.cx.db, self.def)
-                    .resolve_path_in_value_ns(self.cx.db, path);
-                if let Some(ValueResolution::Value(ValueNs::Const(c))) = resolution {
-                    let found = self.const_use_at_pat(c);
-                    self.push(Site::Pat(id), found);
-                }
-            }
-        }
     }
+    (uses, errors)
+}
 
-    /// A constant in a pattern is a file's or an impl's: a class constant
-    /// can't be matched on, since its value isn't known.
-    fn const_use_at_pat(
-        &self,
-        c: boltlang_hir_def::ids::ConstId<'db>,
-    ) -> Result<Use<'db>, UseError> {
-        let body = DefWithBodyId::new(self.cx.db, DefWithBody::Const(c));
-        Ok(Use::Instance {
-            instance: Instance::new(
-                self.cx.db,
-                body,
-                Box::default(),
-                self.cx.instance.root(self.cx.db),
-            ),
-            mutabilities: Box::default(),
-            dicts: Box::default(),
-        })
-    }
-
-    fn path(&mut self, id: ExprId, path: &Path) {
-        let db = self.cx.db;
-        let resolution = Resolver::for_expr(db, self.def, id).resolve_path_in_value_ns(db, path);
-        let value = match resolution {
-            Some(ValueResolution::Value(ValueNs::Overloaded(_))) => {
-                match self.cx.infer.overload(id) {
-                    Some(f) => ValueNs::Function(f),
-                    None => return self.push(Site::Expr(id), Err(UseError::UnknownType)),
-                }
-            }
-            Some(ValueResolution::Value(value)) => value,
-            _ => return,
-        };
-        let found = match value {
-            ValueNs::Function(f) => {
-                self.cx.expr_ty(id).and_then(|t| self.cx.function_use(id, f, &t))
-            }
-            ValueNs::Const(c) => self.cx.expr_ty(id).and_then(|t| self.cx.const_use(id, c, &t)),
-            _ => return,
-        };
-        self.push(Site::Expr(id), found);
-    }
-
-    /// `m.f` or `Vec.new`: a field of something that isn't a value, which
-    /// is a longer path, as the type checker reads it.
-    fn extended_path(&self, id: ExprId) -> Option<Path> {
-        let db = self.cx.db;
-        let (base, name) = match &self.body[id] {
-            Expr::Field { expr, name } => (*expr, name),
-            _ => return None,
-        };
-        let path = match &self.body[base] {
-            Expr::Path(path) => path.clone(),
-            Expr::Field { .. } => self.extended_path(base)?,
-            _ => return None,
-        };
-        let resolver = Resolver::for_expr(db, self.def, base);
-        if let Some(ValueResolution::Value(_)) = resolver.resolve_path_in_value_ns(db, &path) {
-            return None;
-        }
-        let mut segments = path.segments.to_vec();
-        segments.push(PathSegment { name: name.clone(), generic_args: None });
-        Some(Path { segments: segments.into() })
-    }
-
-    /// The type of a use called with `args` that gives `ret`.
-    fn fn_ty(&self, args: &[ExprId], ret: &Ty<'db>) -> Result<MonoTy<'db>, UseError> {
-        let params: Box<[MonoTy<'db>]> =
-            args.iter().map(|&a| self.cx.expr_ty(a)).collect::<Result<_, _>>()?;
-        Ok(MonoTy::Fn(params, Box::new(self.cx.ty(ret)?), crate::ty::MonoMut::Imm))
-    }
-
-    /// An operator, a call of the function with its name in scope.
-    fn operator(
-        &mut self,
-        id: ExprId,
-        name: &boltlang_hir_def::Name,
-        args: &[ExprId],
-        ret: &Ty<'db>,
-    ) {
-        let db = self.cx.db;
-        let path = Path::from_name(name.clone());
-        let f = match self.cx.infer.overload(id) {
-            Some(f) => Some(f),
-            None => {
-                match Resolver::for_expr(db, self.def, id).resolve_path_in_value_ns(db, &path) {
-                    Some(ValueResolution::Value(ValueNs::Function(f))) => Some(f),
+/// The constants that a decision compares with, as uses. A constant in a
+/// pattern is a file's or an impl's: a class constant can't be matched on,
+/// since its value isn't known.
+fn consts_in<'db>(
+    db: &'db dyn Db,
+    cx: &Cx<'_, 'db>,
+    d: &Decision<'db>,
+    at: impl Fn(Role<'db>) -> Site<'db>,
+    push: &mut impl FnMut(Site<'db>, Result<Use<'db>, UseError>),
+) {
+    for node in &d.nodes {
+        let consts: Vec<ConstId<'db>> = match node {
+            DecisionNode::Equals { value: Value::Const(c), .. } => vec![*c],
+            DecisionNode::Range { start, end, .. } => [start, end]
+                .into_iter()
+                .filter_map(|b| match b {
+                    Some(Bound::Const(c)) => Some(*c),
                     _ => None,
-                }
-            }
+                })
+                .collect(),
+            _ => Vec::new(),
         };
-        let Some(f) = f else { return self.push(Site::Expr(id), Err(UseError::UnknownType)) };
-        let found = self.fn_ty(args, ret).and_then(|t| self.cx.function_use(id, f, &t));
-        self.push(Site::Expr(id), found);
-    }
-
-    /// The method that syntax calls of a class of the prelude, for the
-    /// class arguments `args`.
-    fn lang_use(
-        &mut self,
-        site: Site,
-        at: ExprId,
-        lang: LangClass,
-        arg: MonoTy<'db>,
-        use_ty: MonoTy<'db>,
-    ) {
-        let db = self.cx.db;
-        let file = self.def.def(db).file(db);
-        let Some((class, method)) =
-            lang.class(db, file).and_then(|c| Some((c, lang.method(db, c)?)))
-        else {
-            return self.push(site, Err(UseError::NoImpl(lang.name().to_string())));
-        };
-        let found = self.cx.class_item_use(at, class, &[arg], ClassItem::Function(method), &use_ty);
-        self.push(site, found);
-    }
-
-    fn index(&mut self, id: ExprId, base: ExprId) {
-        let found = (|| {
-            let base_ty = self.cx.expr_ty(base)?;
-            let use_ty = MonoTy::Fn(
-                Box::new([base_ty.clone(), MonoTy::Builtin(i32_ty())]),
-                Box::new(self.cx.expr_ty(id)?),
-                crate::ty::MonoMut::Imm,
-            );
-            Ok((base_ty, use_ty))
-        })();
-        match found {
-            Ok((arg, use_ty)) => self.lang_use(Site::Expr(id), id, LangClass::Index, arg, use_ty),
-            Err(e) => self.push(Site::Expr(id), Err(e)),
+        for c in consts {
+            let body = DefWithBodyId::new(db, DefWithBody::Const(c));
+            let instance = Instance::new(db, body, Box::default(), cx.instance.root(db));
+            let u = Use::Instance { instance, mutabilities: Box::default(), dicts: Box::default() };
+            push(at(Role::Const(c)), Ok(u));
         }
-    }
-
-    fn set_index(&mut self, id: ExprId, base: ExprId, value: ExprId) {
-        let found = (|| {
-            let base_ty = self.cx.expr_ty(base)?;
-            let use_ty = MonoTy::Fn(
-                Box::new([base_ty.clone(), MonoTy::Builtin(i32_ty()), self.cx.expr_ty(value)?]),
-                Box::new(MonoTy::unit()),
-                crate::ty::MonoMut::Imm,
-            );
-            Ok((base_ty, use_ty))
-        })();
-        match found {
-            Ok((arg, use_ty)) => {
-                self.lang_use(Site::SetIndex(id), id, LangClass::IndexMut, arg, use_ty)
-            }
-            Err(e) => self.push(Site::SetIndex(id), Err(e)),
-        }
-    }
-
-    fn for_loop(&mut self, id: ExprId, iterable: ExprId) {
-        let db = self.cx.db;
-        let file = self.def.def(db).file(db);
-        let found = (|| {
-            let class = LangClass::Iterable.class(db, file).ok_or(UseError::UnknownType)?;
-            let alias = LangClass::Iterable.assoc(db, class).ok_or(UseError::UnknownType)?;
-            let iterable_hir = self.cx.infer.expr_ty(iterable).clone();
-            let iter = self.cx.ty(&Ty::Assoc(alias, Box::new([iterable_hir])))?;
-            Ok((self.cx.expr_ty(iterable)?, iter))
-        })();
-        let (iterable_ty, iter) = match found {
-            Ok(found) => found,
-            Err(e) => return self.push(Site::Iter(id), Err(e)),
-        };
-        let mi = crate::ty::MonoMut::Imm;
-        let iter_ty = MonoTy::Fn(Box::new([iterable_ty.clone()]), Box::new(iter.clone()), mi);
-        self.lang_use(Site::Iter(id), id, LangClass::Iterable, iterable_ty, iter_ty);
-        let next_ty = MonoTy::Fn(Box::new([iter.clone()]), Box::new(MonoTy::Never), mi);
-        self.lang_use(Site::Next(id), id, LangClass::Iterator, iter, next_ty);
     }
 }
 
-fn i32_ty() -> boltlang_hir_def::builtin_type::BuiltinType {
-    boltlang_hir_def::builtin_type::BuiltinType::Int(
-        boltlang_hir_def::builtin_type::BuiltinInt::I32,
-    )
+impl<'db> Site<'db> {
+    /// The MIR body the use is in, of `def` or of one of its lambdas.
+    pub fn mir<'a>(&self, bodies: &'a MirBodies<'db>) -> Option<&'a MirBody<'db>> {
+        match self.body {
+            0 => Some(&bodies.body),
+            i => bodies.lambdas.get(i as usize - 1),
+        }
+    }
+
+    /// The HIR expression the use's node came from, for errors.
+    pub fn origin(&self, db: &'db dyn Db, def: DefWithBodyId<'db>) -> Option<HirExprId> {
+        self.mir(mir_bodies(db, def))?[self.expr].origin
+    }
+
+    /// The type the use is used at: that of its node or its callee.
+    pub fn use_ty(&self, db: &'db dyn Db, def: DefWithBodyId<'db>) -> Option<Ty<'db>> {
+        let node = &self.mir(mir_bodies(db, def))?[self.expr];
+        match (&node.kind, self.role) {
+            (_, Role::Item) => Some(node.ty.clone()),
+            (ExprKind::For { iter, .. }, Role::Iter) => Some(iter.ty.clone()),
+            (ExprKind::For { next, .. }, Role::Next) => Some(next.ty.clone()),
+            (ExprKind::Assign { op: Some(op), .. }, Role::Op) => Some(op.ty.clone()),
+            (ExprKind::Assign { place: Place::Index { get: Some(get), .. }, .. }, Role::Get) => {
+                Some(get.ty.clone())
+            }
+            (ExprKind::Assign { place: Place::Index { set, .. }, .. }, Role::Set) => {
+                Some(set.ty.clone())
+            }
+            _ => None,
+        }
+    }
 }

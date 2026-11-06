@@ -325,23 +325,23 @@ fn map_pair_i32_i32['m1](%p: imm Tuple_i32_i32, %f: 'm1 fn(i32) -> (i32)) -> (im
   jump ret(%6)
 }
 
-fn star_i32(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = call Mul_i32_mul(%a, %b)
-  jump ret(%2)
-}
-
 fn plus_i32(%a: i32, %b: i32) -> (i32) {
   let %2: i32 = call Add_i32_add(%a, %b)
   jump ret(%2)
 }
 
-fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = mul(%a, %b)
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
   jump ret(%2)
 }
 
 fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
   jump ret(%2)
 }
 

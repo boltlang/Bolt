@@ -73,7 +73,7 @@ use boltlang_hir_def::{
     item_tree::{ModItem, item_tree},
 };
 use boltlang_mir_build::lambda::body_lambdas;
-use boltlang_mir_mono::{ClassItem, Site, Use, UseError, program};
+use boltlang_mir_mono::{ClassItem, Role, Use, UseError, program};
 use boltlang_pattern::decision::{DecisionError, body_decisions};
 use libtest_mimic::{Arguments, Failed, Trial};
 
@@ -224,18 +224,20 @@ impl Program {
         }
         for (i, site, e) in &p.errors {
             let body = i.body(db);
+            let snippet = |site: &boltlang_mir_mono::Site<'_>| match site.origin(db, body) {
+                Some(e) => self.snippet(body, Node::Expr(e)),
+                None => "?".to_string(),
+            };
             let at = match site {
-                Some(Site::Expr(e)) => format!(" at `{}`", self.snippet(body, Node::Expr(*e))),
-                Some(Site::Pat(p)) => format!(" at `{}`", self.snippet(body, Node::Pat(*p))),
-                Some(Site::SetIndex(e)) => {
-                    format!(" at the `set_index` of `{}`", self.snippet(body, Node::Expr(*e)))
-                }
-                Some(Site::Iter(e)) => {
-                    format!(" at the `iter` of `{}`", self.snippet(body, Node::Expr(*e)))
-                }
-                Some(Site::Next(e)) => {
-                    format!(" at the `next` of `{}`", self.snippet(body, Node::Expr(*e)))
-                }
+                Some(s) => match s.role {
+                    Role::Item => format!(" at `{}`", snippet(s)),
+                    Role::Set => format!(" at the `set_index` of `{}`", snippet(s)),
+                    Role::Get => format!(" at the `index` of `{}`", snippet(s)),
+                    Role::Op => format!(" at the operator of `{}`", snippet(s)),
+                    Role::Iter => format!(" at the `iter` of `{}`", snippet(s)),
+                    Role::Next => format!(" at the `next` of `{}`", snippet(s)),
+                    Role::Const(_) => format!(" at a constant in `{}`", snippet(s)),
+                },
                 None => String::new(),
             };
             let error = match e {

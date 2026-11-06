@@ -47,7 +47,10 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
 };
 use boltlang_hir_ty::builtin::Builtin;
-use boltlang_mir_build::lambda::{Lambda, body_lambdas};
+use boltlang_mir_build::{
+    lambda::{Lambda, body_lambdas},
+    mir_bodies,
+};
 use boltlang_mir_mono::{Cx, Instance, MonoTy, Site, Use, UseError, program};
 use boltlang_pattern::decision::{Node, body_decisions};
 use conduit_ir::{Extern, ExternId, Func, FuncId, Module, MutParams, Sig};
@@ -150,15 +153,10 @@ pub(crate) struct Ctx<'db> {
 /// The program of `entry` and its tests, in Conduit.
 pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     let p = program(db, entry);
-    let snippet = |instance: Instance<'_>, site: Option<&Site>| -> Option<String> {
+    let snippet = |instance: Instance<'_>, site: Option<&Site<'_>>| -> Option<String> {
         let def = instance.body(db);
         let (_, map) = body_with_source_map(db, def);
-        let ptr = match site? {
-            Site::Expr(e) | Site::SetIndex(e) | Site::Iter(e) | Site::Next(e) => {
-                map.expr_syntax(*e)
-            }
-            Site::Pat(p) => map.pat_syntax(*p),
-        }?;
+        let ptr = map.expr_syntax(site?.origin(db, def)?)?;
         let text = source_text(db, def.def(db).file(db));
         Some(text[ptr.start as usize..ptr.end as usize].to_string())
     };
@@ -239,15 +237,14 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 continue;
             }
         };
-        let (b, _) = body_with_source_map(db, iu.instance.body(db));
-        for (e, _) in b.exprs.iter() {
-            if let Ok(t) = lcx.expr_ty(e) {
-                let _ = types.value(db, entry, &t);
-            }
-        }
-        for (pat, _) in b.pats.iter() {
-            if let Ok(t) = lcx.pat_ty(pat) {
-                let _ = types.value(db, entry, &t);
+        let bodies = mir_bodies(db, iu.instance.body(db));
+        for mir in std::iter::once(&bodies.body).chain(&bodies.lambdas) {
+            let locals =
+                mir.bindings.iter().map(|(_, d)| &d.ty).chain(mir.temps.iter().map(|d| &d.ty));
+            for ty in mir.exprs().map(|(_, node)| &node.ty).chain(locals) {
+                if let Ok(t) = lcx.ty(ty) {
+                    let _ = types.value(db, entry, &t);
+                }
             }
         }
         match instance_sig(&mut types, &lcx, entry) {
@@ -387,12 +384,14 @@ fn lambda_sig<'db>(
     lambda: &Lambda,
 ) -> Result<(Sig, MutParams), ErrorKind> {
     let db = lcx.db;
-    let (body, _) = body_with_source_map(db, lcx.instance.body(db));
+    let Some(mir) = mir_bodies(db, lcx.instance.body(db)).lambda(lambda.expr) else {
+        return Err(ErrorKind::unsupported("a lambda without a body"));
+    };
     let mut sig = Sig::new(Vec::new(), Vec::new());
-    for &b in lambda.captures.iter() {
-        if let Some(t) = types.value(db, root, &lcx.binding_ty(b)?)? {
-            let mutable = body.bindings[b].mutable;
-            sig.params.push(if mutable { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
+    for c in &mir.captures {
+        let Some(decl) = mir.local(c.local) else { continue };
+        if let Some(t) = types.value(db, root, &lcx.ty(&decl.ty)?)? {
+            sig.params.push(if c.by_ref { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
         }
     }
     let MonoTy::Fn(params, ret, _) = lcx.expr_ty(lambda.expr)? else {
@@ -412,10 +411,16 @@ fn declare_extern<'db>(
     module: &mut Module,
     types: &mut Types<'db>,
     lcx: &Cx<'_, 'db>,
-    site: &Site,
+    site: &Site<'db>,
     u: &Use<'db>,
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
+    let use_ty = |site: &Site<'db>| -> Result<MonoTy<'db>, ErrorKind> {
+        let ty = site
+            .use_ty(db, lcx.instance.body(db))
+            .ok_or_else(|| ErrorKind::unsupported("a use without a type"))?;
+        Ok(lcx.ty(&ty)?)
+    };
     let (key, module_name, name) = match u {
         Use::Extern(f) => {
             let abi = match f.container(db) {
@@ -434,8 +439,7 @@ fn declare_extern<'db>(
             if cx.helpers.string.is_some() {
                 return Ok(());
             }
-            let Site::Expr(callee) = site else { return Ok(()) };
-            let MonoTy::Fn(params, ..) = lcx.expr_ty(*callee)? else {
+            let MonoTy::Fn(params, ..) = use_ty(site)? else {
                 return Err(ErrorKind::unsupported("a `print` whose type isn't a function"));
             };
             let Some(string) = types.value(db, cx.root, &params[0])? else {
@@ -450,8 +454,7 @@ fn declare_extern<'db>(
     if cx.externs.contains_key(&key) {
         return Ok(());
     }
-    let Site::Expr(callee) = site else { return Ok(()) };
-    let MonoTy::Fn(params, ret, _) = lcx.expr_ty(*callee)? else {
+    let MonoTy::Fn(params, ret, _) = use_ty(site)? else {
         return Err(ErrorKind::unsupported("a host function whose type isn't a function"));
     };
     let mut sig = Sig::new(Vec::new(), Vec::new());
