@@ -30,8 +30,8 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     GenericParamId, InferenceResult, Ty,
-    builtin::{Builtin, builtin},
-    instances::{class_args, impl_const, impl_method},
+    builtin::Builtin,
+    instances::{impl_const, impl_method},
     lower::{ClassConstraint, generic_predicates, impl_header},
     scheme::generic_param_ids,
     solve::visible_impls,
@@ -176,79 +176,8 @@ impl<'a, 'db> Cx<'a, 'db> {
         self.ty(&self.generics.ty)
     }
 
-    pub fn pat_ty(&self, pat: boltlang_hir_def::hir::PatId) -> Result<MonoTy<'db>, UseError> {
-        self.ty(self.infer.pat_ty(pat))
-    }
-
-    pub fn binding_ty(
-        &self,
-        binding: boltlang_hir_def::hir::BindingId,
-    ) -> Result<MonoTy<'db>, UseError> {
-        self.ty(self.infer.binding_ty(binding))
-    }
-
     pub fn expr_ty(&self, expr: ExprId) -> Result<MonoTy<'db>, UseError> {
         self.ty(self.infer.expr_ty(expr))
-    }
-
-    /// What the use of `f` at `at` is, where the use has the type `use_ty`:
-    /// the function's type with its arguments, or with a method call's
-    /// receiver first.
-    pub fn function_use(
-        &self,
-        at: ExprId,
-        f: FunctionId<'db>,
-        use_ty: &MonoTy<'db>,
-    ) -> Result<Use<'db>, UseError> {
-        let db = self.db;
-        if let Some(b) = builtin(db, f) {
-            return Ok(Use::Builtin(b));
-        }
-        match f.container(db) {
-            ItemContainerId::ExternBlock(_) if !f.item(db).has_body => Ok(Use::Extern(f)),
-            ItemContainerId::Class(class) => {
-                let args = self.class_args_at(at, class, use_ty, f)?;
-                self.class_item_use(at, class, &args, ClassItem::Function(f), use_ty)
-            }
-            _ => self.instance_use(DefWithBody::Function(f), use_ty, &[]),
-        }
-    }
-
-    /// What the use of the constant `c` at `at`, of type `use_ty`, is.
-    pub fn const_use(
-        &self,
-        at: ExprId,
-        c: ConstId<'db>,
-        use_ty: &MonoTy<'db>,
-    ) -> Result<Use<'db>, UseError> {
-        match c.container(self.db) {
-            ItemContainerId::Class(class) => {
-                let args = match self.infer.type_args(at) {
-                    Some(given) => {
-                        let params = generic_param_ids(self.db, [GenericDefId::Class(class)]);
-                        self.mono_args(class_args(self.db, class, &params, given).iter())?
-                    }
-                    None => return Err(UseError::UnknownType),
-                };
-                self.class_item_use(at, class, &args, ClassItem::Const(c), use_ty)
-            }
-            _ => self.instance_use(DefWithBody::Const(c), use_ty, &[]),
-        }
-    }
-
-    /// The use of a method or constant of a class, for a class method whose
-    /// class arguments, like the `[i32]` of `Show[i32]`, are `args`, which
-    /// syntax uses too, like `Index` for `xs[i]`.
-    pub fn class_item_use(
-        &self,
-        at: ExprId,
-        class: ClassId<'db>,
-        args: &[MonoTy<'db>],
-        item: ClassItem<'db>,
-        use_ty: &MonoTy<'db>,
-    ) -> Result<Use<'db>, UseError> {
-        let chosen = self.infer.instance(at, class);
-        self.class_item_use_with(chosen, class, args, item, use_ty)
     }
 
     /// What a use in MIR is: `item`, used at the type `use_ty`, which is
@@ -277,14 +206,16 @@ impl<'a, 'db> Cx<'a, 'db> {
                     (None, ClassItem::Function(f)) => self.class_args_of_use(class, use_ty, *f)?,
                     (None, ClassItem::Const(_)) => return Err(UseError::UnknownType),
                 };
-                self.class_item_use_with(*imp, class, &args, *item, use_ty)
+                self.class_item_use(*imp, class, &args, *item, use_ty)
             }
         }
     }
 
-    /// [`Cx::class_item_use`], with the impl that the checker chose, if it
-    /// did.
-    fn class_item_use_with(
+    /// The use of a method or constant of a class, for a class method whose
+    /// class arguments, like the `[i32]` of `Show[i32]`, are `args`, which
+    /// syntax uses too, like `Index` for `xs[i]`, with the impl that the
+    /// checker chose, if it did.
+    fn class_item_use(
         &self,
         chosen: Option<ImplId<'db>>,
         class: ClassId<'db>,
@@ -372,25 +303,6 @@ impl<'a, 'db> Cx<'a, 'db> {
                 }
             })
             .collect()
-    }
-
-    /// The arguments of `class` for a use of its method `f` at `at`.
-    fn class_args_at(
-        &self,
-        at: ExprId,
-        class: ClassId<'db>,
-        use_ty: &MonoTy<'db>,
-        f: FunctionId<'db>,
-    ) -> Result<Vec<MonoTy<'db>>, UseError> {
-        let callee = generics(self.db, DefWithBodyId::new(self.db, DefWithBody::Function(f)))
-            .as_ref()
-            .map_err(|e| UseError::from(*e))?;
-        match self.infer.type_args(at) {
-            Some(given) => self.mono_args(class_args(self.db, class, &callee.params, given).iter()),
-            // Without them, the use's type decides, as for a method that
-            // syntax calls, like `index` for `xs[i]`.
-            None => self.class_args_of_use(class, use_ty, f),
-        }
     }
 
     /// The arguments of `class` for a use of its method `f` at the type
