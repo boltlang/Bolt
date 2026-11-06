@@ -124,11 +124,58 @@ fn check_reports_a_used_file_with_errors() {
 }
 
 #[test]
-fn build_is_not_available() {
-    let dir = dir_with("stubs", &[("a.bolt", "1;\n")]);
+fn build_writes_a_wasm_module() {
+    let dir = dir_with("build", &[("a.bolt", "1;\n")]);
+    let o = bolt(&dir, "build", &["a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    let bytes = fs::read(dir.join("a.wasm")).unwrap();
+    assert!(bytes.starts_with(b"\0asm"), "not a Wasm module");
+    let o = bolt(&dir, "build", &["a.bolt", "-o", "b.wasm", "--no-opt"]);
+    assert!(o.ok, "{}", o.err);
+    assert!(fs::read(dir.join("b.wasm")).unwrap().starts_with(b"\0asm"));
+}
+
+#[test]
+fn build_writes_nothing_with_errors() {
+    let dir = dir_with("build-errors", &[("a.bolt", "let x: i32 = True;\n")]);
     let o = bolt(&dir, "build", &["a.bolt"]);
     assert!(!o.ok);
-    assert!(o.err.contains("not available until the Conduit backend lands"), "{}", o.err);
+    assert!(!dir.join("a.wasm").exists());
+}
+
+/// A host for a module of `bolt build` in Node: `write_file` and `flush` of
+/// the module `bolt`, on stdout and stderr, and a run of `main`.
+const NODE_HOST: &str = r#"
+import fs from "node:fs";
+const pending = { 1: [], 2: [] };
+const files = { 1: process.stdout, 2: process.stderr };
+const bolt = {
+  write_file: (f, b) => pending[f].push(b),
+  flush: (f) => { files[f].write(Buffer.from(pending[f])); pending[f] = []; },
+};
+const { instance } = await WebAssembly.instantiate(fs.readFileSync(process.argv[2]), { bolt });
+instance.exports.main();
+"#;
+
+#[test]
+fn build_makes_a_module_that_runs_in_node() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipped: no `node` to run the module with");
+        return;
+    }
+    let program = "effect Yield { fn yield(value: i32); }\n\
+        fn produce() does Yield { yield(1); yield(2); }\n\
+        fn sum(body: fn() does Yield) -> i32 =\n\
+          match body() { () => 0, effect yield(x), k => x + resume(k, ()) };\n\
+        print(\"hello\");\n\
+        if sum(produce) == 3 { print(\"3\") } else { print(\"?\") };\n";
+    let dir = dir_with("build-node", &[("a.bolt", program), ("host.mjs", NODE_HOST)]);
+    let o = bolt_std(&dir, "build", &["a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    let run = Command::new("node").args(["host.mjs", "a.wasm"]).current_dir(&dir).output().unwrap();
+    let err = String::from_utf8(run.stderr).unwrap();
+    assert!(run.status.success(), "{err}");
+    assert_eq!(String::from_utf8(run.stdout).unwrap(), "hello\n3\n");
 }
 
 #[test]

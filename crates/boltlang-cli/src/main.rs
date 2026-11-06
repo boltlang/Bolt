@@ -193,17 +193,22 @@ struct TestCommand {
     fuel: Option<u64>,
 }
 
-/// Compile a file. Not available until the Conduit backend lands.
+/// Check a file, then compile it to a WebAssembly module, whose export
+/// `main` runs the statements at its top level. It imports `write_file`
+/// and `flush` from the module `bolt`, which `print` writes with, and the
+/// functions of `extern` blocks from the modules they name.
 #[derive(clap::Parser)]
 struct BuildCommand {
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
-    _args: Vec<String>,
-}
-
-/// What `bolt build` does until it can write a Wasm module.
-fn not_available(command: &str) -> anyhow::Result<bool> {
-    eprintln!("error: `bolt {command}` is not available until the Conduit backend lands");
-    Ok(false)
+    file: PathBuf,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Where to write the module [default: the file's name, with `.wasm`,
+    /// in the current directory]
+    #[arg(short, long, value_name = "PATH")]
+    output: Option<PathBuf>,
+    /// Don't optimize the program before compiling it.
+    #[arg(long)]
+    no_opt: bool,
 }
 
 impl Exec for RunCommand {
@@ -334,7 +339,31 @@ fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<
 
 impl Exec for BuildCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        not_available("build")
+        let db = self.prelude.database()?;
+        let Some(file) = open(&db, &self.file) else { return Ok(false) };
+        let found = checked(&db, file, &[file]);
+        report(&db, &found)?;
+        if found.iter().any(|d| d.severity == Severity::Error) {
+            return Ok(false);
+        }
+        let Some(program) = lowered(&db, file) else { return Ok(false) };
+        let bytes = match boltlang_codegen_conduit::wasm::build(&program, !self.no_opt) {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                eprintln!("error: {error}");
+                return Ok(false);
+            }
+        };
+        let output = match &self.output {
+            Some(path) => path.clone(),
+            None => {
+                let stem = self.file.file_stem().unwrap_or(self.file.as_os_str());
+                PathBuf::from(stem).with_extension("wasm")
+            }
+        };
+        std::fs::write(&output, bytes)
+            .map_err(|e| anyhow::anyhow!("can't write `{}`: {e}", output.display()))?;
+        Ok(true)
     }
 }
 

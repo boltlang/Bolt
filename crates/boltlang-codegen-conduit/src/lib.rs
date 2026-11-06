@@ -52,6 +52,7 @@ mod func;
 mod host;
 pub mod run;
 mod ty;
+pub mod wasm;
 
 use std::{
     collections::{BTreeMap, HashMap},
