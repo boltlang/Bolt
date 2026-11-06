@@ -32,3 +32,23 @@ fn the_tests_of_std_collect_without_errors() {
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
+
+/// `imm T` in a generic function is what `imm` makes of the type it's
+/// instantiated at.
+#[test]
+fn imm_of_a_type_parameter_in_an_instance() {
+    let mut db = TestDb::new();
+    db.add_std();
+    let file = db.file("/main.bolt", "fn h(x) = imm x;\nlet a = h(mut [mut [1]]);\n");
+    let p = program(&db, file);
+    assert!(p.errors.is_empty(), "{:?}", p.errors);
+    let h = p
+        .instances
+        .iter()
+        .find(|i| i.instance.function(&db).is_some())
+        .expect("an instance of h")
+        .instance;
+    let cx = crate::Cx::new(&db, h, &[]).unwrap();
+    let ty = cx.instance_ty().unwrap();
+    assert_eq!(ty.display(&db).to_string(), "fn(mut [mut [i32]]) -> imm [imm [i32]]");
+}

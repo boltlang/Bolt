@@ -18,7 +18,11 @@ use std::fmt;
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_def::{builtin_type::BuiltinType, hir::Mutability, ids::TypeAliasId};
-use boltlang_hir_ty::{AdtId, GenericParamId, Ty, lower::VariantDef, solve::normalize_assoc};
+use boltlang_hir_ty::{
+    AdtId, GenericParamId, Ty,
+    lower::VariantDef,
+    solve::{imm_of, normalize_assoc},
+};
 
 /// A mutability in an instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -338,6 +342,14 @@ impl<'db> Subst<'_, 'db> {
                 _ => return Err(TyError::Unknown),
             },
             Ty::Assoc(alias, args) => self.assoc(*alias, args)?,
+            // `imm T`, once `T` is known: what `imm` makes of it.
+            Ty::Imm(inner) => {
+                let inner = self.back(&self.ty(inner)?)?;
+                match imm_of(self.db, self.root, &inner) {
+                    Ty::Imm(_) => return Err(TyError::Unknown),
+                    ty => self.ty(&ty)?,
+                }
+            }
             // A type that nothing decides, like the elements of `[]`, can't
             // change what the code does.
             Ty::Var(_) => MonoTy::unit(),
@@ -357,9 +369,19 @@ impl<'db> Subst<'_, 'db> {
         if args.iter().any(MonoTy::has_erased) {
             return Ok(MonoTy::ErasedAssoc(alias, args.into()));
         }
-        // A mutability parameter stays the body's own, as the checker would
-        // have it, so that what the impl gives can use it, like the `'v` of
-        // `VecIter[T, 'v]`, and maps back to the instance's.
+        let args: Box<[Ty<'db>]> = args.iter().map(|t| self.back(t)).collect::<Result<_, _>>()?;
+        let ty = normalize_assoc(self.db, self.root, &Ty::Assoc(alias, args));
+        if matches!(ty, Ty::Assoc(..)) {
+            return Err(TyError::Unknown);
+        }
+        self.ty(&ty)
+    }
+
+    /// A closed type as one of the checker's, for it to work on. A
+    /// mutability parameter stays the body's own, as the checker would have
+    /// it, so that what it gives can use it, like the `'v` of `VecIter[T,
+    /// 'v]` that an impl gives, and maps back to the instance's.
+    fn back(&self, t: &MonoTy<'db>) -> Result<Ty<'db>, TyError> {
         let param = |i: u32| -> Ty<'db> {
             let at = self.slots.iter().position(|s| *s == Slot::Mut(MonoMut::Param(i)));
             match at {
@@ -368,16 +390,7 @@ impl<'db> Subst<'_, 'db> {
                 None => Ty::Mutability(Mutability::Imm),
             }
         };
-        let args: Box<[Ty<'db>]> = args
-            .iter()
-            .map(|t| t.to_ty_with(&param))
-            .collect::<Option<_>>()
-            .ok_or(TyError::Unknown)?;
-        let ty = normalize_assoc(self.db, self.root, &Ty::Assoc(alias, args));
-        if matches!(ty, Ty::Assoc(..)) {
-            return Err(TyError::Unknown);
-        }
-        self.ty(&ty)
+        t.to_ty_with(&param).ok_or(TyError::Unknown)
     }
 
     pub fn mutability(&self, ty: &Ty<'db>) -> Result<MonoMut, TyError> {
