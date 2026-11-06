@@ -17,7 +17,7 @@ use boltlang_mir::{
     Body, Callee, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place as MirPlace, Stmt,
 };
 use boltlang_mir_build::{lambda::Lambda, mir_bodies};
-use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoTy, Use, field_types};
+use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoTy, Use, closed_ty, field_types};
 use boltlang_mir_transform::shim_body;
 use boltlang_pattern::decision::{
     Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value,
@@ -58,14 +58,42 @@ struct Target {
     next: Option<JoinPoint>,
 }
 
-/// The function of the instance `iu`, or of one of its lambdas, lifted.
+/// Which function of an instance is lowered.
+#[derive(Clone, Copy)]
+pub(crate) enum Part<'a> {
+    /// The instance's own.
+    Body,
+    /// That of one of its lambdas, lifted.
+    Lambda(&'a Lambda),
+    /// The scrutinee of a `match` with effect arms, in the MIR body of that
+    /// index, as the closure the handler runs.
+    HandleBody(u32, ExprId),
+    /// Its value arms, as the handler's return clause.
+    HandleRet(u32, ExprId),
+    /// The arms of the `i`th operation of its effect, as its clause.
+    HandleClause(u32, ExprId, usize),
+}
+
+/// What a function of a handler is.
+#[derive(Clone, Copy)]
+enum HandlePart {
+    Body,
+    Ret,
+    Clause(usize),
+}
+
+/// The function of the instance `iu`, or one of its lambdas or handlers.
 pub(crate) fn lower_body<'db>(
     cx: &Ctx<'db>,
     module: &Module,
     types: &mut Types<'db>,
     iu: &InstanceUses<'db>,
-    lambda: Option<&Lambda>,
+    part: Part<'_>,
 ) -> Result<Func, Error> {
+    let lambda = match part {
+        Part::Lambda(lambda) => Some(lambda),
+        _ => None,
+    };
     let db = cx.db;
     let def = iu.instance.body(db);
     let map = def.map(|def| &body_with_source_map(db, def).1);
@@ -94,6 +122,37 @@ pub(crate) fn lower_body<'db>(
         }
         (None, Some(bodies), None) => (cx.funcs[&iu.instance], &bodies.body),
     };
+    // The MIR body a handler is in, and which of its functions this is.
+    let (body_index, handle) = match part {
+        Part::Body => (0, None),
+        Part::Lambda(lambda) => {
+            let at = bodies.and_then(|b| {
+                b.lambdas.iter().position(|m| {
+                    matches!(m.owner, boltlang_mir::BodyOwner::Lambda { expr, .. } if expr == lambda.expr)
+                })
+            });
+            (at.map_or(0, |i| i as u32 + 1), None)
+        }
+        Part::HandleBody(i, e) => (i, Some((e, HandlePart::Body))),
+        Part::HandleRet(i, e) => (i, Some((e, HandlePart::Ret))),
+        Part::HandleClause(i, e, op) => (i, Some((e, HandlePart::Clause(op)))),
+    };
+    let (id, mir) = match (handle, bodies) {
+        (Some((e, which)), Some(bodies)) => {
+            let fns = &cx.handles[&(iu.instance, body_index, e)];
+            let id = match which {
+                HandlePart::Body => fns.body,
+                HandlePart::Ret => fns.ret,
+                HandlePart::Clause(op) => fns.clauses[op],
+            };
+            let mir = match body_index {
+                0 => &bodies.body,
+                i => &bodies.lambdas[i as usize - 1],
+            };
+            (id, mir)
+        }
+        _ => (id, mir),
+    };
     let sig = &module.funcs[&id];
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
     b.set_mut_params(sig.mut_params.clone());
@@ -107,6 +166,8 @@ pub(crate) fn lower_body<'db>(
         map,
         b,
         is_lambda: lambda.is_some(),
+        body_index,
+        handle,
         locals: HashMap::new(),
         targets: Vec::new(),
         at: None,
@@ -145,6 +206,11 @@ struct Lower<'a, 'm, 'db> {
     /// Whether this is the function of a lambda, which takes its captures
     /// first.
     is_lambda: bool,
+    /// Which MIR body of the instance this is: 0 for its own, and `i + 1`
+    /// for its `i`th lambda's.
+    body_index: u32,
+    /// The `match` with effect arms whose function this is, if it's one.
+    handle: Option<(ExprId, HandlePart)>,
     locals: HashMap<Local, LocalVal>,
     targets: Vec<Target>,
     /// The node being lowered, for errors.
@@ -195,6 +261,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     }
 
     fn run(&mut self) -> R<()> {
+        if let Some((e, which)) = self.handle {
+            return self.run_handle(e, which);
+        }
         let db = self.cx.db;
         let mut next = 0;
         // A lambda takes its captures first: a local that's assigned as its
@@ -237,6 +306,122 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             match self.lcx.instance.body(db).map(|body| body.def(db)) {
                 Some(DefWithBody::File(_)) if !self.is_lambda => self.b.ret(()),
                 _ => self.b.ret(result.into_iter().collect::<Vec<_>>()),
+            }
+        }
+        Ok(())
+    }
+
+    /// Bind the locals that a function of a handler is given first, each
+    /// a parameter if its type has values: a local that's assigned as its
+    /// ref.
+    fn bind_given(&mut self, locals: &[Local], next: &mut usize) -> R<()> {
+        for &local in locals {
+            let mutable = self.mir.local(local).is_some_and(|d| d.mutable);
+            let slot = match self.cty(&self.local_ty(local)?)? {
+                Some(_) => {
+                    *next += 1;
+                    let p = self.b.param(*next - 1);
+                    if let Some(name) = self.local_name(local) {
+                        self.var_names.entry(p).or_insert(name);
+                    }
+                    if mutable { LocalVal::Ref(p) } else { LocalVal::Value(Some(Atom::Var(p))) }
+                }
+                None => LocalVal::Value(None),
+            };
+            self.locals.insert(local, slot);
+        }
+        Ok(())
+    }
+
+    /// A function of the handler of the `match` with effect arms `e`: its
+    /// scrutinee, its value arms, or the arms of an operation.
+    fn run_handle(&mut self, e: ExprId, which: HandlePart) -> R<()> {
+        let db = self.cx.db;
+        let mir = self.mir;
+        let fns = &self.cx.handles[&(self.lcx.instance, self.body_index, e)];
+        let ExprKind::Handle { body: scrutinee, value, arms, ops } = &mir[e].kind else {
+            return Err(ErrorKind::unsupported("this handler"));
+        };
+        let mut next = 0;
+        let ret = |l: &mut Self, v: Val| {
+            if !l.ended() {
+                l.b.ret(v.into_iter().collect::<Vec<_>>());
+            }
+        };
+        match which {
+            HandlePart::Body => {
+                self.bind_given(&fns.captures, &mut next)?;
+                let v = self.expr(*scrutinee)?;
+                ret(self, v);
+            }
+            HandlePart::Ret => {
+                self.bind_given(&fns.env, &mut next)?;
+                let t = self.mono(*scrutinee)?;
+                let v = match self.cty(&t)? {
+                    Some(_) => Some(Atom::Var(self.b.param(next))),
+                    None => None,
+                };
+                let guards: Vec<Option<ExprId>> = arms.iter().map(|a| a.guard).collect();
+                let bodies: Vec<ExprId> = arms.iter().map(|a| a.body).collect();
+                self.decide(value, v, t, false, &guards, &mut |l, arm| {
+                    let v = l.expr(bodies[arm as usize])?;
+                    ret(l, v);
+                    Ok(())
+                })?;
+            }
+            HandlePart::Clause(index) => {
+                self.bind_given(&fns.env, &mut next)?;
+                let op = ops
+                    .first()
+                    .and_then(|o| match o.op.container(db) {
+                        boltlang_hir_def::ids::ItemContainerId::Effect(eff) => {
+                            self.cx.effects.get(&eff)
+                        }
+                        _ => None,
+                    })
+                    .and_then(|(_, all)| all.get(index).copied())
+                    .ok_or_else(|| ErrorKind::unsupported("this handler"))?;
+                let op_arms = ops.iter().find(|o| o.op == op).ok_or_else(|| {
+                    ErrorKind::unsupported("a handler without an arm for each operation")
+                })?;
+                // The arguments, matched as a tuple.
+                let mut tys = Vec::new();
+                for p in boltlang_hir_ty::lower::fn_sig(db, op).params.iter() {
+                    let p = p.as_ref().ok_or_else(|| ErrorKind::unsupported("this operation"))?;
+                    tys.push(
+                        closed_ty(db, self.cx.root, p)
+                            .map_err(|_| ErrorKind::unsupported("this operation"))?,
+                    );
+                }
+                let mut args = Vec::new();
+                for t in &tys {
+                    if self.cty(t)?.is_some() {
+                        args.push(Atom::Var(self.b.param(next)));
+                        next += 1;
+                    }
+                }
+                let k = Atom::Var(self.b.param(next));
+                let t = MonoTy::Tuple(tys.clone().into());
+                let scrutinee = if tys.is_empty() {
+                    None
+                } else {
+                    let Some(Ty::Data(id, m, margs, _)) = self.cty(&t)? else {
+                        return Err(ErrorKind::unsupported("the arguments of this operation"));
+                    };
+                    let ctor = CtorId { data: id, index: 0 };
+                    Some(Atom::Var(self.b.new_object_with(ctor, m, margs, args)))
+                };
+                let guards: Vec<Option<ExprId>> = op_arms.arms.iter().map(|a| a.guard).collect();
+                let bodies: Vec<ExprId> = op_arms.arms.iter().map(|a| a.body).collect();
+                let conts = op_arms.conts.clone();
+                self.decide(&op_arms.decision, scrutinee, t, false, &guards, &mut |l, arm| {
+                    if let Some(c) = conts[arm as usize] {
+                        l.bind(c, Some(k.clone()))?;
+                    }
+                    let v = l.expr(bodies[arm as usize])?;
+                    ret(l, v);
+                    Ok(())
+                })?;
             }
         }
         Ok(())
@@ -465,7 +650,31 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Ok(Some(Atom::Var(k.param(0))))
             }
             ExprKind::Let { .. } => Err(ErrorKind::unsupported("`let` here")),
-            ExprKind::Handle { .. } => Err(ErrorKind::unsupported("a match with effect arms")),
+            // A `handle`, with the locals its clauses share, and a closure of
+            // its scrutinee.
+            ExprKind::Handle { .. } => {
+                let fns = &self.cx.handles[&(self.lcx.instance, self.body_index, e)];
+                let given = |l: &Self, locals: &[Local]| -> R<Vec<Atom>> {
+                    let mut out = Vec::new();
+                    for local in locals {
+                        match l.locals.get(local) {
+                            Some(LocalVal::Value(Some(v))) => out.push(v.clone()),
+                            Some(LocalVal::Ref(r)) => out.push(Atom::Var(*r)),
+                            Some(LocalVal::Value(None)) => {}
+                            None => {
+                                return Err(ErrorKind::unsupported("a local that isn't in scope"));
+                            }
+                        }
+                    }
+                    Ok(out)
+                };
+                let mut env = given(self, &fns.env)?;
+                let captures = given(self, &fns.captures)?;
+                let body = self.b.closure_at(fns.body, self.own_margs(), Mutability::Mut, captures);
+                env.push(Atom::Var(body));
+                let results = self.b.handle(fns.handler, env);
+                Ok(results.first().map(|&v| Atom::Var(v)))
+            }
             ExprKind::Match { scrutinee, decision, arms } => {
                 let guards: Vec<Option<ExprId>> = arms.iter().map(|a| a.guard).collect();
                 let bodies: Vec<ExprId> = arms.iter().map(|a| a.body).collect();

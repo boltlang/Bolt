@@ -77,8 +77,22 @@ is given back as it is, with no call and no impl.
 
 ## Effects
 
-**Not implemented: this is a design,** in Conduit as in
-[Bolt](./effects.mdx).
+A call of an operation is a `perform`, and a `match` with effect arms is a
+`handle`, as [the effects design](./effects.mdx#lowering) says: the
+scrutinee becomes a closure, the value arms the return clause, and the arms
+of each operation its clause, a function that takes the operation's
+arguments and the continuation, and matches the arguments as a tuple. The
+clauses share the locals of the code around the `match` that they use, as
+the handler's environment, with a local that's assigned as its ref.
+
+What's lowered so far gives every function and closure the row `Any`,
+since Bolt doesn't give Conduit its rows yet: the rest of this section is
+the design for that. Left out until then: a `match` that handles several
+effects, which needs a handler for several in Conduit
+([conduit#28](https://github.com/boltlang/conduit/issues/28)), effects and
+operations with type parameters, an operation as a value, and a handler
+whose arms hold values of a mutability that's a parameter, since a
+clause can't have mutability parameters in Conduit.
 
 Conduit's effect types follow Bolt's: rows after `does`, joined with `+`,
 with `Nothing` for the empty row and effect parameters `E1`, `E2`, ..

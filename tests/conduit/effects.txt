@@ -16,11 +16,429 @@ fn file() -> () does Any {
 error: fn0: no handler for effect0
 
 ================================================================================
-Handlers aren't lowered yet
+A handler sums what a generator yields
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Yield { fn yield(value: i32); }
+fn produce() does Yield {
+  yield(1);
+  yield(2);
+  yield(3);
+}
+fn sum(body: fn() does Yield) -> i32 =
+  match body() {
+    () => 0,
+    effect yield(x), k => x + resume(k, ()),
+  };
+log(sum(produce));
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Yield {
+  (i32) -> ()
+}
+
+handler sum_handler0 for Yield does Any env() ops(sum_handle0_yield) ret sum_handle0_return
+
+fn file() -> () does Any {
+  let %0: imm fn() -> () does Any = closure produce()
+  let %1: i32 = call sum[imm](%0)
+  let = call_extern log(%1)
+  jump ret()
+}
+
+fn sum['m1](%body: 'm1 fn() -> () does Any) -> (i32) does Any {
+  let %1: mut fn() -> () does Any = closure sum_handle0['m1](%body)
+  let %2: i32 = handle sum_handler0(%1)
+  jump ret(%2)
+}
+
+fn produce() -> () does Any {
+  let = perform Yield.0(1i32)
+  let = perform Yield.0(2i32)
+  let = perform Yield.0(3i32)
+  jump ret()
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn sum_handle0['m1](%body: 'm1 fn() -> () does Any) -> () does Any {
+  let = apply(%body)
+  jump ret()
+}
+
+fn sum_handle0_return() -> (i32) does Any {
+  jump ret(0i32)
+}
+
+fn sum_handle0_yield(%0: i32, %k: cont() -> (i32) does Any) -> (i32) does Any {
+  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %x: i32 = get Tuple_i32.0.0(%2)
+  let %4: i32 = resume(%k)
+  let %5: i32 = call plus_i32(%x, %4)
+  jump ret(%5)
+}
+--------------------------------------------------------------------------------
+env.log(6)
+
+================================================================================
+A handler's arms can change a local around it
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Tick { fn tick(); }
+fn ticks() does Tick {
+  tick();
+  tick();
+}
+fn count() -> i32 {
+  let mut n = 0;
+  match ticks() {
+    () => n,
+    effect tick(), k => {
+      n = n + 1;
+      resume(k, ())
+    },
+  }
+}
+log(count());
+--------------------------------------------------------------------------------
+extern log "env" "log" (i32) -> ()
+
+effect Tick {
+  () -> ()
+}
+
+handler count_handler0 for Tick does Any env(ref i32) ops(count_handle0_tick) ret count_handle0_return
+
+fn file() -> () does Any {
+  let %0: i32 = call count()
+  let = call_extern log(%0)
+  jump ret()
+}
+
+fn count() -> (i32) does Any {
+  let %n: ref i32 = ref_new(0i32)
+  let %1: mut fn() -> () does Any = closure count_handle0()
+  let %2: i32 = handle count_handler0(%n, %1)
+  jump ret(%2)
+}
+
+fn ticks() -> () does Any {
+  let = perform Tick.0()
+  let = perform Tick.0()
+  jump ret()
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn count_handle0() -> () does Any {
+  let = call ticks()
+  jump ret()
+}
+
+fn count_handle0_return(%n: ref i32) -> (i32) does Any {
+  let %1: i32 = ref_get(%n)
+  jump ret(%1)
+}
+
+fn count_handle0_tick(%n: ref i32, %k: cont() -> (i32) does Any) -> (i32) does Any {
+  let %2: i32 = ref_get(%n)
+  let %3: i32 = call plus_i32(%2, 1i32)
+  let = ref_set(%n, %3)
+  let %4: i32 = resume(%k)
+  jump ret(%4)
+}
+--------------------------------------------------------------------------------
+env.log(2)
+
+================================================================================
+An arm that doesn't resume stops the scrutinee
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Fail { fn fail(code: i32) -> !; }
+fn work() -> i32 does Fail {
+  log(1);
+  fail(7);
+  log(2);
+  0
+}
+fn attempt() -> i32 =
+  match work() {
+    v => v,
+    effect fail(code), _ => code,
+  };
+log(attempt());
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Fail {
+  (i32) -> ()
+}
+
+handler attempt_handler0 for Fail does Any env() ops(attempt_handle0_fail) ret attempt_handle0_return
+
+fn file() -> () does Any {
+  let %0: i32 = call attempt()
+  let = call_extern log(%0)
+  jump ret()
+}
+
+fn attempt() -> (i32) does Any {
+  let %0: mut fn() -> (i32) does Any = closure attempt_handle0()
+  let %1: i32 = handle attempt_handler0(%0)
+  jump ret(%1)
+}
+
+fn work() -> (i32) does Any {
+  let = call_extern log(1i32)
+  let = perform Fail.0(7i32)
+  unreachable
+}
+
+fn attempt_handle0() -> (i32) does Any {
+  let %0: i32 = call work()
+  jump ret(%0)
+}
+
+fn attempt_handle0_return(%v: i32) -> (i32) does Any {
+  jump ret(%v)
+}
+
+fn attempt_handle0_fail(%0: i32, %1: cont() -> (i32) does Any) -> (i32) does Any {
+  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %code: i32 = get Tuple_i32.0.0(%2)
+  jump ret(%code)
+}
+--------------------------------------------------------------------------------
+env.log(1)
+env.log(7)
+
+================================================================================
+An operation gives what its arm resumes with, and arms match its arguments
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Ask { fn ask(n: i32) -> i32; }
+fn questions() -> i32 does Ask = ask(0) + ask(5) + ask(20);
+fn answer() -> i32 =
+  match questions() {
+    v => v,
+    effect ask(0), k => resume(k, 100),
+    effect ask(n), k if n > 10 => resume(k, 1),
+    effect ask(n), k => resume(k, n),
+  };
+log(answer());
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Ask {
+  (i32) -> (i32)
+}
+
+handler answer_handler0 for Ask does Any env() ops(answer_handle0_ask) ret answer_handle0_return
+
+fn file() -> () does Any {
+  let %0: i32 = call answer()
+  let = call_extern log(%0)
+  jump ret()
+}
+
+fn answer() -> (i32) does Any {
+  let %0: mut fn() -> (i32) does Any = closure answer_handle0()
+  let %1: i32 = handle answer_handler0(%0)
+  jump ret(%1)
+}
+
+fn questions() -> (i32) does Any {
+  let %0: i32 = perform Ask.0(0i32)
+  let %1: i32 = perform Ask.0(5i32)
+  let %2: i32 = call plus_i32(%0, %1)
+  let %3: i32 = perform Ask.0(20i32)
+  let %4: i32 = call plus_i32(%2, %3)
+  jump ret(%4)
+}
+
+fn gt_i32(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = call PartialOrd_i32_gt(%a, %b)
+  jump ret(%2)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn PartialOrd_i32_gt(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = gt.s(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) does Any {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn answer_handle0() -> (i32) does Any {
+  let %0: i32 = call questions()
+  jump ret(%0)
+}
+
+fn answer_handle0_return(%v: i32) -> (i32) does Any {
+  jump ret(%v)
+}
+
+fn answer_handle0_ask(%0: i32, %k: cont(i32) -> (i32) does Any) -> (i32) does Any {
+  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %n: i32 = get Tuple_i32.0.0(%2)
+  case %n {
+    0 =>
+      let %4: i32 = resume(%k, 100i32)
+      jump ret(%4)
+    _ =>
+      let %5: i32 = call gt_i32(%n, 10i32)
+      case %5 {
+        0 =>
+          let %6: i32 = resume(%k, %n)
+          jump ret(%6)
+        _ =>
+          let %7: i32 = resume(%k, 1i32)
+          jump ret(%7)
+      }
+  }
+}
+--------------------------------------------------------------------------------
+env.log(106)
+
+================================================================================
+An arm for several operations
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Log { fn info(m: i32); fn warn(m: i32); }
+fn chatty() does Log {
+  info(1);
+  warn(2);
+}
+fn shown() =
+  match chatty() {
+    () => (),
+    effect info(m) | warn(m), k => {
+      log(m);
+      resume(k, ())
+    },
+  };
+shown();
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Log {
+  (i32) -> ()
+  (i32) -> ()
+}
+
+handler shown_handler0 for Log does Any env() ops(shown_handle0_info, shown_handle0_warn) ret shown_handle0_return
+
+fn file() -> () does Any {
+  let = call shown()
+  jump ret()
+}
+
+fn shown() -> () does Any {
+  let %0: mut fn() -> () does Any = closure shown_handle0()
+  let = handle shown_handler0(%0)
+  jump ret()
+}
+
+fn chatty() -> () does Any {
+  let = perform Log.0(1i32)
+  let = perform Log.1(2i32)
+  jump ret()
+}
+
+fn shown_handle0() -> () does Any {
+  let = call chatty()
+  jump ret()
+}
+
+fn shown_handle0_return() -> () does Any {
+  jump ret()
+}
+
+fn shown_handle0_info(%0: i32, %k: cont() -> () does Any) -> () does Any {
+  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %m: i32 = get Tuple_i32.0.0(%2)
+  let = call_extern log(%m)
+  let = resume(%k)
+  jump ret()
+}
+
+fn shown_handle0_warn(%0: i32, %k: cont() -> () does Any) -> () does Any {
+  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %m: i32 = get Tuple_i32.0.0(%2)
+  let = call_extern log(%m)
+  let = resume(%k)
+  jump ret()
+}
+--------------------------------------------------------------------------------
+env.log(1)
+env.log(2)
+
+================================================================================
+A match that handles several effects isn't supported yet
+:test-prelude
 :error
 ================================================================================
-effect Yield { fn yield(n: i32); }
-fn f() -> i32 = match 1 { v => v, effect yield(n), k => n };
-f();
+effect Log { fn log(m: i32); }
+effect Ask { fn ask() -> i32; }
+fn job() -> i32 does Log + Ask {
+  log(1);
+  ask()
+}
+fn run() -> i32 =
+  match job() {
+    v => v,
+    effect log(m), k => resume(k, ()),
+    effect ask(), k => resume(k, 1),
+  };
+run();
 --------------------------------------------------------------------------------
-error in f at `match 1 { v => v, effect yield(n), k => n }`: a match with effect arms isn't supported yet
+error in run at `match job() {
+    v => v,
+    effect log(m), k => resume(k, ()),
+    effect ask(), k => resume(k, 1),
+  }`: a match that handles several effects isn't supported yet

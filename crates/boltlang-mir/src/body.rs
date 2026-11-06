@@ -411,6 +411,84 @@ impl<'db> Body<'db> {
         self.alloc(ExprKind::Call { callee, args: args.into() }, ret, None)
     }
 
+    /// The locals that the code at `roots` uses but doesn't bind, in the
+    /// order it first uses them, other than `bound`: what a function made
+    /// of it captures.
+    pub fn free_locals(&self, roots: &[ExprId], bound: &[Local]) -> Vec<Local> {
+        let mut used = Vec::new();
+        let mut bound = bound.to_vec();
+        let decision = |d: &Decision<'db>, bound: &mut Vec<Local>| {
+            for node in &d.nodes {
+                if let boltlang_pattern::decision::Node::Arm { bindings, .. }
+                | boltlang_pattern::decision::Node::Guard { bindings, .. } = node
+                {
+                    bound.extend(bindings.iter().map(|&(b, _)| Local::Binding(b)));
+                }
+            }
+        };
+        let pattern = |p: &Pattern<'db>, bound: &mut Vec<Local>| match p {
+            Pattern::Local(l) => bound.extend(*l),
+            Pattern::Decision(d) => decision(d, bound),
+        };
+        let mut stack: Vec<ExprId> = roots.iter().rev().copied().collect();
+        while let Some(e) = stack.pop() {
+            match &self[e].kind {
+                ExprKind::Local(l) | ExprKind::Assign { place: Place::Local(l), .. } => {
+                    used.push(*l)
+                }
+                ExprKind::Closure { captures, .. } => used.extend(captures.iter().map(|c| c.local)),
+                ExprKind::Block { stmts, .. } => {
+                    for s in stmts.iter() {
+                        if let Stmt::Let { pat, .. } = s {
+                            pattern(pat, &mut bound);
+                        }
+                    }
+                }
+                ExprKind::For { pat, .. } => pattern(pat, &mut bound),
+                ExprKind::Match { decision: d, .. } | ExprKind::Let { decision: d, .. } => {
+                    decision(d, &mut bound)
+                }
+                ExprKind::Handle { value, ops, .. } => {
+                    decision(value, &mut bound);
+                    for op in ops.iter() {
+                        decision(&op.decision, &mut bound);
+                        bound.extend(op.conts.iter().flatten());
+                    }
+                }
+                _ => {}
+            }
+            let mut children = self[e].kind.children();
+            children.reverse();
+            stack.extend(children);
+        }
+        let mut out = Vec::new();
+        for l in used {
+            if !bound.contains(&l) && !out.contains(&l) {
+                out.push(l);
+            }
+        }
+        out
+    }
+
+    /// The locals that the arms of the handler `e` bind themselves: those
+    /// of its patterns, and the continuations.
+    pub fn handle_bindings(&self, e: ExprId) -> Vec<Local> {
+        let ExprKind::Handle { value, ops, .. } = &self[e].kind else { return Vec::new() };
+        let mut out = Vec::new();
+        let decisions = std::iter::once(&**value).chain(ops.iter().map(|o| &*o.decision));
+        for d in decisions {
+            for node in &d.nodes {
+                if let boltlang_pattern::decision::Node::Arm { bindings, .. }
+                | boltlang_pattern::decision::Node::Guard { bindings, .. } = node
+                {
+                    out.extend(bindings.iter().map(|&(b, _)| Local::Binding(b)));
+                }
+            }
+        }
+        out.extend(ops.iter().flat_map(|o| o.conts.iter().flatten()));
+        out
+    }
+
     pub fn local(&self, local: Local) -> Option<&LocalDecl<'db>> {
         match local {
             Local::Binding(b) => self.bindings.get(b),
