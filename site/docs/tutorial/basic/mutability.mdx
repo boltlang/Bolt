@@ -241,6 +241,15 @@ squares;
 `squares` is an `imm [i32]`. A closure can't be copied, so `imm` of one
 that changes something, which is `mut`, is an error.
 
+In a generic function, the copy of a `T` is an `imm T`: whatever `T` is,
+with every array and struct in it `imm`. When `T` is already `imm`, as
+with the bound `T: imm`, `imm T` is just `T`:
+
+```bolt
+fn snapshot[T](x: T) -> imm T = imm x;
+let frozen = snapshot(mut [mut [1, 2]]);   // imm [imm [i32]]
+```
+
 `to_mut` only copies the value itself: what it holds is shared with the
 original. To copy all of it, so that every array and struct in it can be
 changed, use `to_mut_deep`:

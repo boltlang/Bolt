@@ -237,6 +237,28 @@ nothing. A mutability on its own isn't a type: `let x: imm = 1` is an error
 (E0231). A `mut` array or struct inside an `imm` one is still also
 caught once the types are known (E0223), which shows the whole type.
 
+**`imm e` of a type parameter has the type `imm T`**: what `imm` makes of
+`T` once it's known. The checker gives `imm` of a known type as that type,
+with its arrays and structs `imm`, so `imm T` only stays for types it can't
+take apart: type parameters, associated types like `C.Item`, and types
+still unknown when an inferred function is generalized. So `imm e` never
+needs a constraint:
+
+```bolt
+fn h(x) = imm x;                  // forall a. fn(a) -> imm a
+h(mut [mut [1]]);                 // imm [imm [i32]]
+fn g[T: imm](x: T) -> T = imm x;  // imm T is T when T is imm
+fn f[T](x: T) -> T = imm x;       // error: expected T, found imm T
+```
+
+Like an associated type, `imm T` only equals itself, since two types can
+have the same `imm`: `imm (mut [i32])` and `imm [i32]` are both `imm
+[i32]`. In a body, the checker replaces each written `imm T` by a variable
+and the same constraint as `imm e`, which is how `imm T` becomes `T` under
+`T: imm`. Written `imm` keeps its meaning before an array, a struct or a
+function, and is `imm T` only before a type parameter or an associated
+type; `mut T` is still an error (E0222).
+
 **A closure that can change what it captured is `mut`.** A function type
 has a mutability like an array's. A closure is `mut` if it captures a
 `let mut` variable, even only to read it, or a value that holds something
