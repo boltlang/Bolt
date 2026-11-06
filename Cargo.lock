@@ -375,7 +375,7 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 [[package]]
 name = "conduit-eval"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=621243c#621243c90bdd53ee166389f183d2150e3a5bf9a6"
+source = "git+https://github.com/boltlang/conduit?rev=00bfbda#00bfbdabc5009a8018b63eb589050cbcb9833ee1"
 dependencies = [
  "conduit-ir",
 ]
@@ -383,7 +383,7 @@ dependencies = [
 [[package]]
 name = "conduit-ir"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=621243c#621243c90bdd53ee166389f183d2150e3a5bf9a6"
+source = "git+https://github.com/boltlang/conduit?rev=00bfbda#00bfbdabc5009a8018b63eb589050cbcb9833ee1"
 
 [[package]]
 name = "console_error_panic_hook"
