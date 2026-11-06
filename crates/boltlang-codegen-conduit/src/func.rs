@@ -19,7 +19,7 @@ use boltlang_hir_ty::{
     builtin::{Builtin, PrimOp},
     lower::{VariantDef, field_types as hir_field_types},
 };
-use boltlang_lower::{
+use boltlang_mir_mono::{
     Cx, InstanceUses, MonoTy, Site, Use, field_types,
     lambda::{Lambda, body_lambdas},
 };
@@ -650,7 +650,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         Ok(None)
     }
 
-    /// Call the use at `site`, which `boltlang-lower` knows the type of
+    /// Call the use at `site`, which `boltlang-mir-mono` knows the type of
     /// from what it calls: the result, and its type.
     fn call_use_ty(&mut self, site: Site, args: Vec<Val>) -> R<(Val, MonoTy<'db>)> {
         let u = self
@@ -1274,8 +1274,8 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
 }
 
 /// `t` with the `i`th mutability parameter replaced by `args[i]`.
-fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_lower::MonoMut]) -> MonoTy<'db> {
-    use boltlang_lower::MonoMut;
+fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_mir_mono::MonoMut]) -> MonoTy<'db> {
+    use boltlang_mir_mono::MonoMut;
     let m = |m: &MonoMut| match m {
         MonoMut::Param(i) => args.get(*i as usize).copied().unwrap_or(*m),
         other => *other,

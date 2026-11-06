@@ -1,5 +1,5 @@
 [package]
-name = "boltlang-lower"
+name = "boltlang-mir-mono"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

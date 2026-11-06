@@ -7,7 +7,7 @@ description: How Bolt compiles to Conduit, the IR it lowers to after type checki
 # Conduit
 
 [Conduit](https://github.com/boltlang/conduit) is the IR that Bolt compiles
-to after type checking. `boltlang-lower` finds the instances of each
+to after type checking. `boltlang-mir-mono` finds the instances of each
 function, `boltlang-pattern` compiles `match` to decision graphs, and
 `boltlang-codegen-conduit` turns the result into a Conduit module, which
 Conduit optimizes and compiles to WebAssembly.

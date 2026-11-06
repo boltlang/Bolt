@@ -1,7 +1,7 @@
 //! Lowering Bolt to the Conduit IR.
 //!
 //! [`lower`] turns a program, its entry file and its tests, into a Conduit
-//! [`Module`]: one function per instance that `boltlang-lower` finds, with
+//! [`Module`]: one function per instance that `boltlang-mir-mono` finds, with
 //! the data types their types need. Conduit's functions are generic in
 //! mutabilities but not in types, as instances are.
 //!
@@ -19,7 +19,7 @@
 //!   returns.
 //!
 //! - A lambda is lifted to a function of its own, which takes what it
-//!   captures first, as `boltlang-lower` finds it, then its parameters. A
+//!   captures first, as `boltlang-mir-mono` finds it, then its parameters. A
 //!   local that's assigned is captured as its ref. Making the lambda is a
 //!   `closure` of that function, and calling a value that isn't a named
 //!   function is an `apply`.
@@ -46,7 +46,7 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
 };
 use boltlang_hir_ty::builtin::Builtin;
-use boltlang_lower::{
+use boltlang_mir_mono::{
     Cx, Instance, MonoTy, Site, Use, UseError,
     lambda::{Lambda, body_lambdas},
     program,
@@ -80,7 +80,7 @@ pub struct Error {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorKind {
-    /// A use that can't be compiled, which `boltlang-lower` found.
+    /// A use that can't be compiled, which `boltlang-mir-mono` found.
     Use(UseError),
     /// Something this backend doesn't lower yet.
     Unsupported(String),

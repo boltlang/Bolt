@@ -1,8 +1,9 @@
-//! Lowering after type checking, shared by the backends.
+//! Monomorphization, shared by the backends: which instances of its
+//! functions a program needs, and what each use in them calls.
 //!
-//! So far: monomorphization, which instances of its functions a program
-//! needs and what each use in them calls, and the captures of lambdas, for
-//! lifting them. Patterns are compiled to decisions in `boltlang-pattern`.
+//! It also finds the captures of lambdas, for lifting them, until that
+//! moves to building MIR. Patterns are compiled to decisions in
+//! `boltlang-pattern`.
 //!
 //! - [`instance`]: an [`Instance`] is a body at concrete types. It's
 //!   specialized on types, not on mutabilities: those are its parameters.

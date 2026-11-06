@@ -25,7 +25,7 @@ use boltlang_hir_def::{
     signatures::{FieldList, enum_signature},
 };
 use boltlang_hir_ty::{AdtId, lower::VariantDef};
-use boltlang_lower::{MonoMut, MonoTy, field_types};
+use boltlang_mir_mono::{MonoMut, MonoTy, field_types};
 use conduit_ir::{CtorDecl, DataDecl, DataId, Mutability, Sig, Ty};
 
 use crate::ErrorKind;

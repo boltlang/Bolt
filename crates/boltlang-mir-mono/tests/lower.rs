@@ -1,4 +1,4 @@
-//! Tests of what `boltlang-lower` makes of a program, driven by the `.txt`
+//! Tests of what `boltlang-mir-mono` makes of a program, driven by the `.txt`
 //! files in `tests/lower` at the root of the repository, in the format of
 //! the tree-sitter corpus. Each case is a separate test, named after its
 //! file and title, e.g. `decisions::patterns::ranges_and_arms_never_taken`.
@@ -72,7 +72,7 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
     item_tree::{ModItem, item_tree},
 };
-use boltlang_lower::{ClassItem, Site, Use, UseError, lambda::body_lambdas, program};
+use boltlang_mir_mono::{ClassItem, Site, Use, UseError, lambda::body_lambdas, program};
 use boltlang_pattern::decision::{DecisionError, body_decisions};
 use libtest_mimic::{Arguments, Failed, Trial};
 

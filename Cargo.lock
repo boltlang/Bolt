@@ -151,7 +151,7 @@ dependencies = [
  "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-hir-ty",
- "boltlang-lower",
+ "boltlang-mir-mono",
  "boltlang-pattern",
  "conduit-eval",
  "conduit-ir",
@@ -217,7 +217,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "boltlang-lower"
+name = "boltlang-mir-mono"
 version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
