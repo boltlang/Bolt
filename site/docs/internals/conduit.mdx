@@ -7,10 +7,12 @@ description: How Bolt compiles to Conduit, the IR it lowers to after type checki
 # Conduit
 
 [Conduit](https://github.com/boltlang/conduit) is the IR that Bolt compiles
-to after type checking. `boltlang-mir-mono` finds the instances of each
-function, `boltlang-pattern` compiles `match` to decision graphs, and
-`boltlang-codegen-conduit` turns the result into a Conduit module, which
-Conduit optimizes and compiles to WebAssembly.
+to after type checking. `boltlang-mir-build` turns each body into MIR, a
+tree in which each node has its type and each use what it calls, with
+`match` compiled to a decision graph by `boltlang-pattern`.
+`boltlang-mir-mono` walks the MIR to find the instances of each function,
+and `boltlang-codegen-conduit` turns the MIR of each instance into a
+Conduit module, which Conduit optimizes and compiles to WebAssembly.
 
 This page is about what's particular to Bolt: how its mutability, its
 copies and its effects map onto Conduit's. Conduit's own docs describe the
