@@ -10,7 +10,7 @@
 //! - A local that's assigned is a ref, as Conduit has it, and a promotion
 //!   pass in Conduit makes it a variable again.
 //! - A `match`, and a `let` with a pattern, in a statement or a condition,
-//!   follow the decision that `boltlang-lower` makes for them.
+//!   follow the decision that `boltlang-pattern` makes for them.
 //! - The host functions of an `extern` block are Conduit externs, in the
 //!   module the block names. The module `bolt` has `write_file` and
 //!   `flush`, which `print` and a `match` that no arm takes write with
@@ -48,10 +48,10 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::builtin::Builtin;
 use boltlang_lower::{
     Cx, Instance, MonoTy, Site, Use, UseError,
-    decision::{Node, body_decisions},
     lambda::{Lambda, body_lambdas},
     program,
 };
+use boltlang_pattern::decision::{Node, body_decisions};
 use conduit_ir::{Extern, ExternId, Func, FuncId, Module, MutParams, Sig};
 
 use crate::ty::Types;

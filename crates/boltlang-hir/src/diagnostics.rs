@@ -48,7 +48,7 @@ use boltlang_hir_ty::{
     solve::{ConstraintSource, ExprOrPat, Held, Origin, Reason, TypeError},
     ty::GenericParamId,
 };
-use boltlang_lower::decision::body_decisions;
+use boltlang_pattern::decision::body_decisions;
 use boltlang_syntax::{
     SyntaxKind::{
         self, FIELD_EXPR, FIELD_PATT, GENERIC_PARAM_LIST, NAME, NAME_REF, PATH, PATH_SEGMENT,

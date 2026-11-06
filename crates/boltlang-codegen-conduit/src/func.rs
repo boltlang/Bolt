@@ -20,10 +20,11 @@ use boltlang_hir_ty::{
     lower::{VariantDef, field_types as hir_field_types},
 };
 use boltlang_lower::{
-    Cx, InstanceUses, MonoTy, Site, Use,
-    decision::{Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value, body_decisions},
-    field_types,
+    Cx, InstanceUses, MonoTy, Site, Use, field_types,
     lambda::{Lambda, body_lambdas},
+};
+use boltlang_pattern::decision::{
+    Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value, body_decisions,
 };
 use conduit_ir::{
     Atom, CtorId, Func, Lit, Module, Mutability, Prim, Sign, Ty, build::FuncBuilder,

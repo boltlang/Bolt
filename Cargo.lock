@@ -152,6 +152,7 @@ dependencies = [
  "boltlang-hir-def",
  "boltlang-hir-ty",
  "boltlang-lower",
+ "boltlang-pattern",
  "conduit-eval",
  "conduit-ir",
  "libtest-mimic",
@@ -172,7 +173,7 @@ dependencies = [
  "boltlang-base-db",
  "boltlang-hir-def",
  "boltlang-hir-ty",
- "boltlang-lower",
+ "boltlang-pattern",
  "boltlang-syntax",
  "salsa",
 ]
@@ -223,6 +224,7 @@ dependencies = [
  "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "boltlang-pattern",
  "libtest-mimic",
  "salsa",
 ]
@@ -238,6 +240,16 @@ dependencies = [
  "salsa",
  "serde",
  "unicode-ident",
+]
+
+[[package]]
+name = "boltlang-pattern"
+version = "0.2.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-hir-def",
+ "boltlang-hir-ty",
+ "salsa",
 ]
 
 [[package]]

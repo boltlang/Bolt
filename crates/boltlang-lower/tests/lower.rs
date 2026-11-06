@@ -72,12 +72,8 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
     item_tree::{ModItem, item_tree},
 };
-use boltlang_lower::{
-    ClassItem, Site, Use, UseError,
-    decision::{DecisionError, body_decisions},
-    lambda::body_lambdas,
-    program,
-};
+use boltlang_lower::{ClassItem, Site, Use, UseError, lambda::body_lambdas, program};
+use boltlang_pattern::decision::{DecisionError, body_decisions};
 use libtest_mimic::{Arguments, Failed, Trial};
 
 /// What a case shows, from the directory of its file.

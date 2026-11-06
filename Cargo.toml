@@ -8,6 +8,7 @@ members = [
   "crates/boltlang-hir-def",
   "crates/boltlang-hir",
   "crates/boltlang-hir-ty",
+  "crates/boltlang-pattern",
   "crates/boltlang-lower",
   "crates/boltlang-codegen-conduit",
   "crates/boltlang-corpus",
@@ -37,6 +38,7 @@ boltlang-hir-def = { version = "0.2.0", path = "crates/boltlang-hir-def" }
 boltlang-hir-ty = { version = "0.2.0", path = "crates/boltlang-hir-ty" }
 boltlang-ide-diagnostics = { version = "0.2.0", path = "crates/boltlang-ide-diagnostics" }
 boltlang-lower = { version = "0.2.0", path = "crates/boltlang-lower" }
+boltlang-pattern = { version = "0.2.0", path = "crates/boltlang-pattern" }
 boltlang-parser = { version = "0.2.0", path = "crates/boltlang-parser" }
 boltlang-std = { version = "0.2.0", path = "crates/boltlang-std" }
 boltlang-syntax = { version = "0.2.0", path = "crates/boltlang-syntax" }
