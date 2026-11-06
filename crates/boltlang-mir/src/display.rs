@@ -76,6 +76,7 @@ impl<'db> Printer<'_, 'db> {
             BodyOwner::Lambda { expr, .. } => format!("lambda#{}", expr.index()),
             BodyOwner::Shim(Shim::ImmDeep(t)) => format!("shim imm_deep[{}]", self.ty(t)),
             BodyOwner::Shim(Shim::Ctor(c)) => format!("shim {}", ctor_name(db, *c)),
+            BodyOwner::Shim(Shim::Op(f)) => format!("shim perform.{}", fn_name(db, *f)),
         }
     }
 

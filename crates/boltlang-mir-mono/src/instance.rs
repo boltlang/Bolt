@@ -89,6 +89,10 @@ impl<'db> Instance<'db> {
             InstanceDef::Body(body) => Some(body.def(db).file(db)),
             InstanceDef::Shim(Shim::Ctor(Ctor::Struct(s))) => Some(s.file(db)),
             InstanceDef::Shim(Shim::Ctor(Ctor::Variant(v))) => Some(v.parent.file(db)),
+            InstanceDef::Shim(Shim::Op(f)) => match f.container(db) {
+                ItemContainerId::Effect(e) => Some(e.file(db)),
+                _ => None,
+            },
             InstanceDef::Shim(_) => None,
         }
     }
@@ -162,6 +166,12 @@ impl fmt::Display for DisplayInstance<'_> {
             }
             InstanceDef::Shim(Shim::ImmDeep(t)) => {
                 return write!(f, "imm_deep[{}]", t.display(db));
+            }
+            InstanceDef::Shim(Shim::Op(op)) => {
+                write!(f, "{}", container_prefix(db, op.container(db)))?;
+                let name = op.item(db).display_name();
+                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
+                return self.args(f);
             }
         };
         match def {
@@ -321,6 +331,10 @@ pub fn instance_generics<'db>(
         }
         // `fn(T) -> imm T` for the type `T` it copies, whose bound variables
         // are the mutabilities of the code that copies.
+        InstanceDef::Shim(Shim::Op(op)) => {
+            let body = DefWithBodyId::new(db, DefWithBody::Function(*op));
+            generics(db, body).clone()
+        }
         InstanceDef::Shim(Shim::ImmDeep(ty)) => {
             let mut bound = 0;
             ty.any(&mut |t| {

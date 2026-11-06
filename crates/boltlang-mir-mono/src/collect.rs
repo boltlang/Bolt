@@ -222,7 +222,7 @@ fn instances_of_use<'db>(
             dicts.push(dict);
             dicts.extend(given.iter());
         }
-        Use::Builtin(_) | Use::Extern(_) | Use::Op(_) => {}
+        Use::Builtin(_) | Use::Extern(_) | Use::Op { .. } => {}
     }
     while let Some(dict) = dicts.pop() {
         match dict {
@@ -317,11 +317,25 @@ pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
     };
     for (index, mir) in all.into_iter().enumerate() {
         let body = index as u32;
+        // The nodes that are called, which an operation as anything else
+        // isn't.
+        let callees: HashSet<ExprId> = mir
+            .exprs()
+            .filter_map(|(_, n)| match &n.kind {
+                ExprKind::Call { callee, .. } => Some(*callee),
+                _ => None,
+            })
+            .collect();
         for (expr, node) in mir.exprs() {
             let at = |role| Site { body, expr, role };
             let item_use =
                 |item: &ItemRef<'db>, ty: &Ty<'db>| cx.ty(ty).and_then(|t| cx.item_use(item, &t));
             match &node.kind {
+                // An operation that isn't called is a function: its shim.
+                ExprKind::Item(ItemRef::Op(f)) if !callees.contains(&expr) => {
+                    let found = cx.ty(&node.ty).and_then(|t| cx.op_fn_use(*f, &t));
+                    push(at(Role::Item), found)
+                }
                 ExprKind::Item(item) => push(at(Role::Item), item_use(item, &node.ty)),
                 ExprKind::Imm { expr: inner } => match cx.imm_use(&mir[*inner].ty) {
                     Ok(Some(u)) => push(at(Role::Imm), Ok(u)),

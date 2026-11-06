@@ -273,10 +273,18 @@ pub fn field_types<'db>(
     boltlang_hir_ty::lower::field_types(db, def).fields.iter().map(|(_, t)| subst.ty(t)).collect()
 }
 
-/// A type without parameters, like the signature of an operation, as a
-/// closed type, with the impls visible from `root`.
-pub fn closed_ty<'db>(db: &'db dyn Db, root: File, ty: &Ty<'db>) -> Result<MonoTy<'db>, TyError> {
-    Subst { db, root, params: &[], slots: &[] }.ty(ty)
+/// A type whose parameters are `params`, like the signature of an
+/// operation in those of its effect, as a closed type, with `args` for
+/// them and the impls visible from `root`.
+pub fn closed_ty<'db>(
+    db: &'db dyn Db,
+    root: File,
+    params: &[GenericParamId<'db>],
+    args: &[MonoTy<'db>],
+    ty: &Ty<'db>,
+) -> Result<MonoTy<'db>, TyError> {
+    let slots: Vec<Slot<'db>> = args.iter().cloned().map(Slot::Ty).collect();
+    Subst { db, root, params, slots: &slots }.ty(ty)
 }
 
 /// What a parameter of a scheme is in an instance: a type, or one of the

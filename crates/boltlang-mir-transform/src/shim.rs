@@ -7,7 +7,7 @@ use boltlang_hir_ty::{
     GenericParamId, Ty,
     instances::select_impl,
     lang::LangClass,
-    lower::{ClassConstraint, VariantDef, field_types, named_mutabilities},
+    lower::{ClassConstraint, VariantDef, field_types, fn_sig, named_mutabilities},
     solve::{imm_of, missing_instances},
     ty::Mutability,
 };
@@ -74,6 +74,22 @@ pub fn shim_body<'db>(db: &'db dyn Db, shim: &Shim<'db>, root: File) -> Body<'db
             }
             let kind = ExprKind::Construct { ctor: *ctor, fields: values.into() };
             body.root = body.alloc(kind, *made, None);
+        }
+        // `fn(args) = perform op(args)`, in the parameters of the operation's
+        // effect.
+        Shim::Op(op) => {
+            let sig = fn_sig(db, *op);
+            let fill = |t: &Ty<'db>| t.fill_unwritten(&mut || Ty::Mutability(Mutability::Imm));
+            let params: Vec<Ty<'db>> =
+                sig.params.iter().map(|p| p.as_ref().map_or(Ty::Error, fill)).collect();
+            let ret = sig.ret.as_ref().map_or_else(Ty::unit, fill);
+            let mut args = Vec::new();
+            for ty in &params {
+                let local = body.new_temp(None, ty.clone());
+                body.params.push(local);
+                args.push(body.local_expr(local));
+            }
+            body.root = body.call(ItemRef::Op(*op), args, ret);
         }
         Shim::ImmDeep(ty) => {
             let x = body.new_temp(Some(Name::new("x")), ty.clone());

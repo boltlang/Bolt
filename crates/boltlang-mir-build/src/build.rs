@@ -733,8 +733,10 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 op_arms.push(arm.clone());
                 conts.push(*k);
             }
+            let ty = d.pats.first().map_or(Ty::Error, |&p| self.cx.infer.pat_ty(p).clone());
             ops.push(OpArms {
                 op: d.op,
+                ty,
                 decision: Box::new(decision.clone()),
                 arms: op_arms.into(),
                 conts: conts.into(),

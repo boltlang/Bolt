@@ -43,6 +43,9 @@ pub enum Shim<'db> {
     /// function: `Some` in `xs.map(Some)`. It takes the fields, in order,
     /// and makes the value.
     Ctor(Ctor<'db>),
+    /// An operation of an effect as a function: `log` in `xs.each(log)`. It
+    /// takes the operation's arguments and performs it.
+    Op(FunctionId<'db>),
 }
 
 /// A body: its nodes, from [`Body::root`], and its locals.
@@ -332,6 +335,10 @@ pub enum Pattern<'db> {
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct OpArms<'db> {
     pub op: FunctionId<'db>,
+    /// The type of the operation, with the arguments of its effect that the
+    /// handler handles, like `fn(i32) -> ()` for the `set` of a
+    /// `State[i32]`.
+    pub ty: Ty<'db>,
     pub decision: Box<Decision<'db>>,
     pub arms: Box<[Arm]>,
     pub conts: Box<[Option<Local>]>,

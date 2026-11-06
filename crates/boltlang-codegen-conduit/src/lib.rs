@@ -37,11 +37,13 @@
 //!   arms the return clause, and the arms of each operation its clause,
 //!   each a function of its own. The clauses share the locals of the code
 //!   around the `match` that they use. Bolt doesn't give Conduit its rows
-//!   yet, so in a program with effects every function does `Any`.
+//!   yet, so in a program with effects every function does `Any`. An effect
+//!   with type parameters is an effect for each of its arguments, and an
+//!   operation used as a function is a closure of a shim that performs it.
 //!
 //! What's left out: erased code and dictionaries, patterns in parameters,
-//! a `match` that handles several effects, effects and operations with type
-//! parameters, an operation as a value, and what needs something Conduit
+//! a `match` that handles several effects, operations with type parameters
+//! of their own, and what needs something Conduit
 //! doesn't have yet: 128-bit integers, a handler for several effects
 //! (boltlang/conduit#28), and handler clauses with mutability parameters. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
@@ -170,15 +172,16 @@ pub(crate) struct Ctx<'db> {
     pub io: Option<host::Io>,
     /// The functions that call them: `bolt_print` and `bolt_unmatched`.
     pub helpers: host::Helpers,
-    /// The effects of the program, with their operations in order.
-    pub effects: HashMap<EffectId<'db>, (conduit_ir::EffectId, Vec<FunctionId<'db>>)>,
+    /// The effects of the program, one for each effect and its arguments,
+    /// like `State[i32]`, with its operations in order.
+    pub effects: HashMap<EffectKey<'db>, (conduit_ir::EffectId, Vec<FunctionId<'db>>)>,
     /// The row of every function: `Any` in a program with effects, since
     /// Bolt doesn't give Conduit its rows yet, and none otherwise.
     pub row: Row,
     /// What each `match` with effect arms is lowered to, by its instance,
     /// the MIR body it's in (0 for the instance's, `i + 1` for its `i`th
     /// lambda's) and its node.
-    pub handles: HashMap<HandleKey<'db>, HandleFns>,
+    pub handles: HashMap<HandleKey<'db>, HandleFns<'db>>,
 }
 
 pub(crate) type HandleKey<'db> = (Instance<'db>, u32, boltlang_mir::ExprId);
@@ -187,7 +190,7 @@ pub(crate) type HandleKey<'db> = (Instance<'db>, u32, boltlang_mir::ExprId);
 /// scrutinee as a closure, which captures `captures`, and its value arms
 /// and the arms of each operation as the handler's clauses, which share
 /// `env`.
-pub(crate) struct HandleFns {
+pub(crate) struct HandleFns<'db> {
     pub handler: HandlerId,
     pub body: FuncId,
     pub ret: FuncId,
@@ -195,15 +198,73 @@ pub(crate) struct HandleFns {
     pub clauses: Vec<FuncId>,
     pub env: Vec<boltlang_mir::Local>,
     pub captures: Vec<boltlang_mir::Local>,
+    /// The effect it handles, with its arguments.
+    pub effect: EffectKey<'db>,
 }
 
+/// An effect and its arguments, like `State[i32]`.
+pub(crate) type EffectKey<'db> = (EffectId<'db>, Box<[MonoTy<'db>]>);
+
 impl<'db> Ctx<'db> {
-    /// The effect of the operation `f`, and its index among the effect's.
-    pub(crate) fn op(&self, f: FunctionId<'db>) -> Option<(conduit_ir::EffectId, u32)> {
+    /// The effect of the operation `f`, with the arguments `args`, and its
+    /// index among the effect's operations.
+    pub(crate) fn op(
+        &self,
+        f: FunctionId<'db>,
+        args: &[MonoTy<'db>],
+    ) -> Option<(conduit_ir::EffectId, u32)> {
         let ItemContainerId::Effect(e) = f.container(self.db) else { return None };
-        let (id, ops) = self.effects.get(&e)?;
+        let (id, ops) = self.effects.get(&(e, args.into()))?;
         Some((*id, ops.iter().position(|&g| g == f)? as u32))
     }
+}
+
+/// The effect and arguments of the operations that a handler handles, at
+/// the type the first of them is handled at.
+fn handled_effect<'db>(
+    lcx: &Cx<'_, 'db>,
+    ops: &[boltlang_mir::OpArms<'db>],
+) -> Result<EffectKey<'db>, ErrorKind> {
+    let db = lcx.db;
+    let o = ops.first().ok_or_else(|| ErrorKind::unsupported("a handler of no operation"))?;
+    let ItemContainerId::Effect(e) = o.op.container(db) else {
+        return Err(ErrorKind::unsupported("this handler"));
+    };
+    match lcx.item_use(&boltlang_mir::ItemRef::Op(o.op), &lcx.ty(&o.ty)?)? {
+        Use::Op { effect_args, .. } => Ok((e, effect_args)),
+        _ => Err(ErrorKind::unsupported("this handler")),
+    }
+}
+
+/// The types of the parameters and result of the operation `op` of the
+/// effect `key`, with the effect's arguments in place.
+pub(crate) fn op_params<'db>(
+    db: &'db dyn Db,
+    root: File,
+    key: &EffectKey<'db>,
+    op: FunctionId<'db>,
+) -> Result<(Vec<MonoTy<'db>>, MonoTy<'db>), ErrorKind> {
+    let params = boltlang_hir_ty::scheme::generic_param_ids(
+        db,
+        [boltlang_hir_def::resolver::GenericDefId::Effect(key.0)],
+    );
+    let closed = |t: &boltlang_hir_ty::Ty<'db>| {
+        let t = t.fill_unwritten(&mut || {
+            boltlang_hir_ty::Ty::Mutability(boltlang_hir_ty::ty::Mutability::Imm)
+        });
+        closed_ty(db, root, &params, &key.1, &t)
+            .map_err(|_| ErrorKind::unsupported("an operation with type parameters"))
+    };
+    let sig = boltlang_hir_ty::lower::fn_sig(db, op);
+    let mut args = Vec::new();
+    for p in sig.params.iter() {
+        args.push(closed(p.as_ref().ok_or_else(|| ErrorKind::unsupported("this operation"))?)?);
+    }
+    let ret = match &sig.ret {
+        Some(t) => closed(t)?,
+        None => MonoTy::unit(),
+    };
+    Ok((args, ret))
 }
 
 /// The program of `entry` and its tests, in Conduit.
@@ -281,46 +342,51 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     let mut module = Module::default();
     let mut types = Types::default();
-    // The effects that the program performs or handles, from their
-    // operations.
-    let mut ops = Vec::new();
+    // The effects that the program performs or handles, with their
+    // arguments, from their operations.
+    let mut effects: Vec<EffectKey<'_>> = Vec::new();
     for iu in &p.instances {
         for (_, u) in &iu.uses {
-            if let Use::Op(f) = u {
-                ops.push(*f);
+            if let Use::Op { op, effect_args } = u
+                && let ItemContainerId::Effect(e) = op.container(db)
+                && !effects.contains(&(e, effect_args.clone()))
+            {
+                effects.push((e, effect_args.clone()));
             }
         }
         let Some(body) = iu.instance.body(db) else { continue };
+        let Ok(lcx) = Cx::new(db, iu.instance, &p.erased) else { continue };
         let bodies = mir_bodies(db, body);
         for mir in std::iter::once(&bodies.body).chain(&bodies.lambdas) {
             for (_, node) in mir.exprs() {
                 if let boltlang_mir::ExprKind::Handle { ops: handled, .. } = &node.kind {
-                    ops.extend(handled.iter().map(|o| o.op));
+                    match handled_effect(&lcx, handled) {
+                        Ok(key) if !effects.contains(&key) => effects.push(key),
+                        Ok(_) => {}
+                        Err(kind) => errors.push(Error {
+                            instance: iu.instance.display(db).to_string(),
+                            at: None,
+                            kind,
+                        }),
+                    }
                 }
             }
-        }
-    }
-    let mut effects = Vec::new();
-    for f in ops {
-        if let ItemContainerId::Effect(e) = f.container(db)
-            && !effects.contains(&e)
-        {
-            effects.push(e);
         }
     }
     if !effects.is_empty() {
         cx.row = Row::ANY;
         types.row = Row::ANY;
     }
-    for e in effects {
-        if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, e) {
-            let name = e.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+    for key in effects {
+        let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+        if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, key) {
             errors.push(Error { instance: name, at: None, kind });
         }
     }
     // The functions of each handler, after the lambdas.
     for iu in &p.instances {
         let Some(body) = iu.instance.body(db) else { continue };
+        let Ok(lcx) = Cx::new(db, iu.instance, &p.erased) else { continue };
         let bodies = mir_bodies(db, body);
         let instance = iu.instance.display(db).to_string();
         let mut n = 0;
@@ -335,16 +401,11 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                     names.insert(id, name);
                     id
                 };
+                let Ok(effect) = handled_effect(&lcx, ops) else { continue };
                 let body_fn = fresh(format!("{instance}::handle{n}"));
                 let ret = fresh(format!("{instance}::handle{n}_return"));
-                let effect_ops = ops
-                    .first()
-                    .and_then(|o| match o.op.container(db) {
-                        ItemContainerId::Effect(e) => cx.effects.get(&e),
-                        _ => None,
-                    })
-                    .map(|(_, ops)| ops.clone())
-                    .unwrap_or_default();
+                let effect_ops =
+                    cx.effects.get(&effect).map(|(_, ops)| ops.clone()).unwrap_or_default();
                 let clauses = effect_ops
                     .iter()
                     .map(|&op| {
@@ -367,6 +428,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                         clauses,
                         env: mir.free_locals(&code, &mir.handle_bindings(e)),
                         captures: mir.free_locals(&[*scrutinee], &[]),
+                        effect,
                     },
                 );
                 n += 1;
@@ -669,16 +731,12 @@ fn handler_sigs<'db>(
         let mut ret_params = env.clone();
         ret_params.extend(body_results);
         sigs.push((fns.ret, (Sig::new(ret_params, results.clone()), none.clone())));
-        let Some((effect, _)) = ops.first().and_then(|o| cx.op(o.op)) else { continue };
+        let _ = ops;
+        let Some((effect, effect_ops)) = cx.effects.get(&fns.effect) else { continue };
+        let effect = *effect;
         // The tuple of each operation's arguments, which its arms match.
-        for &op in cx.effects.values().find(|(id, _)| *id == effect).map_or(&[][..], |(_, o)| o) {
-            let mut tys = Vec::new();
-            for p in boltlang_hir_ty::lower::fn_sig(db, op).params.iter().flatten() {
-                tys.push(
-                    closed_ty(db, cx.root, p)
-                        .map_err(|_| ErrorKind::unsupported("this operation"))?,
-                );
-            }
+        for &op in effect_ops {
+            let (tys, _) = op_params(db, cx.root, &fns.effect, op)?;
             if !tys.is_empty() {
                 types.value(db, cx.root, &MonoTy::Tuple(tys.into()))?;
             }
@@ -714,18 +772,16 @@ fn handler_sigs<'db>(
     Ok(())
 }
 
-/// Declare the effect `e`, with the signature of each of its operations.
+/// Declare the effect `key`, an effect and its arguments, with the
+/// signature of each of its operations.
 fn declare_effect<'db>(
     cx: &mut Ctx<'db>,
     module: &mut Module,
     types: &mut Types<'db>,
-    e: EffectId<'db>,
+    key: EffectKey<'db>,
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
-    if !boltlang_hir_def::signatures::effect_signature(db, e).generic_params.type_params.is_empty()
-    {
-        return Err(ErrorKind::unsupported("an effect with type parameters"));
-    }
+    let e = key.0;
     let ops: Vec<FunctionId<'db>> = e
         .item(db)
         .items
@@ -737,28 +793,22 @@ fn declare_effect<'db>(
         .collect();
     let mut sigs = Vec::new();
     for &op in &ops {
-        let sig = boltlang_hir_ty::lower::fn_sig(db, op);
-        let closed = |t: &boltlang_hir_ty::Ty<'db>| {
-            closed_ty(db, cx.root, t)
-                .map_err(|_| ErrorKind::unsupported("an operation with type parameters"))
-        };
+        let (args, ret) = op_params(db, cx.root, &key, op)?;
         let mut params = Vec::new();
-        for p in sig.params.iter() {
-            let p = p.as_ref().ok_or_else(|| ErrorKind::unsupported("this operation"))?;
-            params.extend(types.value(db, cx.root, &closed(p)?)?);
+        for t in &args {
+            params.extend(types.value(db, cx.root, t)?);
         }
-        let ret = match &sig.ret {
-            Some(t) => closed(t)?,
-            None => MonoTy::unit(),
-        };
         let results = types.value(db, cx.root, &ret)?.into_iter().collect();
         // An operation's signature has no row.
         sigs.push(Sig::new(params, results));
     }
     let id = conduit_ir::EffectId(module.effects.len() as u64);
-    let debug_name = e.item(db).name.as_ref().map(|n| ident(n.as_str()).into());
+    let name = e.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+    let args: Vec<String> = key.1.iter().map(|t| t.display(db).to_string()).collect();
+    let name = if args.is_empty() { name } else { format!("{name}[{}]", args.join(", ")) };
+    let debug_name = Some(ident(&name).into());
     module.effects.insert(id, conduit_ir::EffectDecl { ops: sigs, debug_name });
-    cx.effects.insert(e, (id, ops));
+    cx.effects.insert(key, (id, ops));
     Ok(())
 }
 

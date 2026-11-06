@@ -60,8 +60,9 @@ pub enum Use<'db> {
     /// A function of the host, in an `extern` block, without a body.
     Extern(FunctionId<'db>),
     /// An operation of an effect, which the nearest handler of its effect
-    /// runs: it has no instance.
-    Op(FunctionId<'db>),
+    /// runs: it has no instance. `effect_args` are the arguments of its
+    /// effect, like the `[i32]` of `State[i32]`.
+    Op { op: FunctionId<'db>, effect_args: Box<[MonoTy<'db>]> },
     /// A method or constant of a class, through a dictionary, in erased
     /// code. `item` is the class's method or constant, and `dicts` are the
     /// dictionaries for its own constraints.
@@ -218,6 +219,43 @@ impl<'a, 'db> Cx<'a, 'db> {
         self.instance_use(InstanceDef::Shim(Shim::ImmDeep(key)), &use_ty, &[]).map(Some)
     }
 
+    /// The use of the operation `op` as a function, not called, at the type
+    /// `use_ty`: an instance of its [`Shim::Op`].
+    pub fn op_fn_use(
+        &self,
+        op: FunctionId<'db>,
+        use_ty: &MonoTy<'db>,
+    ) -> Result<Use<'db>, UseError> {
+        self.instance_use(InstanceDef::Shim(Shim::Op(op)), use_ty, &[])
+    }
+
+    /// The use of the operation `op` at the type `use_ty`, which gives the
+    /// arguments of its effect. Its own type parameters, like the `T` of
+    /// `fn raise[T](e: E) -> T`, aren't supported yet.
+    fn op_use(&self, op: FunctionId<'db>, use_ty: &MonoTy<'db>) -> Result<Use<'db>, UseError> {
+        let db = self.db;
+        let ItemContainerId::Effect(effect) = op.container(db) else {
+            return Err(UseError::UnknownType);
+        };
+        let callee = generics(db, DefWithBodyId::new(db, DefWithBody::Function(op)))
+            .as_ref()
+            .map_err(|e| UseError::from(*e))?;
+        let mut found = vec![None; callee.kinds.len()];
+        bind(&callee.params, &callee.ty, use_ty, &mut found);
+        let params = generic_param_ids(db, [GenericDefId::Effect(effect)]);
+        let effect_args = params
+            .iter()
+            .map(|p| {
+                let i = callee.params.iter().position(|q| q == p);
+                match i.and_then(|i| found[i].clone()) {
+                    Some(Slot::Ty(t)) => Ok(t),
+                    _ => Err(UseError::UnknownType),
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(Use::Op { op, effect_args })
+    }
+
     /// What a use in MIR is: `item`, used at the type `use_ty`, which is
     /// what its `Item` node or `Callee` has, in the instance.
     pub fn item_use(
@@ -229,7 +267,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         match item {
             ItemRef::Builtin(b) => Ok(Use::Builtin(*b)),
             ItemRef::Extern(f) => Ok(Use::Extern(*f)),
-            ItemRef::Op(f) => Ok(Use::Op(*f)),
+            ItemRef::Op(f) => self.op_use(*f, use_ty),
             ItemRef::Fn(f) => self.body_use(DefWithBody::Function(*f), use_ty, &[]),
             ItemRef::Const(c) => self.body_use(DefWithBody::Const(*c), use_ty, &[]),
             ItemRef::Ctor(c) => self.instance_use(InstanceDef::Shim(Shim::Ctor(*c)), use_ty, &[]),

@@ -87,12 +87,15 @@ the handler's environment, with a local that's assigned as its ref.
 
 What's lowered so far gives every function and closure the row `Any`,
 since Bolt doesn't give Conduit its rows yet: the rest of this section is
-the design for that. Left out until then: a `match` that handles several
-effects, which needs a handler for several in Conduit
-([conduit#28](https://github.com/boltlang/conduit/issues/28)), effects and
-operations with type parameters, an operation as a value, and a handler
-whose arms hold values of a mutability that's a parameter, since a
-clause can't have mutability parameters in Conduit.
+the design for that. An effect with type parameters is one Conduit effect
+for each of its arguments, like `State_i32` for `State[i32]`, and an
+operation used as a function, like `say` in `xs.each(say)`, is a closure of
+a shim that performs it. Left out until then: a `match` that handles
+several effects, which needs a handler for several in Conduit
+([conduit#28](https://github.com/boltlang/conduit/issues/28)), operations
+with type parameters of their own, and a handler whose arms hold values of
+a mutability that's a parameter, since a clause can't have mutability
+parameters in Conduit.
 
 Conduit's effect types follow Bolt's: rows after `does`, joined with `+`,
 with `Nothing` for the empty row and effect parameters `E1`, `E2`, ..

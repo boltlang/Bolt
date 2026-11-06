@@ -17,7 +17,7 @@ use boltlang_mir::{
     Body, Callee, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place as MirPlace, Stmt,
 };
 use boltlang_mir_build::{lambda::Lambda, mir_bodies};
-use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoTy, Use, closed_ty, field_types};
+use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoTy, Use, field_types};
 use boltlang_mir_transform::shim_body;
 use boltlang_pattern::decision::{
     Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value,
@@ -371,28 +371,17 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
             HandlePart::Clause(index) => {
                 self.bind_given(&fns.env, &mut next)?;
-                let op = ops
-                    .first()
-                    .and_then(|o| match o.op.container(db) {
-                        boltlang_hir_def::ids::ItemContainerId::Effect(eff) => {
-                            self.cx.effects.get(&eff)
-                        }
-                        _ => None,
-                    })
+                let op = self
+                    .cx
+                    .effects
+                    .get(&fns.effect)
                     .and_then(|(_, all)| all.get(index).copied())
                     .ok_or_else(|| ErrorKind::unsupported("this handler"))?;
                 let op_arms = ops.iter().find(|o| o.op == op).ok_or_else(|| {
                     ErrorKind::unsupported("a handler without an arm for each operation")
                 })?;
                 // The arguments, matched as a tuple.
-                let mut tys = Vec::new();
-                for p in boltlang_hir_ty::lower::fn_sig(db, op).params.iter() {
-                    let p = p.as_ref().ok_or_else(|| ErrorKind::unsupported("this operation"))?;
-                    tys.push(
-                        closed_ty(db, self.cx.root, p)
-                            .map_err(|_| ErrorKind::unsupported("this operation"))?,
-                    );
-                }
+                let (tys, _) = crate::op_params(db, self.cx.root, &fns.effect, op)?;
                 let mut args = Vec::new();
                 for t in &tys {
                     if self.cty(t)?.is_some() {
@@ -767,7 +756,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     /// A function or constant used as a value: a constant's value, or a
     /// closure of a named function that captures nothing.
     fn item_value(&mut self, e: ExprId, item: &ItemRef<'db>) -> R<Val> {
-        let u = self.use_of(item, &self.mir[e].ty)?;
+        let u = match item {
+            // An operation as a function is its shim, which performs it.
+            ItemRef::Op(op) => self.lcx.op_fn_use(*op, &self.mono(e)?)?,
+            _ => self.use_of(item, &self.mir[e].ty)?,
+        };
         let Use::Instance { instance, mutabilities, dicts } = u else {
             return Err(ErrorKind::unsupported("a builtin or a host function as a value"));
         };
@@ -985,9 +978,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Use::Builtin(builtin) => return self.builtin(builtin, args, result_ty),
             Use::Method { .. } => return Err(ErrorKind::unsupported("dictionaries")),
             // A `perform`, which the nearest handler of its effect runs.
-            Use::Op(f) => {
-                let (effect, op) =
-                    self.cx.op(f).ok_or_else(|| ErrorKind::unsupported("this operation"))?;
+            Use::Op { op: f, effect_args } => {
+                let (effect, op) = self
+                    .cx
+                    .op(f, &effect_args)
+                    .ok_or_else(|| ErrorKind::unsupported("this operation"))?;
                 self.b.perform(effect, op, args)
             }
         };
