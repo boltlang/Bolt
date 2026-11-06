@@ -206,7 +206,7 @@ impl<'db> Printer<'_, 'db> {
             ExprKind::Match { scrutinee, decision, arms } => {
                 let inner = INDENT.repeat(indent + 1);
                 let mut s = format!("match {} {{\n", x(*scrutinee));
-                for line in decision.display(db).lines() {
+                for line in self.decision_lines(decision) {
                     s.push_str(&format!("{inner}{line}\n"));
                 }
                 for (i, arm) in arms.iter().enumerate() {
@@ -259,8 +259,18 @@ impl<'db> Printer<'_, 'db> {
                         (format!("{}[{}]", x(*base), x(*index)), via)
                     }
                 };
-                let op = op.as_ref().map_or_else(String::new, |op| self.item(&op.item));
-                format!("{place} {op}= {}{via}", x(*value))
+                match op {
+                    // `n += 1`, with the function `+` calls if it's another.
+                    Some(op) => {
+                        let f = self.item(&op.item);
+                        let symbol = f.strip_prefix('`').and_then(|f| f.strip_suffix('`'));
+                        match symbol {
+                            Some(symbol) => format!("{place} {symbol}= {}{via}", x(*value)),
+                            None => format!("{place} op= {} with {f}{via}", x(*value)),
+                        }
+                    }
+                    None => format!("{place} = {}{via}", x(*value)),
+                }
             }
             ExprKind::Unsupported(what) => format!("unsupported({what:?})"),
         }
@@ -284,7 +294,10 @@ impl<'db> Printer<'_, 'db> {
 
     fn pattern(&self, pat: &Pattern<'db>, indent: usize) -> String {
         match pat {
-            Pattern::Local(Some(l)) => self.local(*l),
+            Pattern::Local(Some(l)) => match self.body.local(*l) {
+                Some(d) if d.mutable => format!("mut {}", self.local(*l)),
+                _ => self.local(*l),
+            },
             Pattern::Local(None) => "_".to_string(),
             Pattern::Decision(d) => self.decision(d, indent),
         }
@@ -294,11 +307,30 @@ impl<'db> Printer<'_, 'db> {
     fn decision(&self, d: &Decision<'db>, indent: usize) -> String {
         let inner = INDENT.repeat(indent + 1);
         let mut s = "{\n".to_string();
-        for line in d.display(self.db).lines() {
+        for line in self.decision_lines(d) {
             s.push_str(&format!("{inner}{line}\n"));
         }
         s.push_str(&format!("{}}}", INDENT.repeat(indent)));
         s
+    }
+
+    /// The lines of a decision, with its bindings by the names of their
+    /// locals, like `with n = $1` rather than `with b1 = $1`.
+    fn decision_lines(&self, d: &Decision<'db>) -> Vec<String> {
+        d.display(self.db)
+            .lines()
+            .map(|line| {
+                let mut line = line.to_string();
+                for (b, _) in self.body.bindings.iter() {
+                    let numbered = format!(" b{} = $", b.index());
+                    if line.contains(&numbered) {
+                        let named = format!(" {} = $", self.local(Local::Binding(b)));
+                        line = line.replace(&numbered, &named);
+                    }
+                }
+                line
+            })
+            .collect()
     }
 
     fn item(&self, item: &ItemRef<'db>) -> String {
