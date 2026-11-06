@@ -18,8 +18,8 @@ use boltlang_hir_ty::{Ty, lower::impl_header};
 use boltlang_pattern::decision::{Ctor, Decision};
 
 use crate::body::{
-    Body, BodyOwner, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place, Shim,
-    Stmt,
+    Body, BodyOwner, Capture, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place,
+    Shim, Stmt,
 };
 
 impl<'db> Body<'db> {
@@ -51,8 +51,13 @@ impl<'db> Printer<'_, 'db> {
             .map(|&p| format!("{}: {}", self.local(p), self.local_ty(p)))
             .collect();
         let ret = self.ty(&self.body[self.body.root].ty);
+        let captures = if self.body.captures.is_empty() {
+            String::new()
+        } else {
+            format!(" capturing [{}]", self.captures(&self.body.captures))
+        };
         format!(
-            "{}({}) -> {ret} = {}\n",
+            "{}{captures}({}) -> {ret} = {}\n",
             self.owner(),
             params.join(", "),
             self.expr(self.body.root, 0)
@@ -102,6 +107,17 @@ impl<'db> Printer<'_, 'db> {
         if shared { format!("{name}#{number}") } else { name.to_string() }
     }
 
+    fn captures(&self, captures: &[Capture]) -> String {
+        let cs: Vec<String> = captures
+            .iter()
+            .map(|c| {
+                let l = self.local(c.local);
+                if c.by_ref { format!("ref {l}") } else { l }
+            })
+            .collect();
+        cs.join(", ")
+    }
+
     fn label(&self, l: LabelId) -> String {
         match &self.body[l].name {
             Some(name) => format!("'{name}"),
@@ -128,6 +144,7 @@ impl<'db> Printer<'_, 'db> {
         let x = |e: ExprId| self.expr(e, indent);
         match &self.body[e].kind {
             ExprKind::Literal(lit) => literal(lit),
+            ExprKind::Bool(b) => (if *b { "True" } else { "False" }).to_string(),
             ExprKind::Local(l) => self.local(*l),
             ExprKind::Item(item) => self.item(item),
             ExprKind::Call { callee, args } => {
@@ -152,14 +169,7 @@ impl<'db> Printer<'_, 'db> {
             ExprKind::Closure { lambda, captures } => {
                 let mut s = format!("lambda#{}", lambda.index());
                 if !captures.is_empty() {
-                    let cs: Vec<String> = captures
-                        .iter()
-                        .map(|c| {
-                            let l = self.local(c.local);
-                            if c.by_ref { format!("ref {l}") } else { l }
-                        })
-                        .collect();
-                    s.push_str(&format!(" capturing [{}]", cs.join(", ")));
+                    s.push_str(&format!(" capturing [{}]", self.captures(captures)));
                 }
                 s
             }
@@ -220,8 +230,8 @@ impl<'db> Printer<'_, 'db> {
                 self.label(*label),
                 self.pattern(pat, indent),
                 x(*iterable),
-                self.item(iter),
-                self.item(next),
+                self.item(&iter.item),
+                self.item(&next.item),
                 x(*body)
             ),
             ExprKind::Break { label, value } => match value {
@@ -241,13 +251,15 @@ impl<'db> Printer<'_, 'db> {
                     }
                     Place::Index { base, index, get, set } => {
                         let via = match get {
-                            Some(get) => format!(" with {}, {}", self.item(get), self.item(set)),
-                            None => format!(" with {}", self.item(set)),
+                            Some(get) => {
+                                format!(" with {}, {}", self.item(&get.item), self.item(&set.item))
+                            }
+                            None => format!(" with {}", self.item(&set.item)),
                         };
                         (format!("{}[{}]", x(*base), x(*index)), via)
                     }
                 };
-                let op = op.as_ref().map_or_else(String::new, |op| self.item(op));
+                let op = op.as_ref().map_or_else(String::new, |op| self.item(&op.item));
                 format!("{place} {op}= {}{via}", x(*value))
             }
             ExprKind::Unsupported(what) => format!("unsupported({what:?})"),
@@ -300,9 +312,9 @@ impl<'db> Printer<'_, 'db> {
             }
         };
         match item {
-            ItemRef::Fn { def, args: a } => format!("{}{}", fn_name(db, *def), args(a)),
-            ItemRef::Const { def, args: a } => format!("{}{}", const_name(db, *def), args(a)),
-            ItemRef::Method { item, class_args, args: a } => {
+            ItemRef::Fn(f) => fn_name(db, *f),
+            ItemRef::Const(c) => const_name(db, *c),
+            ItemRef::Method { item, class_args, .. } => {
                 let (container, name) = match item {
                     ClassItem::Function(f) => {
                         (f.container(db), quote(f.item(db).name.as_ref().map(|n| n.name())))
@@ -313,7 +325,8 @@ impl<'db> Printer<'_, 'db> {
                     ItemContainerId::Class(class) => name_or(class.item(db).name.as_ref()),
                     _ => "?".to_string(),
                 };
-                format!("{class}{}.{name}{}", args(class_args), args(a))
+                let class_args = class_args.as_deref().map_or_else(String::new, args);
+                format!("{class}{class_args}.{name}")
             }
             ItemRef::Builtin(b) => format!("builtin.{}", b.name()),
             ItemRef::Extern(f) => format!("extern.{}", fn_name(db, *f)),

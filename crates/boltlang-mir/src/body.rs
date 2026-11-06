@@ -7,7 +7,7 @@ use boltlang_hir_def::{
     arena::ArenaMap,
     body::DefWithBodyId,
     hir::{self, BindingId, Literal, LogicOp},
-    ids::{ConstId, FunctionId},
+    ids::{ConstId, FunctionId, ImplId},
 };
 use boltlang_hir_ty::{Ty, builtin::Builtin};
 use boltlang_pattern::decision::{Ctor, Decision};
@@ -51,6 +51,9 @@ pub struct Body<'db> {
     pub temps: Vec<LocalDecl<'db>>,
     pub labels: Vec<Label>,
     pub params: Vec<Local>,
+    /// What a lambda captures, which its closure gives it, before its
+    /// parameters. Other bodies capture nothing.
+    pub captures: Vec<Capture>,
     pub root: ExprId,
 }
 
@@ -75,11 +78,13 @@ pub enum Local {
     Temp(u32),
 }
 
-/// A local's name, if it has one, and its type.
+/// A local's name, if it has one, its type, and whether it's assigned to.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct LocalDecl<'db> {
     pub name: Option<Name>,
     pub ty: Ty<'db>,
+    /// Whether it's declared `mut`, so that it can be assigned to.
+    pub mutable: bool,
 }
 
 /// A label of a block or a loop, which `break` and `continue` name.
@@ -95,8 +100,12 @@ pub struct Label {
 pub enum ExprKind<'db> {
     // Values.
     Literal(Literal),
+    /// `True` or `False`, which are names in HIR, not literals.
+    Bool(bool),
     Local(Local),
-    /// A function or constant, used as a value or called.
+    /// A function or constant, used as a value or called. The node's type
+    /// is the type it's used at, which is what tells monomorphization the
+    /// instance: for a function, its parameters and result.
     Item(ItemRef<'db>),
     /// A call. The operators, prefixes like `-a`, reading an index like
     /// `xs[i]` and method calls are calls too, of the function they name.
@@ -185,8 +194,8 @@ pub enum ExprKind<'db> {
         iterable: ExprId,
         body: ExprId,
         label: LabelId,
-        iter: ItemRef<'db>,
-        next: ItemRef<'db>,
+        iter: Callee<'db>,
+        next: Callee<'db>,
     },
     Break {
         label: LabelId,
@@ -203,7 +212,7 @@ pub enum ExprKind<'db> {
     /// once.
     Assign {
         place: Place<'db>,
-        op: Option<ItemRef<'db>>,
+        op: Option<Callee<'db>>,
         value: ExprId,
     },
 
@@ -213,26 +222,37 @@ pub enum ExprKind<'db> {
     Unsupported(&'static str),
 }
 
-/// What a use of a function or constant refers to.
-///
-/// `args` are what the use gives the parameters of its scheme, then its
-/// bound variables, as the checker's `type_args` has them: mutabilities are
-/// [`Ty::Mutability`]s among them. They can contain the parameters of the
-/// body, which monomorphization replaces.
+/// What a use of a function or constant refers to. Which instance it is
+/// follows from the type it's used at: that of its [`ExprKind::Item`], or
+/// of its [`Callee`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum ItemRef<'db> {
     /// A function with a body.
-    Fn { def: FunctionId<'db>, args: Box<[Ty<'db>]> },
+    Fn(FunctionId<'db>),
     /// A constant with a body.
-    Const { def: ConstId<'db>, args: Box<[Ty<'db>]> },
-    /// A method or constant of a class, for the class arguments
-    /// `class_args`. Monomorphization picks the impl, or a dictionary in
-    /// erased code.
-    Method { item: ClassItem<'db>, class_args: Box<[Ty<'db>]>, args: Box<[Ty<'db>]> },
+    Const(ConstId<'db>),
+    /// A method or constant of a class. Monomorphization picks the impl, or
+    /// a dictionary in erased code.
+    Method {
+        item: ClassItem<'db>,
+        /// The class's arguments, like the `[i32]` of `Show[i32]`, when the
+        /// checker knows them. Without them, the type of the use decides.
+        class_args: Option<Box<[Ty<'db>]>>,
+        /// The impl that the checker chose, if it did.
+        imp: Option<ImplId<'db>>,
+    },
     /// A function that the compiler provides, like `i32_add`.
     Builtin(Builtin),
     /// A function of the host, in an `extern` block.
     Extern(FunctionId<'db>),
+}
+
+/// A function that something other than a call calls, like the `next` of a
+/// `for`, with the type it's used at, as an [`ExprKind::Item`] has it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct Callee<'db> {
+    pub item: ItemRef<'db>,
+    pub ty: Ty<'db>,
 }
 
 /// A method or constant of a class.
@@ -257,8 +277,8 @@ pub enum Place<'db> {
     Index {
         base: ExprId,
         index: ExprId,
-        get: Option<ItemRef<'db>>,
-        set: ItemRef<'db>,
+        get: Option<Callee<'db>>,
+        set: Callee<'db>,
     },
 }
 
@@ -311,6 +331,7 @@ impl<'db> Body<'db> {
             temps: Vec::new(),
             labels: Vec::new(),
             params: Vec::new(),
+            captures: Vec::new(),
             root: ExprId(0),
         }
     }
@@ -333,7 +354,7 @@ impl<'db> Body<'db> {
 
     /// Add a local that the source doesn't have.
     pub fn new_temp(&mut self, name: Option<Name>, ty: Ty<'db>) -> Local {
-        self.temps.push(LocalDecl { name, ty });
+        self.temps.push(LocalDecl { name, ty, mutable: false });
         Local::Temp(self.temps.len() as u32 - 1)
     }
 

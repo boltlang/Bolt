@@ -29,7 +29,8 @@ fn int(body: &mut Body<'static>, n: u128) -> ExprId {
 }
 
 fn binding(body: &mut Body<'static>, index: usize, name: &str, ty: Ty<'static>) -> Local {
-    body.bindings.insert(Idx::new(index), LocalDecl { name: Some(Name::new(name)), ty });
+    body.bindings
+        .insert(Idx::new(index), LocalDecl { name: Some(Name::new(name)), ty, mutable: false });
     Local::Binding(Idx::new(index))
 }
 

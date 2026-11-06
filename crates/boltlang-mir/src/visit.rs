@@ -20,6 +20,7 @@ impl ExprKind<'_> {
         let opt = |out: &mut Vec<ExprId>, e: &Option<ExprId>| out.extend(*e);
         match self {
             ExprKind::Literal(_)
+            | ExprKind::Bool(_)
             | ExprKind::Local(_)
             | ExprKind::Item(_)
             | ExprKind::Closure { .. }
