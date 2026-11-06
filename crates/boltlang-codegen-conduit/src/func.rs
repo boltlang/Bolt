@@ -464,6 +464,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Ok(Some(Atom::Var(k.param(0))))
             }
             ExprKind::Let { .. } => Err(ErrorKind::unsupported("`let` here")),
+            ExprKind::Handle { .. } => Err(ErrorKind::unsupported("a match with effect arms")),
             ExprKind::Match { scrutinee, decision, arms } => {
                 let guards: Vec<Option<ExprId>> = arms.iter().map(|a| a.guard).collect();
                 let bodies: Vec<ExprId> = arms.iter().map(|a| a.body).collect();
@@ -773,6 +774,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
             Use::Builtin(builtin) => return self.builtin(builtin, args, result_ty),
             Use::Method { .. } => return Err(ErrorKind::unsupported("dictionaries")),
+            Use::Op(_) => return Err(ErrorKind::unsupported("calling an operation of an effect")),
         };
         Ok(results.first().map(|&v| Atom::Var(v)))
     }

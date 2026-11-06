@@ -1,0 +1,80 @@
+================================================================================
+An operation is a perform
+:test-prelude
+================================================================================
+effect Log { fn log(x: i32); }
+fn f() does Log { log(1); }
+--------------------------------------------------------------------------------
+fn f() -> () = {
+  perform.Log.log(1);
+}
+
+================================================================================
+A match with effect arms is a handle
+:test-prelude
+================================================================================
+effect Yield { fn yield(value: i32); }
+fn sum(body: fn() does Yield) -> i32 =
+    match body() {
+        () => 0,
+        effect yield(0), _ => 0,
+        effect yield(x), k if x > 0 => x + resume(k, ()),
+        effect yield(x), k => resume(k, ()),
+    };
+--------------------------------------------------------------------------------
+fn sum(body: fn() -> () does Yield) -> i32 = handle body() {
+  n0 = arm 0
+  arm 0 => 0
+  effect Yield.yield {
+    $1 = $0.0
+    n0 = switch $1 { 0 => n1, _ => n2 }
+    n1 = arm 0
+    n2 = guard 1 with x#b1 = $1 then n3 else n4
+    n3 = arm 1 with x#b1 = $1
+    n4 = arm 2 with x#b3 = $1
+    arm 0, _ => 0
+    arm 1 if `>`(x#b1, 0), k#b2 => `+`(x#b1, builtin.resume(k#b2, ()))
+    arm 2, k#b4 => builtin.resume(k#b4, ())
+  }
+}
+
+================================================================================
+An arm for several operations is an arm of each
+:test-prelude
+================================================================================
+effect Log { fn info(m: i32); fn warn(m: i32); }
+fn quiet(body: fn() does Log) =
+    match body() {
+        v => v,
+        effect info(m) | warn(m), k => resume(k, ()),
+    };
+--------------------------------------------------------------------------------
+fn quiet(body: fn() -> () does Log) -> () = handle body() {
+  n0 = arm 0 with v = $0
+  arm 0 => v
+  effect Log.info {
+    $1 = $0.0
+    n0 = arm 0 with m = $1
+    arm 0, k => builtin.resume(k, ())
+  }
+  effect Log.warn {
+    $1 = $0.0
+    n0 = arm 0 with m = $1
+    arm 0, k => builtin.resume(k, ())
+  }
+}
+
+================================================================================
+A match that handles several effects isn't supported yet
+:test-prelude
+================================================================================
+effect Log { fn log(m: i32); }
+effect Ask { fn ask() -> i32; }
+fn run(body: fn() -> i32 does Log + Ask) -> i32 =
+    match body() {
+        v => v,
+        effect log(m), k => resume(k, ()),
+        effect ask(), k => resume(k, 1),
+    };
+--------------------------------------------------------------------------------
+fn run(body: fn() -> i32 does Log + Ask) -> i32 = unsupported("a match that handles several effects")

@@ -59,6 +59,9 @@ pub enum Use<'db> {
     Builtin(Builtin),
     /// A function of the host, in an `extern` block, without a body.
     Extern(FunctionId<'db>),
+    /// An operation of an effect, which the nearest handler of its effect
+    /// runs: it has no instance.
+    Op(FunctionId<'db>),
     /// A method or constant of a class, through a dictionary, in erased
     /// code. `item` is the class's method or constant, and `dicts` are the
     /// dictionaries for its own constraints.
@@ -226,6 +229,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         match item {
             ItemRef::Builtin(b) => Ok(Use::Builtin(*b)),
             ItemRef::Extern(f) => Ok(Use::Extern(*f)),
+            ItemRef::Op(f) => Ok(Use::Op(*f)),
             ItemRef::Fn(f) => self.body_use(DefWithBody::Function(*f), use_ty, &[]),
             ItemRef::Const(c) => self.body_use(DefWithBody::Const(*c), use_ty, &[]),
             ItemRef::Ctor(c) => self.instance_use(InstanceDef::Shim(Shim::Ctor(*c)), use_ty, &[]),

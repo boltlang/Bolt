@@ -5,7 +5,7 @@ Operations need handlers, which aren't there yet
 effect Log { fn log(x: i32); }
 log(1);
 --------------------------------------------------------------------------------
-error in Log.log: calling an operation of an effect isn't supported yet
+error in <file> at `log(1)`: calling an operation of an effect isn't supported yet
 
 ================================================================================
 Handlers aren't lowered yet

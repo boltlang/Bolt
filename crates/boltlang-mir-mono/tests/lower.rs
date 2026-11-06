@@ -214,7 +214,7 @@ impl Program {
                         let name = name.unwrap_or_default();
                         out.push_str(&format!("  -> {name} of {}\n", dict.display(db)));
                     }
-                    Use::Builtin(_) | Use::Extern(_) => {}
+                    Use::Builtin(_) | Use::Extern(_) | Use::Op(_) => {}
                 }
             }
         }

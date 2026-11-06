@@ -18,8 +18,8 @@ use boltlang_hir_ty::{Ty, lower::impl_header};
 use boltlang_pattern::decision::{Ctor, Decision};
 
 use crate::body::{
-    Body, BodyOwner, Capture, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place,
-    Shim, Stmt,
+    Arm, Body, BodyOwner, Capture, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern,
+    Place, Shim, Stmt,
 };
 
 impl<'db> Body<'db> {
@@ -211,13 +211,33 @@ impl<'db> Printer<'_, 'db> {
                     s.push_str(&format!("{inner}{line}\n"));
                 }
                 for (i, arm) in arms.iter().enumerate() {
-                    let guard = arm
-                        .guard
-                        .map_or_else(String::new, |g| format!(" if {}", self.expr(g, indent + 1)));
-                    s.push_str(&format!(
-                        "{inner}arm {i}{guard} => {}\n",
-                        self.expr(arm.body, indent + 1)
-                    ));
+                    s.push_str(&format!("{inner}{}\n", self.arm(i, arm, None, indent + 1)));
+                }
+                s.push_str(&format!("{pad}}}"));
+                s
+            }
+            // `handle body { .. }`: the value arms, then those of each
+            // operation, after `effect`, with their continuations.
+            ExprKind::Handle { body, value, arms, ops } => {
+                let inner = INDENT.repeat(indent + 1);
+                let inner2 = INDENT.repeat(indent + 2);
+                let mut s = format!("handle {} {{\n", x(*body));
+                for line in self.decision_lines(value) {
+                    s.push_str(&format!("{inner}{line}\n"));
+                }
+                for (i, arm) in arms.iter().enumerate() {
+                    s.push_str(&format!("{inner}{}\n", self.arm(i, arm, None, indent + 1)));
+                }
+                for op in ops.iter() {
+                    s.push_str(&format!("{inner}effect {} {{\n", fn_name(db, op.op)));
+                    for line in self.decision_lines(&op.decision) {
+                        s.push_str(&format!("{inner2}{line}\n"));
+                    }
+                    for (i, (arm, k)) in op.arms.iter().zip(op.conts.iter()).enumerate() {
+                        let k = Some(k.map_or_else(|| "_".to_string(), |k| self.local(k)));
+                        s.push_str(&format!("{inner2}{}\n", self.arm(i, arm, k, indent + 2)));
+                    }
+                    s.push_str(&format!("{inner}}}\n"));
                 }
                 s.push_str(&format!("{pad}}}"));
                 s
@@ -275,6 +295,14 @@ impl<'db> Printer<'_, 'db> {
             }
             ExprKind::Unsupported(what) => format!("unsupported({what:?})"),
         }
+    }
+
+    /// `arm i if guard, k => body`, with the continuation of an arm of an
+    /// operation.
+    fn arm(&self, i: usize, arm: &Arm, k: Option<String>, indent: usize) -> String {
+        let guard = arm.guard.map_or_else(String::new, |g| format!(" if {}", self.expr(g, indent)));
+        let k = k.map_or_else(String::new, |k| format!(", {k}"));
+        format!("arm {i}{guard}{k} => {}", self.expr(arm.body, indent))
     }
 
     fn stmt(&self, stmt: &Stmt<'db>, indent: usize) -> String {
@@ -364,6 +392,7 @@ impl<'db> Printer<'_, 'db> {
             ItemRef::Builtin(b) => format!("builtin.{}", b.name()),
             ItemRef::Extern(f) => format!("extern.{}", fn_name(db, *f)),
             ItemRef::Ctor(c) => ctor_name(db, *c),
+            ItemRef::Op(f) => format!("perform.{}", fn_name(db, *f)),
         }
     }
 }

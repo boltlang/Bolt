@@ -13,7 +13,7 @@ use boltlang_hir_def::{
     Name,
     body::{Body as HirBody, DefWithBodyId, body},
     builtin_type::{BuiltinInt, BuiltinType, BuiltinValue},
-    hir::{self, BinaryOp, Expr, MatchArm, Pat, PatId, Path, PathSegment, Statement},
+    hir::{self, BinaryOp, EffectArm, Expr, MatchArm, Pat, PatId, Path, PathSegment, Statement},
     ids::{ConstId, FunctionId, ItemContainerId},
     resolver::{GenericDefId, Resolver, TypeNs, ValueNs, ValueResolution},
 };
@@ -28,9 +28,11 @@ use boltlang_hir_ty::{
 };
 use boltlang_mir::{
     Arm, Body, BodyOwner, Callee, Capture, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local,
-    LocalDecl, Pattern, Place, Stmt,
+    LocalDecl, OpArms, Pattern, Place, Stmt,
 };
-use boltlang_pattern::decision::{BodyDecisions, Ctor, Decision, body_decisions};
+use boltlang_pattern::decision::{
+    BodyDecisions, Ctor, Decision, OperationDecision, body_decisions,
+};
 
 use crate::lambda::body_lambdas;
 
@@ -227,6 +229,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         }
         match f.container(db) {
             ItemContainerId::ExternBlock(_) if !f.item(db).has_body => ItemRef::Extern(f),
+            ItemContainerId::Effect(_) => ItemRef::Op(f),
             ItemContainerId::Class(class) => {
                 let given = self.cx.infer.type_args(at).and_then(|given| {
                     let scheme = function_scheme(db, f).ok()?;
@@ -444,8 +447,8 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 self.node(e, ExprKind::If { cond, then, else_ })
             }
             Expr::Let { .. } => self.unsupported(e, "`let` here"),
-            Expr::Match { effect_arms, .. } if !effect_arms.is_empty() => {
-                self.unsupported(e, "a match with effect arms")
+            Expr::Match { expr: scrutinee, arms, effect_arms } if !effect_arms.is_empty() => {
+                self.handle(e, *scrutinee, arms, effect_arms)
             }
             Expr::Match { expr: scrutinee, arms, .. } => self.match_expr(e, *scrutinee, arms),
             Expr::While { condition, body: inner, label } => {
@@ -666,6 +669,78 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             .map(|a| Arm { guard: a.guard.map(|g| self.expr(g)), body: self.expr(a.expr) })
             .collect();
         self.node(e, ExprKind::Match { scrutinee, decision, arms })
+    }
+
+    /// A `match` with `effect` arms: a handler of the one effect its arms
+    /// are for. The arms of each operation come in the order the decision
+    /// has them, and an arm for several operations is built once.
+    fn handle(
+        &mut self,
+        e: hir::ExprId,
+        scrutinee: hir::ExprId,
+        arms: &[MatchArm],
+        effect_arms: &[EffectArm],
+    ) -> ExprId {
+        let db = self.db;
+        let found = self.cx.decisions.matches.iter().find(|(m, _)| *m == e);
+        let Some((_, Ok(value))) = found else { return self.unsupported(e, "this pattern") };
+        let value = Box::new(value.clone());
+        let decisions: Vec<&OperationDecision<'db>> =
+            self.cx.decisions.operations.iter().filter(|o| o.expr == e).collect();
+        let mut effects: Vec<ItemContainerId<'db>> = Vec::new();
+        for d in &decisions {
+            if d.decision.is_err() {
+                return self.unsupported(e, "this pattern");
+            }
+            let container = d.op.container(db);
+            if !effects.contains(&container) {
+                effects.push(container);
+            }
+        }
+        if effects.len() > 1 {
+            return self.unsupported(e, "a match that handles several effects");
+        }
+        let body = self.expr(scrutinee);
+        let mut pats: Vec<PatId> = arms.iter().map(|a| a.pat).collect();
+        for arm in effect_arms {
+            pats.extend(arm.pats());
+        }
+        self.declare_in(&pats);
+        let arms: Box<[Arm]> = arms
+            .iter()
+            .map(|a| Arm { guard: a.guard.map(|g| self.expr(g)), body: self.expr(a.expr) })
+            .collect();
+        // Each effect arm, once, with its continuation.
+        let mut built: HashMap<usize, (Arm, Option<Local>)> = HashMap::new();
+        let mut ops = Vec::new();
+        for d in decisions {
+            let Ok(decision) = &d.decision else { unreachable!("checked above") };
+            let mut op_arms = Vec::new();
+            let mut conts = Vec::new();
+            for pat in &d.pats {
+                let Some(i) = effect_arms.iter().position(|a| a.ops.contains(pat)) else {
+                    return self.unsupported(e, "this effect arm");
+                };
+                if let std::collections::hash_map::Entry::Vacant(slot) = built.entry(i) {
+                    let arm = &effect_arms[i];
+                    let Some(k) = self.simple_pattern(arm.cont) else {
+                        return self.unsupported(e, "this pattern of a continuation");
+                    };
+                    let guard = arm.guard.map(|g| self.expr(g));
+                    slot.insert((Arm { guard, body: self.expr(arm.expr) }, k));
+                }
+                let (arm, k) = &built[&i];
+                op_arms.push(arm.clone());
+                conts.push(*k);
+            }
+            ops.push(OpArms {
+                op: d.op,
+                decision: Box::new(decision.clone()),
+                arms: op_arms.into(),
+                conts: conts.into(),
+            });
+        }
+        self.node(e, ExprKind::Handle { body, value, arms, ops: ops.into() })
     }
 
     fn stmt(&mut self, s: &Statement) -> Option<Stmt<'db>> {

@@ -22,7 +22,7 @@ pub mod visit;
 
 pub use body::{
     Arm, Body, BodyOwner, Callee, Capture, ClassItem, Expr, ExprId, ExprKind, ItemRef, LabelId,
-    Local, LocalDecl, Pattern, Place, Shim, Stmt,
+    Local, LocalDecl, OpArms, Pattern, Place, Shim, Stmt,
 };
 pub use visit::{Visitor, VisitorMut, walk_expr, walk_expr_mut};
 

@@ -56,6 +56,13 @@ impl ExprKind<'_> {
                 opt(&mut out, else_);
             }
             ExprKind::Logic { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
+            ExprKind::Handle { body, arms, ops, .. } => {
+                out.push(*body);
+                for arm in arms.iter().chain(ops.iter().flat_map(|o| o.arms.iter())) {
+                    opt(&mut out, &arm.guard);
+                    out.push(arm.body);
+                }
+            }
             ExprKind::Match { scrutinee, arms, .. } => {
                 out.push(*scrutinee);
                 for arm in arms.iter() {

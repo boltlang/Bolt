@@ -177,6 +177,16 @@ pub enum ExprKind<'db> {
         scrutinee: ExprId,
         decision: Box<Decision<'db>>,
     },
+    /// A `match` with `effect` arms: a handler, which runs `body`, its
+    /// scrutinee, with the operations of one effect handled by `ops`.
+    /// `value` and `arms` are its value arms, which take what `body` gives
+    /// when it's done. Arms run outside the handler.
+    Handle {
+        body: ExprId,
+        value: Box<Decision<'db>>,
+        arms: Box<[Arm]>,
+        ops: Box<[OpArms<'db>]>,
+    },
     /// A `match`. Its decision picks the arm, which [`Arm`]s gives in order.
     Match {
         scrutinee: ExprId,
@@ -254,6 +264,9 @@ pub enum ItemRef<'db> {
     /// which is a [`Shim::Ctor`]. Calling it directly is a
     /// [`ExprKind::Construct`] instead.
     Ctor(Ctor<'db>),
+    /// An operation of an effect: calling it performs it, and the nearest
+    /// handler of its effect runs.
+    Op(FunctionId<'db>),
 }
 
 /// A function that something other than a call calls, like the `next` of a
@@ -310,6 +323,18 @@ pub enum Pattern<'db> {
     /// Any other pattern, as a decision with a single arm: it can fail,
     /// which a `let` with `else` allows.
     Decision(Box<Decision<'db>>),
+}
+
+/// The arms of a handler for one operation: a decision over its arguments,
+/// as a tuple, and the arms it picks, with the local each binds the
+/// continuation to, if any. An arm for several operations, like `effect
+/// info(m) | warn(m), k`, is an arm of each, with the same body.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct OpArms<'db> {
+    pub op: FunctionId<'db>,
+    pub decision: Box<Decision<'db>>,
+    pub arms: Box<[Arm]>,
+    pub conts: Box<[Option<Local>]>,
 }
 
 /// An arm of a `match`, in the order they're written.

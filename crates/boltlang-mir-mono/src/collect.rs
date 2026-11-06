@@ -222,7 +222,7 @@ fn instances_of_use<'db>(
             dicts.push(dict);
             dicts.extend(given.iter());
         }
-        Use::Builtin(_) | Use::Extern(_) => {}
+        Use::Builtin(_) | Use::Extern(_) | Use::Op(_) => {}
     }
     while let Some(dict) = dicts.pop() {
         match dict {
