@@ -4,7 +4,7 @@
 //!
 //! A lambda is part of the body it's in: its types are the body's in each
 //! instance, and the uses in it are the body's uses (see
-//! [`crate::collect`]). So a lifted lambda is an instance and the lambda's
+//! `boltlang_mir_mono::collect`). So a lifted lambda is an instance and the lambda's
 //! expression, and it has the instance's mutability parameters.
 //!
 //! A lambda captures a local of the body around it, not a copy of its

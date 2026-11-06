@@ -151,6 +151,7 @@ dependencies = [
  "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "boltlang-mir-build",
  "boltlang-mir-mono",
  "boltlang-pattern",
  "conduit-eval",
@@ -228,6 +229,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "boltlang-mir-build"
+version = "0.2.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-hir-def",
+ "salsa",
+]
+
+[[package]]
 name = "boltlang-mir-mono"
 version = "0.2.0"
 dependencies = [
@@ -236,6 +246,7 @@ dependencies = [
  "boltlang-hir-def",
  "boltlang-hir-ty",
  "boltlang-mir",
+ "boltlang-mir-build",
  "boltlang-pattern",
  "libtest-mimic",
  "salsa",

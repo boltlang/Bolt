@@ -46,11 +46,8 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
 };
 use boltlang_hir_ty::builtin::Builtin;
-use boltlang_mir_mono::{
-    Cx, Instance, MonoTy, Site, Use, UseError,
-    lambda::{Lambda, body_lambdas},
-    program,
-};
+use boltlang_mir_build::lambda::{Lambda, body_lambdas};
+use boltlang_mir_mono::{Cx, Instance, MonoTy, Site, Use, UseError, program};
 use boltlang_pattern::decision::{Node, body_decisions};
 use conduit_ir::{Extern, ExternId, Func, FuncId, Module, MutParams, Sig};
 

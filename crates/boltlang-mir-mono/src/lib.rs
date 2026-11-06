@@ -1,9 +1,8 @@
 //! Monomorphization, shared by the backends: which instances of its
 //! functions a program needs, and what each use in them calls.
 //!
-//! It also finds the captures of lambdas, for lifting them, until that
-//! moves to building MIR. Patterns are compiled to decisions in
-//! `boltlang-pattern`.
+//! Patterns are compiled to decisions in `boltlang-pattern`, and the
+//! captures of lambdas are found in `boltlang-mir-build`.
 //!
 //! - [`instance`]: an [`Instance`] is a body at concrete types. It's
 //!   specialized on types, not on mutabilities: those are its parameters.
@@ -13,11 +12,9 @@
 //!   the dictionaries that erased code calls class methods through.
 //! - [`collect`]: every instance a program needs, from its entry file and
 //!   its tests, erasing functions that recurse polymorphically.
-//! - [`lambda`]: what each lambda captures, to lift it to a function.
 
 pub mod collect;
 pub mod instance;
-pub mod lambda;
 pub mod ty;
 pub mod uses;
 

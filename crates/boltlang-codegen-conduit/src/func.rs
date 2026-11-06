@@ -19,10 +19,8 @@ use boltlang_hir_ty::{
     builtin::{Builtin, PrimOp},
     lower::{VariantDef, field_types as hir_field_types},
 };
-use boltlang_mir_mono::{
-    Cx, InstanceUses, MonoTy, Site, Use, field_types,
-    lambda::{Lambda, body_lambdas},
-};
+use boltlang_mir_build::lambda::{Lambda, body_lambdas};
+use boltlang_mir_mono::{Cx, InstanceUses, MonoTy, Site, Use, field_types};
 use boltlang_pattern::decision::{
     Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value, body_decisions,
 };

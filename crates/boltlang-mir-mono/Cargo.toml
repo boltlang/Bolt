@@ -13,6 +13,7 @@ salsa = "0.28.5"
 
 [dev-dependencies]
 boltlang-corpus.workspace = true
+boltlang-mir-build.workspace = true
 boltlang-pattern.workspace = true
 libtest-mimic = "0.8.2"
 

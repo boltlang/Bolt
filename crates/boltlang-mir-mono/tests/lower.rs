@@ -72,7 +72,8 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
     item_tree::{ModItem, item_tree},
 };
-use boltlang_mir_mono::{ClassItem, Site, Use, UseError, lambda::body_lambdas, program};
+use boltlang_mir_build::lambda::body_lambdas;
+use boltlang_mir_mono::{ClassItem, Site, Use, UseError, program};
 use boltlang_pattern::decision::{DecisionError, body_decisions};
 use libtest_mimic::{Arguments, Failed, Trial};
 
