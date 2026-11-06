@@ -38,6 +38,7 @@ use boltlang_hir_ty::{
 };
 
 pub use boltlang_mir::ClassItem;
+use boltlang_mir::ItemRef;
 
 use crate::{
     instance::{Generics, GenericsError, Instance, Kind, MonoConstraint, generics},
@@ -246,12 +247,57 @@ impl<'a, 'db> Cx<'a, 'db> {
         item: ClassItem<'db>,
         use_ty: &MonoTy<'db>,
     ) -> Result<Use<'db>, UseError> {
+        let chosen = self.infer.instance(at, class);
+        self.class_item_use_with(chosen, class, args, item, use_ty)
+    }
+
+    /// What a use in MIR is: `item`, used at the type `use_ty`, which is
+    /// what its `Item` node or `Callee` has, in the instance.
+    pub fn item_use(
+        &self,
+        item: &ItemRef<'db>,
+        use_ty: &MonoTy<'db>,
+    ) -> Result<Use<'db>, UseError> {
+        let db = self.db;
+        match item {
+            ItemRef::Builtin(b) => Ok(Use::Builtin(*b)),
+            ItemRef::Extern(f) => Ok(Use::Extern(*f)),
+            ItemRef::Fn(f) => self.instance_use(DefWithBody::Function(*f), use_ty, &[]),
+            ItemRef::Const(c) => self.instance_use(DefWithBody::Const(*c), use_ty, &[]),
+            ItemRef::Method { item, class_args, imp } => {
+                let container = match item {
+                    ClassItem::Function(f) => f.container(db),
+                    ClassItem::Const(c) => c.container(db),
+                };
+                let ItemContainerId::Class(class) = container else {
+                    return Err(UseError::UnknownType);
+                };
+                let args = match (class_args, item) {
+                    (Some(given), _) => self.mono_args(given.iter())?,
+                    (None, ClassItem::Function(f)) => self.class_args_of_use(class, use_ty, *f)?,
+                    (None, ClassItem::Const(_)) => return Err(UseError::UnknownType),
+                };
+                self.class_item_use_with(*imp, class, &args, *item, use_ty)
+            }
+        }
+    }
+
+    /// [`Cx::class_item_use`], with the impl that the checker chose, if it
+    /// did.
+    fn class_item_use_with(
+        &self,
+        chosen: Option<ImplId<'db>>,
+        class: ClassId<'db>,
+        args: &[MonoTy<'db>],
+        item: ClassItem<'db>,
+        use_ty: &MonoTy<'db>,
+    ) -> Result<Use<'db>, UseError> {
         let db = self.db;
         let constraint = MonoConstraint { class, args: args.into() };
         let imp = if args.iter().any(MonoTy::has_erased) {
             None
         } else {
-            match self.infer.instance(at, class) {
+            match chosen {
                 Some(imp) => Some(imp),
                 None => Some(
                     self.select_impl(&constraint)
@@ -343,23 +389,35 @@ impl<'a, 'db> Cx<'a, 'db> {
             Some(given) => self.mono_args(class_args(self.db, class, &callee.params, given).iter()),
             // Without them, the use's type decides, as for a method that
             // syntax calls, like `index` for `xs[i]`.
-            None => {
-                let mut found = vec![None; callee.kinds.len()];
-                bind(&callee.params, &callee.ty, use_ty, &mut found);
-                let class_params = generic_param_ids(self.db, [GenericDefId::Class(class)]);
-                class_params
-                    .iter()
-                    .filter(|&&p| !boltlang_hir_ty::ty::is_hidden_param(self.db, p))
-                    .map(|p| {
-                        let i = callee.params.iter().position(|q| q == p);
-                        match i.and_then(|i| found[i].clone()) {
-                            Some(Slot::Ty(t)) => Ok(t),
-                            _ => Err(UseError::UnknownType),
-                        }
-                    })
-                    .collect()
-            }
+            None => self.class_args_of_use(class, use_ty, f),
         }
+    }
+
+    /// The arguments of `class` for a use of its method `f` at the type
+    /// `use_ty`.
+    fn class_args_of_use(
+        &self,
+        class: ClassId<'db>,
+        use_ty: &MonoTy<'db>,
+        f: FunctionId<'db>,
+    ) -> Result<Vec<MonoTy<'db>>, UseError> {
+        let callee = generics(self.db, DefWithBodyId::new(self.db, DefWithBody::Function(f)))
+            .as_ref()
+            .map_err(|e| UseError::from(*e))?;
+        let mut found = vec![None; callee.kinds.len()];
+        bind(&callee.params, &callee.ty, use_ty, &mut found);
+        let class_params = generic_param_ids(self.db, [GenericDefId::Class(class)]);
+        class_params
+            .iter()
+            .filter(|&&p| !boltlang_hir_ty::ty::is_hidden_param(self.db, p))
+            .map(|p| {
+                let i = callee.params.iter().position(|q| q == p);
+                match i.and_then(|i| found[i].clone()) {
+                    Some(Slot::Ty(t)) => Ok(t),
+                    _ => Err(UseError::UnknownType),
+                }
+            })
+            .collect()
     }
 
     fn mono_args<'t>(
