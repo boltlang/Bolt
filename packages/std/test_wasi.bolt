@@ -1,4 +1,5 @@
-import "./io" *;
+import "./wasi" *;
+import "./io" (assert);
 import "./ops" *;
 import "./array" (array_len);
 import "./string" (bytes);
