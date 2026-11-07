@@ -1,0 +1,116 @@
+import "./io" (panic);
+import "./ops" *;
+import "./option" (Option, None, Some);
+import "./functor" (Functor);
+import "./mutability" (ToImmDeep, to_imm_deep);
+import "./debug" (Debug, debug);
+import "./string" (StringBuilder, push_str);
+
+/// What can fail: `Ok` with what it gives, or `Err` with why it failed.
+///
+/// The error comes first, so that `Result[E]` is a type constructor of
+/// the value: `fmap` and the like change the `Ok`, and leave an `Err` as
+/// it is.
+pub enum Result[E, T] {
+  Err(E),
+  Ok(T),
+}
+
+pub import Result.*;
+
+/// A copy of a `Result` that can't be changed all the way down: what it
+/// holds is copied with its own `to_imm_deep`.
+impl[E: ToImmDeep, T: ToImmDeep] ToImmDeep[Result[E, T]] {
+  fn to_imm_deep(r) = match r {
+    Err(e) => Err(to_imm_deep(e)),
+    Ok(x) => Ok(to_imm_deep(x)),
+  };
+}
+
+/// Results are equal when both are `Ok` of equal values, or both are `Err`
+/// of equal errors.
+impl[E, T] Eq[Result[E, T]] where Eq[E], Eq[T] {
+  fn eq(a, b) = match mut (a, b) {
+    (Ok(x), Ok(y)) => x == y,
+    (Err(x), Err(y)) => x == y,
+    _ => False,
+  };
+}
+
+/// `fmap(f, r)` changes the value of an `Ok` with `f`, and leaves an `Err`
+/// as it is.
+impl[E] Functor[Result[E]] {
+  fn fmap(f, r) = match r {
+    Ok(x) => Ok(f(x)),
+    Err(e) => Err(e),
+  };
+}
+
+/// Results look like `Ok(1)` and `Err("no")`.
+impl[E, T] Debug[Result[E, T]] where Debug[E], Debug[T] {
+  fn debug(r, out) {
+    match r {
+      Ok(x) => {
+        out.push_str("Ok(");
+        debug(x, out);
+      }
+      Err(e) => {
+        out.push_str("Err(");
+        debug(e, out);
+      }
+    };
+    out.push_str(")");
+  }
+}
+
+/// Whether `r` is an `Ok`.
+pub fn is_ok[E, T](r: Result[E, T]) -> Bool = match r {
+  Ok(_) => True,
+  Err(_) => False,
+};
+
+/// Whether `r` is an `Err`.
+pub fn is_err[E, T](r: Result[E, T]) -> Bool = !is_ok(r);
+
+/// The value of an `Ok`, or `None`.
+pub fn ok[E, T](r: Result[E, T]) -> Option[T] = match r {
+  Ok(x) => Some(x),
+  Err(_) => None,
+};
+
+/// The error of an `Err`, or `None`.
+pub fn err[E, T](r: Result[E, T]) -> Option[E] = match r {
+  Ok(_) => None,
+  Err(e) => Some(e),
+};
+
+/// The value of an `Ok`. An `Err` panics.
+pub fn unwrap[E, T](r: Result[E, T]) -> T = match r {
+  Ok(x) => x,
+  Err(_) => panic("trying to unwrap an Err-valued result"), // TODO show the error in the message
+};
+
+/// The error of an `Err`. An `Ok` panics.
+pub fn unwrap_err[E, T](r: Result[E, T]) -> E = match r {
+  Ok(_) => panic("trying to unwrap the error of an Ok-valued result"),
+  Err(e) => e,
+};
+
+/// The value of an `Ok`, or `default` for an `Err`.
+pub fn unwrap_or[E, T](r: Result[E, T], default: T) -> T = match r {
+  Ok(x) => x,
+  Err(_) => default,
+};
+
+/// `r` with its error changed by `f`, if it's an `Err`.
+pub fn map_err[E, F, T](r: Result[E, T], f: fn(E) -> F) -> Result[F, T] = match r {
+  Ok(x) => Ok(x),
+  Err(e) => Err(f(e)),
+};
+
+/// What `f` gives for the value of an `Ok`, which can fail too, or the
+/// `Err` as it is: a chain of steps that stops at the first that fails.
+pub fn and_then[E, T, U](r: Result[E, T], f: fn(T) -> Result[E, U]) -> Result[E, U] = match r {
+  Ok(x) => f(x),
+  Err(e) => Err(e),
+};

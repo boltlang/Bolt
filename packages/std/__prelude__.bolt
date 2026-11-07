@@ -12,6 +12,7 @@ pub import "./show" *;
 // Types
 pub import "./array" *;
 pub import "./option" *;
+pub import "./result" *;
 pub import "./vec" *;
 pub import "./string" *;
 pub import "./char" *;

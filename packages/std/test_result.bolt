@@ -1,0 +1,66 @@
+// The tests of `result.bolt`.
+
+import "./result" *;
+import "./option" (Option, None, Some);
+import "./functor" (fmap);
+import "./debug" (repr);
+import "./string" (String);
+import "./ops" *;
+import "./io" (assert);
+
+fn safe_div(a: i32, b: i32) -> Result[String, i32] =
+  if b == 0 { Err("division by zero") } else { Ok(a / b) };
+
+#[test]
+fn ok_and_err() {
+  assert(safe_div(7, 2) == Ok(3));
+  assert(safe_div(7, 0) == Err("division by zero"));
+  assert(safe_div(7, 2) != safe_div(7, 0));
+  assert(is_ok(safe_div(7, 2)));
+  assert(is_err(safe_div(7, 0)));
+}
+
+#[test]
+fn ok_and_err_as_options() {
+  assert(ok(safe_div(7, 2)) == Some(3));
+  assert(ok(safe_div(7, 0)) == None);
+  assert(err(safe_div(7, 0)) == Some("division by zero"));
+  assert(err(safe_div(7, 2)) == None);
+}
+
+#[test]
+fn unwrapping() {
+  assert(unwrap(safe_div(8, 2)) == 4);
+  assert(unwrap_err(safe_div(8, 0)) == "division by zero");
+  assert(unwrap_or(safe_div(8, 0), -1) == -1);
+  assert(safe_div(8, 4).unwrap_or(-1) == 2);
+}
+
+#[test]
+fn fmap_changes_only_an_ok() {
+  assert(fmap(|n| n * 10, safe_div(8, 2)) == Ok(40));
+  assert(fmap(|n| n * 10, safe_div(8, 0)) == Err("division by zero"));
+}
+
+#[test]
+fn map_err_changes_only_an_err() {
+  let r: Result[i32, i32] = Ok(1);
+  assert(r.map_err(|e| e + 1) == Ok(1));
+  let r: Result[i32, i32] = Err(1);
+  assert(r.map_err(|e| e + 1) == Err(2));
+}
+
+#[test]
+fn and_then_stops_at_the_first_err() {
+  let half = |n: i32| -> Result[String, i32] { if n % 2 == 0 { Ok(n / 2) } else { Err("odd") } };
+  assert(safe_div(40, 2).and_then(half).and_then(half) == Ok(5));
+  assert(safe_div(40, 2).and_then(half).and_then(half).and_then(half) == Err("odd"));
+  assert(safe_div(40, 0).and_then(half) == Err("division by zero"));
+}
+
+#[test]
+fn results_look_like_their_constructors() {
+  let r: Result[String, i32] = Ok(1);
+  assert(repr(r) == "Ok(1)");
+  assert(repr(safe_div(1, 0)) == "Err(\"division by zero\")");
+}
