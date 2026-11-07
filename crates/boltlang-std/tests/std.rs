@@ -1,8 +1,10 @@
 //! The unit tests of `std`: the functions with `#[test]` in the `.bolt`
-//! files of `packages/std`, each run twice, as `bolt test` and `bolt test
-//! --wasm` run them: `eval::vec::pushing_and_popping` with Conduit's
-//! evaluator, and `wasm::vec::pushing_and_popping` compiled to Wasm and run
-//! with Node. Without a `node`, the `wasm::` tests are ignored.
+//! files of `packages/std`, each run three times:
+//! `eval::vec::pushing_and_popping` with Conduit's evaluator, as `bolt test`
+//! runs it, `wasm::vec::pushing_and_popping` compiled to Wasm and run with
+//! `runtime/node.mjs`, as `bolt test --wasm` runs it, and
+//! `browser::vec::pushing_and_popping` with `runtime/browser.mjs`, in Node.
+//! Without a `node`, the `wasm::` and `browser::` tests are ignored.
 //!
 //! Run the tests of one file with `cargo test --test std vec::`, or only
 //! those of the evaluator with `eval::`. A test fails when its file has
@@ -16,7 +18,12 @@ use std::{
 };
 
 use boltlang_base_db::{Db, File, SystemPath, TestDb};
-use boltlang_codegen_conduit::{Lowered, lower, node::NodeHost, run::run, wasm};
+use boltlang_codegen_conduit::{
+    Lowered, lower,
+    node::{NodeHost, Runtime},
+    run::run,
+    wasm,
+};
 use boltlang_hir_def::nameres::test_functions;
 use boltlang_ide_diagnostics::{Severity, dependency_diagnostics, diagnostics};
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -48,13 +55,16 @@ fn main() -> ExitCode {
             let test = format!("{}::{name}", module(&relative));
             let (r, n) = (relative.clone(), name.clone());
             trials.push(Trial::test(format!("eval::{test}"), move || run_eval(&r, &n)));
-            let (r, n, node, modules) = (relative.clone(), name, node.clone(), modules.clone());
-            let ignored = node.is_none();
-            let trial = Trial::test(format!("wasm::{test}"), move || match &node {
-                Some(node) => run_wasm(node, &modules, &r, &n),
-                None => Ok(()),
-            });
-            trials.push(trial.with_ignored_flag(ignored));
+            for (prefix, runtime) in [("wasm", Runtime::Node), ("browser", Runtime::Browser)] {
+                let (r, n) = (relative.clone(), name.clone());
+                let (node, modules) = (node.clone(), modules.clone());
+                let ignored = node.is_none();
+                let trial = Trial::test(format!("{prefix}::{test}"), move || match &node {
+                    Some(node) => run_wasm(node, runtime, &modules, &r, &n),
+                    None => Ok(()),
+                });
+                trials.push(trial.with_ignored_flag(ignored));
+            }
         }
     }
     libtest_mimic::run(&args, trials).exit_code()
@@ -99,12 +109,18 @@ fn run_eval(relative: &str, name: &str) -> Result<(), Failed> {
     run(&program, f, Some(FUEL)).map_err(|e| e.to_string().into())
 }
 
-/// Run the test `name` of the file `relative` in Wasm, in the module of
-/// its file, which exports all its tests.
-fn run_wasm(node: &NodeHost, modules: &Modules, relative: &str, name: &str) -> Result<(), Failed> {
+/// Run the test `name` of the file `relative` in Wasm, with `runtime`, in
+/// the module of its file, which exports all its tests.
+fn run_wasm(
+    node: &NodeHost,
+    runtime: Runtime,
+    modules: &Modules,
+    relative: &str,
+    name: &str,
+) -> Result<(), Failed> {
     let cell = modules.lock().unwrap().entry(relative.to_string()).or_default().clone();
     let module = cell.get_or_init(|| compile(node, relative)).clone()?;
-    match node.run_captured(&module, name).map_err(|e| e.to_string())? {
+    match node.run_captured(runtime, &module, name).map_err(|e| e.to_string())? {
         (Ok(()), _) => Ok(()),
         (Err(why), output) => Err(format!("{why}\n{output}").into()),
     }
