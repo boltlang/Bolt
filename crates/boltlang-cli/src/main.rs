@@ -161,7 +161,7 @@ impl Exec for CheckCommand {
 }
 
 /// Check a file, then run the statements at its top level, with Conduit's
-/// evaluator.
+/// evaluator, or with Node.
 #[derive(clap::Parser)]
 struct RunCommand {
     file: PathBuf,
@@ -171,8 +171,12 @@ struct RunCommand {
     #[arg(long)]
     no_check: bool,
     /// Stop after this many steps of the evaluator.
-    #[arg(long, value_name = "STEPS")]
+    #[arg(long, value_name = "STEPS", conflicts_with = "wasm")]
     fuel: Option<u64>,
+    /// Compile the file to WebAssembly, as `bolt build` does, and run it
+    /// with Node instead of with the evaluator.
+    #[arg(long)]
+    wasm: bool,
 }
 
 /// Check files, then run their tests, with Conduit's evaluator: the
@@ -198,15 +202,16 @@ struct TestCommand {
     wasm: bool,
 }
 
-/// The host that `bolt test --wasm` runs a test with, in Node: `node
-/// host.mjs <module> <test>`. It gives the module `bolt`'s `write_file` and
+/// The host that `bolt run --wasm` and `bolt test --wasm` run a module
+/// with, in Node: `node host.mjs <module> <export>`, which calls the
+/// export: `main`, or a test. It gives the module `bolt`'s `write_file` and
 /// `flush`, on stdout and stderr, Node's WASI preview 1 as
 /// `wasi_snapshot_preview1`, with no arguments, environment or preopened
 /// directories, and every other import a function that stops the program,
 /// as the evaluator does for a host function it doesn't have. It exits
-/// with 1 when the test stops with an error, or exits with a code other
+/// with 1 when the export stops with an error, or exits with a code other
 /// than 0, and with 2 when the module can't be run.
-const NODE_TEST_HOST: &str = r#"import fs from "node:fs";
+const NODE_HOST: &str = r#"import fs from "node:fs";
 import { WASI } from "node:wasi";
 const [, , path, name] = process.argv;
 const pending = { 1: [], 2: [] };
@@ -257,26 +262,28 @@ try {
 }
 "#;
 
-/// Where `bolt test --wasm` puts the modules it runs, and its host.
-struct WasmTests {
+/// Where `bolt run --wasm` and `bolt test --wasm` put the modules they
+/// run, and the host.
+struct NodeHost {
     dir: PathBuf,
 }
 
-impl WasmTests {
+impl NodeHost {
     /// A new directory with the host, if there's a `node` to run it with.
-    fn new() -> anyhow::Result<Self> {
+    /// `command` is the one that needs it, like `bolt test --wasm`.
+    fn new(command: &str) -> anyhow::Result<Self> {
         let found = std::process::Command::new("node").arg("--version").output();
         if !found.is_ok_and(|o| o.status.success()) {
-            anyhow::bail!("`bolt test --wasm` runs tests with Node, but there's no `node`");
+            anyhow::bail!("`{command}` runs the program with Node, but there's no `node`");
         }
-        let dir = std::env::temp_dir().join(format!("bolt-test-wasm-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("bolt-wasm-{}", std::process::id()));
         std::fs::create_dir_all(&dir)?;
-        std::fs::write(dir.join("host.mjs"), NODE_TEST_HOST)?;
-        Ok(WasmTests { dir })
+        std::fs::write(dir.join("host.mjs"), NODE_HOST)?;
+        Ok(NodeHost { dir })
     }
 
-    /// Run the test `name` of the module `module`, with its output on ours:
-    /// `Err` with why it stopped, if it didn't pass.
+    /// Call the export `name` of the module `module`, with its output on
+    /// ours: `Err` with why it stopped, if it stopped with an error.
     fn run(&self, module: &std::path::Path, name: &str) -> anyhow::Result<Result<(), String>> {
         // Node's WASI warns that it's experimental.
         let status = std::process::Command::new("node")
@@ -293,16 +300,17 @@ impl WasmTests {
     }
 }
 
-impl Drop for WasmTests {
+impl Drop for NodeHost {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.dir);
     }
 }
 
 /// Check a file, then compile it to a WebAssembly module, whose export
-/// `main` runs the statements at its top level. It imports `write_file`
-/// and `flush` from the module `bolt`, which `print` writes with, and the
-/// functions with `#[link(wasm, ..)]` from the modules they name.
+/// `main` runs the statements at its top level. It imports the functions
+/// with `#[link(wasm, ..)]` from the modules they name, like WASI's
+/// `fd_write`, which std's `print` writes with, and `write_file` and
+/// `flush` from the module `bolt`, for what the compiler writes itself.
 #[derive(clap::Parser)]
 struct BuildCommand {
     file: PathBuf,
@@ -328,7 +336,22 @@ impl Exec for RunCommand {
             return Ok(false);
         }
         let Some(program) = lowered(&db, file) else { return Ok(false) };
-        match run(&program, program.entry, self.fuel) {
+        let result = if self.wasm {
+            let bytes = match boltlang_codegen_conduit::wasm::build(&program, true) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    eprintln!("error: {error}");
+                    return Ok(false);
+                }
+            };
+            let host = NodeHost::new("bolt run --wasm")?;
+            let module = host.dir.join("main.wasm");
+            std::fs::write(&module, bytes)?;
+            host.run(&module, "main")?
+        } else {
+            run(&program, program.entry, self.fuel).map_err(|e| e.to_string())
+        };
+        match result {
             Ok(()) => Ok(true),
             Err(error) => {
                 eprintln!("error: {error}");
@@ -356,7 +379,7 @@ impl Exec for TestCommand {
             }
         }
         let selected = |name: &str| self.filter.as_ref().is_none_or(|f| name.contains(f.as_str()));
-        let wasm = if self.wasm { Some(WasmTests::new()?) } else { None };
+        let wasm = if self.wasm { Some(NodeHost::new("bolt test --wasm")?) } else { None };
         let (mut passed, mut failed, mut skipped) = (0, 0, 0);
         for (index, &file) in files.iter().enumerate() {
             let count = test_functions(&db, file)

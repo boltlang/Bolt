@@ -192,6 +192,35 @@ fn run_prints_through_conduit() {
 }
 
 #[test]
+fn run_with_wasm_prints_through_node() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipped: no `node` to run the module with");
+        return;
+    }
+    let program = "print(\"hello\");\neprint(\"to stderr\");\nprint(show(-42));\n";
+    let dir = dir_with("run-wasm", &[("a.bolt", program)]);
+    let o = bolt_std(&dir, "run", &["--wasm", "a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "hello\n-42\n");
+    assert!(o.err.contains("to stderr\n"), "{}", o.err);
+    assert!(!dir.join("a.wasm").exists());
+}
+
+#[test]
+fn run_with_wasm_stops_with_an_error() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipped: no `node` to run the module with");
+        return;
+    }
+    let dir = dir_with("run-wasm-error", &[("a.bolt", "print(\"before\");\npanic(\"oops\");\n")]);
+    let o = bolt_std(&dir, "run", &["--wasm", "a.bolt"]);
+    assert!(!o.ok);
+    assert_eq!(o.out, "before\n");
+    assert!(o.err.contains("oops\n"), "{}", o.err);
+    assert!(o.err.contains("stopped with an error"), "{}", o.err);
+}
+
+#[test]
 fn run_stops_with_an_error() {
     let dir = dir_with("run-error", &[("a.bolt", "print(\"before\");\npanic(\"oops\");\n")]);
     let o = bolt_std(&dir, "run", &["a.bolt"]);
