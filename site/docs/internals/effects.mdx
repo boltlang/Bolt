@@ -439,6 +439,10 @@ A `match` with effect arms becomes a `handle` in Conduit:
 - the arms of each operation become its clause, with a decision graph over
   the arguments.
 
+A `match` with arms for several effects is one Conduit handler of all of
+them, so an arm's own operations go to the handler around the `match`,
+not to the `match` itself, as nesting a `handle` per effect would.
+
 Effect parameters, like the `E` of `map`, are passed through to Conduit as
 effect parameters, as mutability parameters are. Instances are only made
 for types, so a `map` that's called with functions of different effects is

@@ -88,10 +88,12 @@ the handler's environment, with a local that's assigned as its ref.
 An effect with type parameters is one Conduit effect for each of its
 arguments, like `State_i32` for `State[i32]`, and an operation used as a
 function, like `say` in `xs.each(say)`, is a closure of a shim that
-performs it. Not lowered yet: a `match` that handles several effects,
-operations with type parameters of their own, and a handler whose arms
-hold values of a mutability that's a parameter, since a clause can't have
-mutability parameters in Conduit.
+performs it. A `match` with arms for several effects is one handler of
+all of them, with a clause for each of their operations: an arm for
+operations of two effects, like `effect fail(c) | abort(c), _ => c`, is
+the clause of each. Not lowered yet: operations with type parameters of
+their own, and a handler whose arms hold values of a mutability that's a
+parameter, since a clause can't have mutability parameters in Conduit.
 
 Every function, closure and continuation gets its row from the checker:
 
