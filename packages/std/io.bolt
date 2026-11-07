@@ -1,9 +1,22 @@
-import "./string" (String);
+import "./string" (String, bytes);
 import "./ops" *;
+import "./wasi" (Fd, fd_write);
 
-/// Write `text` and a newline.
-#[builtin]
-pub fn print(text: String);
+/// Write `text` and a newline to stdout.
+pub fn print(text: String) {
+  write_line(1, text);
+}
+
+/// Write `text` and a newline to stderr.
+pub fn eprint(text: String) {
+  write_line(2, text);
+}
+
+/// Write `text` and a newline to `fd`, as its UTF-8 bytes, in one call of
+/// the host. What goes wrong is left out, since there's nowhere to say it.
+fn write_line(fd: Fd, text: String) {
+  fd_write(fd, [bytes(text), bytes("\n")]);
+}
 
 /// Stop the program with an error, at once.
 #[builtin]

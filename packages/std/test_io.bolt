@@ -1,0 +1,11 @@
+import "./io" (print, eprint);
+
+#[test]
+fn print_writes_a_line_to_stdout() {
+  print("io: hello, wörld");
+}
+
+#[test]
+fn eprint_writes_a_line_to_stderr() {
+  eprint("io: hello, stderr");
+}
