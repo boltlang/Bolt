@@ -2,7 +2,8 @@
 128-bit integers
 :error
 ================================================================================
-extern "env" { fn log(x: i128); }
+#[link(wasm, module = "env")]
+fn log(x: i128);
 log(1);
 --------------------------------------------------------------------------------
 error in <file>: needs what Conduit doesn't have yet: 128-bit integers

@@ -20,7 +20,7 @@ use boltlang_hir_def::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
         ItemContainerId, StructId, TypeAliasId,
     },
-    item_tree::{AssocItem, AstId, ModItem, RawVisibility, item_tree},
+    item_tree::{AssocItem, AstId, LinkError, ModItem, RawVisibility, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
@@ -230,8 +230,13 @@ pub enum DiagnosticKind<'db> {
     },
     /// A function with `#[test]` that can't be run as a test.
     /// A function at the top level of a file without a body, which only a
-    /// builtin can be.
+    /// builtin or a function the host provides can be.
     MissingBody,
+    /// `#[link(..)]` that's written wrong, or on a function that can't
+    /// have one.
+    BadLink {
+        reason: BadLink,
+    },
     /// `#[builtin]` on a function that can't be one.
     BadBuiltin {
         reason: BadBuiltin,
@@ -452,7 +457,20 @@ pub enum BecauseKind<'db> {
     Bound { item: Option<Name> },
 }
 
-/// Why a function with `#[test]` can't be run as a test.
+/// Why a function's `#[link(..)]` is wrong.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BadLink {
+    /// It's in a class, an impl, an extern block or a type's namespace.
+    NotTopLevel,
+    /// It has a body, which the host would replace.
+    HasBody,
+    /// It's a builtin too.
+    Builtin,
+    /// How it's written.
+    Written(LinkError),
+}
+
+/// Why a function's `#[builtin]` is wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BadBuiltin {
     /// It's in a class, an impl, an extern block or a type's namespace.
@@ -1027,13 +1045,28 @@ impl<'db> Collector<'db> {
     }
 
     /// Report a function at the top level without a body that isn't a
-    /// builtin, and check one with `#[builtin]`: it must be a builtin, with
-    /// its type.
+    /// builtin or linked to the host, check its `#[link(..)]`, and check one
+    /// with `#[builtin]`: it must be a builtin, with its type.
     fn builtin_decl(&mut self, f: FunctionId<'db>) {
         let db = self.db;
         let item = f.item(db);
         let range = Some(self.item_range(item.ast_id));
         let top = matches!(f.container(db), ItemContainerId::File(_));
+        if let Some(link) = &item.link {
+            let reason = if !top || item.owner.is_some() {
+                Some(BadLink::NotTopLevel)
+            } else if item.is_builtin {
+                Some(BadLink::Builtin)
+            } else if item.has_body {
+                Some(BadLink::HasBody)
+            } else {
+                link.error.clone().map(BadLink::Written)
+            };
+            if let Some(reason) = reason {
+                self.push(range, DiagnosticKind::BadLink { reason });
+            }
+            return;
+        }
         if !item.is_builtin {
             if top && !item.has_body {
                 self.push(range, DiagnosticKind::MissingBody);

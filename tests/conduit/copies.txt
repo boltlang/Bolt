@@ -2,7 +2,8 @@
 A deep copy of an array doesn't see later changes
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let xs = mut [1, 2];
 let ys = imm xs;
 xs[0] = 9;
@@ -95,7 +96,8 @@ env.log(9)
 The arrays an array holds are copied too
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let xs = mut [mut [1], mut [2]];
 let ys = imm xs;
 xs[0][0] = 9;
@@ -225,7 +227,8 @@ env.log(1)
 A struct is copied with its own impl, and an Option with the prelude's
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Cell { items: [i32] }
 impl ToImmDeep[Cell] {
   fn to_imm_deep(c) = Cell { items: to_imm_deep(c.items) };
@@ -391,7 +394,8 @@ env.log(3)
 What's already imm is shared as it is
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let xs = [1, 2];
 let ys = imm xs;
 log(ys[1]);
@@ -416,7 +420,8 @@ env.log(2)
 A type with an impl of ToImmDeep is copied with it
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let v = Vec.new();
 v.push(mut [1]);
 let w = imm v;
@@ -779,7 +784,8 @@ env.log(1)
 The copy of a generic function's value is made where it's instantiated
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn freeze[T](x: T) -> imm T = imm x;
 let xs = mut [1];
 let ys = freeze(xs);
@@ -874,7 +880,8 @@ env.log(1)
 An array is copied with the impl of ToImmDeep in std
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let xs = mut [mut [1]];
 let ys = imm xs;
 xs[0][0] = 9;
@@ -1026,7 +1033,8 @@ error in <file> at `imm v`: nothing gives `ToImmDeep[mut Point]`
 A type that imm doesn't change needs no impl
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Point { x: i32 }
 let p = Point { x: 3 };
 let q = imm p;

@@ -2,7 +2,8 @@
 A handler sums what a generator yields
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn produce() does Yield {
   yield(1);
@@ -81,7 +82,8 @@ env.log(6)
 A handler's arms can change a local around it
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Tick { fn tick(); }
 fn ticks() does Tick {
   tick();
@@ -160,7 +162,8 @@ env.log(2)
 An arm that doesn't resume stops the scrutinee
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Fail { fn fail(code: i32) -> !; }
 fn work() -> i32 does Fail {
   log(1);
@@ -227,7 +230,8 @@ env.log(7)
 An operation gives what its arm resumes with, and arms match its arguments
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Ask { fn ask(n: i32) -> i32; }
 fn questions() -> i32 does Ask = ask(0) + ask(5) + ask(20);
 fn answer() -> i32 =
@@ -327,7 +331,8 @@ env.log(106)
 An arm for several operations
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Log { fn info(m: i32); fn warn(m: i32); }
 fn chatty() does Log {
   info(1);
@@ -405,7 +410,8 @@ env.log(2)
 A match can handle several effects
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Log { fn log_it(m: i32); }
 effect Ask { fn ask() -> i32; }
 fn job() -> i32 does Log + Ask {
@@ -495,7 +501,8 @@ env.log(40)
 An arm can be for operations of several effects
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Fail { fn fail(code: i32); }
 effect Abort { fn abort(code: i32); }
 fn work(n: i32) -> i32 does Fail + Abort {
@@ -604,7 +611,8 @@ env.log(3)
 A handler of several effects lets the others through
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Skip { fn skip(); }
 effect Ask { fn ask() -> i32; }
@@ -730,7 +738,8 @@ env.log(111)
 An effect with type parameters is an effect for each of its arguments
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect State[S] {
   fn get() -> S;
   fn set(s: S);
@@ -915,7 +924,8 @@ env.log(1)
 An operation as a function performs it
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Say { fn say(n: i32); }
 fn each(xs: [i32], f: fn(i32) does Say) does Say {
   for x in xs {
@@ -1070,7 +1080,8 @@ env.log(2)
 A function generic in its effects passes them on
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn twice[E](f: fn() does E) does E { f(); f() }
 fn produce() does Yield { yield(1); }
@@ -1156,7 +1167,8 @@ env.log(2)
 A handler of one effect lets the others through
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Ask { fn ask() -> i32; }
 fn job() does Yield + Ask { yield(ask()); yield(ask() + 1); }
@@ -1271,7 +1283,8 @@ env.log(21)
 An arm can perform what the handler around it handles
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Ask { fn ask() -> i32; }
 fn produce() does Yield { yield(1); yield(2); }
@@ -1389,7 +1402,8 @@ env.log(30)
 A closure with effects in a data type
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn run(f: Option[fn() does Yield]) does Yield = match f {
   Some(g) => g(),
@@ -1483,7 +1497,8 @@ env.log(5)
 A continuation given to a function generic in its effects
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn later[E](k: Cont[(), i32, E]) -> i32 does E = resume(k, ());
 fn produce() does Yield { yield(1); yield(2); }
@@ -1562,7 +1577,8 @@ env.log(3)
 The clauses of operations of the same name are named after their effects
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Reader { fn get() -> i32; }
 effect State { fn get() -> i32; }
 fn job() -> i32 does Reader + State = Reader.get() * State.get();
@@ -1640,7 +1656,8 @@ env.log(42)
 Instances aren't specialized on the rows in their type arguments
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Ask { fn ask() -> i32; }
 fn id[T](x: T) -> T = x;

@@ -227,6 +227,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         if let Some(b) = builtin(db, f) {
             return ItemRef::Builtin(b);
         }
+        if boltlang_hir_ty::builtin::link(db, f).is_some() {
+            return ItemRef::Extern(f);
+        }
         match f.container(db) {
             ItemContainerId::ExternBlock(_) if !f.item(db).has_body => ItemRef::Extern(f),
             ItemContainerId::Effect(_) => ItemRef::Op(f),

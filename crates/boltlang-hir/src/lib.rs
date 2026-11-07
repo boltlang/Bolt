@@ -8,6 +8,6 @@ pub mod diagnostics;
 
 pub use boltlang_hir_def::nameres::ImportPathError;
 pub use diagnostics::{
-    BadBuiltin, BadTest, Because, BecauseKind, ClassItemKind, Diagnostic, DiagnosticKind,
+    BadBuiltin, BadLink, BadTest, Because, BecauseKind, ClassItemKind, Diagnostic, DiagnosticKind,
     file_diagnostics,
 };

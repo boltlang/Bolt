@@ -24,7 +24,7 @@ use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::Mutability,
     ids::{FunctionId, ItemContainerId},
-    item_tree::FunctionName,
+    item_tree::{FunctionName, Link},
 };
 
 use crate::{
@@ -418,6 +418,20 @@ pub fn is_builtin_decl(db: &dyn Db, f: FunctionId<'_>) -> bool {
         && !item.has_body
         && item.owner.is_none()
         && matches!(f.container(db), ItemContainerId::File(_))
+}
+
+/// Where the host provides `f`, if it's declared as a function the host
+/// provides: at the top level of a file, without a body, with a
+/// `#[link(..)]` that's written right and no `#[builtin]`.
+pub fn link<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<&'db Link> {
+    let item = f.item(db);
+    let link = item.link.as_ref()?;
+    let ok = link.error.is_none()
+        && !item.is_builtin
+        && !item.has_body
+        && item.owner.is_none()
+        && matches!(f.container(db), ItemContainerId::File(_));
+    ok.then_some(link)
 }
 
 /// The builtin that `f` is, if it's declared as one with the name of one.

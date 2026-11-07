@@ -1,7 +1,8 @@
 ================================================================================
 A call of a function
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn add(a: i32, b: i32) -> i32 = i32_add(a, b);
 #[builtin] fn i32_add(a: i32, b: i32) -> i32;
 log(add(1, 2));
@@ -24,7 +25,10 @@ env.log(3)
 ================================================================================
 A generic function has an instance per type
 ================================================================================
-extern "env" { fn log(x: i32); fn log64(x: i64); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
+#[link(wasm, module = "env")]
+fn log64(x: i64);
 fn id[T](x: T) -> T = x;
 log(id(1));
 log64(id(2i64));
@@ -56,7 +60,8 @@ env.log64(2)
 Operators come from the prelude
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn square(n: i32) -> i32 = n * n;
 log(square(3) + 1);
 log(7 / 2);
@@ -139,7 +144,10 @@ env.log(-1)
 Small integers wrap around
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: u8); fn logi(x: i8); }
+#[link(wasm, module = "env")]
+fn log(x: u8);
+#[link(wasm, module = "env")]
+fn logi(x: i8);
 let a: u8 = 200;
 log(a + 100);
 let b: i8 = 100;
@@ -187,7 +195,8 @@ env.logi(-56)
 Recursion
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn fac(n: i32) -> i32 = if n <= 1 { 1 } else { n * fac(n - 1) };
 log(fac(5));
 --------------------------------------------------------------------------------
@@ -249,7 +258,8 @@ env.log(120)
 Tests run after the file
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 log(1);
 #[test]
 fn second() { log(2); }
@@ -273,7 +283,10 @@ env.log(2)
 ================================================================================
 A host function that's declared never to return stops the program if it does
 ================================================================================
-extern "env" { fn log(x: i32); fn stop() -> !; }
+#[link(wasm, module = "env")]
+fn log(x: i32);
+#[link(wasm, module = "env")]
+fn stop() -> !;
 log(1);
 stop();
 --------------------------------------------------------------------------------
@@ -347,7 +360,8 @@ stdout:
 A generic function called at a type with a mutability parameter (#371)
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn id[T](x: T) -> T = x;
 fn first(xs: 'm [i32]) -> i32 = id(xs)[0];
 log(first(mut [1]));

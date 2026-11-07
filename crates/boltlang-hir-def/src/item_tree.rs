@@ -227,7 +227,38 @@ pub struct Function {
     /// Whether it's a builtin, with `#[builtin]` before it: a function
     /// without a body that the compiler provides.
     pub is_builtin: bool,
+    /// What `#[link(..)]` before it says: a function without a body that
+    /// the host provides.
+    pub link: Option<Link>,
     pub ast_id: AstId,
+}
+
+/// What `#[link(wasm, module = "m", name = "n")]` says: that the host
+/// provides a function, as the import `n` of the Wasm module `m`. `name`
+/// is the function's own name if it's left out.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct Link {
+    pub module: Option<String>,
+    pub name: Option<String>,
+    /// What's wrong with how it's written, if anything: the first problem.
+    pub error: Option<LinkError>,
+}
+
+/// A problem with how `#[link(..)]` is written.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub enum LinkError {
+    /// It doesn't start with what the function is linked to, like `wasm`.
+    NoTarget,
+    /// It starts with something other than `wasm`.
+    UnknownTarget(String),
+    /// It has no `module = ".."`.
+    NoModule,
+    /// A key other than `module` and `name`.
+    UnknownKey(String),
+    /// A key given twice.
+    Repeated(String),
+    /// Something that isn't `key = "string"` after the target.
+    Malformed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -494,6 +525,7 @@ impl ItemTree {
             has_body: f.body().is_some(),
             is_test: has_attr(f, "test"),
             is_builtin: has_attr(f, "builtin"),
+            link: link_attr(f),
             ast_id,
         };
         push(&mut self.functions, function)
@@ -569,6 +601,57 @@ fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
                 && meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == name)
         })
     })
+}
+
+/// What the `#[link(..)]` of `node` says, if it has one.
+fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
+    let meta = node.attrs().filter_map(|attr| attr.meta()).find(|meta| {
+        meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == "link")
+    })?;
+    let mut link = Link { module: None, name: None, error: None };
+    let Some(tree) = meta.token_tree() else {
+        link.error = Some(LinkError::NoTarget);
+        return Some(link);
+    };
+    // The tokens between the parentheses, without trivia.
+    let tokens: Vec<(SyntaxKind, String)> = tree
+        .syntax()
+        .children_with_tokens()
+        .filter_map(|e| e.into_token())
+        .filter(|t| !t.kind().is_trivia())
+        .map(|t| (t.kind(), t.text().to_string()))
+        .collect();
+    let inner = match tokens.as_slice() {
+        [(L_PAREN, _), inner @ .., (R_PAREN, _)] => inner,
+        _ => &[][..],
+    };
+    let mut parts = inner.split(|(k, _)| *k == COMMA).filter(|p| !p.is_empty());
+    link.error = (|| {
+        match parts.next() {
+            Some([(IDENT, target)]) if target == "wasm" => {}
+            Some([(IDENT, target)]) => return Some(LinkError::UnknownTarget(target.clone())),
+            _ => return Some(LinkError::NoTarget),
+        }
+        for part in parts {
+            let [(IDENT, key), (EQUALS, _), (STRING, value)] = part else {
+                return Some(LinkError::Malformed);
+            };
+            let slot = match key.as_str() {
+                "module" => &mut link.module,
+                "name" => &mut link.name,
+                _ => return Some(LinkError::UnknownKey(key.clone())),
+            };
+            if slot.is_some() {
+                return Some(LinkError::Repeated(key.clone()));
+            }
+            *slot = Some(unquote(value));
+        }
+        if link.module.is_none() {
+            return Some(LinkError::NoModule);
+        }
+        None
+    })();
+    Some(link)
 }
 
 fn name(name: Option<ast::Name>) -> Option<Name> {

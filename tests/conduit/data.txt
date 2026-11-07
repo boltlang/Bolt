@@ -2,7 +2,8 @@
 Structs and their fields
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Point { x: i32, y: i32 }
 let p = mut Point { x: 1, y: 2 };
 p.x = 10;
@@ -40,7 +41,8 @@ env.log(12)
 Tuples
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn swap(p: (i32, i32)) -> (i32, i32) = (p.1, p.0);
 let q = swap((1, 2));
 log(q.0);
@@ -72,7 +74,8 @@ env.log(2)
 Arrays
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let xs = mut [1, 2, 3];
 xs[1] = 20;
 log(xs[0] + xs[1] + xs[2]);
@@ -117,7 +120,8 @@ env.log(24)
 A match on an enum
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum Shape { Circle(i32), Rect(i32, i32), Empty }
 fn area(s: Shape) -> i32 = match s {
   Shape.Circle(r) => 3 * r * r,
@@ -185,7 +189,8 @@ env.log(0)
 A match on integers, with a guard
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn classify(n: i32) -> i32 = match n {
   0 => 0,
   1..=9 => 1,
@@ -264,7 +269,8 @@ env.log(2)
 A fieldless enum is an integer
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum Color { Red, Green, Blue }
 fn code(c: Color) -> i32 = match c { Color.Red => 1, Color.Green => 2, Color.Blue => 3 };
 log(code(Color.Blue));
@@ -294,7 +300,8 @@ env.log(3)
 A match that no arm takes
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn f(n: i32) -> i32 = match n { 0 => 0 };
 log(f(1));
 --------------------------------------------------------------------------------
@@ -366,7 +373,8 @@ error: fn1: trap
 A let with a pattern
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Point { x: i32, y: i32 }
 let (a, b) = (1, 2);
 let Point { x, y } = Point { x: 10, y: 20 };
@@ -418,7 +426,8 @@ env.log(33)
 A let with an else
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum Maybe { Just(i32), Nothing }
 fn get(m: Maybe) -> i32 {
   let Maybe.Just(n) = m else { return -1; };
@@ -474,7 +483,8 @@ env.log(-1)
 If let and while let
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum Maybe { Just(i32), Nothing }
 fn countdown(n: i32) -> Maybe = if n > 0 { Maybe.Just(n) } else { Maybe.Nothing };
 if let Maybe.Just(n) = countdown(3) { log(n); } else { log(0); }
@@ -576,7 +586,8 @@ env.log(10)
 Nested patterns share the code after them
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum Maybe { Just(i32), Nothing }
 fn both(p: (Maybe, Maybe)) -> i32 = match p {
   (Maybe.Just(a), Maybe.Just(b)) => a + b,
@@ -648,7 +659,8 @@ env.log(0)
 A for loop over an iterator
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Upto { next: i32, end: i32 }
 struct Range { start: i32, end: i32 }
 impl Iterator[mut Upto] {
@@ -760,7 +772,8 @@ env.log(6)
 A for loop over an array
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let mut sum = 0;
 for x in [1, 2, 3] { sum += x; }
 log(sum);
@@ -864,7 +877,8 @@ env.log(6)
 A struct that holds an array has its mutability
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Stack { items: [i32], len: i32 }
 let s = mut Stack { items: mut [0, 0], len: 0 };
 s.items[0] = 7;
@@ -903,7 +917,8 @@ env.log(7)
 An enum that holds a mut array
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum Holder[T] { One(T), Zero }
 let h = Holder.One(mut [1, 2]);
 match h {
@@ -950,7 +965,8 @@ env.log(5)
 The alternatives of an or-pattern bind the same name
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 enum E { A(i32), B(i32), C }
 fn get(e: E) -> i32 = match e { E.A(x) | E.B(x) => x, E.C => 0 };
 log(get(E.A(1)));
@@ -1000,7 +1016,8 @@ env.log(0)
 A Vec grows with array_alloc and array_copy
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let v = Vec.new();
 let mut i = 0;
 while i < 10 { v.push(i * i); i += 1; }
@@ -1272,7 +1289,8 @@ env.log(81)
 A deep copy that can't be changed doesn't see later changes
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let xs = mut [mut [1, 2], mut [3]];
 let ys = to_imm_deep(xs);
 xs[0][0] = 9;
@@ -1686,7 +1704,8 @@ env.log(1)
 Tuples of up to ten elements are compared element by element
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn show(b: Bool) { if b { log(1); } else { log(0); } }
 fn order(o: Ordering) {
   match o { Ordering.Less => log(-1), Ordering.Equal => log(0), Ordering.Greater => log(1) }
@@ -2541,7 +2560,8 @@ env.log(1)
 Abort stops the program
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 log(1);
 abort();
 --------------------------------------------------------------------------------
@@ -2559,7 +2579,8 @@ error: fn0: trap
 A Range gives its values in a for loop, each time
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let r = Range { start: 1, end: 4 };
 for i in r { log(i); }
 let mut sum = 0;
@@ -2703,7 +2724,8 @@ env.log(60)
 A for loop over a..b
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 for i in 0..3 { log(i * i); }
 fn count(n: i32) -> i32 { let mut c = 0; for _ in 0..n { c += 1; } c }
 log(count(5));
@@ -2869,7 +2891,8 @@ env.log(3)
 A for loop over a..=b includes its end
 :prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 for i in 1..=3 { log(i); }
 let mut n = 0;
 for _ in 0u8..=255 { n += 1; }

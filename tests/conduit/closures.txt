@@ -2,7 +2,8 @@
 A lambda that captures a local
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let n = 10;
 let add = |x| x + n;
 log(add(1));
@@ -37,7 +38,8 @@ env.log(11)
 A lambda that changes a local it captures
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let mut count = 0;
 let tick = || { count += 1; };
 tick();
@@ -79,7 +81,8 @@ env.log(2)
 A function that makes a closure
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn adder(n: i32) -> fn(i32) -> i32 = |x| x + n;
 let add2 = adder(2);
 log(add2(5));
@@ -119,7 +122,8 @@ env.log(7)
 A closure passed to a function
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn twice(f: fn(i32) -> i32, x: i32) -> i32 = f(f(x));
 let k = 3;
 log(twice(|x| x * k, 2));
@@ -160,7 +164,8 @@ env.log(18)
 A named function as a value
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn inc(x: i32) -> i32 = x + 1;
 fn apply(f: fn(i32) -> i32, x: i32) -> i32 = f(x);
 log(apply(inc, 41));
@@ -200,7 +205,8 @@ env.log(42)
 A lambda in a lambda
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let n = 100;
 let outer = |x| {
   let inner = |y| y + x + n;
@@ -245,7 +251,8 @@ env.log(111)
 A closure in a struct
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Counter { next: fn() -> i32 }
 let mut n = 0;
 let c = mut Counter { next: || { n += 1; n } };
@@ -294,7 +301,8 @@ env.log(2)
 A generic function with a closure
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn map_pair[A, B](p: (A, A), f: fn(A) -> B) -> (B, B) = (f(p.0), f(p.1));
 let q = map_pair((1, 2), |x| x * 10);
 log(q.0 + q.1);
@@ -356,7 +364,8 @@ env.log(30)
 A lambda in a function generic over a mutability
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn first(xs: 'm [i32]) -> i32 {
   let get = || xs[0];
   get()
@@ -399,7 +408,8 @@ env.log(6)
 A constructor used as a function is a shim
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 struct Wrapper(i32);
 fn apply[A, B](f: fn(A) -> B, x: A) -> B = f(x);
 let w = apply(Wrapper, 5);

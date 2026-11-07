@@ -79,9 +79,8 @@ fn g(h: fn() -> i32) -> i32 = h()
 A builtin and a host function
 :test-prelude
 ================================================================================
-extern "host" {
-  fn tick();
-}
+#[link(wasm, module = "host")]
+fn tick();
 fn f(x: i32, y: i32) -> i32 {
   tick();
   print("hi");

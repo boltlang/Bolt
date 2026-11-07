@@ -2,7 +2,8 @@
 A while loop
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let mut i = 0;
 let mut sum = 0;
 while i < 5 {
@@ -65,7 +66,8 @@ env.log(10)
 Break and continue
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let mut i = 0;
 loop {
   i += 1;
@@ -144,7 +146,8 @@ env.log(4)
 A loop that breaks with a value
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 let mut i = 1;
 let n = loop {
   if i * i > 50 { break i; }
@@ -216,7 +219,8 @@ env.log(8)
 Early return
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn first_over(limit: i32) -> i32 {
   let mut i = 0;
   while True {
@@ -287,7 +291,8 @@ env.log(12)
 And and or are short-circuit
 :test-prelude
 ================================================================================
-extern "env" { fn log(x: i32); }
+#[link(wasm, module = "env")]
+fn log(x: i32);
 fn yes(n: i32) -> Bool { log(n); True }
 fn no(n: i32) -> Bool { log(n); False }
 if no(1) && yes(2) { log(10); }

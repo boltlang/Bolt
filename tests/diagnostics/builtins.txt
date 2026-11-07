@@ -73,7 +73,7 @@ fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U;
 A function without a body has to be a builtin
 ================================================================================
 fn nothing(x: i32);
- //^^^^^^^ error: this function has no body; only a function with `#[builtin]`, which the compiler provides, can do without one
+ //^^^^^^^ error: this function has no body; only a function the compiler provides, with `#[builtin]`, or the host, with `#[link(..)]`, can do without one
 
 ================================================================================
 A builtin can't have a body
@@ -85,8 +85,48 @@ fn i32_add(a: i32, b: i32) -> i32 { a }
 ================================================================================
 A builtin has to be at the top level
 ================================================================================
-extern "env" {
-  #[builtin]
-  fn i32_add(a: i32, b: i32) -> i32;
-   //^^^^^^^ error: a builtin must be a function at the top level of a file, not in a class, an impl, an `extern` block or the namespace of a type
-}
+struct Num(i32);
+#[builtin]
+fn Num.i32_add(a: i32, b: i32) -> i32;
+     //^^^^^^^ error: a builtin must be a function at the top level of a file, not in a class, an impl, an `extern` block or the namespace of a type
+
+================================================================================
+A function linked to the host
+================================================================================
+#[link(wasm, module = "env")]
+fn log(x: i32);
+#[link(wasm, module = "wasi_snapshot_preview1", name = "proc_exit")]
+fn exit(code: i32) -> !;
+
+================================================================================
+A function linked to the host can't have a body or be a builtin
+================================================================================
+#[link(wasm, module = "env")]
+fn log(x: i32) {}
+ //^^^ error: a function linked to the host can't have a body: the host provides it
+#[builtin]
+#[link(wasm, module = "env")]
+fn print(x: i32);
+ //^^^^^ error: a function can't be both a builtin and linked to the host
+
+================================================================================
+How link is written
+================================================================================
+#[link]
+fn a(x: i32);
+ //^ error: `#[link]` must say what the function is linked to first; write it like `#[link(wasm, module = "env", name = "log")]`
+#[link(native, module = "c")]
+fn b(x: i32);
+ //^ error: a function can't be linked to `native`: only `wasm` imports are supported; write it like `#[link(wasm, module = "env", name = "log")]`
+#[link(wasm)]
+fn c(x: i32);
+ //^ error: `#[link(wasm, ..)]` needs the Wasm module of the import; write it like `#[link(wasm, module = "env", name = "log")]`
+#[link(wasm, module = "env", lib = "m")]
+fn d(x: i32);
+ //^ error: `#[link]` has no `lib`; it takes `module` and `name`
+#[link(wasm, module = "env", module = "env")]
+fn e(x: i32);
+ //^ error: `module` is given twice
+#[link(wasm, module = env)]
+fn f(x: i32);
+ //^ error: after `wasm`, `#[link]` takes `key = "string"` pairs; write it like `#[link(wasm, module = "env", name = "log")]`

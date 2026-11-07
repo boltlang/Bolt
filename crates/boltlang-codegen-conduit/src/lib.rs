@@ -925,14 +925,21 @@ fn declare_extern<'db>(
     };
     let (key, module_name, name) = match u {
         Use::Extern(f) => {
-            let abi = match f.container(db) {
-                boltlang_hir_def::ids::ItemContainerId::ExternBlock(b) => {
-                    b.item(db).abi.clone().unwrap_or_else(|| "env".to_string())
+            let own = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
+            // `#[link(wasm, module = "m", name = "n")]`, or a function of
+            // an `extern "m"` block.
+            let (module, name) = match boltlang_hir_ty::builtin::link(db, *f) {
+                Some(link) => {
+                    (link.module.clone().unwrap_or_default(), link.name.clone().unwrap_or(own))
                 }
-                _ => "env".to_string(),
+                None => match f.container(db) {
+                    boltlang_hir_def::ids::ItemContainerId::ExternBlock(b) => {
+                        (b.item(db).abi.clone().unwrap_or_else(|| "env".to_string()), own)
+                    }
+                    _ => ("env".to_string(), own),
+                },
             };
-            let name = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
-            (ExternKey::Function(*f), abi, name)
+            (ExternKey::Function(*f), module, name)
         }
         // `print` is a function of the module, `bolt_print`, which calls the
         // host's `write_file` and `flush`. Its id is given once every

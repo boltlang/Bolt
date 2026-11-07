@@ -16,7 +16,8 @@ use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
 use boltlang_hir::{
-    BadBuiltin, BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError,
+    BadBuiltin, BadLink, BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind,
+    ImportPathError,
 };
 /// The manifest of a file's package, and the name of manifests.
 pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
@@ -125,6 +126,7 @@ impl DiagnosticCode {
     pub const MISSING_OPERATIONS: Self = Self("E0249");
     pub const MISSING_BODY: Self = Self("E0250");
     pub const BAD_BUILTIN: Self = Self("E0251");
+    pub const BAD_LINK: Self = Self("E0252");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -767,9 +769,22 @@ fn describe(
         }
         K::MissingBody => (
             C::MISSING_BODY,
-            "this function has no body; only a function with `#[builtin]`, which the compiler provides, \
-             can do without one"
+            "this function has no body; only a function the compiler provides, with `#[builtin]`, or the \
+             host, with `#[link(..)]`, can do without one"
                 .to_string(),
+        ),
+        K::BadLink { reason } => (
+            C::BAD_LINK,
+            match reason {
+                BadLink::NotTopLevel => "a function linked to the host must be at the top level of a file, not \
+                                         in a class, an impl, an `extern` block or the namespace of a type"
+                    .to_string(),
+                BadLink::HasBody => {
+                    "a function linked to the host can't have a body: the host provides it".to_string()
+                }
+                BadLink::Builtin => "a function can't be both a builtin and linked to the host".to_string(),
+                BadLink::Written(e) => link_error(&e),
+            },
         ),
         K::BadBuiltin { reason } => (
             C::BAD_BUILTIN,
@@ -1039,5 +1054,23 @@ fn list_types(tys: &[String]) -> String {
         None => String::new(),
         Some((last, [])) => last.clone(),
         Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// What's wrong with how a `#[link(..)]` is written.
+fn link_error(e: &boltlang_hir_def::item_tree::LinkError) -> String {
+    use boltlang_hir_def::item_tree::LinkError as E;
+    const FORM: &str = "write it like `#[link(wasm, module = \"env\", name = \"log\")]`";
+    match e {
+        E::NoTarget => format!("`#[link]` must say what the function is linked to first; {FORM}"),
+        E::UnknownTarget(t) => {
+            format!(
+                "a function can't be linked to `{t}`: only `wasm` imports are supported; {FORM}"
+            )
+        }
+        E::NoModule => format!("`#[link(wasm, ..)]` needs the Wasm module of the import; {FORM}"),
+        E::UnknownKey(k) => format!("`#[link]` has no `{k}`; it takes `module` and `name`"),
+        E::Repeated(k) => format!("`{k}` is given twice"),
+        E::Malformed => format!("after `wasm`, `#[link]` takes `key = \"string\"` pairs; {FORM}"),
     }
 }
