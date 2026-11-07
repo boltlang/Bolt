@@ -89,6 +89,16 @@ pub fn repr_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
     }
 }
 
+/// The function `panic` of the prelude, as `file` sees it, which compiled
+/// code calls when no arm of a `match` matches.
+pub fn panic_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
+    let lib = prelude_lib(db, file)?;
+    match file_scope(db, lib).scope.get(Namespace::Values, &Name::new("panic"))?.def {
+        ModuleDefId::Function(id) => Some(id),
+        _ => None,
+    }
+}
+
 /// A class of the prelude that syntax uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LangClass {

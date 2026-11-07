@@ -1,21 +1,15 @@
 //! Running a lowered program with Conduit's evaluator, for `bolt run` and
-//! `bolt test`. The host provides the module `bolt`'s `write_file` and
-//! `flush` (see [`crate::host`]), writing to the process's stdout and
-//! stderr, and WASI's functions (see [`crate::wasi`]). Externs of other
-//! modules have no host here: calling one stops the program with an
-//! error.
+//! `bolt test`. The host provides WASI's functions (see [`crate::wasi`]),
+//! writing to the process's stdout and stderr. Externs of other modules
+//! have no host here: calling one stops the program with an error.
 
-use std::{
-    collections::BTreeMap,
-    io::{self, Write},
-};
+use std::io::{self, Write};
 
 use conduit_eval::{Arrays, ErrorKind, Host, Machine, Value};
 use conduit_ir::{Extern, ExternId, FuncId};
 
 use crate::{
     Lowered,
-    host::{STDERR, STDOUT},
     wasi::{self, Output, Wasi},
 };
 
@@ -37,8 +31,6 @@ pub fn run(program: &Lowered, f: FuncId, fuel: Option<u64>) -> Result<(), RunErr
     let mut machine = Machine::new(&program.module, Stdio::default());
     machine.fuel = fuel;
     let result = machine.call(f, Vec::new());
-    // What wasn't flushed is written anyway, like at the end of a process.
-    let _ = machine.host.flush_all();
     // `proc_exit(0)` ends the program as its end does.
     match machine.host.wasi.exit {
         Some(0) => return Ok(()),
@@ -65,38 +57,26 @@ pub fn run(program: &Lowered, f: FuncId, fuel: Option<u64>) -> Result<(), RunErr
     })
 }
 
-/// A host that writes files 1 and 2 to stdout and stderr, and has WASI.
+/// A host with WASI, whose files 1 and 2 are stdout and stderr.
 #[derive(Default)]
 struct Stdio {
-    /// What each file has waiting, by its number.
-    files: BTreeMap<i32, Vec<u8>>,
     wasi: Wasi,
 }
 
-impl Stdio {
-    fn flush(&mut self, file: i32) -> io::Result<()> {
-        let bytes = self.files.remove(&file).unwrap_or_default();
-        match file {
-            STDOUT => {
-                let mut out = io::stdout().lock();
-                out.write_all(&bytes)?;
-                out.flush()
-            }
-            STDERR => {
-                let mut err = io::stderr().lock();
-                err.write_all(&bytes)?;
-                err.flush()
-            }
-            _ => Ok(()),
+/// Write `bytes` to the file `fd`: 1 is stdout and 2 is stderr.
+fn write(fd: i32, bytes: &[u8]) -> io::Result<()> {
+    match fd {
+        1 => {
+            let mut out = io::stdout().lock();
+            out.write_all(bytes)?;
+            out.flush()
         }
-    }
-
-    fn flush_all(&mut self) -> io::Result<()> {
-        let files: Vec<i32> = self.files.keys().copied().collect();
-        for file in files {
-            self.flush(file)?;
+        2 => {
+            let mut err = io::stderr().lock();
+            err.write_all(bytes)?;
+            err.flush()
         }
-        Ok(())
+        _ => Ok(()),
     }
 }
 
@@ -108,25 +88,13 @@ impl Host for Stdio {
         args: &[Value],
         arrays: &mut Arrays<'_, '_>,
     ) -> Result<Vec<Value>, String> {
-        if &*decl.module == wasi::MODULE {
-            let (results, output) = self.wasi.call(decl, args, arrays)?;
-            // In order with what `print` wrote before it.
-            if let Output::Write { fd, bytes } = output {
-                self.files.entry(fd).or_default().extend(bytes);
-                self.flush(fd).map_err(|e| e.to_string())?;
-            }
-            return Ok(results);
+        if &*decl.module != wasi::MODULE {
+            return Err(format!("there's no host function `{}.{}` here", decl.module, decl.name));
         }
-        match (&*decl.module, &*decl.name, args) {
-            ("bolt", "write_file", [Value::I32(file), Value::I32(byte)]) => {
-                self.files.entry(*file).or_default().push(*byte as u8);
-                Ok(Vec::new())
-            }
-            ("bolt", "flush", [Value::I32(file)]) => {
-                self.flush(*file).map_err(|e| e.to_string())?;
-                Ok(Vec::new())
-            }
-            (module, name, _) => Err(format!("there's no host function `{module}.{name}` here")),
+        let (results, output) = self.wasi.call(decl, args, arrays)?;
+        if let Output::Write { fd, bytes } = output {
+            write(fd, &bytes).map_err(|e| e.to_string())?;
         }
+        Ok(results)
     }
 }

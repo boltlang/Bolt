@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! #[builtin]
-//! pub fn print(text: String);
+//! pub fn array_len[T](xs: [T]) -> i32;
 //! ```
 //!
 //! so that the type checker sees ordinary signatures, and each backend
@@ -27,11 +27,7 @@ use boltlang_hir_def::{
     item_tree::{FunctionName, Link},
 };
 
-use crate::{
-    AdtId,
-    lang::{cont_struct, string_struct},
-    ty::Ty,
-};
+use crate::{AdtId, lang::cont_struct, ty::Ty};
 
 /// What a builtin of a primitive type for a prefix operator does, like
 /// `i32_neg`.
@@ -72,8 +68,6 @@ pub enum CmpOp {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Builtin {
-    /// `fn print(text: String)`: write the text and a newline.
-    Print,
     /// `fn abort() -> !`: stop the program with an error, at once. std's
     /// `panic` prints its message, then aborts.
     Abort,
@@ -251,7 +245,6 @@ fn all_builtins() -> &'static [(Builtin, &'static str)] {
 impl Builtin {
     /// The builtins other than the operations of primitive types.
     pub const BASE: &[Builtin] = &[
-        Builtin::Print,
         Builtin::Abort,
         Builtin::ArrayLen,
         Builtin::ArrayAlloc,
@@ -261,10 +254,6 @@ impl Builtin {
         Builtin::ArrayFreeze,
         Builtin::Resume,
     ];
-
-    /// The builtins that compiled code imports from the host. The others
-    /// work on arrays, which the code generator doesn't compile yet.
-    pub const HOST: &[Builtin] = &[Builtin::Print];
 
     /// Every builtin: those of [`Builtin::BASE`], then the operations of
     /// each primitive type.
@@ -284,7 +273,6 @@ impl Builtin {
     fn base_name(self) -> &'static str {
         match self {
             Builtin::Prim(..) => unreachable!("named in `all_builtins`"),
-            Builtin::Print => "print",
             Builtin::Abort => "abort",
             Builtin::ArrayLen => "array_len",
             Builtin::ArrayAlloc => "array_alloc",
@@ -300,42 +288,12 @@ impl Builtin {
         all_builtins().iter().find(|&&(_, n)| n == name).map(|&(b, _)| b)
     }
 
-    /// Whether it has an effect on the world, which evaluation at compile
-    /// time, like that of a const, doesn't allow.
-    pub fn is_effect(self) -> bool {
-        match self {
-            Builtin::Print => true,
-            // Stopping with an error is fine anywhere.
-            Builtin::Abort
-            | Builtin::ArrayLen
-            | Builtin::ArrayAlloc
-            | Builtin::ArrayGet
-            | Builtin::ArraySet
-            | Builtin::ArrayCopy
-            | Builtin::ArrayFreeze
-            // What the computation does is in its effects.
-            | Builtin::Resume
-            | Builtin::Prim(..) => false,
-        }
-    }
-
     /// The type a declaration of it in `file` must have. Its type
     /// parameters, and the mutabilities that can be either, are
-    /// [`Ty::Bound`]. A string is the prelude's `String`, as `file` sees it
-    /// ([`string_struct`]): without one, `print` and `panic` can't be
-    /// declared. It's always `imm` when it's an `imm struct`, and can be of
-    /// either mutability otherwise.
+    /// [`Ty::Bound`].
     pub fn signature<'db>(self, db: &'db dyn Db, file: File) -> Ty<'db> {
-        let str_ty = match string_struct(db, file) {
-            Some(id) if id.item(db).is_imm => {
-                Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm))
-            }
-            Some(id) => Ty::adt(AdtId::Struct(id), [], [], Ty::Bound(0)),
-            None => Ty::Error,
-        };
         let i32_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
         match self {
-            Builtin::Print => Ty::func([str_ty], Ty::unit()),
             Builtin::Abort => Ty::func([], Ty::Never),
             Builtin::ArrayLen => Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1))], i32_ty),
             Builtin::ArrayAlloc => {

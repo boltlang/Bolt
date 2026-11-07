@@ -91,13 +91,11 @@ impl Attributes {
     }
 }
 
-/// A host that writes down every call. The module `bolt`'s `write_file`
-/// and `flush` are a line for each flush instead, like `stdout: hi`.
+/// A host that writes down every call. WASI's `fd_write` to stdout or
+/// stderr is a line for each line it writes instead, like `stdout: hi`.
 #[derive(Default, Clone)]
 struct Log {
     lines: Rc<RefCell<Vec<String>>>,
-    /// What each file has waiting, by its number.
-    files: Rc<RefCell<std::collections::BTreeMap<i32, Vec<u8>>>>,
 }
 
 impl Host for Log {
@@ -108,27 +106,31 @@ impl Host for Log {
         args: &[Value],
         arrays: &mut conduit_eval::Arrays<'_, '_>,
     ) -> Result<Vec<Value>, String> {
-        if &*decl.module == "bolt" {
-            match (&*decl.name, args) {
-                ("write_file", [Value::I32(file), Value::I32(byte)]) => {
-                    self.files.borrow_mut().entry(*file).or_default().push(*byte as u8);
-                    return Ok(Vec::new());
-                }
-                ("flush", [Value::I32(file)]) => {
-                    let bytes = self.files.borrow_mut().remove(file).unwrap_or_default();
-                    let name = match file {
-                        1 => "stdout".to_string(),
-                        2 => "stderr".to_string(),
-                        n => format!("file {n}"),
-                    };
-                    let text = String::from_utf8_lossy(&bytes);
-                    for line in text.strip_suffix('\n').unwrap_or(&text).split('\n') {
-                        let line = format!("{name}: {line}");
-                        self.lines.borrow_mut().push(line.trim_end().to_string());
+        if &*decl.module == "wasi_snapshot_preview1" && &*decl.name == "fd_write" {
+            if let [Value::I32(fd @ (1 | 2)), iovs] = args {
+                let mut bytes = Vec::new();
+                for buf in arrays.get(iovs).unwrap_or_default() {
+                    for b in arrays.get(buf).unwrap_or_default() {
+                        if let Value::I8(b) = b {
+                            bytes.push(*b as u8);
+                        }
                     }
-                    return Ok(Vec::new());
                 }
-                _ => {}
+                let name = if *fd == 1 { "stdout" } else { "stderr" };
+                let text = String::from_utf8_lossy(&bytes);
+                for line in text.strip_suffix('\n').unwrap_or(&text).split('\n') {
+                    let line = format!("{name}: {line}");
+                    self.lines.borrow_mut().push(line.trim_end().to_string());
+                }
+                // Success, and how many bytes it wrote.
+                let values = [0, bytes.len() as i64];
+                let results = decl.sig.results.iter().zip(values).map(|(t, n)| match t {
+                    conduit_ir::Ty::I64 => Value::I64(n),
+                    conduit_ir::Ty::I16 => Value::I16(n as i16),
+                    conduit_ir::Ty::I8 => Value::I8(n as i8),
+                    _ => Value::I32(n as i32),
+                });
+                return Ok(results.collect());
             }
         }
         // A flat extern's arrays are shown with their elements, like

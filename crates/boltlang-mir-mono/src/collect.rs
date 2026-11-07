@@ -170,6 +170,10 @@ fn collect<'db>(
         for (_, u) in &uses {
             instances_of_use(db, u, instance.root(db), &mut found, &mut seen_dicts, &mut program)?;
         }
+        // A `match` that no arm may take calls the prelude's `panic`.
+        if can_fail(db, instance) {
+            found.extend(panic_instance(db, instance.root(db)));
+        }
         for next in found {
             if seen.contains_key(&next) {
                 continue;
@@ -192,6 +196,23 @@ fn collect<'db>(
         program.instances.push(InstanceUses { instance, uses });
     }
     Ok(program)
+}
+
+/// Whether a `match` of `instance` can be taken by no arm.
+fn can_fail<'db>(db: &'db dyn Db, instance: Instance<'db>) -> bool {
+    instance.body(db).is_some_and(|body| {
+        boltlang_pattern::decision::body_decisions(db, body)
+            .matches
+            .iter()
+            .any(|(_, d)| d.as_ref().is_ok_and(|d| d.nodes.contains(&DecisionNode::Fail)))
+    })
+}
+
+/// The instance of the prelude's `panic`, as `root` sees it, which a
+/// `match` that no arm takes calls, if there's a prelude with one.
+pub fn panic_instance<'db>(db: &'db dyn Db, root: File) -> Option<Instance<'db>> {
+    let f = boltlang_hir_ty::lang::panic_fn(db, root)?;
+    Some(plain_instance(db, f, root))
 }
 
 /// The instance of a function that isn't generic, like a test.

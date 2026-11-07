@@ -1,17 +1,11 @@
 ================================================================================
 Builtin declarations
-:prelude
 ================================================================================
-//- /toolchain/std/__prelude__.bolt
-pub imm struct String(i32);
-//- /main.bolt
-// A builtin's string is the prelude's `String`, so this has a prelude
-// that has one.
 #[builtin]
-fn print(text: String);
+fn array_len[T](xs: [T]) -> i32;
 #[builtin]
-fn prnt(text: String);
- //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `abort`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`, `resume`, and the operations of the primitive types, like `i32_add`
+fn prnt(text: i32);
+ //^^^^ error: there is no builtin `prnt`; the builtins are `abort`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`, `resume`, and the operations of the primitive types, like `i32_add`
 #[builtin]
 fn abort(code: i32) -> !;
  //^^^^^ error: the builtin `abort` must have the type `fn() -> !`

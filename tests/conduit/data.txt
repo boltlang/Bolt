@@ -311,14 +311,20 @@ fn log(x: i32);
 fn f(n: i32) -> i32 = match n { 0 => 0 };
 log(f(1));
 --------------------------------------------------------------------------------
+data String {
+  (imm [i8])
+}
+
+data Tuple_u16_u32 {
+  (i16, i32)
+}
+
 #[link(wasm, module = "env")]
 extern log(i32) -> ()
 
-#[link(wasm, module = "bolt")]
-extern write_file(i32, i32) -> ()
-
-#[link(wasm, module = "bolt")]
-extern flush(i32) -> ()
+#[link(wasm, module = "wasi_snapshot_preview1")]
+#[abi(flat)]
+extern fd_write(i32, imm [imm [i8]]) -> (i16, i32)
 
 fn file() -> () {
   let %0: i32 = call f(1i32)
@@ -332,51 +338,31 @@ fn f(%n: i32) -> (i32) {
   case %n {
     0 => jump j1(0i32)
     _ =>
-      let = call bolt_unmatched()
+      let %2: imm [i8] = array_new(110i8, 111i8, 32i8, 97i8, 114i8, 109i8, 32i8, 111i8, 102i8, 32i8, 97i8, 32i8, 109i8, 97i8, 116i8, 99i8, 104i8, 32i8, 109i8, 97i8, 116i8, 99i8, 104i8, 101i8, 100i8)
+      let %3: imm String = new String.0(%2)
+      let = call panic(%3)
       trap
   }
 }
 
-fn bolt_unmatched() -> () {
-  let = call_extern write_file(2i32, 101i32)
-  let = call_extern write_file(2i32, 114i32)
-  let = call_extern write_file(2i32, 114i32)
-  let = call_extern write_file(2i32, 111i32)
-  let = call_extern write_file(2i32, 114i32)
-  let = call_extern write_file(2i32, 58i32)
-  let = call_extern write_file(2i32, 32i32)
-  let = call_extern write_file(2i32, 110i32)
-  let = call_extern write_file(2i32, 111i32)
-  let = call_extern write_file(2i32, 32i32)
-  let = call_extern write_file(2i32, 97i32)
-  let = call_extern write_file(2i32, 114i32)
-  let = call_extern write_file(2i32, 109i32)
-  let = call_extern write_file(2i32, 32i32)
-  let = call_extern write_file(2i32, 111i32)
-  let = call_extern write_file(2i32, 102i32)
-  let = call_extern write_file(2i32, 32i32)
-  let = call_extern write_file(2i32, 97i32)
-  let = call_extern write_file(2i32, 32i32)
-  let = call_extern write_file(2i32, 109i32)
-  let = call_extern write_file(2i32, 97i32)
-  let = call_extern write_file(2i32, 116i32)
-  let = call_extern write_file(2i32, 99i32)
-  let = call_extern write_file(2i32, 104i32)
-  let = call_extern write_file(2i32, 32i32)
-  let = call_extern write_file(2i32, 109i32)
-  let = call_extern write_file(2i32, 97i32)
-  let = call_extern write_file(2i32, 116i32)
-  let = call_extern write_file(2i32, 99i32)
-  let = call_extern write_file(2i32, 104i32)
-  let = call_extern write_file(2i32, 101i32)
-  let = call_extern write_file(2i32, 100i32)
-  let = call_extern write_file(2i32, 10i32)
-  let = call_extern flush(2i32)
+fn panic(%message: imm String) -> () {
+  let = call eprint(%message)
+  trap
+}
+
+fn eprint(%text: imm String) -> () {
+  let %1: imm [i8] = get String.0.0(%text)
+  let %2: imm [i8] = array_new(10i8)
+  let %3: imm String = new String.0(%2)
+  let %4: imm [i8] = get String.0.0(%3)
+  let %5: imm [imm [i8]] = array_new(%1, %4)
+  let %6: i16, %7: i32 = call_extern fd_write(2i32, %5)
+  let %8: imm Tuple_u16_u32 = new Tuple_u16_u32.0(%6, %7)
   jump ret()
 }
 --------------------------------------------------------------------------------
-stderr: error: no arm of a match matched
-error: fn1: trap
+stderr: no arm of a match matched
+error: fn2: trap
 
 ================================================================================
 A let with a pattern

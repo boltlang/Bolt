@@ -13,9 +13,9 @@
 //! - A `match`, and a `let` with a pattern, in a statement or a condition,
 //!   follow the decision that `boltlang-pattern` makes for them.
 //! - The host functions, with `#[link(wasm, ..)]`, are Conduit externs, in the
-//!   module the block names. The module `bolt` has `write_file` and
-//!   `flush`, which `print` and a `match` that no arm takes write with
-//!   (see [`host`]). `abort` is a `trap`. An `unreachable` is only where Bolt can promise
+//!   module the block names, like std's `print` calls WASI's `fd_write`. A
+//!   `match` that no arm takes calls the prelude's `panic`, if there is
+//!   one, and traps. `abort` is a `trap`. An `unreachable` is only where Bolt can promise
 //!   that nothing gets, like after a call of a function that never
 //!   returns.
 //!
@@ -49,7 +49,6 @@
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
 mod func;
-mod host;
 pub mod node;
 pub mod run;
 mod ty;
@@ -68,7 +67,6 @@ use boltlang_hir_def::{
     ids::{EffectId, FunctionId, ItemContainerId},
     item_tree::AssocItem,
 };
-use boltlang_hir_ty::builtin::Builtin;
 use boltlang_mir_build::{
     lambda::{Lambda, body_lambdas},
     mir_bodies,
@@ -77,7 +75,6 @@ use boltlang_mir_mono::{
     Cx, Instance, InstanceDef, MonoRow, MonoTy, Site, Use, UseError, closed_ty, program,
 };
 use boltlang_mir_transform::shim_body;
-use boltlang_pattern::decision::{Node, body_decisions};
 use conduit_ir::{Extern, ExternId, Func, FuncId, HandlerId, Module, MutParams, Row, Sig};
 
 use crate::func::Part;
@@ -171,10 +168,9 @@ pub(crate) struct Ctx<'db> {
     pub lambdas: HashMap<(Instance<'db>, ExprId), FuncId>,
     pub externs: HashMap<ExternKey<'db>, ExternId>,
     pub erased: Vec<FunctionId<'db>>,
-    /// The host's `write_file` and `flush`, once something needs them.
-    pub io: Option<host::Io>,
-    /// The functions that call them: `bolt_print` and `bolt_unmatched`.
-    pub helpers: host::Helpers,
+    /// The prelude's `panic`, with the type of the `String` it takes, if
+    /// a `match` that no arm takes calls it.
+    pub panic: Option<(FuncId, conduit_ir::Ty)>,
     /// The effects of the program, one for each effect and its arguments,
     /// like `State[i32]`, with its operations in order.
     pub effects: HashMap<EffectKey<'db>, (conduit_ir::EffectId, Vec<FunctionId<'db>>)>,
@@ -331,8 +327,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         lambdas: HashMap::new(),
         externs: HashMap::new(),
         erased: p.erased.clone(),
-        io: None,
-        helpers: host::Helpers::default(),
+        panic: None,
         effects: HashMap::new(),
         handles: HashMap::new(),
     };
@@ -537,26 +532,16 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     if !errors.is_empty() {
         return Err(errors);
     }
-    // The functions that call the host: `bolt_print`, if something prints,
-    // and `bolt_unmatched`, if a `match` can be taken by no arm.
-    if let Some(string) = &cx.helpers.string {
-        let id = FuncId(names.len() as u64);
-        names.insert(id, "bolt_print".into());
-        sigs.push((id, (Sig::new(vec![string.clone()], Vec::new()), MutParams::default(), 0)));
-        cx.helpers.print = Some(id);
-    }
-    let can_fail = p.instances.iter().filter_map(|iu| iu.instance.body(db)).any(|body| {
-        body_decisions(db, body)
-            .matches
-            .iter()
-            .any(|(_, d)| d.as_ref().is_ok_and(|d| d.nodes.contains(&Node::Fail)))
-    });
-    if can_fail {
-        host::declare_io(&mut module, &mut cx.io);
-        let id = FuncId(names.len() as u64);
-        names.insert(id, "bolt_unmatched".into());
-        sigs.push((id, (Sig::new(Vec::new(), Vec::new()), MutParams::default(), 0)));
-        cx.helpers.unmatched = Some(id);
+    // `panic`, if a `match` calls it: the `String` it takes is its first
+    // parameter.
+    if let Some(instance) = boltlang_mir_mono::panic_instance(db, entry) {
+        if let Some(&id) = cx.funcs.get(&instance) {
+            let string = sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| {
+                let sig: &Sig = sig;
+                sig.params.first().cloned()
+            });
+            cx.panic = string.map(|t| (id, t));
+        }
     }
     module.data = types.decls.clone();
     for (id, (sig, mut_params, effect_params)) in &sigs {
@@ -599,19 +584,6 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 Ok(f) => built.push((id, f)),
                 Err(e) => errors.push(e),
             }
-        }
-    }
-    let helpers = [
-        cx.helpers
-            .print
-            .zip(cx.helpers.string.as_ref())
-            .map(|(id, string)| (id, host::print_func(&module, cx.io.unwrap(), string))),
-        cx.helpers.unmatched.map(|id| (id, host::unmatched_func(&module, cx.io.unwrap()))),
-    ];
-    for (id, f) in helpers.into_iter().flatten() {
-        match f {
-            Ok(f) => built.push((id, f)),
-            Err(kind) => errors.push(Error { instance: names[&id].clone(), at: None, kind }),
         }
     }
     if !errors.is_empty() {
@@ -935,23 +907,6 @@ fn declare_extern<'db>(
             let module = link.module.clone().unwrap_or_default();
             let name = link.name.clone().unwrap_or(own);
             (ExternKey::Function(*f), module, name, *f)
-        }
-        // `print` is a function of the module, `bolt_print`, which calls the
-        // host's `write_file` and `flush`. Its id is given once every
-        // instance has one.
-        Use::Builtin(Builtin::Print) => {
-            if cx.helpers.string.is_some() {
-                return Ok(());
-            }
-            let MonoTy::Fn(params, ..) = use_ty(site)? else {
-                return Err(ErrorKind::unsupported("a `print` whose type isn't a function"));
-            };
-            let Some(string) = types.value(db, cx.root, &params[0])? else {
-                return Err(ErrorKind::unsupported("a `String` with no values"));
-            };
-            host::declare_io(module, &mut cx.io);
-            cx.helpers.string = Some(string);
-            return Ok(());
         }
         _ => return Ok(()),
     };

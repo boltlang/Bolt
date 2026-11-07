@@ -1064,13 +1064,6 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             // A copy that can't be changed. Conduit's `copies` pass makes it
             // a freeze when nothing else has the array.
             Builtin::ArrayFreeze => one(self.b.array_clone(Mutability::Imm, args[0].clone())),
-            Builtin::Print => {
-                let Some(print) = self.cx.helpers.print else {
-                    return Err(ErrorKind::unsupported("this `print`"));
-                };
-                self.b.call(print, args);
-                Ok(None)
-            }
             Builtin::Abort => {
                 self.b.trap();
                 Ok(None)
@@ -1749,10 +1742,22 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             }
             Node::Fail if self.fail_arm => arm(l, FAIL),
             Node::Fail => {
-                // Say so on stderr, then stop: reaching this is defined, so
-                // it's a `trap`, not an `unreachable`.
-                if let Some(unmatched) = l.cx.helpers.unmatched {
-                    l.b.call(unmatched, ());
+                // Say so with the prelude's `panic`, then stop: reaching
+                // this is defined, so it's a `trap`, not an `unreachable`.
+                if let Some((panic, Ty::Data(id, m, margs, rows))) = &l.cx.panic {
+                    let text = "no arm of a match matched";
+                    let bytes: Vec<Atom> =
+                        text.bytes().map(|b| Atom::Lit(Lit::I8(b as i8))).collect();
+                    let xs = l.b.array_new(Ty::I8, Mutability::Imm, bytes);
+                    let ctor = CtorId { data: *id, index: 0 };
+                    let message = l.b.new_object_full(
+                        ctor,
+                        *m,
+                        margs.clone(),
+                        rows.clone(),
+                        vec![Atom::Var(xs)],
+                    );
+                    l.b.call(*panic, [Atom::Var(message)]);
                 }
                 l.b.trap();
                 Ok(())

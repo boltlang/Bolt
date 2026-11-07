@@ -83,12 +83,10 @@ A builtin and a host function
 fn tick();
 fn f(x: i32, y: i32) -> i32 {
   tick();
-  print("hi");
   array_len([x, y])
 }
 --------------------------------------------------------------------------------
 fn f(x: i32, y: i32) -> i32 = {
   extern.tick();
-  builtin.print("hi");
   builtin.array_len([x, y])
 }
