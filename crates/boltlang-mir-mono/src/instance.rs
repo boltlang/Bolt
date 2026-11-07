@@ -131,10 +131,22 @@ impl<'db> Instance<'db> {
             .collect()
     }
 
-    /// How many mutability parameters the instance has.
+    /// How many mutability parameters the instance has: those of its
+    /// scheme, then those its type arguments have, which its uses give
+    /// (#371).
     pub fn mut_params(self, db: &'db dyn Db) -> usize {
-        instance_generics(db, self.def(db))
-            .map_or(0, |g| g.kinds.iter().filter(|k| **k == Kind::Mut).count())
+        let own = instance_generics(db, self.def(db))
+            .map_or(0, |g| g.kinds.iter().filter(|k| **k == Kind::Mut).count());
+        let mut most = own;
+        for t in self.args(db).iter() {
+            t.map_muts(&mut |m| {
+                if let MonoMut::Param(i) = m {
+                    most = most.max(i as usize + 1);
+                }
+                m
+            });
+        }
+        most
     }
 
     pub fn display(self, db: &'db dyn Db) -> impl fmt::Display + 'db {

@@ -458,20 +458,36 @@ impl<'a, 'db> Cx<'a, 'db> {
         for c in callee.predicates.iter() {
             self.push_dict(callee, c, &actual, &erased, &mut dicts)?;
         }
-        let args: Box<[MonoTy<'db>]> = erased
-            .iter()
-            .filter_map(|s| match s {
-                Slot::Ty(t) => Some(t.clone()),
-                Slot::Mut(_) | Slot::Row => None,
-            })
-            .collect();
-        let mutabilities = actual
+        let mut mutabilities: Vec<MonoMut> = actual
             .iter()
             .filter_map(|s| match s {
                 Slot::Mut(m) => Some(*m),
                 Slot::Ty(_) | Slot::Row => None,
             })
             .collect();
+        // The mutability parameters of this instance in the type arguments,
+        // like the `'m` of `T = 'm [i32]`, become parameters of the callee's
+        // instance, after its own, which the use gives (#371).
+        let own = mutabilities.len() as u32;
+        let mut free: Vec<u32> = Vec::new();
+        let args: Box<[MonoTy<'db>]> = erased
+            .iter()
+            .filter_map(|s| match s {
+                Slot::Ty(t) => Some(t.map_muts(&mut |m| match m {
+                    MonoMut::Param(i) => {
+                        let at = free.iter().position(|&j| j == i).unwrap_or_else(|| {
+                            free.push(i);
+                            free.len() - 1
+                        });
+                        MonoMut::Param(own + at as u32)
+                    }
+                    m => m,
+                })),
+                Slot::Mut(_) | Slot::Row => None,
+            })
+            .collect();
+        mutabilities.extend(free.iter().map(|&i| MonoMut::Param(i)));
+        let mutabilities = mutabilities.into();
         let instance = Instance::new(db, def, canonical(&args), self.instance.root(db));
         Ok(Use::Instance { instance, mutabilities, dicts: dicts.into() })
     }

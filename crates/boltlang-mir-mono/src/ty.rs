@@ -102,6 +102,35 @@ impl<'db> MonoTy<'db> {
         }
     }
 
+    /// The type with each of its mutabilities replaced by what `f` gives.
+    pub fn map_muts(&self, f: &mut dyn FnMut(MonoMut) -> MonoMut) -> Self {
+        let all = |tys: &[MonoTy<'db>], f: &mut dyn FnMut(MonoMut) -> MonoMut| {
+            tys.iter().map(|t| t.map_muts(f)).collect::<Box<[_]>>()
+        };
+        match self {
+            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never => self.clone(),
+            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
+            MonoTy::Adt(adt, args, ms, own) => {
+                let args = all(args, f);
+                let ms = ms.iter().map(|&m| f(m)).collect();
+                MonoTy::Adt(*adt, args, ms, f(*own))
+            }
+            MonoTy::Tuple(args, own) => {
+                let args = all(args, f);
+                MonoTy::Tuple(args, f(*own))
+            }
+            MonoTy::Array(own, elem) => {
+                let own = f(*own);
+                MonoTy::Array(own, Box::new(elem.map_muts(f)))
+            }
+            MonoTy::Fn(params, ret, own) => {
+                let params = all(params, f);
+                let ret = Box::new(ret.map_muts(f));
+                MonoTy::Fn(params, ret, f(*own))
+            }
+        }
+    }
+
     /// Whether a mutability parameter is somewhere in the type.
     pub fn has_mut_param(&self) -> bool {
         let param = |m: &MonoMut| matches!(m, MonoMut::Param(_));

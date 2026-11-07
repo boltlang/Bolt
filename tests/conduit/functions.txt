@@ -342,3 +342,43 @@ fn bolt_print(%0: imm String) -> () {
 stdout: hello
 stdout: é✓
 stdout:
+
+================================================================================
+A generic function called at a type with a mutability parameter (#371)
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+fn id[T](x: T) -> T = x;
+fn first(xs: 'm [i32]) -> i32 = id(xs)[0];
+log(first(mut [1]));
+log(first([2]));
+--------------------------------------------------------------------------------
+extern log "env" "log" (i32) -> ()
+
+fn file() -> () {
+  let %0: mut [i32] = array_new(1i32)
+  let %1: i32 = call first[mut](%0)
+  let = call_extern log(%1)
+  let %2: imm [i32] = array_new(2i32)
+  let %3: i32 = call first[imm](%2)
+  let = call_extern log(%3)
+  jump ret()
+}
+
+fn first['m1](%xs: 'm1 [i32]) -> (i32) {
+  let %1: 'm1 [i32] = call id_0_i32['m1](%xs)
+  let %2: i32 = call Index_T_index_i32['m1](%1, 0i32)
+  jump ret(%2)
+}
+
+fn id_0_i32['m1](%x: 'm1 [i32]) -> ('m1 [i32]) {
+  jump ret(%x)
+}
+
+fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
+  let %2: i32 = array_get(%xs, %i)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+env.log(1)
+env.log(2)
