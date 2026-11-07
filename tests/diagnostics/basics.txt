@@ -23,8 +23,8 @@ Range before a syntax error leaves out whitespace
 ================================================================================
 Unsupported is a warning
 ================================================================================
-fn f(x: i32) -> i32 = x?;
-                    //^^ warning: the type checker doesn't support this yet
+let r = ..5;
+      //^^^ warning: the type checker doesn't support this yet
 
 ================================================================================
 Break outside a loop

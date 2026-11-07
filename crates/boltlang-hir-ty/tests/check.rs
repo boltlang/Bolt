@@ -559,6 +559,19 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::CyclicInference => {
                         "error: cyclic inference between files".to_string()
                     }
+                    InferenceDiagnostic::BadTry { expr, reason } => {
+                        use boltlang_hir_ty::infer::BadTry;
+                        let what = match reason {
+                            BadTry::NotOptionOrResult(ty) => {
+                                format!("not an Option or a Result: {}", show(&[ty])[0])
+                            }
+                            BadTry::WrongReturn { ret, .. } => {
+                                format!("in a function that gives {}", show(&[ret])[0])
+                            }
+                            BadTry::Unknown => "unknown".to_string(),
+                        };
+                        format!("error at `{}`: bad ?: {what}", at(ExprOrPat::Expr(*expr)))
+                    }
                 };
                 diagnostics.push(format!("{prefix}{line}"));
             }

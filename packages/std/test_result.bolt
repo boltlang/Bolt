@@ -64,3 +64,39 @@ fn results_look_like_their_constructors() {
   assert(repr(r) == "Ok(1)");
   assert(repr(safe_div(1, 0)) == "Err(\"division by zero\")");
 }
+
+fn sum_of_quotients(a: i32, b: i32, c: i32) -> Result[String, i32] {
+  let x = safe_div(a, b)?;
+  let y = safe_div(a, c)?;
+  Ok(x + y)
+}
+
+#[test]
+fn question_mark_gives_the_value_of_an_ok() {
+  assert(sum_of_quotients(12, 3, 4) == Ok(7));
+}
+
+#[test]
+fn question_mark_returns_the_first_err() {
+  assert(sum_of_quotients(12, 0, 4) == Err("division by zero"));
+  assert(sum_of_quotients(12, 3, 0) == Err("division by zero"));
+}
+
+#[test]
+fn question_mark_in_an_expression_and_a_lambda() {
+  let twice = |a: i32, b: i32| -> Result[String, i32] { Ok(safe_div(a, b)? * 2) };
+  assert(twice(9, 3) == Ok(6));
+  assert(twice(9, 0) == Err("division by zero"));
+}
+
+// The type of `checked`'s result is inferred from the `?`s.
+fn checked(a: i32, b: i32) {
+  let q = safe_div(a, b)?;
+  Ok(q + 1)
+}
+
+#[test]
+fn question_mark_decides_an_inferred_result_type() {
+  assert(checked(6, 2) == Ok(4));
+  assert(checked(6, 0) == Err("division by zero"));
+}

@@ -93,8 +93,14 @@ pub enum Expr {
         expr: ExprId,
         name: Name,
     },
+    /// `e?`: the value of an `Ok` or `Some`, or a return of the `Err` or
+    /// `None`. It's a `match` with two arms, whose bindings are `value`, of
+    /// the `Ok` or `Some`, and `error`, of the `Err`; they have no name that
+    /// code can write.
     Try {
         expr: ExprId,
+        value: BindingId,
+        error: BindingId,
     },
     Cast {
         expr: ExprId,
@@ -360,7 +366,7 @@ impl Expr {
                 out.extend(args.iter());
             }
             Expr::Field { expr, .. }
-            | Expr::Try { expr }
+            | Expr::Try { expr, .. }
             | Expr::Cast { expr, .. }
             | Expr::Prefix { expr, .. }
             | Expr::Imm { expr }

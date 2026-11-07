@@ -278,7 +278,7 @@ fn children(expr: &Expr) -> Vec<ExprId> {
             out.extend(args.iter().copied());
         }
         Expr::Field { expr, .. }
-        | Expr::Try { expr }
+        | Expr::Try { expr, .. }
         | Expr::Imm { expr }
         | Expr::Mut { expr }
         | Expr::Cast { expr, .. }

@@ -485,7 +485,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 self.node(e, ExprKind::Return { value })
             }
             Expr::Lambda { .. } => self.closure(e),
-            Expr::Try { .. } => self.unsupported(e, "`e?`"),
+            Expr::Try { expr: inner, value, error } => self.try_expr(e, *inner, *value, *error),
             Expr::MacroCall { .. } => self.unsupported(e, "a macro"),
         }
     }
@@ -655,6 +655,70 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             return self.node(c, ExprKind::Let { scrutinee, decision: Box::new(decision) });
         }
         self.expr(c)
+    }
+
+    /// `e?`, as `match e { Some(value) => value, None => return None }`, or
+    /// for a `Result`, `match e { Ok(value) => value, Err(error) => return
+    /// Err(error) }`, with the hidden bindings of the `?`.
+    fn try_expr(
+        &mut self,
+        e: hir::ExprId,
+        inner: hir::ExprId,
+        value: hir::BindingId,
+        error: hir::BindingId,
+    ) -> ExprId {
+        use boltlang_hir_ty::infer::TryKind;
+        use boltlang_pattern::decision::{Case, Node, Place as DecisionPlace};
+        let Some(t) = self.cx.infer.tries.get(e).cloned() else {
+            return self.unsupported(e, "`e?`");
+        };
+        let (parent, good, bad, is_result) = match t.kind {
+            TryKind::Option(id) => (id, "Some", "None", false),
+            TryKind::Result(id) => (id, "Ok", "Err", true),
+        };
+        let variants = &boltlang_hir_def::signatures::enum_signature(self.db, parent).variants;
+        let variant = |name: &str| {
+            let index = variants.iter().position(|v| v.name.as_str() == name)?;
+            Some(boltlang_hir_def::ids::EnumVariantId { parent, index: index as u32 })
+        };
+        let (Some(good), Some(bad)) = (variant(good), variant(bad)) else {
+            return self.unsupported(e, "`e?`");
+        };
+        // The value, the field of `Some` or `Ok`, at place 1, and the error,
+        // the field of `Err`, at place 2.
+        let mut places = vec![
+            DecisionPlace::Scrutinee,
+            DecisionPlace::Field { of: 0, ctor: Ctor::Variant(good), index: 0 },
+        ];
+        if is_result {
+            places.push(DecisionPlace::Field { of: 0, ctor: Ctor::Variant(bad), index: 0 });
+        }
+        let nodes = vec![
+            Node::Switch {
+                place: 0,
+                cases: vec![(Case::Variant(good), 1), (Case::Variant(bad), 2)],
+                default: None,
+            },
+            Node::Arm { arm: 0, bindings: vec![(value, 1)] },
+            Node::Arm { arm: 1, bindings: if is_result { vec![(error, 2)] } else { Vec::new() } },
+        ];
+        let decision = Box::new(Decision { places, nodes, root: 0, arms: 2 });
+        let scrutinee = self.expr(inner);
+        let value_ty = self.cx.infer.binding_ty(value).clone();
+        let value = self.declare(value);
+        let ok = self.mir.alloc(ExprKind::Local(value), value_ty, Some(e));
+        let fields: Box<[ExprId]> = if is_result {
+            let error_ty = self.cx.infer.binding_ty(error).clone();
+            let error = self.declare(error);
+            Box::new([self.mir.alloc(ExprKind::Local(error), error_ty, Some(e))])
+        } else {
+            Box::new([])
+        };
+        let back = ExprKind::Construct { ctor: Ctor::Variant(bad), fields };
+        let back = self.mir.alloc(back, t.ret.clone(), Some(e));
+        let ret = self.mir.alloc(ExprKind::Return { value: Some(back) }, Ty::Never, Some(e));
+        let arms = Box::new([Arm { guard: None, body: ok }, Arm { guard: None, body: ret }]);
+        self.node(e, ExprKind::Match { scrutinee, decision, arms })
     }
 
     fn match_expr(&mut self, e: hir::ExprId, scrutinee: hir::ExprId, arms: &[MatchArm]) -> ExprId {

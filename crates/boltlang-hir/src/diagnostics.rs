@@ -350,6 +350,10 @@ pub enum DiagnosticKind<'db> {
         from: Ty<'db>,
         to: Ty<'db>,
     },
+    /// An `e?` that can't be checked.
+    BadTry {
+        reason: boltlang_hir_ty::infer::BadTry<'db>,
+    },
     /// The type an impl gives an associated type doesn't meet a bound the
     /// class puts on it, like `type Iter: Iterator;`.
     UnmetAssocBound {
@@ -1607,6 +1611,19 @@ impl<'db> Collector<'db> {
                 }
                 // Reported at the function, which is the fallback.
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),
+                InferenceDiagnostic::BadTry { expr, reason } => {
+                    use boltlang_hir_ty::infer::BadTry;
+                    let errs = match &reason {
+                        BadTry::NotOptionOrResult(ty) | BadTry::WrongReturn { ret: ty, .. } => {
+                            has_error(ty)
+                        }
+                        BadTry::Unknown => false,
+                    };
+                    if errs {
+                        continue;
+                    }
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::BadTry { reason })
+                }
             };
             self.push(range, kind);
         }

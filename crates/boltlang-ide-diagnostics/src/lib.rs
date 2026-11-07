@@ -128,6 +128,7 @@ impl DiagnosticCode {
     pub const BAD_BUILTIN: Self = Self("E0251");
     pub const BAD_LINK: Self = Self("E0252");
     pub const BAD_CFG: Self = Self("E0253");
+    pub const BAD_TRY: Self = Self("E0254");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -450,6 +451,11 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
         DiagnosticKind::Effects { found, allowed } => vec![found, allowed],
         DiagnosticKind::InvalidCast { from, to } => vec![from, to],
+        DiagnosticKind::BadTry { reason } => match reason {
+            boltlang_hir_ty::infer::BadTry::NotOptionOrResult(ty)
+            | boltlang_hir_ty::infer::BadTry::WrongReturn { ret: ty, .. } => vec![ty],
+            boltlang_hir_ty::infer::BadTry::Unknown => vec![],
+        },
         DiagnosticKind::NotAtMost { held, .. } => vec![held],
         DiagnosticKind::NoInstance { constraint, .. }
         | DiagnosticKind::AmbiguousConstraint { constraint, .. }
@@ -847,6 +853,29 @@ fn describe(
             C::NO_LANG_CLASS,
             format!("this needs the class `{class}`, but there's no prelude that defines it"),
         ),
+        K::BadTry { reason } => {
+            use boltlang_hir_ty::infer::BadTry;
+            let message = match reason {
+                BadTry::NotOptionOrResult(ty) => format!(
+                    "`?` takes an `Option` or a `Result`, not `{}`",
+                    ty.display_with(db, names)
+                ),
+                BadTry::WrongReturn { result: true, ret } => format!(
+                    "`?` on a `Result` returns its `Err`, so it can only be in a function that gives a \
+                     `Result`, not `{}`",
+                    ret.display_with(db, names)
+                ),
+                BadTry::WrongReturn { result: false, ret } => format!(
+                    "`?` on an `Option` returns its `None`, so it can only be in a function that gives an \
+                     `Option`, not `{}`",
+                    ret.display_with(db, names)
+                ),
+                BadTry::Unknown => "cannot tell whether this is an `Option` or a `Result`; add a type \
+                                    annotation"
+                    .to_string(),
+            };
+            (C::BAD_TRY, message)
+        }
         K::InvalidCast { from, to } => (
             C::INVALID_CAST,
             format!(

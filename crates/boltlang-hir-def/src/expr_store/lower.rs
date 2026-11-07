@@ -292,7 +292,13 @@ impl ExprCollector {
                     .unwrap_or_else(|| Name::new(""));
                 Expr::Field { expr, name }
             }
-            E::Try(e) => Expr::Try { expr: self.lower_opt_expr(e.expr()) },
+            E::Try(e) => {
+                let expr = self.lower_opt_expr(e.expr());
+                let mut hidden =
+                    || self.store.bindings.alloc(Binding { name: Name::new("?"), mutable: false });
+                let (value, error) = (hidden(), hidden());
+                Expr::Try { expr, value, error }
+            }
             E::Imm(e) => Expr::Imm { expr: self.lower_opt_expr(e.expr()) },
             E::Mut(e) => Expr::Mut { expr: self.lower_opt_expr(e.expr()) },
             E::Cast(e) => {

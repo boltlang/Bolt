@@ -74,7 +74,37 @@ pub struct InferenceResult<'db> {
     /// Point { x: 1 }` or `mut Wrapper(1)`, each with its `e`. The others
     /// are errors.
     pub mut_literals: Vec<(ExprId, ExprId)>,
+    /// What each `e?` is about, by the `?`.
+    pub tries: ArenaMap<Expr, Try<'db>>,
     pub diagnostics: Vec<InferenceDiagnostic<'db>>,
+}
+
+/// What an `e?` takes apart, and what it gives back when it can't go on.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct Try<'db> {
+    pub kind: TryKind<'db>,
+    /// The type of the function's result, which the `None` or `Err` it
+    /// returns has.
+    pub ret: Ty<'db>,
+}
+
+/// Whether an `e?` is on an `Option` or a `Result`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, salsa::SalsaValue)]
+pub enum TryKind<'db> {
+    Option(boltlang_hir_def::ids::EnumId<'db>),
+    Result(boltlang_hir_def::ids::EnumId<'db>),
+}
+
+/// Why an `e?` can't be checked.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub enum BadTry<'db> {
+    /// `e` is neither an `Option` nor a `Result`.
+    NotOptionOrResult(Ty<'db>),
+    /// The function gives something else than what `?` returns: an
+    /// `Option` for an `Option`, and a `Result` for a `Result`.
+    WrongReturn { result: bool, ret: Ty<'db> },
+    /// What `e` is isn't known, nor what the function gives.
+    Unknown,
 }
 
 impl<'db> InferenceResult<'db> {
@@ -194,6 +224,9 @@ impl<'db> InferenceResult<'db> {
         for args in self.type_args.values_mut() {
             *args = args.iter().map(&mut *f).collect();
         }
+        for t in self.tries.values_mut() {
+            t.ret = f(&t.ret);
+        }
         for diagnostic in &mut self.diagnostics {
             diagnostic.map_types(f);
         }
@@ -308,6 +341,11 @@ pub enum InferenceDiagnostic<'db> {
     /// Functions without complete signatures in files that import each
     /// other call each other; one of them needs a signature.
     CyclicInference,
+    /// An `e?` that can't be checked.
+    BadTry {
+        expr: ExprId,
+        reason: BadTry<'db>,
+    },
 }
 
 impl<'db> InferenceDiagnostic<'db> {
@@ -323,6 +361,11 @@ impl<'db> InferenceDiagnostic<'db> {
                 *ty = f(ty);
                 *inner = f(inner);
             }
+            InferenceDiagnostic::BadTry { reason, .. } => match reason {
+                BadTry::NotOptionOrResult(ty) => *ty = f(ty),
+                BadTry::WrongReturn { ret, .. } => *ret = f(ret),
+                BadTry::Unknown => {}
+            },
             _ => {}
         }
     }
@@ -716,6 +759,97 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.check_expr_because(expr, expected, Reason::None);
     }
 
+    /// `e?`: the `T` of an `Option[T]` or a `Result[E, T]`. The function
+    /// it's in must give the same kind, an `Option`, or a `Result` with the
+    /// same `E`, which a `None` or an `Err` is returned as. When the type of
+    /// `e` isn't known yet, the function's says which it is.
+    fn infer_try(
+        &mut self,
+        expr: ExprId,
+        inner: ExprId,
+        value: BindingId,
+        error: BindingId,
+    ) -> Ty<'db> {
+        let db = self.db;
+        let file = self.def.def(db).file(db);
+        let option = crate::lang::option_enum(db, file);
+        let result = crate::lang::result_enum(db, file);
+        let ty = self.infer_expr(inner);
+        let ret = self.return_ty.clone();
+        let enum_of = |t: &Ty<'db>| match t {
+            Ty::Adt(AdtId::Enum(e), args, ..) => Some((*e, args.clone())),
+            _ => None,
+        };
+        let enum_ty = |e, args: Vec<Ty<'db>>| Ty::adt(AdtId::Enum(e), args, [], Ty::Unwritten);
+        let resolved = self.solver.unifier.shallow_resolve(&ty);
+        let ret_resolved = self.solver.unifier.shallow_resolve(&ret);
+        // Which kind it is, from `e`'s type, or else from the function's.
+        let kind = match (enum_of(&resolved), &resolved) {
+            (Some((e, _)), _) if Some(e) == option => Some(TryKind::Option(e)),
+            (Some((e, _)), _) if Some(e) == result => Some(TryKind::Result(e)),
+            (_, Ty::Error) => return Ty::Error,
+            (_, Ty::Var(_)) => match enum_of(&ret_resolved) {
+                Some((e, _)) if Some(e) == option => Some(TryKind::Option(e)),
+                Some((e, _)) if Some(e) == result => Some(TryKind::Result(e)),
+                _ => {
+                    let reason = BadTry::Unknown;
+                    self.result.diagnostics.push(InferenceDiagnostic::BadTry { expr, reason });
+                    return Ty::Error;
+                }
+            },
+            _ => None,
+        };
+        let Some(kind) = kind else {
+            let reason = BadTry::NotOptionOrResult(resolved);
+            self.result.diagnostics.push(InferenceDiagnostic::BadTry { expr, reason });
+            return Ty::Error;
+        };
+        let origin = self.origin(inner);
+        // What `e` has, and the error it passes on, if any.
+        let (value_ty, error_ty) = match kind {
+            TryKind::Option(e) => {
+                let t = self.new_var();
+                self.solver.equal(&enum_ty(e, vec![t.clone()]), &ty, origin);
+                (t, Ty::unit())
+            }
+            TryKind::Result(e) => {
+                let (err, t) = (self.new_var(), self.new_var());
+                self.solver.equal(&enum_ty(e, vec![err.clone(), t.clone()]), &ty, origin);
+                (t, err)
+            }
+        };
+        // The function must give the same kind, with the same error.
+        let ret_origin = Origin { reason: self.return_reason, ..self.origin(expr) };
+        match (kind, enum_of(&ret_resolved), &ret_resolved) {
+            (TryKind::Option(e), Some((r, _)), _) | (TryKind::Result(e), Some((r, _)), _)
+                if e == r =>
+            {
+                let expected = match kind {
+                    TryKind::Option(_) => vec![self.new_var()],
+                    TryKind::Result(_) => vec![error_ty.clone(), self.new_var()],
+                };
+                self.solver.equal(&ret, &enum_ty(e, expected), ret_origin);
+            }
+            (_, _, Ty::Var(_)) => {
+                let expected = match kind {
+                    TryKind::Option(e) => enum_ty(e, vec![self.new_var()]),
+                    TryKind::Result(e) => enum_ty(e, vec![error_ty.clone(), self.new_var()]),
+                };
+                self.solver.equal(&ret, &expected, ret_origin);
+            }
+            (_, _, Ty::Error) => {}
+            _ => {
+                let result = matches!(kind, TryKind::Result(_));
+                let reason = BadTry::WrongReturn { result, ret: ret_resolved };
+                self.result.diagnostics.push(InferenceDiagnostic::BadTry { expr, reason });
+            }
+        }
+        self.result.binding_types.insert(value, value_ty.clone());
+        self.result.binding_types.insert(error, error_ty);
+        self.result.tries.insert(expr, Try { kind, ret });
+        value_ty
+    }
+
     fn check_expr_because(&mut self, expr: ExprId, expected: &Ty<'db>, reason: Reason<'db>) {
         let actual = self.infer_expr_expect(expr, Some(Expectation { ty: expected, reason }));
         self.solver.equal(expected, &actual, Origin { reason, ..self.origin(expr) });
@@ -768,11 +902,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Call { callee, args } => self.infer_call(expr, *callee, args, false),
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
-            Expr::Try { expr: inner } => {
-                self.infer_expr(*inner);
-                self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
-                Ty::Error
-            }
+            Expr::Try { expr: inner, value, error } => self.infer_try(expr, *inner, *value, *error),
             Expr::Cast { expr: inner, type_ref } => {
                 let from = self.infer_expr(*inner);
                 let to = self.lower_ty(expr, *type_ref);

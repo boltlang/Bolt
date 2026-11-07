@@ -119,7 +119,7 @@ impl Printer<'_> {
                 format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr))
             }
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
-            Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
+            Expr::Try { expr, .. } => format!("(? {})", self.expr(*expr)),
             Expr::Imm { expr } => format!("(imm {})", self.expr(*expr)),
             // As the literals were written before `mut e`: `mut [1]` and
             // `(mut record ...)`.

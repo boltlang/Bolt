@@ -1,0 +1,45 @@
+================================================================================
+? needs an Option or a Result
+:prelude
+================================================================================
+fn f(x: i32) -> Option[i32] {
+  let y = x?;
+        //^^ error: `?` takes an `Option` or a `Result`, not `i32`
+  Some(y)
+}
+
+================================================================================
+? needs a function that gives the same kind
+:prelude
+================================================================================
+fn on_option(x: Option[i32]) -> Result[String, i32] {
+  let y = x?;
+        //^^ error: `?` on an `Option` returns its `None`, so it can only be in a function that gives an `Option`, not `Result[String, i32]`
+  Ok(y)
+}
+fn on_result(x: Result[String, i32]) -> i32 {
+  let y = x?;
+        //^^ error: `?` on a `Result` returns its `Err`, so it can only be in a function that gives a `Result`, not `i32`
+  y
+}
+
+================================================================================
+? passes on an error of the same type
+:prelude
+================================================================================
+fn f(x: Result[i32, i32]) -> Result[String, i32] {
+                           //^^^^^^^^^^^^^^^^^^^ label: expected because of the return type
+  let y = x?;
+        //^^ error: expected `Result[String, i32]`, found `Result[i32, a]`
+  Ok(y)
+}
+
+================================================================================
+? on something whose type isn't known yet
+:prelude
+================================================================================
+fn f(g) {
+  let y = g()?;
+        //^^^^ error: cannot tell whether this is an `Option` or a `Result`; add a type annotation
+  y
+}

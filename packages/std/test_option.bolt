@@ -17,3 +17,15 @@ fn some_and_none() {
 fn unwrapping_some() {
   assert(unwrap(Some(1)) == 1);
 }
+
+fn sum_of_quotients(a: i32, b: i32, c: i32) -> Option[i32] {
+  let x = test_safe_div(a, b)?;
+  Some(x + test_safe_div(a, c)?)
+}
+
+#[test]
+fn question_mark_gives_the_value_of_a_some_or_returns_none() {
+  assert(sum_of_quotients(12, 3, 4) == Some(7));
+  assert(sum_of_quotients(12, 0, 4) == None);
+  assert(sum_of_quotients(12, 3, 0) == None);
+}

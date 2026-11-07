@@ -13,7 +13,7 @@ use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     hir::Mutability,
-    ids::{ClassId, FunctionId, ItemContainerId, ModuleDefId, StructId, TypeAliasId},
+    ids::{ClassId, EnumId, FunctionId, ItemContainerId, ModuleDefId, StructId, TypeAliasId},
     item_tree::AssocItem,
     nameres::{Namespace, file_scope, prelude_lib},
 };
@@ -28,6 +28,24 @@ fn prelude_struct<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<Struct
         ModuleDefId::Struct(id) => Some(id),
         _ => None,
     }
+}
+
+fn prelude_enum<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<EnumId<'db>> {
+    let lib = prelude_lib(db, file)?;
+    match file_scope(db, lib).scope.get(Namespace::Types, &Name::new(name))?.def {
+        ModuleDefId::Enum(id) => Some(id),
+        _ => None,
+    }
+}
+
+/// The enum `Option` of the prelude, as `file` sees it, which `e?` takes.
+pub fn option_enum<'db>(db: &'db dyn Db, file: File) -> Option<EnumId<'db>> {
+    prelude_enum(db, file, "Option")
+}
+
+/// The enum `Result` of the prelude, as `file` sees it, which `e?` takes.
+pub fn result_enum<'db>(db: &'db dyn Db, file: File) -> Option<EnumId<'db>> {
+    prelude_enum(db, file, "Result")
 }
 
 /// The struct `id` as a type, if it's an `imm struct` without type
