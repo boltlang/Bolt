@@ -140,7 +140,8 @@ pub enum DecisionError {
 }
 
 /// The decisions of a body: its `match`es, by the `match`, and its `let`s
-/// with patterns, in statements and conditions, by the pattern.
+/// with patterns, in statements and conditions, and the patterns of its
+/// `for`s, by the pattern.
 #[derive(Debug, Clone, Default, PartialEq, Eq, salsa::SalsaValue)]
 pub struct BodyDecisions<'db> {
     pub matches: Vec<(ExprId, Result<Decision<'db>, DecisionError>)>,
@@ -196,7 +197,9 @@ pub fn body_decisions<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> BodyDeci
                     });
                 }
             }
-            Expr::Let { pat, .. } => out.lets.push((*pat, decide(db, def, body, &[(*pat, None)]))),
+            Expr::Let { pat, .. } | Expr::For { pat, .. } => {
+                out.lets.push((*pat, decide(db, def, body, &[(*pat, None)])))
+            }
             Expr::Block { statements, .. } => {
                 for statement in statements.iter() {
                     if let Statement::Let { pat, initializer: Some(_), .. } = statement {

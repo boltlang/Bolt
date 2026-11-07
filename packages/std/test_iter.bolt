@@ -1,0 +1,39 @@
+// The tests of `iter.bolt`, and of patterns in `for`.
+
+import "./io" (assert);
+import "./ops" *;
+
+struct P { x: i32, y: i32 }
+
+#[test]
+fn a_for_can_take_its_items_apart() {
+  let mut sum = 0;
+  for (a, b) in [(1, 2), (3, 4)] {
+    sum = sum + a * b;
+  }
+  assert(sum == 14);
+}
+
+#[test]
+fn a_for_can_have_nested_patterns() {
+  let mut n = 0;
+  for ((a, _), P { x, y: _ }) in [((1, 9), P { x: 10, y: 0 }), ((2, 9), P { x: 20, y: 0 })] {
+    n = n + a + x;
+  }
+  assert(n == 33);
+}
+
+#[test]
+fn break_and_continue_in_a_for_with_a_pattern() {
+  let mut n = 0;
+  for (a, b) in [(1, 1), (2, 0), (3, 3), (4, 4)] {
+    if b == 0 {
+      continue;
+    }
+    if a == 4 {
+      break;
+    }
+    n = n + a;
+  }
+  assert(n == 4);
+}

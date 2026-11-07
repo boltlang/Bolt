@@ -851,7 +851,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         match pat {
             Pattern::Local(Some(local)) => self.bind(*local, x)?,
             Pattern::Local(None) => {}
-            Pattern::Decision(_) => return Err(ErrorKind::unsupported("this pattern here")),
+            Pattern::Decision(d) => self.let_decision(d, x, field_ty, None)?,
         }
         self.targets.push(Target { label, exit, next: Some(next) });
         self.expr(inner)?;

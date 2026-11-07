@@ -791,8 +791,17 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         label: Option<hir::LabelId>,
     ) -> ExprId {
         let db = self.db;
-        let Some(local) = self.simple_pattern(pat) else {
-            return self.unsupported(e, "this pattern here");
+        // `for x in ..`, or a pattern like `(x, y)`, which matches each item
+        // as a `let` does.
+        let pattern = match self.simple_pattern(pat) {
+            Some(local) => Pattern::Local(local),
+            None => match self.let_decision(pat) {
+                Some(d) => {
+                    self.declare_in(&[pat]);
+                    Pattern::Decision(Box::new(d))
+                }
+                None => return self.unsupported(e, "this pattern here"),
+            },
         };
         let iterable_ty = self.ty(iterable);
         let found = (|| {
@@ -816,8 +825,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         let label = self.loop_label(label);
         let body = self.expr(inner);
         self.scopes.pop();
-        let pat = Pattern::Local(local);
-        self.node(e, ExprKind::For { pat, iterable, body, label, iter, next })
+        self.node(e, ExprKind::For { pat: pattern, iterable, body, label, iter, next })
     }
 
     /// A closure of the lambda `e`, whose body is built too.
