@@ -12,7 +12,11 @@ use boltlang_base_db::{
     Arch, DEFAULT_PRELUDE, Db, File, FilePath, Settings, SystemPath, SystemPathBuf, Target,
     parse_file, source_text,
 };
-use boltlang_codegen_conduit::{Lowered, lower, node::NodeHost, run::run};
+use boltlang_codegen_conduit::{
+    Lowered, lower,
+    node::NodeHost,
+    run::{run, run_with_args},
+};
 use boltlang_hir_def::nameres::test_functions;
 use boltlang_ide_diagnostics::{
     Diagnostic, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
@@ -224,6 +228,9 @@ struct RunCommand {
     wasm: bool,
     #[command(flatten)]
     target: TargetArgs,
+    /// The program's arguments, after `--`, with the evaluator.
+    #[arg(last = true, value_name = "ARGS")]
+    args: Vec<String>,
 }
 
 /// Check files, then run their tests, with Conduit's evaluator: the
@@ -291,6 +298,9 @@ impl Exec for RunCommand {
             return Ok(false);
         }
         let Some(program) = lowered(&db, file) else { return Ok(false) };
+        if self.wasm && !self.args.is_empty() {
+            anyhow::bail!("only the evaluator gives a program arguments, not `--wasm`, for now");
+        }
         let result = if self.wasm {
             let bytes = match boltlang_codegen_conduit::wasm::build(&program, true) {
                 Ok(bytes) => bytes,
@@ -304,7 +314,8 @@ impl Exec for RunCommand {
             std::fs::write(&module, bytes)?;
             host.run(&module, "main")?
         } else {
-            run(&program, program.entry, self.fuel).map_err(|e| e.to_string())
+            run_with_args(&program, program.entry, self.fuel, self.args.clone())
+                .map_err(|e| e.to_string())
         };
         match result {
             Ok(()) => Ok(true),
