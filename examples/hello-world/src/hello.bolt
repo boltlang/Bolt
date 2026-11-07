@@ -1,0 +1,6 @@
+// Runs in the browser: what it prints goes to the page.
+
+fn greet(name: String) -> String = "Hello, " <> name <> "!";
+
+print(greet("world"));
+print("6 * 7 = " <> show(6 * 7));
