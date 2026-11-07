@@ -13,14 +13,17 @@ A mutability is `mut`, `imm`, or a parameter of a generic function, like the
 hidden or named mutability of a parameter written `[T]` or `'m [T]` in Bolt.
 A type can be a type parameter of a generic function too, like `T`.
 
-A tuple is a value, as in Bolt: `prod a b`. A struct is a cell that holds
-the tuple of its fields, so one mutability covers all of them, and a field
+A tuple is a value: `prod a b`. A struct is a cell that holds the tuple
+of its fields, so one mutability covers all of them, and a field
 that's a struct is a cell in that tuple. Changing a field replaces the
 tuple, and `S { a: x, ..base }` is `new b (pair x (snd (get base)))`: the
 fields it doesn't give are shared with `base`, at the types they have
 there. A generic struct like `Box[T]` is a cell holding a `T`, and a field
 with a mutability of its own (`'v`, #243) is a cell with a mutability
 parameter.
+
+A tuple of Bolt, like `mut (1, 2)`, has a mutability too: it's a struct
+with numeric fields, so a cell holding a `prod`.
 
 Closures have a mutability too, as #244 proposes: `fn m a r`. A closure is
 `imm` only if everything it captures is `imm` all the way down. In Bolt, a

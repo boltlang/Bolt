@@ -162,6 +162,10 @@ let point = (3, "three", 3.0);
 (3, "three")
 ```
 
+A tuple can't be changed, unless it's made with `mut`: after
+`let t = mut (1, 2);`, `t.0 = 5;` changes its first field. See
+[mutability](../advanced/mutability.mdx) for more.
+
 The empty tuple `()` is called *unit*. It's the value of statements and of
 functions that don't return anything.
 

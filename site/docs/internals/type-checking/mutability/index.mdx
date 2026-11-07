@@ -55,15 +55,16 @@ In source code, and when types are shown:
 
 | Written | Means |
 |---|---|
-| `mut [i32]`, `mut Point` | can be changed |
-| `imm [i32]`, `imm Point` | can never be changed, by anyone |
-| `[i32]`, `Point` | either: see [annotations](./functions.mdx#annotations) |
+| `mut [i32]`, `mut Point`, `mut (i32, i32)` | can be changed |
+| `imm [i32]`, `imm Point`, `imm (i32, i32)` | can never be changed, by anyone |
+| `[i32]`, `Point`, `(i32, i32)` | either: see [annotations](./functions.mdx#annotations) |
 
-Only arrays and structs have a mutability. An enum can't be changed in
-place: `match` gives the values of its fields, and there's no way to
-assign to one. A tuple is still a value, copied when it's assigned, so
-`t.0 = 1` needs `let mut t` as before. `mut` before anything else, like
-`mut i32` or `mut Option[i32]`, is an error (E0222).
+Only arrays, structs and tuples have a mutability. A tuple works like a
+struct with numeric fields: `t.0 = 1` needs `t` to be a `mut` tuple, like
+`let t = mut (1, 2)`, and the variable it's in doesn't matter. The unit
+type `()` is always `imm`. An enum can't be changed in place: `match` gives
+the values of its fields, and there's no way to assign to one. `mut` before
+anything else, like `mut i32` or `mut Option[i32]`, is an error (E0222).
 
 Something can be changed only if its type is `mut`:
 
@@ -92,10 +93,10 @@ the innermost array or struct of the place that's assigned to: in
 **The expression that makes an array or a struct decides** whether it can
 be changed. Variables only pass it on:
 
-- `[1, 2]` and `Point { x: 0, y: 0 }` can't be changed: `imm [i32]` and
-  `imm Point`.
-- `mut [1, 2]`, `mut []`, `mut Point { x: 0, y: 0 }` and, for a tuple
-  struct, `mut Meters(1.0)` can be changed.
+- `[1, 2]`, `(1, 2)` and `Point { x: 0, y: 0 }` can't be changed:
+  `imm [i32]`, `imm (i32, i32)` and `imm Point`.
+- `mut [1, 2]`, `mut []`, `mut (1, 2)`, `mut Point { x: 0, y: 0 }` and, for
+  a tuple struct, `mut Meters(1.0)` can be changed.
 - A function's result has the mutability of its type: `Vec.new()` could
   return `mut [T]`, and `xs.copy()` a new `mut [T]`.
 - `mut` before a variant's literal, like `mut Shape.Circle { radius: 1.0 }`,
@@ -408,6 +409,3 @@ left out before one that's shown is `'_`.
 - **Enums with a mutability**, so that a variant can hold something that
   can be changed without a type parameter, and so that an enum can be
   changed in place.
-- **Assigning to a field of a tuple through a field constraint**, like
-  `fn f(t) { t.0 = 1; }`, isn't checked: once the type is a tuple, it's a
-  value, and the variable should be `mut`.
