@@ -221,3 +221,12 @@ fn a_deep_copy_of_a_vec_shares_its_strings() {
   let copy: mut Vec[String] = to_mut_deep(names);
   assert(copy[0] == "ada");
 }
+
+#[test]
+fn a_vec_of_a_type_with_no_values() {
+  let v = Vec.new();
+  v.push(());
+  v.push(());
+  v.push(());
+  assert(len(v) == 3);
+}

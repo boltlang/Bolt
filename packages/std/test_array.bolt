@@ -89,3 +89,13 @@ fn array_copy_copies_within_one_array() {
   array_copy(d, 5, d, 0, 0);
   assert(d == mut [3, 4, 5, 4, 5]);
 }
+
+#[test]
+fn arrays_of_a_type_with_no_values_have_a_length() {
+  let xs = [(), (), ()];
+  assert(array_len(xs) == 3);
+  xs[2];
+  let ys = mut [(); 4];
+  ys[1] = ();
+  assert(array_len(ys) == 4);
+}

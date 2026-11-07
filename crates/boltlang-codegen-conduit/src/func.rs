@@ -29,7 +29,7 @@ use conduit_ir::{
 
 use crate::{
     Ctx, Error, ErrorKind, ExternKey,
-    ty::{Scalar, Types, is_fieldless, mutability},
+    ty::{Scalar, Types, is_fieldless, mutability, placeholder},
 };
 
 type R<T> = Result<T, ErrorKind>;
@@ -555,9 +555,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             ExprKind::Array { elems } => {
                 let mut values = Vec::new();
                 for &x in elems.iter() {
-                    values.push(val!(self.expr(x)).ok_or_else(|| {
-                        ErrorKind::unsupported("an array of a type with no values")
-                    })?);
+                    values.push(val!(self.expr(x)).unwrap_or_else(placeholder));
                 }
                 let Some(Ty::Array(elem, m)) = self.cty(&self.mono(e)?)? else {
                     return Err(ErrorKind::unsupported("this array"));
@@ -565,8 +563,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Ok(Some(Atom::Var(self.b.array_new(*elem, m, values))))
             }
             ExprKind::ArrayRepeat { value, count } => {
-                let v = val!(self.expr(*value))
-                    .ok_or_else(|| ErrorKind::unsupported("an array of a type with no values"))?;
+                let v = val!(self.expr(*value)).unwrap_or_else(placeholder);
                 let n = val!(self.expr(*count)).ok_or_else(|| ErrorKind::unsupported("this"))?;
                 let Some(Ty::Array(elem, m)) = self.cty(&self.mono(e)?)? else {
                     return Err(ErrorKind::unsupported("this array"));
@@ -1050,9 +1047,18 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Ok(results.first().map(|&v| Atom::Var(v)))
             }
             Builtin::ArrayLen => one(self.b.array_len(args[0].clone())),
-            Builtin::ArrayGet => one(self.b.array_get(args[0].clone(), args[1].clone())),
+            // An element of a type with no values is read for the check of
+            // its index, and gives nothing.
+            Builtin::ArrayGet => {
+                let x = self.b.array_get(args[0].clone(), args[1].clone());
+                match self.cty(result)? {
+                    Some(_) => one(x),
+                    None => Ok(None),
+                }
+            }
             Builtin::ArraySet => {
-                self.b.array_set(args[0].clone(), args[1].clone(), args[2].clone());
+                let x = args.get(2).cloned().unwrap_or_else(placeholder);
+                self.b.array_set(args[0].clone(), args[1].clone(), x);
                 Ok(None)
             }
             // A copy that can't be changed. Conduit's `copies` pass makes it

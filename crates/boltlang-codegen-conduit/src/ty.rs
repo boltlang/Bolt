@@ -37,6 +37,15 @@ use conduit_ir::{CtorDecl, DataDecl, DataId, EffectId, Mutability, Row, Sig, Ty}
 
 use crate::{EffectKey, ErrorKind};
 
+/// The type of the elements of an array of a type with no values, and
+/// [`placeholder`] its value.
+pub(crate) const PLACEHOLDER: Ty = Ty::I8;
+
+/// What an array of a type with no values holds for each element.
+pub(crate) fn placeholder() -> conduit_ir::Atom {
+    conduit_ir::Atom::Lit(conduit_ir::Lit::I8(0))
+}
+
 /// The marker for a struct's own mutability in its field types, which is
 /// Conduit's `inherit`.
 const OWN: u32 = u32::MAX;
@@ -192,10 +201,13 @@ impl<'db> Types<'db> {
                 let rows = rows.iter().map(|r| self.row(r)).collect();
                 Ty::Data(id, mutability(*own), margs, rows)
             }
-            MonoTy::Array(m, elem) => match self.value(db, root, elem)? {
-                Some(elem) => Ty::Array(Box::new(elem), mutability(*m)),
-                None => return Err(ErrorKind::unsupported("an array of a type with no values")),
-            },
+            // An array of a type with no values, like the `[]` of
+            // `array_len([])`, still has a length: its elements are
+            // placeholders.
+            MonoTy::Array(m, elem) => {
+                let elem = self.value(db, root, elem)?.unwrap_or(PLACEHOLDER);
+                Ty::Array(Box::new(elem), mutability(*m))
+            }
             MonoTy::Fn(params, ret, m, row) => {
                 let mut sig = Sig::new(Vec::new(), Vec::new());
                 for p in params {
