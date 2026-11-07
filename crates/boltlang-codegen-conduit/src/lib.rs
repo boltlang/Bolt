@@ -966,9 +966,7 @@ fn declare_extern<'db>(
     sig.results.extend(types.value(db, cx.root, &ret)?);
     let id = ExternId(module.externs.len() as u64);
     let debug_name = Some(name.as_str().into());
-    module
-        .externs
-        .insert(id, Extern { module: module_name.into(), name: name.into(), sig, debug_name });
+    module.externs.insert(id, Extern { debug_name, ..Extern::new(&module_name, &name, sig) });
     cx.externs.insert(key, id);
     Ok(())
 }

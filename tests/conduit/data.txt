@@ -13,7 +13,8 @@ data Point {
   (i32, i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %p: mut Point = new Point.0(1i32, 2i32)
@@ -51,7 +52,8 @@ data Tuple_i32_i32 {
   (i32, i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
@@ -80,7 +82,8 @@ let xs = mut [1, 2, 3];
 xs[1] = 20;
 log(xs[0] + xs[1] + xs[2]);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %xs: mut [i32] = array_new(1i32, 2i32, 3i32)
@@ -138,7 +141,8 @@ data Shape {
   ()
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Shape = new Shape.0(2i32)
@@ -202,7 +206,8 @@ log(classify(5));
 log(classify(-3));
 log(classify(42));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call classify(0i32)
@@ -275,7 +280,8 @@ enum Color { Red, Green, Blue }
 fn code(c: Color) -> i32 = match c { Color.Red => 1, Color.Green => 2, Color.Blue => 3 };
 log(code(Color.Blue));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call code(2i32)
@@ -305,11 +311,14 @@ fn log(x: i32);
 fn f(n: i32) -> i32 = match n { 0 => 0 };
 log(f(1));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern write_file "bolt" "write_file" (i32, i32) -> ()
+#[link(wasm, module = "bolt")]
+extern write_file(i32, i32) -> ()
 
-extern flush "bolt" "flush" (i32) -> ()
+#[link(wasm, module = "bolt")]
+extern flush(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call f(1i32)
@@ -388,7 +397,8 @@ data Point {
   (i32, i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
@@ -441,7 +451,8 @@ data Maybe {
   ()
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Maybe = new Maybe.0(5i32)
@@ -499,7 +510,8 @@ data Maybe {
   ()
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   join j1() =
@@ -605,7 +617,8 @@ data Maybe {
   ()
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Maybe = new Maybe.0(1i32)
@@ -695,7 +708,8 @@ data Option_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %sum: ref i32 = ref_new(0i32)
@@ -787,7 +801,8 @@ data Option_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %sum: ref i32 = ref_new(0i32)
@@ -888,7 +903,8 @@ data Stack {
   (inherit [i32], i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(0i32, 0i32)
@@ -931,7 +947,8 @@ data Holder_0_i32['m1] {
   ()
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32, 2i32)
@@ -979,7 +996,8 @@ data E {
   ()
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm E = new E.0(1i32)
@@ -1033,11 +1051,14 @@ data String {
   (imm [i32])
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern write_file "bolt" "write_file" (i32, i32) -> ()
+#[link(wasm, module = "bolt")]
+extern write_file(i32, i32) -> ()
 
-extern flush "bolt" "flush" (i32) -> ()
+#[link(wasm, module = "bolt")]
+extern flush(i32) -> ()
 
 fn file() -> () {
   let %v: mut Vec_i32 = call Vec_new_i32()
@@ -1311,11 +1332,14 @@ data String {
   (imm [i32])
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern write_file "bolt" "write_file" (i32, i32) -> ()
+#[link(wasm, module = "bolt")]
+extern write_file(i32, i32) -> ()
 
-extern flush "bolt" "flush" (i32) -> ()
+#[link(wasm, module = "bolt")]
+extern flush(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32, 2i32)
@@ -1760,7 +1784,8 @@ data Tuple_Ordering_Ordering {
   (i32, i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %a: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32, 5i32, 6i32, 7i32, 8i32, 9i32, 10i32)
@@ -2565,7 +2590,8 @@ fn log(x: i32);
 log(1);
 abort();
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let = call_extern log(1i32)
@@ -2602,7 +2628,8 @@ data Option_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %r: imm Range_i32 = new Range_i32.0(1i32, 4i32)
@@ -2746,7 +2773,8 @@ data Option_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Range_i32 = new Range_i32.0(0i32, 3i32)
@@ -2927,7 +2955,8 @@ data Option_u8 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm RangeInclusive_i32 = new RangeInclusive_i32.0(1i32, 3i32)

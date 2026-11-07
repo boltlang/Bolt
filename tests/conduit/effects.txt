@@ -21,7 +21,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Yield {
   (i32) -> ()
@@ -101,7 +102,8 @@ fn count() -> i32 {
 }
 log(count());
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Tick {
   () -> ()
@@ -182,7 +184,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Fail {
   (i32) -> ()
@@ -247,7 +250,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Ask {
   (i32) -> (i32)
@@ -352,7 +356,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Log {
   (i32) -> ()
@@ -430,7 +435,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Log {
   (i32) -> ()
@@ -523,7 +529,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Fail {
   (i32) -> ()
@@ -634,7 +641,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Ask {
   () -> (i32)
@@ -786,7 +794,8 @@ data Tuple_Bool {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect State_i32 {
   () -> (i32)
@@ -955,7 +964,8 @@ data Option_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Say {
   (i32) -> ()
@@ -1096,7 +1106,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Yield {
   (i32) -> ()
@@ -1188,7 +1199,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Ask {
   () -> (i32)
@@ -1304,7 +1316,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Ask {
   () -> (i32)
@@ -1425,7 +1438,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Yield {
   (i32) -> ()
@@ -1513,7 +1527,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Yield {
   (i32) -> ()
@@ -1590,7 +1605,8 @@ fn run() -> i32 =
   };
 log(run());
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Reader {
   () -> (i32)
@@ -1674,7 +1690,8 @@ data Tuple_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 effect Yield {
   (i32) -> ()

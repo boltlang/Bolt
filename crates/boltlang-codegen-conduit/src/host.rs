@@ -39,9 +39,7 @@ pub(crate) fn declare_io(module: &mut Module, io: &mut Option<Io>) -> Io {
         let id = ExternId(module.externs.len() as u64);
         let sig = Sig::new(params, Vec::new());
         let debug_name = Some(name.into());
-        module
-            .externs
-            .insert(id, Extern { module: "bolt".into(), name: name.into(), sig, debug_name });
+        module.externs.insert(id, Extern { debug_name, ..Extern::new("bolt", name, sig) });
         id
     };
     let write_file = declare("write_file", vec![Ty::I32, Ty::I32]);

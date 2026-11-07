@@ -101,7 +101,13 @@ struct Log {
 }
 
 impl Host for Log {
-    fn call(&mut self, _: ExternId, decl: &Extern, args: &[Value]) -> Result<Vec<Value>, String> {
+    fn call(
+        &mut self,
+        _: ExternId,
+        decl: &Extern,
+        args: &[Value],
+        _: &mut conduit_eval::Arrays<'_, '_>,
+    ) -> Result<Vec<Value>, String> {
         if &*decl.module == "bolt" {
             match (&*decl.name, args) {
                 ("write_file", [Value::I32(file), Value::I32(byte)]) => {

@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
 };
 
-use conduit_eval::{ErrorKind, Host, Machine, Value};
+use conduit_eval::{Arrays, ErrorKind, Host, Machine, Value};
 use conduit_ir::{Extern, ExternId, FuncId};
 
 use crate::{
@@ -90,7 +90,13 @@ impl Stdio {
 }
 
 impl Host for Stdio {
-    fn call(&mut self, _: ExternId, decl: &Extern, args: &[Value]) -> Result<Vec<Value>, String> {
+    fn call(
+        &mut self,
+        _: ExternId,
+        decl: &Extern,
+        args: &[Value],
+        _: &mut Arrays<'_, '_>,
+    ) -> Result<Vec<Value>, String> {
         match (&*decl.module, &*decl.name, args) {
             ("bolt", "write_file", [Value::I32(file), Value::I32(byte)]) => {
                 self.files.entry(*file).or_default().push(*byte as u8);

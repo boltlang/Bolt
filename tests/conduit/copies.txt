@@ -10,7 +10,8 @@ xs[0] = 9;
 log(ys[0]);
 log(xs[0]);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %xs: mut [i32] = array_new(1i32, 2i32)
@@ -103,7 +104,8 @@ let ys = imm xs;
 xs[0][0] = 9;
 log(ys[0][0]);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32)
@@ -257,7 +259,8 @@ data Option_0_i32['m1] {
   ('m1 [i32])
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32)
@@ -400,7 +403,8 @@ let xs = [1, 2];
 let ys = imm xs;
 log(ys[1]);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %xs: imm [i32] = array_new(1i32, 2i32)
@@ -437,11 +441,14 @@ data String {
   (imm [i32])
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern write_file "bolt" "write_file" (i32, i32) -> ()
+#[link(wasm, module = "bolt")]
+extern write_file(i32, i32) -> ()
 
-extern flush "bolt" "flush" (i32) -> ()
+#[link(wasm, module = "bolt")]
+extern flush(i32) -> ()
 
 fn file() -> () {
   let %v: mut Vec_0_i32[mut] = call Vec_new_mut_i32()
@@ -792,7 +799,8 @@ let ys = freeze(xs);
 xs[0] = 9;
 log(ys[0]);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %xs: mut [i32] = array_new(1i32)
@@ -887,7 +895,8 @@ let ys = imm xs;
 xs[0][0] = 9;
 log(ys[0][0]);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32)
@@ -1044,7 +1053,8 @@ data Point {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %p: imm Point = new Point.0(3i32)

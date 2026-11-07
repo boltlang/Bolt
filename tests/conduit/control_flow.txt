@@ -12,7 +12,8 @@ while i < 5 {
 }
 log(sum);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %i: ref i32 = ref_new(0i32)
@@ -76,7 +77,8 @@ loop {
   log(i);
 }
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %i: ref i32 = ref_new(0i32)
@@ -155,7 +157,8 @@ let n = loop {
 };
 log(n);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %i: ref i32 = ref_new(1i32)
@@ -231,7 +234,8 @@ fn first_over(limit: i32) -> i32 {
 }
 log(first_over(10));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call first_over(10i32)
@@ -298,7 +302,8 @@ fn no(n: i32) -> Bool { log(n); False }
 if no(1) && yes(2) { log(10); }
 if yes(3) || no(4) { log(20); }
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   join j1() =

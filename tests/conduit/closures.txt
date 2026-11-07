@@ -8,7 +8,8 @@ let n = 10;
 let add = |x| x + n;
 log(add(1));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %add: imm fn(i32) -> (i32) = closure file_lambda0(10i32)
@@ -46,7 +47,8 @@ tick();
 tick();
 log(count);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %count: ref i32 = ref_new(0i32)
@@ -87,7 +89,8 @@ fn adder(n: i32) -> fn(i32) -> i32 = |x| x + n;
 let add2 = adder(2);
 log(add2(5));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %add2: imm fn(i32) -> (i32) = call adder[imm](2i32)
@@ -128,7 +131,8 @@ fn twice(f: fn(i32) -> i32, x: i32) -> i32 = f(f(x));
 let k = 3;
 log(twice(|x| x * k, 2));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm fn(i32) -> (i32) = closure file_lambda0(3i32)
@@ -170,7 +174,8 @@ fn inc(x: i32) -> i32 = x + 1;
 fn apply(f: fn(i32) -> i32, x: i32) -> i32 = f(x);
 log(apply(inc, 41));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm fn(i32) -> (i32) = closure inc()
@@ -214,7 +219,8 @@ let outer = |x| {
 };
 log(outer(10));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %outer: imm fn(i32) -> (i32) = closure file_lambda0(100i32)
@@ -263,7 +269,8 @@ data Counter {
   (inherit fn() -> (i32))
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %n: ref i32 = ref_new(0i32)
@@ -311,7 +318,8 @@ data Tuple_i32_i32 {
   (i32, i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
@@ -373,7 +381,8 @@ fn first(xs: 'm [i32]) -> i32 {
 log(first(mut [4, 5]));
 log(first([6]));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(4i32, 5i32)
@@ -429,7 +438,8 @@ data Option_i32 {
   (i32)
 }
 
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: imm fn(i32) -> (imm Wrapper) = closure Wrapper()

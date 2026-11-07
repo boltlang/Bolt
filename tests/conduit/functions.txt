@@ -7,7 +7,8 @@ fn add(a: i32, b: i32) -> i32 = i32_add(a, b);
 #[builtin] fn i32_add(a: i32, b: i32) -> i32;
 log(add(1, 2));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call add(1i32, 2i32)
@@ -33,9 +34,11 @@ fn id[T](x: T) -> T = x;
 log(id(1));
 log64(id(2i64));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern log64 "env" "log64" (i64) -> ()
+#[link(wasm, module = "env")]
+extern log64(i64) -> ()
 
 fn file() -> () {
   let %0: i32 = call id_i32(1i32)
@@ -67,7 +70,8 @@ log(square(3) + 1);
 log(7 / 2);
 log(-7 % 3);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call square(3i32)
@@ -153,9 +157,11 @@ log(a + 100);
 let b: i8 = 100;
 logi(b + 100);
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern logi "env" "logi" (i32) -> ()
+#[link(wasm, module = "env")]
+extern logi(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call plus_u8(200i32, 100i32)
@@ -200,7 +206,8 @@ fn log(x: i32);
 fn fac(n: i32) -> i32 = if n <= 1 { 1 } else { n * fac(n - 1) };
 log(fac(5));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: i32 = call fac(5i32)
@@ -264,7 +271,8 @@ log(1);
 #[test]
 fn second() { log(2); }
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let = call_extern log(1i32)
@@ -290,9 +298,11 @@ fn stop() -> !;
 log(1);
 stop();
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
-extern stop "env" "stop" () -> ()
+#[link(wasm, module = "env")]
+extern stop() -> ()
 
 fn file() -> () {
   let = call_extern log(1i32)
@@ -316,9 +326,11 @@ data String {
   (imm [i32])
 }
 
-extern write_file "bolt" "write_file" (i32, i32) -> ()
+#[link(wasm, module = "bolt")]
+extern write_file(i32, i32) -> ()
 
-extern flush "bolt" "flush" (i32) -> ()
+#[link(wasm, module = "bolt")]
+extern flush(i32) -> ()
 
 fn file() -> () {
   let %0: imm [i32] = array_new(104i32, 101i32, 108i32, 108i32, 111i32)
@@ -367,7 +379,8 @@ fn first(xs: 'm [i32]) -> i32 = id(xs)[0];
 log(first(mut [1]));
 log(first([2]));
 --------------------------------------------------------------------------------
-extern log "env" "log" (i32) -> ()
+#[link(wasm, module = "env")]
+extern log(i32) -> ()
 
 fn file() -> () {
   let %0: mut [i32] = array_new(1i32)

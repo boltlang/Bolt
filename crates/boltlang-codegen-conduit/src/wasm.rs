@@ -40,6 +40,7 @@ pub fn build_exporting(
     }
     conduit_opt::ownership::insert_counts(&mut m)
         .map_err(|e| format!("making reference counts explicit: {e}"))?;
-    let options = Options { stack_switching: false, counts: true, cycles: true };
+    let options =
+        Options { stack_switching: false, counts: true, cycles: true, ..Options::default() };
     emit_module_with(&m, exports, &options).map_err(|e| e.to_string())
 }
