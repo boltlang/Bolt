@@ -1,6 +1,9 @@
 import "./string" (String, bytes);
 import "./ops" *;
-import "./wasi" (Fd, fd_write);
+#[cfg(host = "wasm")]
+import "./wasi" (fd_write);
+#[cfg(host = "emu")]
+import "./emu" (write);
 
 /// Write `text` and a newline to stdout.
 pub fn print(text: String) {
@@ -12,10 +15,17 @@ pub fn eprint(text: String) {
   write_line(2, text);
 }
 
-/// Write `text` and a newline to `fd`, as its UTF-8 bytes, in one call of
-/// the host. What goes wrong is left out, since there's nowhere to say it.
-fn write_line(fd: Fd, text: String) {
+/// Write `text` and a newline to the file `fd`, as its UTF-8 bytes. What
+/// goes wrong is left out, since there's nowhere to say it.
+#[cfg(host = "wasm")]
+fn write_line(fd: u32, text: String) {
   fd_write(fd, [bytes(text), bytes("\n")]);
+}
+
+#[cfg(host = "emu")]
+fn write_line(fd: i32, text: String) {
+  write(fd, bytes(text));
+  write(fd, bytes("\n"));
 }
 
 /// Stop the program with an error, at once.

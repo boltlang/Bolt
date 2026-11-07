@@ -48,13 +48,14 @@
 //! mutability parameters. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
+mod emu;
 mod func;
 pub mod node;
 pub mod run;
 mod ty;
-mod wasi;
 pub mod wasm;
 
+use boltlang_hir_def::item_tree::LinkKind;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
@@ -897,16 +898,22 @@ fn declare_extern<'db>(
             .ok_or_else(|| ErrorKind::unsupported("a use without a type"))?;
         Ok(lcx.ty(&ty)?)
     };
-    let (key, module_name, name, linked) = match u {
+    let (key, link, name, linked) = match u {
         Use::Extern(f) => {
             let own = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
-            // `#[link(wasm, module = "m", name = "n")]`.
+            // `#[link(wasm, module = "m", name = "n")]` or `#[link(emu, name = "n")]`.
             let Some(link) = boltlang_hir_ty::builtin::link(db, *f) else {
                 return Err(ErrorKind::unsupported("a host function without `#[link]`"));
             };
-            let module = link.module.clone().unwrap_or_default();
             let name = link.name.clone().unwrap_or(own);
-            (ExternKey::Function(*f), module, name, *f)
+            let link = match link.kind {
+                LinkKind::Wasm => conduit_ir::Link::Wasm {
+                    module: link.module.clone().unwrap_or_default().into(),
+                    name: name.as_str().into(),
+                },
+                LinkKind::Emu => conduit_ir::Link::Emu { name: name.as_str().into() },
+            };
+            (ExternKey::Function(*f), link, name, *f)
         }
         _ => return Ok(()),
     };
@@ -940,7 +947,7 @@ fn declare_extern<'db>(
     }
     let id = ExternId(module.externs.len() as u64);
     let debug_name = Some(name.as_str().into());
-    let mut ext = Extern { debug_name, ..Extern::new(&module_name, &name, sig) };
+    let mut ext = Extern { debug_name, ..Extern::new(link, sig) };
     if flat {
         ext.abi = conduit_ir::Abi::Flat;
         if nolen.contains(&true) {

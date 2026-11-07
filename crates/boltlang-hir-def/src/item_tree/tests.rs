@@ -45,7 +45,7 @@ let top_level_statements_are_not_items = 1;
             "visibility: Package",
             "\"Red\"",
             "\"Green\"",
-            "link: Some(Link { module: Some(\"env\")",
+            "link: Some(Link { kind: Wasm, module: Some(\"env\")",
         ],
     );
     assert_eq!(tree.top_level.len(), 15);

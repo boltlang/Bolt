@@ -14,11 +14,11 @@ boltlang-mir-mono.workspace = true
 boltlang-mir-transform.workspace = true
 boltlang-pattern.workspace = true
 # Conduit, at a commit of its `main`: bump `rev` to use newer changes.
-conduit-ir = { git = "https://github.com/boltlang/conduit", rev = "088d5d8" }
-conduit-effects = { git = "https://github.com/boltlang/conduit", rev = "088d5d8" }
-conduit-eval = { git = "https://github.com/boltlang/conduit", rev = "088d5d8" }
-conduit-opt = { git = "https://github.com/boltlang/conduit", rev = "088d5d8" }
-conduit-wasm = { git = "https://github.com/boltlang/conduit", rev = "088d5d8" }
+conduit-ir = { git = "https://github.com/boltlang/conduit", rev = "b8b2b2b" }
+conduit-effects = { git = "https://github.com/boltlang/conduit", rev = "b8b2b2b" }
+conduit-eval = { git = "https://github.com/boltlang/conduit", rev = "b8b2b2b" }
+conduit-opt = { git = "https://github.com/boltlang/conduit", rev = "b8b2b2b" }
+conduit-wasm = { git = "https://github.com/boltlang/conduit", rev = "b8b2b2b" }
 
 [dev-dependencies]
 boltlang-corpus.workspace = true

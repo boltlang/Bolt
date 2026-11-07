@@ -2,7 +2,7 @@
 A handler sums what a generator yields
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn produce() does Yield {
@@ -21,7 +21,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Yield {
@@ -77,13 +77,13 @@ fn sum_handle0_yield(%0: i32, %k: cont() -> (i32)) -> (i32) {
   jump ret(%5)
 }
 --------------------------------------------------------------------------------
-env.log(6)
+log(6)
 
 ================================================================================
 A handler's arms can change a local around it
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Tick { fn tick(); }
 fn ticks() does Tick {
@@ -102,7 +102,7 @@ fn count() -> i32 {
 }
 log(count());
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Tick {
@@ -158,13 +158,13 @@ fn count_handle0_tick(%n: ref i32, %k: cont() -> (i32)) -> (i32) {
   jump ret(%4)
 }
 --------------------------------------------------------------------------------
-env.log(2)
+log(2)
 
 ================================================================================
 An arm that doesn't resume stops the scrutinee
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Fail { fn fail(code: i32) -> !; }
 fn work() -> i32 does Fail {
@@ -184,7 +184,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Fail {
@@ -226,14 +226,14 @@ fn attempt_handle0_fail(%0: i32, %1: cont() -> (i32)) -> (i32) {
   jump ret(%code)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(7)
+log(1)
+log(7)
 
 ================================================================================
 An operation gives what its arm resumes with, and arms match its arguments
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Ask { fn ask(n: i32) -> i32; }
 fn questions() -> i32 does Ask = ask(0) + ask(5) + ask(20);
@@ -250,7 +250,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Ask {
@@ -329,13 +329,13 @@ fn answer_handle0_ask(%0: i32, %k: cont(i32) -> (i32)) -> (i32) {
   }
 }
 --------------------------------------------------------------------------------
-env.log(106)
+log(106)
 
 ================================================================================
 An arm for several operations
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Log { fn info(m: i32); fn warn(m: i32); }
 fn chatty() does Log {
@@ -356,7 +356,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Log {
@@ -408,14 +408,14 @@ fn shown_handle0_warn(%0: i32, %k: cont() -> ()) -> () {
   jump ret()
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(2)
+log(1)
+log(2)
 
 ================================================================================
 A match can handle several effects
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Log { fn log_it(m: i32); }
 effect Ask { fn ask() -> i32; }
@@ -435,7 +435,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Log {
@@ -500,14 +500,14 @@ fn run_handle0_ask(%k: cont(i32) -> (i32)) -> (i32) {
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(40)
+log(1)
+log(40)
 
 ================================================================================
 An arm can be for operations of several effects
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Fail { fn fail(code: i32); }
 effect Abort { fn abort(code: i32); }
@@ -529,7 +529,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Fail {
@@ -610,15 +610,15 @@ fn attempt_handle0_abort(%0: i32, %1: cont() -> (i32)) -> (i32) {
   jump ret(%c)
 }
 --------------------------------------------------------------------------------
-env.log(10)
-env.log(20)
-env.log(3)
+log(10)
+log(20)
+log(3)
 
 ================================================================================
 A handler of several effects lets the others through
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Skip { fn skip(); }
@@ -641,7 +641,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Ask {
@@ -740,13 +740,13 @@ fn sum_handle0_skip[E1](%k: cont() -> (i32) does E1) -> (i32) does E1 {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(111)
+log(111)
 
 ================================================================================
 An effect with type parameters is an effect for each of its arguments
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect State[S] {
   fn get() -> S;
@@ -794,7 +794,7 @@ data Tuple_Bool {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect State_i32 {
@@ -926,14 +926,14 @@ fn flag_handle0_set(%b: ref i32, %1: i32, %k: cont() -> (i32)) -> (i32) {
   jump ret(%5)
 }
 --------------------------------------------------------------------------------
-env.log(12)
-env.log(1)
+log(12)
+log(1)
 
 ================================================================================
 An operation as a function performs it
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Say { fn say(n: i32); }
 fn each(xs: [i32], f: fn(i32) does Say) does Say {
@@ -964,7 +964,7 @@ data Option_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Say {
@@ -1083,14 +1083,14 @@ fn run_handle0_say(%0: i32, %k: cont() -> ()) -> () {
   jump ret()
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(2)
+log(1)
+log(2)
 
 ================================================================================
 A function generic in its effects passes them on
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn twice[E](f: fn() does E) does E { f(); f() }
@@ -1106,7 +1106,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Yield {
@@ -1172,13 +1172,13 @@ fn sum_handle0_yield(%0: i32, %k: cont() -> (i32)) -> (i32) {
   jump ret(%5)
 }
 --------------------------------------------------------------------------------
-env.log(2)
+log(2)
 
 ================================================================================
 A handler of one effect lets the others through
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Ask { fn ask() -> i32; }
@@ -1199,7 +1199,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Ask {
@@ -1289,13 +1289,13 @@ fn sum_handle0_yield[E1](%0: i32, %k: cont() -> (i32) does E1) -> (i32) does E1 
   jump ret(%5)
 }
 --------------------------------------------------------------------------------
-env.log(21)
+log(21)
 
 ================================================================================
 An arm can perform what the handler around it handles
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Ask { fn ask() -> i32; }
@@ -1316,7 +1316,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Ask {
@@ -1409,13 +1409,13 @@ fn scaled_handle0_yield(%0: i32, %k: cont() -> (i32) does Ask) -> (i32) does Ask
   jump ret(%7)
 }
 --------------------------------------------------------------------------------
-env.log(30)
+log(30)
 
 ================================================================================
 A closure with effects in a data type
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn run(f: Option[fn() does Yield]) does Yield = match f {
@@ -1438,7 +1438,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Yield {
@@ -1505,13 +1505,13 @@ fn sum_handle0_yield(%0: i32, %k: cont() -> (i32)) -> (i32) {
   jump ret(%5)
 }
 --------------------------------------------------------------------------------
-env.log(5)
+log(5)
 
 ================================================================================
 A continuation given to a function generic in its effects
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 fn later[E](k: Cont[(), i32, E]) -> i32 does E = resume(k, ());
@@ -1527,7 +1527,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Yield {
@@ -1586,13 +1586,13 @@ fn sum_handle0_yield(%0: i32, %k: cont() -> (i32)) -> (i32) {
   jump ret(%5)
 }
 --------------------------------------------------------------------------------
-env.log(3)
+log(3)
 
 ================================================================================
 The clauses of operations of the same name are named after their effects
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Reader { fn get() -> i32; }
 effect State { fn get() -> i32; }
@@ -1605,7 +1605,7 @@ fn run() -> i32 =
   };
 log(run());
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Reader {
@@ -1666,13 +1666,13 @@ fn run_handle0_State_get(%k: cont(i32) -> (i32)) -> (i32) {
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
-env.log(42)
+log(42)
 
 ================================================================================
 Instances aren't specialized on the rows in their type arguments
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 effect Yield { fn yield(value: i32); }
 effect Ask { fn ask() -> i32; }
@@ -1690,7 +1690,7 @@ data Tuple_i32 {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 effect Yield {
@@ -1768,5 +1768,5 @@ fn sum_handle0_ask(%k: cont(i32) -> (i32)) -> (i32) {
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
-env.log(3)
-env.log(3)
+log(3)
+log(3)

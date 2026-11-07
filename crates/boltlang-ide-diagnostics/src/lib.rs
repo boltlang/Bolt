@@ -1114,10 +1114,18 @@ fn link_error(e: &boltlang_hir_def::item_tree::LinkError) -> String {
         E::NoTarget => format!("`#[link]` must say what the function is linked to first; {FORM}"),
         E::UnknownTarget(t) => {
             format!(
-                "a function can't be linked to `{t}`: only `wasm` imports are supported; {FORM}"
+                "a function can't be linked to `{t}`: it's linked to `wasm`, a Wasm import, or `emu`, \
+                 the evaluator; {FORM}"
             )
         }
+        E::NoNativeTarget => {
+            "a function can't be linked to `c` yet: that comes with the native target".to_string()
+        }
         E::NoModule => format!("`#[link(wasm, ..)]` needs the Wasm module of the import; {FORM}"),
+        E::ModuleForEmu => {
+            "`#[link(emu, ..)]` has no module: the evaluator provides it by its `name` alone"
+                .to_string()
+        }
         E::UnknownKey(k) => format!("`#[link]` has no `{k}`; it takes `module`, `name` and `abi`"),
         E::UnknownAbi(a) => format!("there's no ABI `{a}`; the only one is `flat`"),
         E::Repeated(k) => format!("`{k}` is given twice"),

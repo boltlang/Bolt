@@ -44,8 +44,8 @@ use boltlang_codegen_conduit::lower;
 use boltlang_corpus::{
     Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
 };
-use conduit_eval::{Host, Machine, Value};
-use conduit_ir::{Extern, ExternId, Module};
+use conduit_eval::{Host, HostError, Machine, Value};
+use conduit_ir::{Extern, Module};
 use libtest_mimic::{Arguments, Failed, Trial};
 
 #[derive(Default)]
@@ -91,47 +91,66 @@ impl Attributes {
     }
 }
 
-/// A host that writes down every call. WASI's `fd_write` to stdout or
-/// stderr is a line for each line it writes instead, like `stdout: hi`.
+/// A host that writes down every call, by its `emu` name. `write` to
+/// stdout or stderr, as std's and the test prelude's `print` do, is a line
+/// for each line it writes instead, like `stdout: hi`, once its newline
+/// is written.
 #[derive(Default, Clone)]
 struct Log {
     lines: Rc<RefCell<Vec<String>>>,
+    /// The text of a line on stdout or stderr that has no newline yet.
+    pending: Rc<RefCell<std::collections::BTreeMap<i32, String>>>,
+}
+
+impl Log {
+    /// Write down what's still pending, as at the end of a run.
+    fn finish(&self) {
+        for (fd, text) in std::mem::take(&mut *self.pending.borrow_mut()) {
+            self.line(fd, &text);
+        }
+    }
+
+    fn line(&self, fd: i32, text: &str) {
+        let file = if fd == 1 { "stdout" } else { "stderr" };
+        self.lines.borrow_mut().push(format!("{file}: {text}").trim_end().to_string());
+    }
 }
 
 impl Host for Log {
     fn call(
         &mut self,
-        _: ExternId,
+        name: &str,
         decl: &Extern,
         args: &[Value],
         arrays: &mut conduit_eval::Arrays<'_, '_>,
-    ) -> Result<Vec<Value>, String> {
-        if &*decl.module == "wasi_snapshot_preview1" && &*decl.name == "fd_write" {
-            if let [Value::I32(fd @ (1 | 2)), iovs] = args {
-                let mut bytes = Vec::new();
-                for buf in arrays.get(iovs).unwrap_or_default() {
-                    for b in arrays.get(buf).unwrap_or_default() {
-                        if let Value::I8(b) = b {
-                            bytes.push(*b as u8);
-                        }
-                    }
-                }
-                let name = if *fd == 1 { "stdout" } else { "stderr" };
-                let text = String::from_utf8_lossy(&bytes);
-                for line in text.strip_suffix('\n').unwrap_or(&text).split('\n') {
-                    let line = format!("{name}: {line}");
-                    self.lines.borrow_mut().push(line.trim_end().to_string());
-                }
-                // Success, and how many bytes it wrote.
-                let values = [0, bytes.len() as i64];
-                let results = decl.sig.results.iter().zip(values).map(|(t, n)| match t {
-                    conduit_ir::Ty::I64 => Value::I64(n),
-                    conduit_ir::Ty::I16 => Value::I16(n as i16),
-                    conduit_ir::Ty::I8 => Value::I8(n as i8),
-                    _ => Value::I32(n as i32),
-                });
-                return Ok(results.collect());
+    ) -> Result<Vec<Value>, HostError> {
+        if name == "write"
+            && let [Value::I32(fd @ (1 | 2)), buf] = args
+        {
+            let bytes: Vec<u8> = arrays
+                .get(buf)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|b| if let Value::I8(b) = b { Some(*b as u8) } else { None })
+                .collect();
+            let mut pending = self.pending.borrow_mut().remove(fd).unwrap_or_default();
+            pending.push_str(&String::from_utf8_lossy(&bytes));
+            while let Some(end) = pending.find('\n') {
+                self.line(*fd, &pending[..end]);
+                pending.drain(..=end);
             }
+            if !pending.is_empty() {
+                self.pending.borrow_mut().insert(*fd, pending);
+            }
+            // Success, and how many bytes it wrote.
+            let values = [0, bytes.len() as i64];
+            let results = decl.sig.results.iter().zip(values).map(|(t, n)| match t {
+                conduit_ir::Ty::I64 => Value::I64(n),
+                conduit_ir::Ty::I16 => Value::I16(n as i16),
+                conduit_ir::Ty::I8 => Value::I8(n as i8),
+                _ => Value::I32(n as i32),
+            });
+            return Ok(results.collect());
         }
         // A flat extern's arrays are shown with their elements, like
         // `[1, 2]`, and its results are 1, 2 and so on, so that a test sees
@@ -139,7 +158,7 @@ impl Host for Log {
         let flat = decl.abi == conduit_ir::Abi::Flat;
         let show = |v: &Value| if flat { show_array(arrays, v) } else { show_value(v) };
         let args: Vec<String> = args.iter().map(show).collect();
-        self.lines.borrow_mut().push(format!("{}.{}({})", decl.module, decl.name, args.join(", ")));
+        self.lines.borrow_mut().push(format!("{name}({})", args.join(", ")));
         if flat {
             let results = decl.sig.results.iter().enumerate().map(|(i, t)| match t {
                 conduit_ir::Ty::I64 => Value::I64(i as i64 + 1),
@@ -150,7 +169,7 @@ impl Host for Log {
             return Ok(results.collect());
         }
         if !decl.sig.results.is_empty() {
-            return Err(format!("`{}` gives a value, which the tests' host can't", decl.name));
+            return Err(format!("`{name}` gives a value, which the tests' host can't").into());
         }
         Ok(Vec::new())
     }
@@ -219,6 +238,7 @@ fn execute(module: &Module, f: conduit_ir::FuncId, test: Option<&str>) -> Vec<St
     let log = Log::default();
     let mut machine = Machine::new(module, log.clone());
     let result = machine.call(f, Vec::new());
+    log.finish();
     let mut lines = Vec::new();
     if let Some(name) = test {
         lines.push(format!("test {name}"));

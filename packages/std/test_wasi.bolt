@@ -1,3 +1,5 @@
+// The tests of `wasi.bolt`, which only Wasm has: `bolt test --wasm`.
+
 import "./wasi" *;
 import "./io" (assert);
 import "./ops" *;
@@ -14,6 +16,7 @@ fn not_there(e: Errno) -> Bool = match e {
   _ => False,
 };
 
+#[cfg(host = "wasm")]
 #[test]
 fn fd_write_writes_its_iovecs() {
   let r = fd_write(1, [bytes("io: "), bytes("hello\n")]);
@@ -21,11 +24,13 @@ fn fd_write_writes_its_iovecs() {
   assert(r.1 == 10);
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn fd_write_to_a_file_that_isnt_open() {
   assert(!succeeded(fd_write(1000, [bytes("x")]).0));
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn there_are_no_arguments_or_environment() {
   let args = args_sizes_get();
@@ -36,6 +41,7 @@ fn there_are_no_arguments_or_environment() {
   assert(env.1 == 0);
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn clocks_go_forward() {
   let a = clock_time_get(Clockid.Monotonic, 1);
@@ -48,6 +54,7 @@ fn clocks_go_forward() {
   assert(now.1 > 1577836800000000000);
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn random_get_fills_its_buffer() {
   let buf = mut [0u8; 32];
@@ -63,16 +70,19 @@ fn random_get_fills_its_buffer() {
   assert(zeros < 32);
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn there_are_no_preopened_directories() {
   assert(not_there(fd_prestat_get(3).0));
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn sched_yield_succeeds() {
   assert(succeeded(sched_yield()));
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn poll_oneoff_waits_for_a_clock() {
   let sub = Subscription.Clock {
@@ -94,6 +104,7 @@ fn poll_oneoff_waits_for_a_clock() {
   }
 }
 
+#[cfg(host = "wasm")]
 #[test]
 fn proc_exit_with_0_ends_the_program() {
   proc_exit(0);

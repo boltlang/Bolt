@@ -1,0 +1,138 @@
+// The evaluator's host, which `bolt run` and `bolt test` run programs
+// with: `#[link(emu, ..)]`, for `host = "emu"`. Like POSIX and WASI, but
+// simpler: one buffer instead of a list of them, paths as they are, from
+// the directory `bolt` runs in, and an `Error` first in what a function
+// gives back. The host can't make arrays, so what it gives back that isn't
+// a number goes into a buffer the caller passes, as `read` does.
+//
+// They're for `std` to build its I/O on, so they're `pub(package)`.
+
+/// What went wrong, or `Success`.
+pub(package) enum Error {
+  Success,
+  NotFound,
+  Exists,
+  Denied,
+  BadFd,
+  Invalid,
+  IsDir,
+  NotDir,
+  NotEmpty,
+  Io,
+}
+
+/// An open file: 0, 1 and 2 are stdin, stdout and stderr.
+pub(package) type Fd = i32;
+
+/// How `open` opens a file: a set of these flags.
+pub(package) const READ: i32 = 1;
+pub(package) const WRITE: i32 = 2;
+pub(package) const CREATE: i32 = 4;
+pub(package) const TRUNCATE: i32 = 8;
+pub(package) const APPEND: i32 = 16;
+
+/// Where `seek` counts from.
+pub(package) enum Whence { Set, Current, End }
+
+/// Which clock to read.
+pub(package) enum Clock {
+  /// Nanoseconds since 1970.
+  Realtime,
+  /// Nanoseconds since the program started.
+  Monotonic,
+}
+
+/// Write `bytes`: how many it wrote.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn write(fd: Fd, bytes: [u8]) -> (Error, i32);
+
+/// Read into `buf`: how many bytes it read, `0` at the end.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn read(fd: Fd, buf: mut [u8]) -> (Error, i32);
+
+/// Open the file at `path`, with `flags`: its file descriptor.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn open(path: [u8], flags: i32) -> (Error, Fd);
+
+/// Close a file.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn close(fd: Fd) -> Error;
+
+/// Move a file's position: the new one.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn seek(fd: Fd, offset: i64, whence: Whence) -> (Error, i64);
+
+/// How many bytes an open file has.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn file_size(fd: Fd) -> (Error, i64);
+
+/// Remove a file.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn remove(path: [u8]) -> Error;
+
+/// Rename a file or directory.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn rename(from: [u8], to: [u8]) -> Error;
+
+/// Make a directory.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn make_dir(path: [u8]) -> Error;
+
+/// Remove an empty directory.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn remove_dir(path: [u8]) -> Error;
+
+/// Write the names in the directory at `path` to `buf`, sorted, each
+/// ending in a zero, as many as fit: how many bytes they take in all, so
+/// that a bigger buffer can be tried when that's more than `buf` has.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn read_dir(path: [u8], buf: mut [u8]) -> (Error, i32);
+
+/// How many arguments the program has, after its own name, and how many
+/// bytes `args` writes for them.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn args_size() -> (i32, i32);
+
+/// Write the arguments to `buf`, each ending in a zero.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn args(buf: mut [u8]) -> Error;
+
+/// How many environment variables there are, and how many bytes `env`
+/// writes for them.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn env_size() -> (i32, i32);
+
+/// Write the environment variables to `buf` as `KEY=value`, sorted, each
+/// ending in a zero.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn env(buf: mut [u8]) -> Error;
+
+/// The time of a clock, in nanoseconds.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn clock(clock: Clock) -> i64;
+
+/// Fill `buf` with random bytes.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn random(buf: mut [u8]);
+
+/// Stop the program, with `code` as its exit code.
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+pub(package) fn exit(code: i32) -> !;

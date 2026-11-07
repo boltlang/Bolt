@@ -111,7 +111,7 @@ fn a(x: i32);
  //^ error: `#[link]` must say what the function is linked to first; write it like `#[link(wasm, module = "env", name = "log")]`
 #[link(native, module = "c")]
 fn b(x: i32);
- //^ error: a function can't be linked to `native`: only `wasm` imports are supported; write it like `#[link(wasm, module = "env", name = "log")]`
+ //^ error: a function can't be linked to `native`: it's linked to `wasm`, a Wasm import, or `emu`, the evaluator; write it like `#[link(wasm, module = "env", name = "log")]`
 #[link(wasm)]
 fn c(x: i32);
  //^ error: `#[link(wasm, ..)]` needs the Wasm module of the import; write it like `#[link(wasm, module = "env", name = "log")]`
@@ -124,6 +124,16 @@ fn e(x: i32);
 #[link(wasm, module = env)]
 fn f(x: i32);
  //^ error: after `wasm`, `#[link]` takes `key = "string"` pairs, and `abi = flat`; write it like `#[link(wasm, module = "env", name = "log")]`
+#[link(emu, module = "env")]
+fn g(x: i32);
+ //^ error: `#[link(emu, ..)]` has no module: the evaluator provides it by its `name` alone
+#[link(c, symbol = "puts")]
+fn h(x: i32);
+ //^ error: a function can't be linked to `c` yet: that comes with the native target
+#[link(emu)]
+fn i(x: i32);
+#[link(emu, name = "j2", abi = flat)]
+fn j(x: i32);
 
 ================================================================================
 extern is reserved

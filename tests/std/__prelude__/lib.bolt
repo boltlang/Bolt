@@ -4,23 +4,25 @@
 // with their impls for the primitive types, arrays, tuples, `String` and
 // `Char`, the types of string and character literals, `Debug`, which the
 // evaluator shows characters with, `ToImmDeep`, which `imm e` copies with,
-// `Cont` and `resume` for handlers, `print` and `eprint` on WASI's
-// `fd_write`, and a few functions the compiler provides. It's a copy of what `packages/std` has of them, so that a case
+// `Cont` and `resume` for handlers, `print` and `eprint` on the
+// evaluator's `write`, and a few functions the compiler provides. It's a copy of what `packages/std` has of them, so that a case
 // that only needs these doesn't change when `std` does.
 
-/// Write `iovs`, as WASI's `fd_write` does: an error number, and how
-/// many bytes it wrote.
-#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
-fn fd_write(fd: u32, iovs: [[u8]]) -> (u16, u32);
+/// Write `bytes` to the file `fd`, as `std`'s `emu.bolt` does: an error
+/// number, and how many bytes it wrote.
+#[link(emu, abi = flat)]
+fn write(fd: i32, bytes: [u8]) -> (u16, i32);
 
 /// Write `text` and a newline to stdout.
 pub fn print(text: String) {
-  fd_write(1, [text.0, "\n".0]);
+  write(1, text.0);
+  write(1, "\n".0);
 }
 
 /// Write `text` and a newline to stderr.
 pub fn eprint(text: String) {
-  fd_write(2, [text.0, "\n".0]);
+  write(2, text.0);
+  write(2, "\n".0);
 }
 
 /// Stop the program with an error, at once.

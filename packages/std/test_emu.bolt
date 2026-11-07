@@ -1,0 +1,140 @@
+// The tests of `emu.bolt`, which only the evaluator has: `bolt test`.
+
+import "./emu" *;
+import "./io" (assert);
+import "./ops" *;
+import "./array" (array_len);
+import "./string" (bytes);
+
+fn ok(e: Error) -> Bool = match e {
+  Error.Success => True,
+  _ => False,
+};
+
+#[cfg(host = "emu")]
+#[test]
+fn write_gives_how_many_bytes_it_wrote() {
+  let r = write(1, bytes("emu: hello\n"));
+  assert(ok(r.0));
+  assert(r.1 == 11);
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn a_file_that_isnt_open_is_a_bad_fd() {
+  assert(match write(1000, bytes("x")).0 { Error.BadFd => True, _ => False });
+  assert(match close(1000) { Error.BadFd => True, _ => False });
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn a_file_can_be_written_read_and_removed() {
+  let path = bytes("test_emu_file.txt");
+  let w = open(path, WRITE | CREATE | TRUNCATE);
+  assert(ok(w.0));
+  assert(write(w.1, bytes("hello, file")).1 == 11);
+  assert(ok(close(w.1)));
+  let r = open(path, READ);
+  assert(ok(r.0));
+  assert(file_size(r.1).1 == 11);
+  let buf = mut [0u8; 32];
+  let n = read(r.1, buf);
+  assert(ok(n.0));
+  assert(n.1 == 11);
+  assert(buf[0] == b'h');
+  assert(buf[10] == b'e');
+  // From the start again, then past the end.
+  assert(seek(r.1, 7, Whence.Set).1 == 7);
+  assert(read(r.1, buf).1 == 4);
+  assert(buf[0] == b'f');
+  assert(read(r.1, buf).1 == 0);
+  assert(ok(close(r.1)));
+  assert(ok(remove(path)));
+  assert(match open(path, READ).0 { Error.NotFound => True, _ => False });
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn appending_adds_to_the_end() {
+  let path = bytes("test_emu_append.txt");
+  let a = open(path, WRITE | CREATE | TRUNCATE);
+  write(a.1, bytes("ab"));
+  close(a.1);
+  let b = open(path, APPEND);
+  write(b.1, bytes("cd"));
+  assert(file_size(b.1).1 == 4);
+  close(b.1);
+  remove(path);
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn directories_can_be_made_listed_and_removed() {
+  let dir = bytes("test_emu_dir");
+  assert(ok(make_dir(dir)));
+  assert(match make_dir(dir) { Error.Exists => True, _ => False });
+  let f = open(bytes("test_emu_dir/a"), WRITE | CREATE);
+  close(f.1);
+  assert(ok(rename(bytes("test_emu_dir/a"), bytes("test_emu_dir/b"))));
+  let buf = mut [0u8; 16];
+  let r = read_dir(dir, buf);
+  assert(ok(r.0));
+  // "b" and its zero.
+  assert(r.1 == 2);
+  assert(buf[0] == b'b');
+  assert(buf[1] == 0);
+  assert(match remove_dir(dir) { Error.NotEmpty => True, _ => False });
+  assert(ok(remove(bytes("test_emu_dir/b"))));
+  assert(ok(remove_dir(dir)));
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn a_test_has_no_arguments() {
+  let size = args_size();
+  assert(size.0 == 0);
+  assert(size.1 == 0);
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn the_environment_is_key_value_pairs() {
+  let size = env_size();
+  if size.0 > 0 {
+    let buf = mut [0u8; size.1 as usize];
+    assert(ok(env(buf)));
+    assert(buf[size.1 - 1] == 0);
+  }
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn clocks_go_forward() {
+  let a = clock(Clock.Monotonic);
+  let b = clock(Clock.Monotonic);
+  assert(b >= a);
+  // After 2020.
+  assert(clock(Clock.Realtime) > 1577836800000000000);
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn random_fills_its_buffer() {
+  let buf = mut [0u8; 32];
+  random(buf);
+  let mut zeros = 0;
+  let mut i = 0;
+  while i < 32 {
+    if buf[i] == 0 {
+      zeros = zeros + 1;
+    }
+    i = i + 1;
+  }
+  assert(zeros < 32);
+}
+
+#[cfg(host = "emu")]
+#[test]
+fn exit_with_0_ends_the_program() {
+  exit(0);
+}

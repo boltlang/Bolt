@@ -2,7 +2,7 @@
 A deep copy of an array doesn't see later changes
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 let xs = mut [1, 2];
 let ys = imm xs;
@@ -10,7 +10,7 @@ xs[0] = 9;
 log(ys[0]);
 log(xs[0]);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -90,21 +90,21 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(9)
+log(1)
+log(9)
 
 ================================================================================
 The arrays an array holds are copied too
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 let xs = mut [mut [1], mut [2]];
 let ys = imm xs;
 xs[0][0] = 9;
 log(ys[0][0]);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -223,13 +223,13 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(1)
+log(1)
 
 ================================================================================
 A struct is copied with its own impl, and an Option with the prelude's
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 struct Cell { items: [i32] }
 impl ToImmDeep[Cell] {
@@ -259,7 +259,7 @@ data Option_0_i32['m1] {
   ('m1 [i32])
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -390,20 +390,20 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(3)
+log(1)
+log(3)
 
 ================================================================================
 What's already imm is shared as it is
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 let xs = [1, 2];
 let ys = imm xs;
 log(ys[1]);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -418,13 +418,13 @@ fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(2)
+log(2)
 
 ================================================================================
 A type with an impl of ToImmDeep is copied with it
 :prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 let v = Vec.new();
 v.push(mut [1]);
@@ -441,16 +441,16 @@ data String {
   (imm [i8])
 }
 
-data Tuple_Errno_u32 {
+data Tuple_Error_i32 {
   (i32, i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
-#[link(wasm, module = "wasi_snapshot_preview1")]
+#[link(emu)]
 #[abi(flat)]
-extern fd_write(i32, imm [imm [i8]]) -> (i32, i32)
+extern write(i32, imm [i8]) -> (i32, i32)
 
 fn file() -> () {
   let %v: mut Vec_0_i32[mut] = call Vec_new_mut_i32()
@@ -774,12 +774,13 @@ fn PartialOrd_i32_gte(%a: i32, %b: i32) -> (i32) {
 
 fn write_line(%fd: i32, %text: imm String) -> () {
   let %2: imm [i8] = call bytes(%text)
-  let %3: imm [i8] = array_new(10i8)
-  let %4: imm String = new String.0(%3)
-  let %5: imm [i8] = call bytes(%4)
-  let %6: imm [imm [i8]] = array_new(%2, %5)
-  let %7: i32, %8: i32 = call_extern fd_write(%fd, %6)
-  let %9: imm Tuple_Errno_u32 = new Tuple_Errno_u32.0(%7, %8)
+  let %3: i32, %4: i32 = call_extern write(%fd, %2)
+  let %5: imm Tuple_Error_i32 = new Tuple_Error_i32.0(%3, %4)
+  let %6: imm [i8] = array_new(10i8)
+  let %7: imm String = new String.0(%6)
+  let %8: imm [i8] = call bytes(%7)
+  let %9: i32, %10: i32 = call_extern write(%fd, %8)
+  let %11: imm Tuple_Error_i32 = new Tuple_Error_i32.0(%9, %10)
   jump ret()
 }
 
@@ -788,14 +789,14 @@ fn bytes(%s: imm String) -> (imm [i8]) {
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(1)
+log(1)
+log(1)
 
 ================================================================================
 The copy of a generic function's value is made where it's instantiated
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 fn freeze[T](x: T) -> imm T = imm x;
 let xs = mut [1];
@@ -803,7 +804,7 @@ let ys = freeze(xs);
 xs[0] = 9;
 log(ys[0]);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -886,20 +887,20 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(1)
+log(1)
 
 ================================================================================
 An array is copied with the impl of ToImmDeep in std
 :prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 let xs = mut [mut [1]];
 let ys = imm xs;
 xs[0][0] = 9;
 log(ys[0][0]);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -1017,7 +1018,7 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(1)
+log(1)
 
 ================================================================================
 A copy of a type without an impl of ToImmDeep is an error
@@ -1046,7 +1047,7 @@ error in <file> at `imm v`: nothing gives `ToImmDeep[mut Point]`
 A type that imm doesn't change needs no impl
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 struct Point { x: i32 }
 let p = Point { x: 3 };
@@ -1057,7 +1058,7 @@ data Point {
   (i32)
 }
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -1067,4 +1068,4 @@ fn file() -> () {
   jump ret()
 }
 --------------------------------------------------------------------------------
-env.log(3)
+log(3)

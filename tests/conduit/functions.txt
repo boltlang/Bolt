@@ -1,13 +1,13 @@
 ================================================================================
 A call of a function
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 fn add(a: i32, b: i32) -> i32 = i32_add(a, b);
 #[builtin] fn i32_add(a: i32, b: i32) -> i32;
 log(add(1, 2));
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -21,23 +21,23 @@ fn add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(3)
+log(3)
 
 ================================================================================
 A generic function has an instance per type
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log64(x: i64);
 fn id[T](x: T) -> T = x;
 log(id(1));
 log64(id(2i64));
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log64(i64) -> ()
 
 fn file() -> () {
@@ -56,21 +56,21 @@ fn id_i64(%x: i64) -> (i64) {
   jump ret(%x)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log64(2)
+log(1)
+log64(2)
 
 ================================================================================
 Operators come from the prelude
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 fn square(n: i32) -> i32 = n * n;
 log(square(3) + 1);
 log(7 / 2);
 log(-7 % 3);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -140,27 +140,27 @@ fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(10)
-env.log(3)
-env.log(-1)
+log(10)
+log(3)
+log(-1)
 
 ================================================================================
 Small integers wrap around
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: u8);
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn logi(x: i8);
 let a: u8 = 200;
 log(a + 100);
 let b: i8 = 100;
 logi(b + 100);
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i8) -> ()
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern logi(i8) -> ()
 
 fn file() -> () {
@@ -191,19 +191,19 @@ fn Add_i8_add(%a: i8, %b: i8) -> (i8) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(44)
-env.logi(-56)
+log(44)
+logi(-56)
 
 ================================================================================
 Recursion
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 fn fac(n: i32) -> i32 = if n <= 1 { 1 } else { n * fac(n - 1) };
 log(fac(5));
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -256,19 +256,19 @@ fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(120)
+log(120)
 
 ================================================================================
 Tests run after the file
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 log(1);
 #[test]
 fn second() { log(2); }
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -281,24 +281,24 @@ fn second() -> () {
   jump ret()
 }
 --------------------------------------------------------------------------------
-env.log(1)
+log(1)
 test second
-env.log(2)
+log(2)
 
 ================================================================================
 A host function that's declared never to return stops the program if it does
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn stop() -> !;
 log(1);
 stop();
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern stop() -> ()
 
 fn file() -> () {
@@ -307,8 +307,8 @@ fn file() -> () {
   trap
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.stop()
+log(1)
+stop()
 error: fn0: trap
 
 ================================================================================
@@ -323,13 +323,13 @@ data String {
   (imm [i8])
 }
 
-data Tuple_u16_u32 {
+data Tuple_u16_i32 {
   (i16, i32)
 }
 
-#[link(wasm, module = "wasi_snapshot_preview1")]
+#[link(emu)]
 #[abi(flat)]
-extern fd_write(i32, imm [imm [i8]]) -> (i16, i32)
+extern write(i32, imm [i8]) -> (i16, i32)
 
 fn file() -> () {
   let %0: imm [i8] = array_new(104i8, 101i8, 108i8, 108i8, 111i8)
@@ -346,12 +346,13 @@ fn file() -> () {
 
 fn print(%text: imm String) -> () {
   let %1: imm [i8] = get String.0.0(%text)
-  let %2: imm [i8] = array_new(10i8)
-  let %3: imm String = new String.0(%2)
-  let %4: imm [i8] = get String.0.0(%3)
-  let %5: imm [imm [i8]] = array_new(%1, %4)
-  let %6: i16, %7: i32 = call_extern fd_write(1i32, %5)
-  let %8: imm Tuple_u16_u32 = new Tuple_u16_u32.0(%6, %7)
+  let %2: i16, %3: i32 = call_extern write(1i32, %1)
+  let %4: imm Tuple_u16_i32 = new Tuple_u16_i32.0(%2, %3)
+  let %5: imm [i8] = array_new(10i8)
+  let %6: imm String = new String.0(%5)
+  let %7: imm [i8] = get String.0.0(%6)
+  let %8: i16, %9: i32 = call_extern write(1i32, %7)
+  let %10: imm Tuple_u16_i32 = new Tuple_u16_i32.0(%8, %9)
   jump ret()
 }
 --------------------------------------------------------------------------------
@@ -363,14 +364,14 @@ stdout:
 A generic function called at a type with a mutability parameter (#371)
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 fn id[T](x: T) -> T = x;
 fn first(xs: 'm [i32]) -> i32 = id(xs)[0];
 log(first(mut [1]));
 log(first([2]));
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -398,20 +399,20 @@ fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
   jump ret(%2)
 }
 --------------------------------------------------------------------------------
-env.log(1)
-env.log(2)
+log(1)
+log(2)
 
 ================================================================================
 A function linked with abi = flat
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
-#[link(wasm, module = "host", abi = flat)]
-fn write(fd: i32, iovs: [[u8]]) -> (u16, u32);
-#[link(wasm, module = "host", abi = flat)]
+#[link(emu, abi = flat)]
+fn gather(fd: i32, iovs: [[u8]]) -> (u16, u32);
+#[link(emu, abi = flat)]
 fn fill(#[nolen] buf: mut [u8], len: u32) -> u16;
-let r = write(1, [[104u8, 105u8], [33u8]]);
+let r = gather(1, [[104u8, 105u8], [33u8]]);
 log(r.0 as i32);
 log(r.1 as i32);
 let buf = mut [0u8, 0u8];
@@ -421,14 +422,14 @@ data Tuple_u16_u32 {
   (i16, i32)
 }
 
-#[link(wasm, module = "host")]
+#[link(emu)]
 #[abi(flat)]
-extern write(i32, imm [imm [i8]]) -> (i16, i32)
+extern gather(i32, imm [imm [i8]]) -> (i16, i32)
 
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
-#[link(wasm, module = "host")]
+#[link(emu)]
 #[abi(flat)]
 extern fill(#[nolen] mut [i8], i32) -> (i16)
 
@@ -436,7 +437,7 @@ fn file() -> () {
   let %0: imm [i8] = array_new(104i8, 105i8)
   let %1: imm [i8] = array_new(33i8)
   let %2: imm [imm [i8]] = array_new(%0, %1)
-  let %3: i16, %4: i32 = call_extern write(1i32, %2)
+  let %3: i16, %4: i32 = call_extern gather(1i32, %2)
   let %r: imm Tuple_u16_u32 = new Tuple_u16_u32.0(%3, %4)
   let %6: i16 = get Tuple_u16_u32.0.0(%r)
   let %7: i32 = convert.u[i32](%6)
@@ -450,17 +451,17 @@ fn file() -> () {
   jump ret()
 }
 --------------------------------------------------------------------------------
-host.write(1, [[104, 105], [33]])
-env.log(1)
-env.log(2)
-host.fill([0, 0], 2)
-env.log(1)
+gather(1, [[104, 105], [33]])
+log(1)
+log(2)
+fill([0, 0], 2)
+log(1)
 
 ================================================================================
 A match on small integers
 :test-prelude
 ================================================================================
-#[link(wasm, module = "env")]
+#[link(emu)]
 fn log(x: i32);
 fn byte(n: u8) -> i32 = match n {
   0 => 10,
@@ -477,7 +478,7 @@ log(byte(7u8));
 log(signed(-5i16));
 log(signed(300i16));
 --------------------------------------------------------------------------------
-#[link(wasm, module = "env")]
+#[link(emu)]
 extern log(i32) -> ()
 
 fn file() -> () {
@@ -525,7 +526,7 @@ fn Neg_i16_neg(%a: i16) -> (i16) {
   jump ret(%1)
 }
 --------------------------------------------------------------------------------
-env.log(20)
-env.log(30)
-env.log(1)
-env.log(2)
+log(20)
+log(30)
+log(1)
+log(2)

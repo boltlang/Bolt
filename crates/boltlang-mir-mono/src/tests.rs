@@ -6,11 +6,10 @@ use boltlang_base_db::TestDb;
 
 use crate::program;
 
-/// Every test file of `std` is a program whose uses can all be compiled.
+/// Every test file of `std` is a program whose uses can all be compiled,
+/// for the evaluator and for Wasm.
 #[test]
 fn the_tests_of_std_collect_without_errors() {
-    let mut db = TestDb::new();
-    db.add_std();
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
     let mut names: Vec<String> = std::fs::read_dir(dir)
         .unwrap()
@@ -20,14 +19,24 @@ fn the_tests_of_std_collect_without_errors() {
     names.sort();
     assert!(!names.is_empty());
     let mut problems = Vec::new();
-    for name in names {
-        let path = format!("{}/{name}", TestDb::STD_DIR);
-        let file =
-            boltlang_base_db::Db::files(&db).resolve(&db, boltlang_base_db::SystemPath::new(&path));
-        let p = program(&db, file);
-        assert!(p.instances.len() > 1, "{name} has no instances");
-        for (i, site, e) in &p.errors {
-            problems.push(format!("{name}: in {} at {site:?}: {e:?}", i.display(&db)));
+    for target in [boltlang_base_db::Target::default(), boltlang_base_db::Target::WASM] {
+        let mut db = TestDb::new();
+        db.add_std();
+        boltlang_base_db::Settings::change_target(&mut db, target);
+        for name in &names {
+            let path = format!("{}/{name}", TestDb::STD_DIR);
+            let file = boltlang_base_db::Db::files(&db)
+                .resolve(&db, boltlang_base_db::SystemPath::new(&path));
+            // A file can have tests only for some targets, like `test_wasi.bolt`.
+            if boltlang_hir_def::nameres::test_functions(&db, file).is_empty() {
+                continue;
+            }
+            let p = program(&db, file);
+            assert!(p.instances.len() > 1, "{name} has no instances for {target}");
+            for (i, site, e) in &p.errors {
+                problems
+                    .push(format!("{name} ({target}): in {} at {site:?}: {e:?}", i.display(&db)));
+            }
         }
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));

@@ -245,11 +245,25 @@ pub struct Function {
 /// it's called.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Link {
+    /// Who provides it.
+    pub kind: LinkKind,
+    /// The Wasm module of a `wasm` link.
     pub module: Option<String>,
     pub name: Option<String>,
     pub abi: LinkAbi,
     /// What's wrong with how it's written, if anything: the first problem.
     pub error: Option<LinkError>,
+}
+
+/// Who provides a function linked to the host.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum LinkKind {
+    /// `#[link(wasm, module = "m")]`: a Wasm import.
+    #[default]
+    Wasm,
+    /// `#[link(emu)]`: the evaluator, as `bolt run` and `bolt test` run
+    /// programs.
+    Emu,
 }
 
 /// How a function the host provides is called.
@@ -268,10 +282,14 @@ pub enum LinkAbi {
 pub enum LinkError {
     /// It doesn't start with what the function is linked to, like `wasm`.
     NoTarget,
-    /// It starts with something other than `wasm`.
+    /// It starts with something other than `wasm` or `emu`.
     UnknownTarget(String),
-    /// It has no `module = ".."`.
+    /// `c`, which comes with the native target.
+    NoNativeTarget,
+    /// A `wasm` link without `module = ".."`.
     NoModule,
+    /// `module = ".."` on an `emu` link, which has none.
+    ModuleForEmu,
     /// A key other than `module`, `name` and `abi`.
     UnknownKey(String),
     /// An `abi` other than `flat`.
@@ -630,7 +648,8 @@ fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
     let meta = node.attrs().filter_map(|attr| attr.meta()).find(|meta| {
         meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == "link")
     })?;
-    let mut link = Link { module: None, name: None, abi: LinkAbi::Conduit, error: None };
+    let mut link =
+        Link { kind: LinkKind::Wasm, module: None, name: None, abi: LinkAbi::Conduit, error: None };
     let Some(tree) = meta.token_tree() else {
         link.error = Some(LinkError::NoTarget);
         return Some(link);
@@ -651,6 +670,8 @@ fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
     link.error = (|| {
         match parts.next() {
             Some([(IDENT, target)]) if target == "wasm" => {}
+            Some([(IDENT, target)]) if target == "emu" => link.kind = LinkKind::Emu,
+            Some([(IDENT, target)]) if target == "c" => return Some(LinkError::NoNativeTarget),
             Some([(IDENT, target)]) => return Some(LinkError::UnknownTarget(target.clone())),
             _ => return Some(LinkError::NoTarget),
         }
@@ -682,8 +703,10 @@ fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
             }
             *slot = Some(unquote(value));
         }
-        if link.module.is_none() {
-            return Some(LinkError::NoModule);
+        match link.kind {
+            LinkKind::Wasm if link.module.is_none() => return Some(LinkError::NoModule),
+            LinkKind::Emu if link.module.is_some() => return Some(LinkError::ModuleForEmu),
+            _ => {}
         }
         None
     })();
