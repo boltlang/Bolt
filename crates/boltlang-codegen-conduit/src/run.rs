@@ -1,8 +1,9 @@
 //! Running a lowered program with Conduit's evaluator, for `bolt run` and
 //! `bolt test`. The host provides the module `bolt`'s `write_file` and
 //! `flush` (see [`crate::host`]), writing to the process's stdout and
-//! stderr. Externs of other modules have no host here: calling one stops
-//! the program with an error.
+//! stderr, and WASI's functions (see [`crate::wasi`]). Externs of other
+//! modules have no host here: calling one stops the program with an
+//! error.
 
 use std::{
     collections::BTreeMap,
@@ -15,6 +16,7 @@ use conduit_ir::{Extern, ExternId, FuncId};
 use crate::{
     Lowered,
     host::{STDERR, STDOUT},
+    wasi::{self, Output, Wasi},
 };
 
 /// Why a run stopped before its end.
@@ -37,6 +39,14 @@ pub fn run(program: &Lowered, f: FuncId, fuel: Option<u64>) -> Result<(), RunErr
     let result = machine.call(f, Vec::new());
     // What wasn't flushed is written anyway, like at the end of a process.
     let _ = machine.host.flush_all();
+    // `proc_exit(0)` ends the program as its end does.
+    match machine.host.wasi.exit {
+        Some(0) => return Ok(()),
+        Some(code) => {
+            return Err(RunError { message: format!("the program exited with code {code}") });
+        }
+        None => {}
+    }
     result.map(|_| ()).map_err(|e| {
         let message = match &e.kind {
             ErrorKind::Trap => "the program stopped with an error".to_string(),
@@ -55,11 +65,12 @@ pub fn run(program: &Lowered, f: FuncId, fuel: Option<u64>) -> Result<(), RunErr
     })
 }
 
-/// A host that writes files 1 and 2 to stdout and stderr.
+/// A host that writes files 1 and 2 to stdout and stderr, and has WASI.
 #[derive(Default)]
 struct Stdio {
     /// What each file has waiting, by its number.
     files: BTreeMap<i32, Vec<u8>>,
+    wasi: Wasi,
 }
 
 impl Stdio {
@@ -95,8 +106,17 @@ impl Host for Stdio {
         _: ExternId,
         decl: &Extern,
         args: &[Value],
-        _: &mut Arrays<'_, '_>,
+        arrays: &mut Arrays<'_, '_>,
     ) -> Result<Vec<Value>, String> {
+        if &*decl.module == wasi::MODULE {
+            let (results, output) = self.wasi.call(decl, args, arrays)?;
+            // In order with what `print` wrote before it.
+            if let Output::Write { fd, bytes } = output {
+                self.files.entry(fd).or_default().extend(bytes);
+                self.flush(fd).map_err(|e| e.to_string())?;
+            }
+            return Ok(results);
+        }
         match (&*decl.module, &*decl.name, args) {
             ("bolt", "write_file", [Value::I32(file), Value::I32(byte)]) => {
                 self.files.entry(*file).or_default().push(*byte as u8);

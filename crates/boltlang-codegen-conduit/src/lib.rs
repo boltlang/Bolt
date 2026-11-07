@@ -52,6 +52,7 @@ mod func;
 mod host;
 pub mod run;
 mod ty;
+mod wasi;
 pub mod wasm;
 
 use std::{
