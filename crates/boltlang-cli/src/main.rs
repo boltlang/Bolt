@@ -9,7 +9,8 @@ use std::{
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{
-    DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text,
+    Arch, DEFAULT_PRELUDE, Db, File, FilePath, Settings, SystemPath, SystemPathBuf, Target,
+    parse_file, source_text,
 };
 use boltlang_codegen_conduit::{Lowered, lower, node::NodeHost, run::run};
 use boltlang_hir_def::nameres::test_functions;
@@ -52,6 +53,44 @@ impl PreludeArgs {
         // `std`'s prelude may be missing, as without `std`.
         let prelude = (!self.no_prelude).then(|| DEFAULT_PRELUDE.to_string());
         Ok(CliDatabase::new(&current_dir()?, prelude, false, std_dir()))
+    }
+
+    /// A database that compiles for `target`, which `#[cfg]` picks items by.
+    fn database_for(&self, target: Target) -> anyhow::Result<CliDatabase> {
+        let mut db = self.database()?;
+        Settings::change_target(&mut db, target);
+        Ok(db)
+    }
+}
+
+/// The machine to compile for.
+#[derive(clap::Args)]
+struct TargetArgs {
+    /// The machine to compile for, which `#[cfg(..)]` picks items by: one
+    /// for the evaluator to imitate [default: this one], or `wasm32` with
+    /// `--wasm` and `bolt build`
+    #[arg(long, value_name = "ARCH", value_parser = arch_names())]
+    target: Option<String>,
+}
+
+fn arch_names() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(Arch::ALL.iter().map(|a| a.name()))
+}
+
+impl TargetArgs {
+    /// What to compile for: Wasm, for `bolt build` and `--wasm`, or the
+    /// evaluator, imitating the machine `--target` names.
+    fn target(&self, wasm: bool) -> anyhow::Result<Target> {
+        let arch = self.target.as_deref().and_then(Arch::by_name);
+        if !wasm {
+            return Ok(Target::emu(arch.unwrap_or_else(Arch::current)));
+        }
+        match arch {
+            None | Some(Arch::Wasm32) => Ok(Target::WASM),
+            Some(other) => {
+                anyhow::bail!("WebAssembly is compiled for `wasm32`, not `{}`", other.name())
+            }
+        }
     }
 }
 
@@ -138,11 +177,17 @@ struct CheckCommand {
     files: Vec<PathBuf>,
     #[command(flatten)]
     prelude: PreludeArgs,
+    #[command(flatten)]
+    target: TargetArgs,
+    /// Check the files as `bolt build` compiles them, for WebAssembly,
+    /// instead of as the evaluator runs them.
+    #[arg(long)]
+    wasm: bool,
 }
 
 impl Exec for CheckCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
+        let db = self.prelude.database_for(self.target.target(self.wasm)?)?;
         let mut ok = true;
         let mut files = Vec::new();
         for path in &self.files {
@@ -177,6 +222,8 @@ struct RunCommand {
     /// with Node instead of with the evaluator.
     #[arg(long)]
     wasm: bool,
+    #[command(flatten)]
+    target: TargetArgs,
 }
 
 /// Check files, then run their tests, with Conduit's evaluator: the
@@ -200,6 +247,8 @@ struct TestCommand {
     /// evaluator.
     #[arg(long)]
     wasm: bool,
+    #[command(flatten)]
+    target: TargetArgs,
 }
 
 /// The Node runtime, `runtime/node.mjs`, for `command`, like `bolt test
@@ -227,11 +276,13 @@ struct BuildCommand {
     /// Don't optimize the program before compiling it.
     #[arg(long)]
     no_opt: bool,
+    #[command(flatten)]
+    target: TargetArgs,
 }
 
 impl Exec for RunCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
+        let db = self.prelude.database_for(self.target.target(self.wasm)?)?;
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
         let found =
             if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
@@ -267,7 +318,7 @@ impl Exec for RunCommand {
 
 impl Exec for TestCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
+        let db = self.prelude.database_for(self.target.target(self.wasm)?)?;
         let mut paths = Vec::new();
         let roots =
             if self.paths.is_empty() { vec![PathBuf::from(".")] } else { self.paths.clone() };
@@ -404,7 +455,7 @@ fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<
 
 impl Exec for BuildCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
+        let db = self.prelude.database_for(self.target.target(true)?)?;
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
         let found = checked(&db, file, &[file]);
         report(&db, &found)?;

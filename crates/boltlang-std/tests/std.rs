@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
 };
 
-use boltlang_base_db::{Db, File, SystemPath, TestDb};
+use boltlang_base_db::{Db, File, Settings, SystemPath, Target, TestDb};
 use boltlang_codegen_conduit::{
     Lowered, lower,
     node::{NodeHost, Runtime},
@@ -39,7 +39,16 @@ fn main() -> ExitCode {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
     let mut paths = Vec::new();
     bolt_files(&root, &mut paths);
-    let db = std_db();
+    // Each mode has the tests of its target, which `#[cfg]` can pick.
+    let emu = std_db(Target::default());
+    let wasm = std_db(Target::WASM);
+    let names = |db: &TestDb, relative: &str| -> Vec<String> {
+        let file = std_file(db, relative);
+        test_functions(db, file)
+            .iter()
+            .map(|f| f.item(db).display_name().unwrap().to_string())
+            .collect()
+    };
     let node = if boltlang_codegen_conduit::node::available() {
         Some(Arc::new(NodeHost::new().expect("a directory for the Wasm modules")))
     } else {
@@ -49,17 +58,18 @@ fn main() -> ExitCode {
     let mut trials = Vec::new();
     for path in paths {
         let relative = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
-        let file = std_file(&db, &relative);
-        for f in test_functions(&db, file) {
-            let name = f.item(&db).display_name().unwrap().to_string();
-            let test = format!("{}::{name}", module(&relative));
-            let (r, n) = (relative.clone(), name.clone());
-            trials.push(Trial::test(format!("eval::{test}"), move || run_eval(&r, &n)));
+        for name in names(&emu, &relative) {
+            let test = format!("eval::{}::{name}", module(&relative));
+            let r = relative.clone();
+            trials.push(Trial::test(test, move || run_eval(&r, &name)));
+        }
+        for name in names(&wasm, &relative) {
             for (prefix, runtime) in [("wasm", Runtime::Node), ("browser", Runtime::Browser)] {
+                let test = format!("{prefix}::{}::{name}", module(&relative));
                 let (r, n) = (relative.clone(), name.clone());
                 let (node, modules) = (node.clone(), modules.clone());
                 let ignored = node.is_none();
-                let trial = Trial::test(format!("{prefix}::{test}"), move || match &node {
+                let trial = Trial::test(test, move || match &node {
                     Some(node) => run_wasm(node, runtime, &modules, &r, &n),
                     None => Ok(()),
                 });
@@ -70,11 +80,12 @@ fn main() -> ExitCode {
     libtest_mimic::run(&args, trials).exit_code()
 }
 
-/// A database with `std`. Each test has one of its own, since tests run on
-/// threads of their own.
-fn std_db() -> TestDb {
+/// A database with `std`, compiling for `target`. Each test has one of its
+/// own, since tests run on threads of their own.
+fn std_db(target: Target) -> TestDb {
     let mut db = TestDb::new();
     db.add_std();
+    Settings::change_target(&mut db, target);
     db
 }
 
@@ -99,7 +110,7 @@ fn lowered(db: &TestDb, relative: &str) -> Result<Lowered, Failed> {
 
 /// Run the test `name` of the file `relative` with the evaluator.
 fn run_eval(relative: &str, name: &str) -> Result<(), Failed> {
-    let db = std_db();
+    let db = std_db(Target::default());
     let program = lowered(&db, relative)?;
     let &(_, f) = program
         .tests
@@ -128,7 +139,7 @@ fn run_wasm(
 
 /// The Wasm module of the file `relative`, written to the host's directory.
 fn compile(node: &NodeHost, relative: &str) -> Result<PathBuf, String> {
-    let db = std_db();
+    let db = std_db(Target::WASM);
     let program =
         lowered(&db, relative).map_err(|e| e.message().unwrap_or_default().to_string())?;
     let exports: Vec<_> = program.tests.iter().map(|(n, f)| (*f, n.as_str())).collect();

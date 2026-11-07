@@ -211,6 +211,45 @@ fn run_with_wasm_stops_with_an_error() {
     assert!(o.err.contains("stopped with an error"), "{}", o.err);
 }
 
+/// A program that says what it was compiled for.
+const TARGETS: &str = r#"#[cfg(host = "emu")]
+fn host() -> String = "emu";
+#[cfg(host = "wasm")]
+fn host() -> String = "wasm";
+#[cfg(pointer_width = 32)]
+fn width() -> String = "32";
+#[cfg(pointer_width = 64)]
+fn width() -> String = "64";
+print(host());
+print(width());
+"#;
+
+#[test]
+fn run_compiles_for_the_target_it_imitates() {
+    let dir = dir_with("run-target", &[("a.bolt", TARGETS)]);
+    let o = bolt_std(&dir, "run", &["--target", "x86", "a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "emu\n32\n");
+    let o = bolt_std(&dir, "run", &["--target", "x86_64", "a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "emu\n64\n");
+    let o = bolt_std(&dir, "run", &["--wasm", "--target", "x86_64", "a.bolt"]);
+    assert!(!o.ok);
+    assert!(o.err.contains("compiled for `wasm32`, not `x86_64`"), "{}", o.err);
+}
+
+#[test]
+fn run_with_wasm_compiles_for_wasm32() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipped: no `node` to run the module with");
+        return;
+    }
+    let dir = dir_with("run-target-wasm", &[("a.bolt", TARGETS)]);
+    let o = bolt_std(&dir, "run", &["--wasm", "a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "wasm\n32\n");
+}
+
 #[test]
 fn run_stops_with_an_error() {
     let dir = dir_with("run-error", &[("a.bolt", "print(\"before\");\npanic(\"oops\");\n")]);
