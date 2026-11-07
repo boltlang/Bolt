@@ -64,8 +64,8 @@ pub fn struct_atoms_of<'db>(
 
 /// Split "`ty` is at most `bound`" into atoms, as `split` does in
 /// `lean/BoltMut/Solver.lean`: an array, struct or function is at most
-/// `bound`, and what an array or struct holds at most its own mutability;
-/// an enum or tuple is a value, which holds its parts; a type parameter, an
+/// `bound`, and what an array, struct or tuple holds at most its own
+/// mutability; an enum is a value, which holds its parts; a type parameter, an
 /// associated type or an unknown stays as it is. Atoms that hold by the
 /// order alone, like `imm ⊑ m`, are left out.
 pub fn split<'db>(
@@ -102,7 +102,13 @@ pub fn split<'db>(
                 }
             }
         }
-        Ty::Adt(AdtId::Enum(_), args, ..) | Ty::Tuple(args) => {
+        Ty::Tuple(tys, m) => {
+            push(out, Held::Mutability((**m).clone()), bound);
+            for t in tys.iter() {
+                split(db, t, m, out);
+            }
+        }
+        Ty::Adt(AdtId::Enum(_), args, ..) => {
             for arg in args.iter() {
                 split(db, arg, bound, out);
             }

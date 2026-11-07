@@ -42,8 +42,8 @@ pub enum MonoTy<'db> {
     /// argument of `Functor[Option]`, has fewer type arguments than
     /// parameters.
     Adt(AdtId<'db>, Box<[MonoTy<'db>]>, Box<[MonoMut]>, MonoMut),
-    /// `(A, B)`, and `()` when empty.
-    Tuple(Box<[MonoTy<'db>]>),
+    /// `(A, B)` and its mutability, and `()` when empty, which is `Imm`.
+    Tuple(Box<[MonoTy<'db>]>, MonoMut),
     Array(MonoMut, Box<MonoTy<'db>>),
     /// The parameters, the result, and the mutability of a closure.
     Fn(Box<[MonoTy<'db>]>, Box<MonoTy<'db>>, MonoMut),
@@ -58,7 +58,7 @@ pub enum MonoTy<'db> {
 
 impl<'db> MonoTy<'db> {
     pub fn unit() -> Self {
-        MonoTy::Tuple(Box::new([]))
+        MonoTy::Tuple(Box::new([]), MonoMut::Imm)
     }
 
     /// Whether an erased type is somewhere in the type.
@@ -66,7 +66,9 @@ impl<'db> MonoTy<'db> {
         match self {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => true,
             MonoTy::Builtin(_) | MonoTy::Never => false,
-            MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args) => args.iter().any(MonoTy::has_erased),
+            MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) => {
+                args.iter().any(MonoTy::has_erased)
+            }
             MonoTy::Array(_, elem) => elem.has_erased(),
             MonoTy::Fn(params, ret, _) => params.iter().any(MonoTy::has_erased) || ret.has_erased(),
         }
@@ -92,7 +94,7 @@ impl<'db> MonoTy<'db> {
             MonoTy::Adt(adt, args, ms, own) => {
                 MonoTy::Adt(*adt, all(args, map, next), ms.clone(), *own)
             }
-            MonoTy::Tuple(args) => MonoTy::Tuple(all(args, map, next)),
+            MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, map, next), *own),
             MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.renumber(map, next))),
             MonoTy::Fn(params, ret, own) => {
                 MonoTy::Fn(all(params, map, next), Box::new(ret.renumber(map, next)), *own)
@@ -109,7 +111,7 @@ impl<'db> MonoTy<'db> {
             MonoTy::Adt(_, args, ms, m) => {
                 param(m) || ms.iter().any(param) || args.iter().any(MonoTy::has_mut_param)
             }
-            MonoTy::Tuple(args) => args.iter().any(MonoTy::has_mut_param),
+            MonoTy::Tuple(args, m) => param(m) || args.iter().any(MonoTy::has_mut_param),
             MonoTy::Array(m, elem) => param(m) || elem.has_mut_param(),
             MonoTy::Fn(params, ret, m) => {
                 param(m) || params.iter().any(MonoTy::has_mut_param) || ret.has_mut_param()
@@ -141,7 +143,7 @@ impl<'db> MonoTy<'db> {
             MonoTy::Adt(adt, args, ms, own) => {
                 Ty::Adt(*adt, all(args)?, ms.iter().map(m).collect(), Box::new(m(own)))
             }
-            MonoTy::Tuple(tys) => Ty::Tuple(all(tys)?),
+            MonoTy::Tuple(tys, own) => Ty::tuple(all(tys)?, m(own)),
             MonoTy::Array(own, elem) => {
                 Ty::Array(Box::new(m(own)), Box::new(elem.to_ty_with(param)?))
             }
@@ -216,7 +218,10 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 }
                 Ok(())
             }
-            MonoTy::Tuple(tys) => {
+            MonoTy::Tuple(tys, own) => {
+                if *own != MonoMut::Imm {
+                    write!(f, "{own} ")?;
+                }
                 write!(f, "(")?;
                 list(f, tys)?;
                 if tys.len() == 1 {
@@ -344,7 +349,7 @@ impl<'db> Subst<'_, 'db> {
                 ms.iter().map(|m| self.mutability(m)).collect::<Result<_, _>>()?,
                 self.mutability(own)?,
             ),
-            Ty::Tuple(tys) => MonoTy::Tuple(all(tys)?),
+            Ty::Tuple(tys, own) => MonoTy::Tuple(all(tys)?, self.mutability(own)?),
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
             Ty::Fn(params, ret, own, _) => {
                 MonoTy::Fn(all(params)?, Box::new(self.ty(ret)?), self.mutability(own)?)

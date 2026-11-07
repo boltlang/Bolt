@@ -74,8 +74,8 @@ lib.twice(1);
 lib.id(1);
 --------------------------------------------------------------------------------
 /toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
-/lib.bolt: twice: forall T. fn(T) -> (T, T)
-/main.bolt: lib.twice(1): (i32, i32)
+/lib.bolt: twice: forall T. T: imm => fn(T) -> imm (T, T)
+/main.bolt: lib.twice(1): imm (i32, i32)
 /main.bolt: lib.id(1): {error}
 --------------------------------------------------------------------------------
 /main.bolt: error at `lib.id`: unresolved

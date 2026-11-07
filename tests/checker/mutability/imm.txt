@@ -23,12 +23,12 @@ struct Point { x: i32 }
 struct Line { a: Point, b: Point }
 let ps = imm mut [mut Point { x: 1 }];
 let l = imm mut Line { a: mut Point { x: 1 }, b: mut Point { x: 2 } };
-let t = imm (mut [1], 2);
+let t = imm mut (mut [1], 2);
 let n = imm 1;
 --------------------------------------------------------------------------------
 let ps: imm [imm Point]
 let l: imm Line
-let t: (imm [i32], i32)
+let t: imm (imm [i32], i32)
 let n: i32
 
 ================================================================================

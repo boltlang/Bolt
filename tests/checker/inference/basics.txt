@@ -21,7 +21,7 @@ Functions used before their definition
 fn pair(x) = (first(x), first(True));
 fn first(y) = y;
 --------------------------------------------------------------------------------
-pair: forall a. fn(a) -> (a, Bool)
+pair: forall a. a: imm => fn(a) -> imm (a, Bool)
 first: forall a. fn(a) -> a
 
 ================================================================================

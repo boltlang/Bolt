@@ -172,14 +172,14 @@ struct Ints { n: i32 }
 struct Pair[A, B] { first: A, second: B }
 impl Iterator[Ints] { type Item = i32; fn next(it) = it.n; }
 impl[A: Iterator, B: Iterator] Iterator[Pair[A, B]] {
-  type Item = (A.Item, B.Item);
-  fn next(it) = (next(it.first), next(it.second));
+  type Item = mut (A.Item, B.Item);
+  fn next(it) = mut (next(it.first), next(it.second));
 }
 next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } });
 --------------------------------------------------------------------------------
 Iterator[Ints].next: fn(Ints) -> i32
-Iterator[Pair[A, B]].next: forall A B. Iterator[A] => Iterator[B] => fn(Pair[A, B]) -> (A.Item, B.Item)
-next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } }): (i32, i32)
+Iterator[Pair[A, B]].next: forall A B. Iterator[A] => Iterator[B] => fn(Pair[A, B]) -> mut (A.Item, B.Item)
+next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } }): mut (i32, i32)
 
 ================================================================================
 A bound on an associated type holds wherever its class does

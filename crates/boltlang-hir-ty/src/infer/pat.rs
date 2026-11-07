@@ -48,7 +48,7 @@ impl<'db> InferenceContext<'_, 'db> {
             }
             Pat::Tuple { args, rest } => {
                 let elems = match (self.solver.unifier.shallow_resolve(expected), rest) {
-                    (Ty::Tuple(tys), Some(_)) if tys.len() >= args.len() => tys.into_vec(),
+                    (Ty::Tuple(tys, _), Some(_)) if tys.len() >= args.len() => tys.into_vec(),
                     (_, Some(_)) => {
                         // The length isn't known, so neither is what `..` covers.
                         for &arg in args.iter() {
@@ -60,7 +60,9 @@ impl<'db> InferenceContext<'_, 'db> {
                     (_, None) => {
                         let tys: Vec<_> =
                             args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
-                        self.expect_shape(pat, expected, &Ty::Tuple(tys.clone().into()), &tys);
+                        let m = self.solver.new_var(VarKind::Mutability);
+                        let shape = Ty::tuple(tys.clone().into(), m);
+                        self.expect_shape(pat, expected, &shape, &tys);
                         tys
                     }
                 };

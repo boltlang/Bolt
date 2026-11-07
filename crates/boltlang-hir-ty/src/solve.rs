@@ -589,10 +589,10 @@ impl<'db> Solver<'db> {
                 sub(self, *elem, elem_to);
                 true
             }
-            Ty::Tuple(tys) => {
+            Ty::Tuple(tys, _) => {
                 let tos: Vec<Ty<'db>> =
                     tys.iter().map(|_| self.new_var(VarKind::General)).collect();
-                self.equal(&c.to, &Ty::Tuple(tos.clone().into()), origin);
+                self.equal(&c.to, &Ty::tuple(tos.clone().into(), imm), origin);
                 for (from, to) in tys.into_iter().zip(tos) {
                     sub(self, from, to);
                 }
@@ -800,6 +800,15 @@ impl<'db> Solver<'db> {
                     }
                     true
                 }
+                // Like an array: what it holds is at most its own
+                // mutability.
+                Ty::Tuple(tys, m) => {
+                    sub(self, Held::Mutability(*m.clone()), &bound);
+                    for t in tys {
+                        sub(self, Held::Type(t), &m);
+                    }
+                    true
+                }
                 // An associated type is split once an impl decides it, like
                 // `A.Iter` in a struct's field for an `A` that's known.
                 t @ Ty::Assoc(..) => {
@@ -811,8 +820,8 @@ impl<'db> Solver<'db> {
                     }
                     !has_vars(&t) && self.type_assumed(&t, &bound)
                 }
-                // An enum or a tuple is a value, which holds its parts.
-                Ty::Adt(AdtId::Enum(_), args, _, _) | Ty::Tuple(args) | Ty::App(_, args) => {
+                // An enum is a value, which holds its parts.
+                Ty::Adt(AdtId::Enum(_), args, _, _) | Ty::App(_, args) => {
                     for arg in args {
                         sub(self, Held::Type(arg), &bound);
                     }
@@ -1139,7 +1148,10 @@ impl<'db> Solver<'db> {
                     .field(&constraint.name)
                     .map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))
             }
-            Ty::Tuple(tys) => {
+            Ty::Tuple(tys, mutability) => {
+                if constraint.assign {
+                    self.require_mut(&ty, mutability, origin);
+                }
                 constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned())
             }
             _ => None,
@@ -1159,7 +1171,7 @@ impl<'db> Solver<'db> {
         true
     }
 
-    /// Report that `ty`, an array or struct with the mutability
+    /// Report that `ty`, an array, struct or tuple with the mutability
     /// `mutability`, is changed at `origin` but isn't `mut`. A mutability
     /// that isn't known yet becomes `Mut`.
     pub fn require_mut(&mut self, ty: &Ty<'db>, mutability: &Ty<'db>, origin: Origin<'db>) {
@@ -1581,7 +1593,9 @@ fn match_ty<'db>(
         (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => {
             match_app(pattern, ty, subst)
         }
-        (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
+        (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) if xs.len() == ys.len() => {
+            match_all(xs, ys, subst).and(|| match_ty(m, n, subst))
+        }
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
         (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => match_all(xs, ys, subst)
             .and(|| match_ty(x, y, subst))

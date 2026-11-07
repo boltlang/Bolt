@@ -42,10 +42,10 @@ get_x(Point { x: 1, y: 2 }): i32
 get_x(Size { x: 3u8 }): u8
 start_x(Line { start: Point { x: 1, y: 2 } }): i32
 get_x((1, 2)): {error}
-let t: (Bool, i32)
+let t: imm (Bool, i32)
 t.0: Bool
 --------------------------------------------------------------------------------
-error at `get_x`: (i32, i32) has no field x
+error at `get_x`: imm (i32, i32) has no field x
 
 ================================================================================
 Fields of types never found are reported
@@ -149,7 +149,7 @@ let p: imm Point
 Point { x: 3, ..p }: imm Point
 Point { x: 3, ..(1, 2) }: imm Point
 --------------------------------------------------------------------------------
-error at `(1, 2)`: expected Point, found ({integer}, {integer})
+error at `(1, 2)`: expected Point, found imm ({integer}, {integer})
 
 ================================================================================
 Field shorthand
@@ -168,12 +168,12 @@ t.0;
 t.2;
 t.3;
 --------------------------------------------------------------------------------
-let t: (i32, String, Bool)
+let t: imm (i32, String, Bool)
 t.0: i32
 t.2: Bool
 t.3: {error}
 --------------------------------------------------------------------------------
-error at `t.3`: (i32, String, Bool) has no field 3
+error at `t.3`: imm (i32, String, Bool) has no field 3
 
 ================================================================================
 Fields of generic structs
@@ -329,7 +329,7 @@ first((1, True)): i32
 second((1, True)): Bool
 second((1,)): {error}
 --------------------------------------------------------------------------------
-error at `second`: (i32,) has no field 1
+error at `second`: imm (i32,) has no field 1
 
 ================================================================================
 Methods of fields

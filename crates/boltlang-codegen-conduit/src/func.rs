@@ -390,7 +390,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     }
                 }
                 let k = Atom::Var(self.b.param(next));
-                let t = MonoTy::Tuple(tys.clone().into());
+                let t = crate::op_args_tuple(&tys);
                 let scrutinee = if tys.is_empty() {
                     None
                 } else {
@@ -1358,7 +1358,9 @@ fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_mir_mono::MonoMut]) -> Mono
             muts.iter().map(m).collect(),
             m(own),
         ),
-        MonoTy::Tuple(tys) => MonoTy::Tuple(tys.iter().map(|t| subst_muts(t, args)).collect()),
+        MonoTy::Tuple(tys, own) => {
+            MonoTy::Tuple(tys.iter().map(|t| subst_muts(t, args)).collect(), m(own))
+        }
         MonoTy::Array(own, elem) => MonoTy::Array(m(own), Box::new(subst_muts(elem, args))),
         MonoTy::Fn(ps, r, own) => MonoTy::Fn(
             ps.iter().map(|t| subst_muts(t, args)).collect(),
@@ -1796,7 +1798,7 @@ fn field_ty<'db>(
 ) -> R<MonoTy<'db>> {
     let unknown = |_| ErrorKind::unsupported("a field whose type isn't known");
     let fields = match (ctor, t) {
-        (Ctor::Tuple(_), MonoTy::Tuple(elems)) => elems.to_vec(),
+        (Ctor::Tuple(_), MonoTy::Tuple(elems, _)) => elems.to_vec(),
         (Ctor::Struct(s), MonoTy::Adt(_, args, muts, own)) => {
             field_types(l.cx.db, l.cx.root, VariantDef::Struct(s), args, muts, *own)
                 .map_err(unknown)?

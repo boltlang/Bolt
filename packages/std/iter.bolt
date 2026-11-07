@@ -33,11 +33,11 @@ pub struct ZipIter[A: Iterator, B: Iterator] {
 
 impl[A: Iterator, B: Iterator] Iterator[ZipIter[A, B]] {
 
-  type Item = (A.Item, B.Item);
+  type Item = mut (A.Item, B.Item);
 
   fn next(it) {
-    match (it.first.next(), it.second.next()) {
-      (Some(a), Some(b)) => Some((a, b)),
+    match mut (it.first.next(), it.second.next()) {
+      (Some(a), Some(b)) => Some(mut (a, b)),
       _ => None,
     }
   }

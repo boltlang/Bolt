@@ -544,7 +544,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     /// The constructor and index of the field `name` of a value of type `t`.
     fn field_index(&self, t: &Ty<'db>, name: &Name) -> Option<(Ctor<'db>, u32)> {
         match t {
-            Ty::Tuple(tys) => {
+            Ty::Tuple(tys, _) => {
                 let i = name.as_str().parse::<u32>().ok()?;
                 Some((Ctor::Tuple(tys.len() as u32), i))
             }

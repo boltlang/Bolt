@@ -163,9 +163,9 @@ error at `1`: not a place
 error at `g()`: not a place
 error at `g`: not a place
 error at `C`: not a place
-error at `(1, 2).0`: not a place
 error at `nope`: unresolved
 error at `h()`: can't change imm Point
+error at `(1, 2)`: can't change imm (i32, i32)
 
 ================================================================================
 Custom operators call their definition
@@ -175,10 +175,10 @@ fn[T] (a: T) <> (b: T) -> (T, T) = (a, b);
 True <> False;
 1 <> True;
 --------------------------------------------------------------------------------
-<>: forall T. fn(T, T) -> (T, T)
-1 <> 2: (i32, i32)
-True <> False: (Bool, Bool)
-1 <> True: (i32, i32)
+<>: forall T. T: imm => fn(T, T) -> imm (T, T)
+1 <> 2: imm (i32, i32)
+True <> False: imm (Bool, Bool)
+1 <> True: imm (i32, i32)
 --------------------------------------------------------------------------------
 error at `True`: expected {integer}, found Bool
 
@@ -302,8 +302,8 @@ Custom operators without types
 fn a <&> b = (b, a);
 1 <&> True;
 --------------------------------------------------------------------------------
-<&>: forall a b. fn(a, b) -> (b, a)
-1 <&> True: (Bool, i32)
+<&>: forall a b. b: imm => a: imm => fn(a, b) -> imm (b, a)
+1 <&> True: imm (Bool, i32)
 
 ================================================================================
 Comparing structs uses their impl

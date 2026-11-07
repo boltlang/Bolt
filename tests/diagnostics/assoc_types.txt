@@ -64,9 +64,9 @@ class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
 class Iterable[C] { type Item = Iter.Item; type Iter: Iterator[Item = Item]; fn iter(c: C) -> Iter; }
 struct ZipIter[A: Iterator, B: Iterator] { first: A, second: B }
 impl[A: Iterator, B: Iterator] Iterator[ZipIter[A, B]] {
-  type Item = (A.Item, B.Item);
-  fn next(it) = match (next(it.first), next(it.second)) {
-    (Option.Some(a), Option.Some(b)) => Option.Some((a, b)),
+  type Item = mut (A.Item, B.Item);
+  fn next(it) = match mut (next(it.first), next(it.second)) {
+    (Option.Some(a), Option.Some(b)) => Option.Some(mut (a, b)),
     _ => Option.None,
   };
 }

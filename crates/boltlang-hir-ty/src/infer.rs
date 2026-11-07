@@ -357,7 +357,7 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
         ty.held_mutability() == Some(&Ty::Mutability(mutability))
     }
     /// Something `mut` that a value of type `ty` is, or holds as a value
-    /// does, in an enum or tuple. A struct or array that isn't `mut` is
+    /// does, in an enum. A struct, tuple or array that isn't `mut` is
     /// looked into on its own.
     fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
         // A `mut` on its own is a mutability argument, like that of
@@ -366,7 +366,7 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
             return Some(ty.clone());
         }
         match ty {
-            Ty::Adt(AdtId::Enum(_), args, ..) | Ty::Tuple(args) => args.iter().find_map(find_mut),
+            Ty::Adt(AdtId::Enum(_), args, ..) => args.iter().find_map(find_mut),
             _ => None,
         }
     }
@@ -375,6 +375,7 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
         let imm = Ty::Mutability(Mutability::Imm);
         match ty {
             Ty::Array(m, elem) if **m == imm => find_mut(elem),
+            Ty::Tuple(tys, m) if **m == imm => tys.iter().find_map(find_mut),
             Ty::Adt(AdtId::Struct(s), args, ms, m) => struct_atoms_of(db, *s, args, ms, m)
                 .into_iter()
                 .filter(|a| a.bound == imm)
@@ -822,7 +823,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // a copy is `to_mut(e)` or `to_mut_deep(e)`.
             Expr::Mut { expr: inner } => {
                 let literal = match &body[*inner] {
-                    Expr::Array { .. } | Expr::ArrayRepeat { .. } | Expr::Record { .. } => true,
+                    Expr::Array { .. }
+                    | Expr::ArrayRepeat { .. }
+                    | Expr::Record { .. }
+                    | Expr::Tuple { .. } => true,
                     Expr::Call { callee, .. } => self.constructs_struct(*callee),
                     _ => false,
                 };
@@ -850,27 +854,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
                 Ty::Error
             }
-            Expr::Tuple { exprs } => {
-                let hints: Option<Vec<Ty<'db>>> =
-                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                        Some(Ty::Tuple(tys)) if tys.len() == exprs.len() => Some(tys.into_vec()),
-                        _ => None,
-                    };
-                let tys = exprs
-                    .iter()
-                    .enumerate()
-                    .map(|(i, e)| {
-                        self.infer_expr_expect(
-                            *e,
-                            hints.as_ref().map(|h| Expectation { ty: &h[i], reason }),
-                        )
-                    })
-                    .collect();
-                Ty::Tuple(tys)
-            }
-            Expr::Array { .. } | Expr::ArrayRepeat { .. } | Expr::Record { .. } => {
-                self.infer_literal(expr, expr, expected, false)
-            }
+            Expr::Array { .. }
+            | Expr::ArrayRepeat { .. }
+            | Expr::Record { .. }
+            | Expr::Tuple { .. } => self.infer_literal(expr, expr, expected, false),
             Expr::If { condition, then_branch, else_branch } => {
                 self.check_expr(*condition, &Ty::bool());
                 match else_branch {
@@ -1423,8 +1410,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         field
     }
 
-    /// The array, struct literal or call `literal`, made `mut` with
-    /// `is_mut`, as `mut [1]`, `mut Point { x: 1 }` or `mut Wrapper(1)` do.
+    /// The array, tuple, struct literal or call `literal`, made `mut` with
+    /// `is_mut`, as `mut [1]`, `mut (1, 2)`, `mut Point { x: 1 }` or
+    /// `mut Wrapper(1)` do.
     /// `expr` is where it's reported: the `mut` around it, if there is one.
     fn infer_literal(
         &mut self,
@@ -1458,7 +1446,28 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.infer_record(expr, path.as_ref(), fields, *spread, is_mut)
             }
             Expr::Call { callee, args } => self.infer_call(expr, *callee, args, is_mut),
-            _ => unreachable!("only arrays, struct literals and calls are literals"),
+            Expr::Tuple { exprs } => {
+                let hints: Option<Vec<Ty<'db>>> =
+                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
+                        Some(Ty::Tuple(tys, _)) if tys.len() == exprs.len() => Some(tys.into_vec()),
+                        _ => None,
+                    };
+                let tys: Box<[Ty<'db>]> = exprs
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| {
+                        self.infer_expr_expect(
+                            *e,
+                            hints.as_ref().map(|h| Expectation { ty: &h[i], reason }),
+                        )
+                    })
+                    .collect();
+                for ty in tys.iter() {
+                    self.holds(ty, &mutability, expr);
+                }
+                Ty::tuple(tys, mutability)
+            }
+            _ => unreachable!("only arrays, tuples, struct literals and calls are literals"),
         }
     }
 
@@ -1800,11 +1809,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// Report an assignment to `place` if it can't be assigned to. `plain`
     /// is whether it's `=` rather than a compound assignment like `+=`.
     ///
-    /// Arrays are shared, so assigning to an element, or to a field of an
-    /// element, changes the array: the array must be `mut`, and the
-    /// variable it's in doesn't matter. Otherwise the place must be a
-    /// variable that's `mut`, or a field of one: structs are values, so
-    /// `p.x = 1` changes the variable `p`.
+    /// Arrays, structs and tuples are shared, so assigning to an element or
+    /// a field changes the object: it must be `mut`, and the variable it's
+    /// in doesn't matter. Otherwise the place must be a variable that's
+    /// `mut`.
     fn check_place(&mut self, place: ExprId, plain: bool) {
         let body = self.body;
         let mut root = place;
@@ -1818,8 +1826,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         continue;
                     };
                     match self.solver.unifier.resolve(base_ty) {
-                        // A struct is shared, like an array.
-                        ty @ Ty::Adt(AdtId::Struct(_), ..) => {
+                        // A struct or tuple is shared, like an array.
+                        ty @ (Ty::Adt(AdtId::Struct(_), ..) | Ty::Tuple(..)) => {
                             let mutability = ty.mutability().unwrap().clone();
                             return self.solver.require_mut(&ty, &mutability, self.origin(base));
                         }
@@ -1827,7 +1835,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         // known.
                         Ty::Var(_) => return self.solver.assign_field(self.origin(root)),
                         Ty::Error | Ty::Never => return,
-                        // A tuple is a value: it's changed in its variable.
+                        // An enum has no fields to assign.
                         _ => root = base,
                     }
                 }

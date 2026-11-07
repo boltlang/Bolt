@@ -14,9 +14,9 @@ A function that returns itself has an infinite type
 ================================================================================
 fn f(x) = (x, f);
 --------------------------------------------------------------------------------
-f: forall a b. fn(a) -> b
+f: forall a b. a: imm => fn(a) -> b
 --------------------------------------------------------------------------------
-error at `(x, f)`: infinite type (a, fn(a) -> b)
+error at `(x, f)`: infinite type imm (a, fn(a) -> b)
 
 ================================================================================
 A list that contains itself has an infinite type

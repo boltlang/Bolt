@@ -66,7 +66,7 @@ let v = Vec.new();
 v.push(mut [1]);
 let b = to_imm_deep(v);
 let c = to_imm_deep(Some(mut [True]));
-let d = to_imm_deep((mut [1], 'x', "s"));
+let d = to_imm_deep(mut (mut [1], 'x', "s"));
 let e = to_imm_deep(List.Cons(mut [1], List.Nil));
 let f = to_imm_deep(5);
 --------------------------------------------------------------------------------
@@ -75,7 +75,7 @@ let v: mut Vec[mut [i32]]
 v.push(mut [1]): ()
 let b: imm Vec[imm [i32]]
 let c: Option[imm [Bool]]
-let d: (imm [i32], Char, String)
+let d: imm (imm [i32], Char, String)
 let e: List[imm [i32]]
 let f: i32
 
@@ -107,11 +107,11 @@ error at `to_imm_deep`: no instance ToImmDeep[fn(i32) -> i32]
 Deep copies of tuples up to ten elements
 :prelude
 ================================================================================
-let a = to_imm_deep((mut [1], 2, 'c', mut [True]));
-let b = to_imm_deep((1, 2, 3, 4, 5, 6, 7, 8, 9, mut [10]));
+let a = to_imm_deep(mut (mut [1], 2, 'c', mut [True]));
+let b = to_imm_deep(mut (1, 2, 3, 4, 5, 6, 7, 8, 9, mut [10]));
 --------------------------------------------------------------------------------
-let a: (imm [i32], i32, Char, imm [Bool])
-let b: (i32, i32, i32, i32, i32, i32, i32, i32, i32, imm [i32])
+let a: imm (imm [i32], i32, Char, imm [Bool])
+let b: imm (i32, i32, i32, i32, i32, i32, i32, i32, i32, imm [i32])
 
 ================================================================================
 A tuple of eleven elements has no deep copy
@@ -120,9 +120,9 @@ A tuple of eleven elements has no deep copy
 ================================================================================
 let c = to_imm_deep((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11));
 --------------------------------------------------------------------------------
-let c: (i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)
+let c: imm (i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)
 --------------------------------------------------------------------------------
-error at `to_imm_deep`: no instance ToImmDeep[(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)]
+error at `to_imm_deep`: no instance ToImmDeep[imm (i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)]
 
 ================================================================================
 Deep copies that can be changed of tuples up to ten elements
@@ -132,8 +132,8 @@ let a = to_mut_deep(([1], 2));
 let b = to_mut_deep((1, 2, 3, 4, 5, 6, 7, 8, 9, [10]));
 a.0[0] = 5;
 --------------------------------------------------------------------------------
-let a: (mut [i32], i32)
-let b: (i32, i32, i32, i32, i32, i32, i32, i32, i32, mut [i32])
+let a: mut (mut [i32], i32)
+let b: mut (i32, i32, i32, i32, i32, i32, i32, i32, i32, mut [i32])
 a.0[0] = 5: ()
 
 ================================================================================

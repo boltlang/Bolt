@@ -309,7 +309,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         let ty = match &self.store[id] {
             TypeRef::Error => return (Ty::Error, None),
             TypeRef::Path(path) => return self.lower_path_ty(id, path),
-            TypeRef::Tuple(tys) => Ty::Tuple(tys.iter().map(|t| self.lower_ty(*t)).collect()),
+            // Like an array, a tuple written without `mut` or `imm` has its
+            // mutability decided by where it's written.
+            TypeRef::Tuple(tys) => {
+                Ty::tuple(tys.iter().map(|t| self.lower_ty(*t)).collect(), Ty::Unwritten)
+            }
             TypeRef::Array { element, mutability, .. } => {
                 let mutability = mutability.map_or(Ty::Unwritten, Ty::Mutability);
                 Ty::array(mutability, self.lower_ty(*element))
@@ -355,7 +359,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     /// `ty` with the mutability written before it, as in `mut Point`: only
-    /// arrays, structs and functions have one.
+    /// arrays, structs, tuples and functions have one.
     fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, written: Ty<'db>) -> Ty<'db> {
         let fits = |old: &Ty<'db>| matches!(old, Ty::Unwritten) || *old == written;
         match ty {
@@ -363,6 +367,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 Ty::Adt(adt, args, ms, Box::new(written))
             }
             Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
+            Ty::Tuple(tys, old) if !tys.is_empty() && fits(&old) => Ty::tuple(tys, written),
             Ty::Fn(params, ret, old, effects) if fits(&old) => {
                 Ty::Fn(params, ret, Box::new(written), effects)
             }
@@ -1489,7 +1494,7 @@ fn lower_fields<'db>(
 }
 
 /// Replace the unwritten mutabilities of a field's type with `fill`: the
-/// struct's own, `own`, except inside an `imm` array or struct, where
+/// struct's own, `own`, except inside an `imm` array, struct or tuple, where
 /// everything is `imm` anyway, so that `imm [Point]` is `imm [imm Point]`
 /// (#271). The parameters and result of a function type aren't held by it,
 /// so they get `own`.
@@ -1511,6 +1516,11 @@ fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
             let args = args.iter().map(|a| fill_field(a, &held, own)).collect();
             let ms = ms.iter().map(|a| fill_field(a, &held, own)).collect();
             Some(Ty::Adt(*id, args, ms, Box::new(m)))
+        }
+        Ty::Tuple(tys, m) => {
+            let m = fill_field(m, fill, own);
+            let tys = tys.iter().map(|t| fill_field(t, &inner(&m), own)).collect();
+            Some(Ty::tuple(tys, m))
         }
         Ty::Fn(params, ret, m, effects) => {
             let params = params.iter().map(|p| fill_field(p, own, own)).collect();

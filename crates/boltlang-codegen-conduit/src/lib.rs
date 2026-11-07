@@ -237,6 +237,12 @@ fn handled_effect<'db>(
     }
 }
 
+/// The tuple of an operation's arguments, which the arms of a handler
+/// match. It's `mut`, so that it can hold arguments of any mutability.
+pub(crate) fn op_args_tuple<'db>(tys: &[MonoTy<'db>]) -> MonoTy<'db> {
+    MonoTy::Tuple(tys.into(), boltlang_mir_mono::MonoMut::Mut)
+}
+
 /// The types of the parameters and result of the operation `op` of the
 /// effect `key`, with the effect's arguments in place.
 pub(crate) fn op_params<'db>(
@@ -739,7 +745,7 @@ fn handler_sigs<'db>(
         for &op in effect_ops {
             let (tys, _) = op_params(db, cx.root, &fns.effect, op)?;
             if !tys.is_empty() {
-                types.value(db, cx.root, &MonoTy::Tuple(tys.into()))?;
+                types.value(db, cx.root, &op_args_tuple(&tys))?;
             }
         }
         for (i, &clause) in fns.clauses.iter().enumerate() {

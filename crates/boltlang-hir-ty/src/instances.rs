@@ -82,7 +82,10 @@ fn bind<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, found: &mut 
             all(found, ms, ns);
             bind(m, n, scheme, found);
         }
-        (Ty::Tuple(xs), Ty::Tuple(ys)) => all(found, xs, ys),
+        (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) => {
+            all(found, xs, ys);
+            bind(m, n, scheme, found);
+        }
         (Ty::Array(m, x), Ty::Array(n, y)) => {
             bind(m, n, scheme, found);
             bind(x, y, scheme, found);

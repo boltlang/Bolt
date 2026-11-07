@@ -85,7 +85,7 @@ fn sum_handle0_return() -> (i32) does Any {
 }
 
 fn sum_handle0_yield(%0: i32, %k: cont() -> (i32) does Any) -> (i32) does Any {
-  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
   let %x: i32 = get Tuple_i32.0.0(%2)
   let %4: i32 = resume(%k)
   let %5: i32 = call plus_i32(%x, %4)
@@ -232,7 +232,7 @@ fn attempt_handle0_return(%v: i32) -> (i32) does Any {
 }
 
 fn attempt_handle0_fail(%0: i32, %1: cont() -> (i32) does Any) -> (i32) does Any {
-  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
   let %code: i32 = get Tuple_i32.0.0(%2)
   jump ret(%code)
 }
@@ -319,7 +319,7 @@ fn answer_handle0_return(%v: i32) -> (i32) does Any {
 }
 
 fn answer_handle0_ask(%0: i32, %k: cont(i32) -> (i32) does Any) -> (i32) does Any {
-  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
   let %n: i32 = get Tuple_i32.0.0(%2)
   case %n {
     0 =>
@@ -400,7 +400,7 @@ fn shown_handle0_return() -> () does Any {
 }
 
 fn shown_handle0_info(%0: i32, %k: cont() -> () does Any) -> () does Any {
-  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
   let %m: i32 = get Tuple_i32.0.0(%2)
   let = call_extern log(%m)
   let = resume(%k)
@@ -408,7 +408,7 @@ fn shown_handle0_info(%0: i32, %k: cont() -> () does Any) -> () does Any {
 }
 
 fn shown_handle0_warn(%0: i32, %k: cont() -> () does Any) -> () does Any {
-  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
   let %m: i32 = get Tuple_i32.0.0(%2)
   let = call_extern log(%m)
   let = resume(%k)
@@ -595,7 +595,7 @@ fn count_handle0_get(%s: ref i32, %k: cont(i32) -> (i32) does Any) -> (i32) does
 }
 
 fn count_handle0_set(%s: ref i32, %1: i32, %k: cont() -> (i32) does Any) -> (i32) does Any {
-  let %3: imm Tuple_i32 = new Tuple_i32.0(%1)
+  let %3: mut Tuple_i32 = new Tuple_i32.0(%1)
   let %x: i32 = get Tuple_i32.0.0(%3)
   let = ref_set(%s, %x)
   let %5: i32 = resume(%k)
@@ -618,7 +618,7 @@ fn flag_handle0_get(%b: ref i32, %k: cont(i32) -> (i32) does Any) -> (i32) does 
 }
 
 fn flag_handle0_set(%b: ref i32, %1: i32, %k: cont() -> (i32) does Any) -> (i32) does Any {
-  let %3: imm Tuple_Bool = new Tuple_Bool.0(%1)
+  let %3: mut Tuple_Bool = new Tuple_Bool.0(%1)
   let %x: i32 = get Tuple_Bool.0.0(%3)
   let = ref_set(%b, %x)
   let %5: i32 = resume(%k)
@@ -773,7 +773,7 @@ fn run_handle0_return() -> () does Any {
 }
 
 fn run_handle0_say(%0: i32, %k: cont() -> () does Any) -> () does Any {
-  let %2: imm Tuple_i32 = new Tuple_i32.0(%0)
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
   let %n: i32 = get Tuple_i32.0.0(%2)
   let = call_extern log(%n)
   let = resume(%k)

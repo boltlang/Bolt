@@ -115,7 +115,7 @@ fn compound_assignments_call_the_impls() {
   m += Money { cents: 2 };
   m -= Money { cents: 1 };
   assert(m.cents == 2);
-  let mut t = (Money { cents: 5 }, 0);
+  let t = mut (Money { cents: 5 }, 0);
   t.0 += Money { cents: 5 };
   assert(t.0.cents == 10);
 }

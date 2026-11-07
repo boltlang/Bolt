@@ -379,13 +379,13 @@ error at `[mut Point { x: 0, y: 0 }]`: imm [mut Point] holds mut Point
 An imm array can't hold a tuple with a mut array
 :error
 ================================================================================
-let a = [(mut [1], True)];
+let a = [mut (mut [1], True)];
 let b = [|xs: mut [i32]| ()];
 --------------------------------------------------------------------------------
-let a: imm [(mut [i32], Bool)]
+let a: imm [mut (mut [i32], Bool)]
 let b: imm [fn(mut [i32]) -> ()]
 --------------------------------------------------------------------------------
-error at `[(mut [1], True)]`: imm [(mut [i32], Bool)] holds mut [i32]
+error at `[mut (mut [1], True)]`: imm [mut (mut [i32], Bool)] holds mut (mut [i32], Bool)
 
 ================================================================================
 Enums hold imm structs
@@ -448,12 +448,11 @@ Types that can't be mut or imm
 :error
 ================================================================================
 enum Maybe[T] { Just(T), Nothing }
-fn f[T](a: mut i32, b: imm (i32, i32), c: mut Maybe[i32], d: mut T) {}
+fn f[T](a: mut i32, c: mut Maybe[i32], d: mut T) {}
 --------------------------------------------------------------------------------
-f: forall T. fn(i32, (i32, i32), Maybe[i32], T) -> ()
+f: forall T. fn(i32, Maybe[i32], T) -> ()
 --------------------------------------------------------------------------------
 error at `mut i32`: can't be mut or imm
-error at `imm (i32, i32)`: can't be mut or imm
 error at `mut Maybe[i32]`: can't be mut or imm
 error at `mut T`: can't be mut or imm
 
@@ -517,7 +516,7 @@ g: fn(imm Point) -> i32
 let Point { x, y }: mut Point
 
 ================================================================================
-Tuples are still values
+Only the fields of a mut tuple can be assigned
 :error
 ================================================================================
 fn f() {
@@ -525,18 +524,21 @@ fn f() {
   t.0 = 3;
   let mut u = (1, 2);
   u.0 = 3;
+  let v = mut (1, 2);
+  v.0 = 3;
 }
 --------------------------------------------------------------------------------
 f: fn() -> ()
 --------------------------------------------------------------------------------
-error at `t.0`: not mut
+error at `t`: can't change imm (i32, i32)
+error at `u`: can't change imm (i32, i32)
 
 ================================================================================
 A tuple in a mut struct
 :error
 ================================================================================
 struct S { t: (i32, i32) }
-let s = mut S { t: (1, 2) };
+let s = mut S { t: mut (1, 2) };
 s.t.0 = 3;
 let r = S { t: (1, 2) };
 r.t.0 = 3;
@@ -546,7 +548,7 @@ s.t.0 = 3: ()
 let r: imm S
 r.t.0 = 3: ()
 --------------------------------------------------------------------------------
-error at `r`: can't change imm S
+error at `r.t`: can't change imm (i32, i32)
 
 ================================================================================
 An impl for structs without mut or imm is for both
@@ -658,14 +660,14 @@ Mismatches show the mutability of structs
 struct Point { x: i32, y: i32 }
 fn f(p: mut Point) {}
 f(Point { x: 1, y: 2 });
-let a: (mut Point, Bool) = (Point { x: 1, y: 2 }, True);
+let a: (mut Point, Bool) = mut (Point { x: 1, y: 2 }, True);
 --------------------------------------------------------------------------------
 f: fn(mut Point) -> ()
 f(Point { x: 1, y: 2 }): ()
-let a: (mut Point, Bool)
+let a: mut (mut Point, Bool)
 --------------------------------------------------------------------------------
 error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
-error at `(Point { x: 1, y: 2 }, True)`: expected (mut Point, Bool), found (imm Point, Bool)
+error at `mut (Point { x: 1, y: 2 }, True)`: expected mut (mut Point, Bool), found mut (imm Point, Bool)
 
 ================================================================================
 A struct update can't give an imm struct the mut struct of its base (#246)

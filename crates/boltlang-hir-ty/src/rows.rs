@@ -506,7 +506,10 @@ pub(crate) fn positive_rows(ty: &Ty<'_>, is_row: impl Fn(TyVar) -> bool) -> Vec<
                 walk(ret, polarity, out);
                 walk(effects, polarity, out);
             }
-            Ty::Tuple(tys) => tys.iter().for_each(|t| walk(t, polarity, out)),
+            Ty::Tuple(tys, mutability) => {
+                tys.iter().for_each(|t| walk(t, polarity, out));
+                walk(mutability, 0, out);
+            }
             _ => ty.walk_children(|t| walk(t, 0, out)),
         }
     }

@@ -86,8 +86,10 @@ pub enum Ty<'db> {
     /// those an `Adt` or one `App`, so that each type has one form.
     App(Box<Ty<'db>>, Box<[Ty<'db>]>),
     Builtin(BuiltinType),
-    /// `(A, B)`; the unit type is the empty tuple.
-    Tuple(Box<[Ty<'db>]>),
+    /// `(A, B)` and its mutability: like a struct with numeric fields, a
+    /// `mut` tuple's fields can be assigned, and an `imm` one holds nothing
+    /// `mut`. The unit type is the empty tuple, which is always `Imm`.
+    Tuple(Box<[Ty<'db>]>, Box<Ty<'db>>),
     /// An array: its mutability, then the type of its elements. The
     /// mutability is [`Ty::Mutability`], a variable, a parameter, or the
     /// error type. Lengths aren't checked yet.
@@ -156,7 +158,7 @@ pub enum Ty<'db> {
 
 impl<'db> Ty<'db> {
     pub fn unit() -> Self {
-        Ty::Tuple(Box::new([]))
+        Ty::tuple(Box::new([]), Ty::Mutability(Mutability::Imm))
     }
 
     pub fn bool() -> Self {
@@ -267,6 +269,13 @@ impl<'db> Ty<'db> {
     }
 
     /// An array of `element` with the mutability `mutability`.
+    /// A tuple of `tys`. The unit type is always `Imm`, so that it has
+    /// one form.
+    pub fn tuple(tys: Box<[Ty<'db>]>, mutability: Ty<'db>) -> Self {
+        let mutability = if tys.is_empty() { Ty::Mutability(Mutability::Imm) } else { mutability };
+        Ty::Tuple(tys, Box::new(mutability))
+    }
+
     pub fn array(mutability: Ty<'db>, element: Ty<'db>) -> Self {
         Ty::Array(Box::new(mutability), Box::new(element))
     }
@@ -289,9 +298,9 @@ impl<'db> Ty<'db> {
     /// The mutability of an array or a struct.
     pub fn mutability(&self) -> Option<&Ty<'db>> {
         match self {
-            Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, _, mutability) => {
-                Some(mutability)
-            }
+            Ty::Array(mutability, _)
+            | Ty::Adt(AdtId::Struct(_), _, _, mutability)
+            | Ty::Tuple(_, mutability) => Some(mutability),
             _ => None,
         }
     }
@@ -336,7 +345,7 @@ impl<'db> Ty<'db> {
     }
 
     pub fn is_unit(&self) -> bool {
-        matches!(self, Ty::Tuple(tys) if tys.is_empty())
+        matches!(self, Ty::Tuple(tys, _) if tys.is_empty())
     }
 
     /// Call `f` on every type directly inside this one.
@@ -347,7 +356,10 @@ impl<'db> Ty<'db> {
                 mutabilities.iter().for_each(&mut f);
                 f(mutability);
             }
-            Ty::Tuple(args) => args.iter().for_each(f),
+            Ty::Tuple(args, mutability) => {
+                args.iter().for_each(&mut f);
+                f(mutability);
+            }
             Ty::App(head, args) => {
                 f(head);
                 args.iter().for_each(f);
@@ -397,7 +409,7 @@ impl<'db> Ty<'db> {
             // The head can become a struct or enum, like `F` in `F[A]` when
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
-            Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
+            Ty::Tuple(tys, mutability) => Ty::tuple(fold_all(tys, f), mutability.fold(f)),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret, mutability, effects) => Ty::Fn(
                 fold_all(params, f),
@@ -734,7 +746,10 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 f.write_str("]")
             }
             Ty::Builtin(ty) => write!(f, "{ty}"),
-            Ty::Tuple(tys) => {
+            Ty::Tuple(tys, mutability) => {
+                if !tys.is_empty() {
+                    self.write_mutability(f, mutability)?;
+                }
                 f.write_str("(")?;
                 list(f, tys)?;
                 if tys.len() == 1 {

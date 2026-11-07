@@ -118,11 +118,11 @@ let sum = |(a, b)| a + b;
 sum((1, 2));
 sum(1);
 --------------------------------------------------------------------------------
-let sum: fn((i32, i32)) -> i32
+let sum: fn(imm (i32, i32)) -> i32
 sum((1, 2)): i32
 sum(1): i32
 --------------------------------------------------------------------------------
-error at `1`: expected ({integer}, {integer}), found {integer}
+error at `1`: expected imm ({integer}, {integer}), found {integer}
 
 ================================================================================
 Class constraints in lambdas are inferred for their function
@@ -148,6 +148,6 @@ fn mixed(x) = (twice(x), twice(1));
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 Show[Bool].show: fn(Bool) -> String
-both: fn() -> (String, String)
-twice: forall a. Show[a] => fn(a) -> (String, String)
-mixed: forall a. Show[a] => fn(a) -> ((String, String), (String, String))
+both: fn() -> imm (String, String)
+twice: forall a. Show[a] => fn(a) -> imm (String, String)
+mixed: forall a. Show[a] => fn(a) -> imm (imm (String, String), imm (String, String))

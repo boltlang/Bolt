@@ -39,10 +39,9 @@ let xs: imm [i32]
 let a: imm [i32]
 let b: imm [i32]
 let c: String
-let d: (imm [i32], i32)
+let d: mut (imm [i32], i32)
 --------------------------------------------------------------------------------
 error at `mut x`: can't be mut
 error at `mut xs`: can't be mut
 error at `mut f(1)`: can't be mut
 error at `mut "abc"`: can't be mut
-error at `mut ([1], 2)`: can't be mut

@@ -708,7 +708,7 @@ fn fits<'db>(params: &[GenericParamId<'db>], pattern: &Ty<'db>, ty: &MonoTy<'db>
         (_, MonoTy::Erased(_) | MonoTy::ErasedAssoc(..)) => false,
         (Ty::Builtin(a), MonoTy::Builtin(b)) => a == b,
         (Ty::Adt(a, xs, ..), MonoTy::Adt(b, ys, ..)) => a == b && all(xs, ys),
-        (Ty::Tuple(xs), MonoTy::Tuple(ys)) => all(xs, ys),
+        (Ty::Tuple(xs, _), MonoTy::Tuple(ys, _)) => all(xs, ys),
         (Ty::Array(_, x), MonoTy::Array(_, y)) => fits(params, x, y),
         (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, y, _)) => all(xs, ys) && fits(params, x, y),
         (Ty::Never, MonoTy::Never) => true,
@@ -761,7 +761,10 @@ pub(crate) fn bind<'db>(
             bind(params, head, &head_ty, found);
             all(xs, &ys[split..], found);
         }
-        (Ty::Tuple(xs), MonoTy::Tuple(ys)) => all(xs, ys, found),
+        (Ty::Tuple(xs, m), MonoTy::Tuple(ys, n)) => {
+            all(xs, ys, found);
+            bind_mut(m, *n, found);
+        }
         (Ty::Array(m, x), MonoTy::Array(n, y)) => {
             bind_mut(m, *n, found);
             bind(params, x, y, found);

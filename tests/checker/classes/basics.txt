@@ -9,9 +9,9 @@ twice(1);
 twice(True);
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
-twice: forall a. Show[a] => fn(a) -> (String, String)
-twice(1): (String, String)
-twice(True): (String, String)
+twice: forall a. Show[a] => fn(a) -> imm (String, String)
+twice(1): imm (String, String)
+twice(True): imm (String, String)
 --------------------------------------------------------------------------------
 error at `twice`: no instance Show[Bool]
 
@@ -118,7 +118,7 @@ fn k() { let z = ZERO; }
 --------------------------------------------------------------------------------
 f: fn() -> i32
 g: fn() -> Bool
-zeros: forall a b. Zero[a] => Zero[b] => fn() -> (a, b)
+zeros: forall a b. Zero[a] => Zero[b] => a: imm => b: imm => fn() -> imm (a, b)
 h: forall T. Zero[T] => fn() -> T
 k: fn() -> ()
 --------------------------------------------------------------------------------
@@ -453,7 +453,7 @@ show((1, True)): String
 show(|x: i32| x): String
 show((True, 1)): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[(Bool, i32)]
+error at `show`: no instance Show[imm (Bool, i32)]
 
 ================================================================================
 An impl for a type alias
@@ -492,8 +492,8 @@ fn twice[T](x: T) -> (String, String) where Show[T] = (show(x), show(x));
 fn call() = twice("a");
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
-twice: forall T. Show[T] => fn(T) -> (String, String)
-call: fn() -> (String, String)
+twice: forall T. Show[T] => fn(T) -> imm (String, String)
+call: fn() -> imm (String, String)
 --------------------------------------------------------------------------------
 error at `twice`: no instance Show[String]
 

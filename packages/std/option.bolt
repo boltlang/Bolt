@@ -21,7 +21,7 @@ impl[T: ToImmDeep] ToImmDeep[Option[T]] {
 /// Options are equal when both are `None`, or both are `Some` of equal
 /// values.
 impl[T] Eq[Option[T]] where Eq[T] {
-  fn eq(a, b) = match (a, b) {
+  fn eq(a, b) = match mut (a, b) {
     (Some(x), Some(y)) => x == y,
     (None, None) => True,
     _ => False,

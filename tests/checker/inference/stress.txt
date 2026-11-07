@@ -66,7 +66,7 @@ fn p1(x) = pair(pair(x));
 fn p2(x) = p1(p1(x));
 p2(True);
 --------------------------------------------------------------------------------
-pair: forall a. fn(a) -> (a, a)
-p1: forall a. fn(a) -> ((a, a), (a, a))
-p2: forall a. fn(a) -> ((((a, a), (a, a)), ((a, a), (a, a))), (((a, a), (a, a)), ((a, a), (a, a))))
-p2(True): ((((Bool, Bool), (Bool, Bool)), ((Bool, Bool), (Bool, Bool))), (((Bool, Bool), (Bool, Bool)), ((Bool, Bool), (Bool, Bool))))
+pair: forall a. a: imm => fn(a) -> imm (a, a)
+p1: forall a. a: imm => fn(a) -> imm (imm (a, a), imm (a, a))
+p2: forall a. a: imm => fn(a) -> imm (imm (imm (imm (a, a), imm (a, a)), imm (imm (a, a), imm (a, a))), imm (imm (imm (a, a), imm (a, a)), imm (imm (a, a), imm (a, a))))
+p2(True): imm (imm (imm (imm (Bool, Bool), imm (Bool, Bool)), imm (imm (Bool, Bool), imm (Bool, Bool))), imm (imm (imm (Bool, Bool), imm (Bool, Bool)), imm (imm (Bool, Bool), imm (Bool, Bool))))

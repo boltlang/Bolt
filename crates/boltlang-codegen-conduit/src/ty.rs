@@ -118,12 +118,12 @@ impl<'db> Types<'db> {
         Ok(Some(match t {
             MonoTy::Builtin(_) => unreachable!("a scalar"),
             MonoTy::Never => return Ok(None),
-            MonoTy::Tuple(elems) if elems.is_empty() => return Ok(None),
-            MonoTy::Tuple(elems) => {
+            MonoTy::Tuple(elems, _) if elems.is_empty() => return Ok(None),
+            MonoTy::Tuple(elems, own) => {
                 let (args, extracted) = abstract_muts(elems, 0);
                 let id = self.data(db, root, DataKey::Tuple(args))?;
-                let own = held_mutability(&extracted)?;
-                Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect(), Vec::new())
+                let margs = extracted.iter().map(|&m| mutability(m)).collect();
+                Ty::Data(id, mutability(*own), margs, Vec::new())
             }
             MonoTy::Adt(AdtId::Enum(e), ..) if is_fieldless(db, *e) => Ty::I32,
             MonoTy::Adt(adt @ AdtId::Enum(_), args, _, _) => {
@@ -317,7 +317,12 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
                 let own = if matches!(adt, AdtId::Enum(_)) { *own } else { next(own) };
                 MonoTy::Adt(*adt, args, muts, own)
             }
-            MonoTy::Tuple(elems) => MonoTy::Tuple(elems.iter().map(|a| go(a, next)).collect()),
+            // `()` has no values, so no mutability either.
+            MonoTy::Tuple(elems, _) if elems.is_empty() => t.clone(),
+            MonoTy::Tuple(elems, own) => {
+                let elems = elems.iter().map(|a| go(a, next)).collect();
+                MonoTy::Tuple(elems, next(own))
+            }
             MonoTy::Array(m, elem) => {
                 let m = next(m);
                 MonoTy::Array(m, Box::new(go(elem, next)))
@@ -342,7 +347,7 @@ fn count_params(tys: &[MonoTy<'_>]) -> u32 {
     abstract_muts(tys, 0).1.len() as u32
 }
 
-/// The mutability of an enum or a tuple that holds values with these
+/// The mutability of an enum that holds values with these
 /// mutabilities: the most any of them can be.
 fn held_mutability(held: &[MonoMut]) -> Result<Mutability, ErrorKind> {
     if held.contains(&MonoMut::Mut) {

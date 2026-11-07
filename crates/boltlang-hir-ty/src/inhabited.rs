@@ -47,7 +47,7 @@ fn fields_have_values<'db>(db: &'db dyn Db, fields: &[(Name, Ty<'db>)]) -> bool 
 pub fn ty_has_values<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> bool {
     match ty {
         Ty::Never => false,
-        Ty::Tuple(tys) => tys.iter().all(|t| ty_has_values(db, t)),
+        Ty::Tuple(tys, _) => tys.iter().all(|t| ty_has_values(db, t)),
         Ty::Adt(AdtId::Struct(id), ..) => has_values(db, GenericDefId::Struct(*id)),
         Ty::Adt(AdtId::Enum(id), ..) => has_values(db, GenericDefId::Enum(*id)),
         _ => true,

@@ -250,7 +250,12 @@ impl<'db> Unifier<'db> {
                     self.unify_all(xs, &ys[split..])
                 }
             }
-            (Ty::Tuple(xs), Ty::Tuple(ys)) if xs.len() == ys.len() => self.unify_all(xs, ys),
+            // The mutability first, so that it's known even when an element
+            // doesn't fit.
+            (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) if xs.len() == ys.len() => {
+                self.unify(m, n)?;
+                self.unify_all(xs, ys)
+            }
             (Ty::Array(m, x), Ty::Array(n, y)) => {
                 self.unify(x, y)?;
                 self.unify(m, n)
@@ -339,8 +344,8 @@ mod tests {
     fn reports_the_innermost_mismatch() {
         let mut u = Unifier::new();
         let err = u.unify(
-            &Ty::Tuple(Box::new([i32(), Ty::bool()])),
-            &Ty::Tuple(Box::new([i32(), Ty::unit()])),
+            &Ty::tuple(Box::new([i32(), Ty::bool()]), Ty::Mutability(Mutability::Imm)),
+            &Ty::tuple(Box::new([i32(), Ty::unit()]), Ty::Mutability(Mutability::Imm)),
         );
         assert_eq!(err, Err(UnifyError::Mismatch(Ty::bool(), Ty::unit())));
         // Different arities differ as a whole.

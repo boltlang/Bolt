@@ -183,13 +183,13 @@ Aliases through a closure and a tuple
 let xs = mut [1];
 let get = || xs;
 get()[0] = 2;
-let t = (xs, True);
+let t = mut (xs, True);
 t.0[0] = 3;
 --------------------------------------------------------------------------------
 let xs: mut [i32]
 let get: mut fn() -> mut [i32]
 get()[0] = 2: ()
-let t: (mut [i32], Bool)
+let t: mut (mut [i32], Bool)
 t.0[0] = 3: ()
 
 ================================================================================
@@ -570,8 +570,8 @@ let s = Shape.Points(mut [(0.0, 1.0)]);
 f: fn(Shape) -> ()
 let s: Shape
 --------------------------------------------------------------------------------
-error at `ps`: can't change imm [(f64, f64)]
-error at `mut [(0.0, 1.0)]`: expected imm [(f64, f64)], found mut [(f64, f64)]
+error at `ps`: can't change imm [imm (f64, f64)]
+error at `mut [(0.0, 1.0)]`: expected imm [imm (f64, f64)], found mut [imm (f64, f64)]
 
 ================================================================================
 Generic structs hold arrays of either mutability
@@ -839,12 +839,12 @@ Mismatches show the mutability
 ================================================================================
 fn f(xs: mut [i32]) {}
 f([True]);
-let a: (mut [i32], Bool) = ([1], True);
+let a: (mut [i32], Bool) = mut ([1], True);
 --------------------------------------------------------------------------------
 f: fn(mut [i32]) -> ()
 f([True]): ()
-let a: (mut [i32], Bool)
+let a: mut (mut [i32], Bool)
 --------------------------------------------------------------------------------
 error at `True`: expected i32, found Bool
 error at `[True]`: expected mut [i32], found imm [i32]
-error at `([1], True)`: expected (mut [i32], Bool), found (imm [i32], Bool)
+error at `mut ([1], True)`: expected mut (mut [i32], Bool), found mut (imm [i32], Bool)

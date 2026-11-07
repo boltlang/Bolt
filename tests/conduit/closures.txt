@@ -308,7 +308,7 @@ extern log "env" "log" (i32) -> ()
 fn file() -> () {
   let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
   let %1: imm fn(i32) -> (i32) = closure file_lambda0()
-  let %q: imm Tuple_i32_i32 = call map_pair_i32_i32[imm](%0, %1)
+  let %q: imm Tuple_i32_i32 = call map_pair_i32_i32[imm, imm](%0, %1)
   let %3: i32 = get Tuple_i32_i32.0.0(%q)
   let %4: i32 = get Tuple_i32_i32.0.1(%q)
   let %5: i32 = call plus_i32(%3, %4)
@@ -316,7 +316,7 @@ fn file() -> () {
   jump ret()
 }
 
-fn map_pair_i32_i32['m1](%p: imm Tuple_i32_i32, %f: 'm1 fn(i32) -> (i32)) -> (imm Tuple_i32_i32) {
+fn map_pair_i32_i32['m1, 'm2](%p: 'm1 Tuple_i32_i32, %f: 'm2 fn(i32) -> (i32)) -> (imm Tuple_i32_i32) {
   let %2: i32 = get Tuple_i32_i32.0.0(%p)
   let %3: i32 = apply(%f, %2)
   let %4: i32 = get Tuple_i32_i32.0.1(%p)

@@ -456,7 +456,7 @@ impl<'db> Builder<'_, 'db> {
             return Ok(given);
         }
         match infer_body(self.db, self.def).pat_ty(pat) {
-            Ty::Tuple(tys) => Ok(tys.len()),
+            Ty::Tuple(tys, _) => Ok(tys.len()),
             _ => Err(DecisionError::Unknown(pat)),
         }
     }

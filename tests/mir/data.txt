@@ -3,7 +3,7 @@ Tuples and their fields
 ================================================================================
 fn swap(p: (i32, Bool)) -> (Bool, i32) = (p.1, p.0);
 --------------------------------------------------------------------------------
-fn swap(p: (i32, Bool)) -> (Bool, i32) = (p.1, p.0)
+fn swap(p: (i32, Bool)) -> imm (Bool, i32) = (p.1, p.0)
 
 ================================================================================
 Structs, in the order of their fields
@@ -25,7 +25,7 @@ Variants, with and without fields
 ================================================================================
 fn f() -> (Option[i32], Option[i32]) = (Some(1), None);
 --------------------------------------------------------------------------------
-fn f() -> (Option[i32], Option[i32]) = (Option.Some(1), Option.None)
+fn f() -> imm (Option[i32], Option[i32]) = (Option.Some(1), Option.None)
 
 ================================================================================
 Tuple structs and unit structs
@@ -34,7 +34,7 @@ struct Wrapper(i32);
 struct Unit;
 fn f() = (Wrapper(1), Unit);
 --------------------------------------------------------------------------------
-fn f() -> (imm Wrapper, imm Unit) = (Wrapper(1), Unit)
+fn f() -> imm (imm Wrapper, imm Unit) = (Wrapper(1), Unit)
 
 ================================================================================
 Struct literals of variants
@@ -47,9 +47,9 @@ fn f() -> Shape = Shape.Circle(2)
 ================================================================================
 Arrays and mut before a literal
 ================================================================================
-fn f() = (mut [1, 2], [0; 3]);
+fn f() = mut (mut [1, 2], [0; 3]);
 --------------------------------------------------------------------------------
-fn f() -> (mut [i32], imm [i32]) = ([1, 2], [0; 3])
+fn f() -> mut (mut [i32], imm [i32]) = ([1, 2], [0; 3])
 
 ================================================================================
 Ranges
@@ -57,14 +57,14 @@ Ranges
 ================================================================================
 fn f() = (1..3, 1..=3);
 --------------------------------------------------------------------------------
-fn f() -> (imm Range[i32], imm RangeInclusive[i32]) = (Range(1, 3), RangeInclusive(1, 3))
+fn f() -> imm (imm Range[i32], imm RangeInclusive[i32]) = (Range(1, 3), RangeInclusive(1, 3))
 
 ================================================================================
 Casts and imm
 ================================================================================
 fn f(x: i32, xs: mut [i32]) = (x as i64, imm xs);
 --------------------------------------------------------------------------------
-fn f(x: i32, xs: mut [i32]) -> (i64, imm [i32]) = (x as i64, imm xs)
+fn f(x: i32, xs: mut [i32]) -> imm (i64, imm [i32]) = (x as i64, imm xs)
 
 ================================================================================
 Constructors used as functions
@@ -73,4 +73,4 @@ Constructors used as functions
 struct Wrapper(i32);
 fn f() = (Some, Wrapper, None, Some(1));
 --------------------------------------------------------------------------------
-fn f() -> (fn(a) -> Option[a], fn(i32) -> imm Wrapper, Option[b], Option[i32]) = (Option.Some, Wrapper, Option.None, Option.Some(1))
+fn f() -> imm (fn(a) -> Option[a], fn(i32) -> imm Wrapper, Option[b], Option[i32]) = (Option.Some, Wrapper, Option.None, Option.Some(1))
