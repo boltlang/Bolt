@@ -85,17 +85,15 @@ arguments and the continuation, and matches the arguments as a tuple. The
 clauses share the locals of the code around the `match` that they use, as
 the handler's environment, with a local that's assigned as its ref.
 
-What's lowered so far gives every function and closure the row `Any`,
-since Bolt doesn't give Conduit its rows yet: the rest of this section is
-the design for that. An effect with type parameters is one Conduit effect
-for each of its arguments, like `State_i32` for `State[i32]`, and an
-operation used as a function, like `say` in `xs.each(say)`, is a closure of
-a shim that performs it. Left out until then: a `match` that handles
-several effects, which needs a handler for several in Conduit
-([conduit#28](https://github.com/boltlang/conduit/issues/28)), operations
-with type parameters of their own, and a handler whose arms hold values of
-a mutability that's a parameter, since a clause can't have mutability
-parameters in Conduit.
+An effect with type parameters is one Conduit effect for each of its
+arguments, like `State_i32` for `State[i32]`, and an operation used as a
+function, like `say` in `xs.each(say)`, is a closure of a shim that
+performs it. Not lowered yet: a `match` that handles several effects,
+operations with type parameters of their own, and a handler whose arms
+hold values of a mutability that's a parameter, since a clause can't have
+mutability parameters in Conduit.
+
+Every function, closure and continuation gets its row from the checker:
 
 Conduit's effect types follow Bolt's: rows after `does`, joined with `+`,
 with `Nothing` for the empty row and effect parameters `E1`, `E2`, ..
@@ -110,7 +108,21 @@ Bolt's are: `Effect20`.
   ```
 
   is monomorphized on `A` and `B` but keeps `E`, so there's one `map` for
-  every callback.
+  every callback. An instance's row parameters are its effect parameters,
+  which each call and closure of it gives rows for, and its lambdas and
+  handlers have them too. A row parameter of the caller in a type
+  argument, like `T = fn() does E`, becomes one of the callee's instance,
+  as for mutabilities (#371).
+- **Data types** get an effect parameter for each row in their type
+  arguments, like that of the closure in `Option[fn() does Log]`, as they
+  do for mutabilities.
+- **A handler's row** is that of the function or closure the `match` is
+  in: what its arms can do, and what resuming its continuations does,
+  which is the row the checker gives a `Cont` (#370 would make it
+  smaller). The scrutinee's closure does that and the handled effect.
+- **Top-level code** has no effects, since the checker rejects an
+  operation there that nothing handles. So a `perform` without a handler
+  can't happen at run time.
 - **An effect with type parameters,** like `State[i32]`, becomes one
   Conduit effect per instance, as a generic data type does.
 - **`handle` is typed as Bolt types a handler:** it takes its effect out of
