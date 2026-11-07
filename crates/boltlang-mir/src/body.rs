@@ -261,7 +261,7 @@ pub enum ItemRef<'db> {
     },
     /// A function that the compiler provides, like `i32_add`.
     Builtin(Builtin),
-    /// A function of the host, in an `extern` block.
+    /// A function of the host, with `#[link]`.
     Extern(FunctionId<'db>),
     /// The constructor of a tuple struct or a variant, used as a function,
     /// which is a [`Shim::Ctor`]. Calling it directly is a

@@ -114,7 +114,8 @@ fn impl_trait_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, IMPL_TRAIT_TYPE)
 }
 
-/// `fn(A) -> B`, with optional modifiers: `const` and `extern "C"`.
+/// `fn(A) -> B`, with an optional `const`, and an `extern "C"` that's
+/// reported.
 fn fn_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     function_modifiers(p);
@@ -125,8 +126,8 @@ fn fn_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, FN_TYPE)
 }
 
-/// `const` and `extern "C"`, in any order, as in the grammar's
-/// `function_modifiers`.
+/// `const`, and `extern "C"`, which is reported, in any order, as in the
+/// grammar's `function_modifiers`.
 pub(crate) fn function_modifiers(p: &mut Parser) {
     loop {
         match p.current() {
@@ -137,12 +138,17 @@ pub(crate) fn function_modifiers(p: &mut Parser) {
     }
 }
 
-/// `extern` or `extern "C"`
+/// `extern` or `extern "C"`, which Bolt doesn't have: `extern` is
+/// reserved, and a function the host provides has `#[link(..)]`.
 pub(crate) fn abi(p: &mut Parser) {
     let m = p.start();
+    p.error(
+        "`extern` is reserved: a function the host provides is written \
+         `#[link(wasm, module = \"env\")] fn log(x: i32);`",
+    );
     p.bump(T![extern]);
     p.eat(STRING);
-    m.complete(p, ABI);
+    m.complete(p, ERROR);
 }
 
 /// `does A + B`, the effects of a function, if it has any. Each effect is

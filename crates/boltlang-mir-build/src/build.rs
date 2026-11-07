@@ -231,7 +231,6 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             return ItemRef::Extern(f);
         }
         match f.container(db) {
-            ItemContainerId::ExternBlock(_) if !f.item(db).has_body => ItemRef::Extern(f),
             ItemContainerId::Effect(_) => ItemRef::Op(f),
             ItemContainerId::Class(class) => {
                 let given = self.cx.infer.type_args(at).and_then(|given| {

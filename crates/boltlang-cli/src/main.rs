@@ -283,7 +283,7 @@ impl Drop for WasmTests {
 /// Check a file, then compile it to a WebAssembly module, whose export
 /// `main` runs the statements at its top level. It imports `write_file`
 /// and `flush` from the module `bolt`, which `print` writes with, and the
-/// functions of `extern` blocks from the modules they name.
+/// functions with `#[link(wasm, ..)]` from the modules they name.
 #[derive(clap::Parser)]
 struct BuildCommand {
     file: PathBuf,

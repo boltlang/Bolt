@@ -96,7 +96,8 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
 }
 
 /// Whether a named function starts here, possibly after modifiers like
-/// `const` or `extern "C"`. `fn (x) = x` is an anonymous function instead.
+/// `const`, or an `extern "C"` that's reported. `fn (x) = x` is an
+/// anonymous function instead.
 fn at_fn(p: &Parser) -> bool {
     let mut n = 0;
     loop {
@@ -598,16 +599,17 @@ pub(crate) fn item_list(p: &mut Parser) {
     m.complete(p, ITEM_LIST);
 }
 
-/// `extern "C" { items }` or `extern "C";`, following the grammar's
-/// `foreign_mod_item`.
+/// `extern "C" { items }` or `extern "C";`, which Bolt doesn't have:
+/// `extern` is reserved, and a function the host provides has
+/// `#[link(..)]`. It's parsed to report it, and its items are left out.
 fn extern_block(p: &mut Parser, m: Marker) {
     abi(p);
     if p.at(T!['{']) {
         item_list(p);
     } else {
-        p.expect(T![;]);
+        p.eat(T![;]);
     }
-    m.complete(p, EXTERN_BLOCK);
+    m.complete(p, ERROR);
 }
 
 /// `import "./path";`, `import "./path" (a, b as c);`,

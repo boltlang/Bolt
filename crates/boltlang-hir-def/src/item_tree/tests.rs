@@ -23,7 +23,8 @@ class Show[T] { fn show(x: T) -> String; type Out; }
 impl Show[Point] { fn show(x: Point) -> String { "" } const N: i32 = 1; m!(); }
 const MAX: usize = 10;
 type Alias = Point;
-extern "C" { fn malloc(size: usize) -> Ptr; }
+#[link(wasm, module = "env")]
+fn malloc(size: usize) -> Ptr;
 macro_rules! m { () => {} }
 let top_level_statements_are_not_items = 1;
 "#,
@@ -44,7 +45,7 @@ let top_level_statements_are_not_items = 1;
             "visibility: Package",
             "\"Red\"",
             "\"Green\"",
-            "abi: Some(\"C\")",
+            "link: Some(Link { module: Some(\"env\")",
         ],
     );
     assert_eq!(tree.top_level.len(), 15);
@@ -122,7 +123,8 @@ struct Point { x: i32 }
 enum Color { Red }
 class Show[T] { fn show(x: T) -> String; type Out; const N: T; }
 impl Show[Point] { fn show(x) = ""; type Out = i32; const N: Point = Point { x: 1 }; m!(); }
-extern "C" { fn malloc(size: usize) -> Ptr; }
+#[link(wasm, module = "env")]
+fn malloc(size: usize) -> Ptr;
 macro_rules! m { () => {} }
 const MAX: usize = 10;
 type Alias = Point;
@@ -139,12 +141,11 @@ type Alias = Point;
         .chain(tree.impls.iter().map(|i| i.ast_id))
         .chain(tree.consts.iter().map(|i| i.ast_id))
         .chain(tree.type_aliases.iter().map(|i| i.ast_id))
-        .chain(tree.extern_blocks.iter().map(|i| i.ast_id))
         .chain(tree.macro_rules.iter().map(|i| i.ast_id))
         .chain(tree.macro_calls.iter().map(|i| i.ast_id))
         .collect();
     // Everything but the function in a body is an item.
-    assert_eq!(ast_ids.len(), 18);
+    assert_eq!(ast_ids.len(), 17);
     let mut ranges = Vec::new();
     for ast_id in ast_ids {
         let node =

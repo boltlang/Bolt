@@ -124,7 +124,7 @@ fn group_root<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> GenericDefId<'db>
         ItemContainerId::Class(id) => GenericDefId::Class(id),
         ItemContainerId::Effect(id) => GenericDefId::Effect(id),
         ItemContainerId::Impl(id) => GenericDefId::Impl(id),
-        ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => def,
+        ItemContainerId::File(_) => def,
     }
 }
 

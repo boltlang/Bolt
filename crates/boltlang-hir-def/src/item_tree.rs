@@ -107,7 +107,7 @@ fn is_item_kind(kind: SyntaxKind) -> bool {
     matches!(
         kind,
         FUNC_DECL | STRUCT | ENUM | CLASS | EFFECT | IMPL | CONST | TYPE_ALIAS | IMPORT
-            | EXTERN_BLOCK | MACRO_RULES | MACRO_CALL
+            | MACRO_RULES | MACRO_CALL
     )
 }
 
@@ -125,7 +125,6 @@ pub struct ItemTree {
     pub consts: Vec<Const>,
     pub type_aliases: Vec<TypeAlias>,
     pub imports: Vec<Import>,
-    pub extern_blocks: Vec<ExternBlock>,
     pub macro_rules: Vec<MacroRules>,
     pub macro_calls: Vec<MacroCall>,
 }
@@ -142,7 +141,6 @@ pub enum ModItem {
     Const(Idx<Const>),
     TypeAlias(Idx<TypeAlias>),
     Import(Idx<Import>),
-    ExternBlock(Idx<ExternBlock>),
     MacroRules(Idx<MacroRules>),
 }
 
@@ -351,15 +349,6 @@ pub enum ImportKind {
     Variants(Box<[Name]>),
 }
 
-/// `extern "C" { items }`. Its items are part of the file it's in.
-#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
-pub struct ExternBlock {
-    /// The ABI string without quotes, like `C`.
-    pub abi: Option<String>,
-    pub items: Vec<AssocItem>,
-    pub ast_id: AstId,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct MacroRules {
     pub name: Option<Name>,
@@ -386,7 +375,6 @@ impl ItemTree {
             CONST => self.consts.len(),
             TYPE_ALIAS => self.type_aliases.len(),
             IMPORT => self.imports.len(),
-            EXTERN_BLOCK => self.extern_blocks.len(),
             MACRO_RULES => self.macro_rules.len(),
             MACRO_CALL => self.macro_calls.len(),
             _ => unreachable!("{kind:?} is not an item"),
@@ -439,15 +427,6 @@ impl ItemTree {
                 let ast_id = self.next_ast_id(IMPL);
                 let items = self.lower_assoc_items(i.item_list());
                 ModItem::Impl(push(&mut self.impls, Impl { items, ast_id }))
-            }
-            E::ExternBlock(b) => {
-                let ast_id = self.next_ast_id(EXTERN_BLOCK);
-                let abi = b.abi().and_then(|abi| abi.string()).map(|s| unquote(s.text()));
-                let items = self.lower_assoc_items(b.item_list());
-                ModItem::ExternBlock(push(
-                    &mut self.extern_blocks,
-                    ExternBlock { abi, items, ast_id },
-                ))
             }
             E::Const(c) => ModItem::Const(self.lower_const(&c)),
             E::TypeAlias(t) => ModItem::TypeAlias(self.lower_type_alias(&t)),

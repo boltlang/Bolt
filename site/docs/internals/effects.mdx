@@ -73,9 +73,9 @@ fn total(xs: [i32]) -> i32 = …;
   it has one, and then its body must be a block, as with a result type:
   `|x| -> i32 does Log { … }`, `|x| does Log { … }`. Most closures don't
   write it: their effects are inferred.
-- An extern says `does` like any function:
-  `extern "env" { fn log(message: String) does Console; }`. Without it, the
-  extern has no effects.
+- A function the host provides says `does` like any function:
+  `#[link(wasm, module = "env")] fn log(message: String) does Console;`.
+  Without it, it has no effects.
 
 ### Written or inferred
 

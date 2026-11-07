@@ -62,7 +62,7 @@ pub enum Use<'db> {
     },
     /// A function the compiler provides, like `i32_add` or `array_len`.
     Builtin(Builtin),
-    /// A function of the host, in an `extern` block, without a body.
+    /// A function of the host, with `#[link]`, without a body.
     Extern(FunctionId<'db>),
     /// An operation of an effect, which the nearest handler of its effect
     /// runs: it has no instance. `effect_args` are the arguments of its

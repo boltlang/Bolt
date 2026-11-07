@@ -161,7 +161,7 @@ impl<'db> Resolver<'db> {
             ItemContainerId::Class(id) => resolver.push_generics(db, GenericDefId::Class(id)),
             ItemContainerId::Effect(id) => resolver.push_generics(db, GenericDefId::Effect(id)),
             ItemContainerId::Impl(id) => resolver.push_generics(db, GenericDefId::Impl(id)),
-            ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => {}
+            ItemContainerId::File(_) => {}
         }
         resolver
     }

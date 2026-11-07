@@ -25,8 +25,8 @@ use crate::manifest::{
 use crate::{
     Name,
     ids::{
-        ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
-        ItemContainerId, MacroRulesId, ModuleDefId, StructId, TypeAliasId,
+        ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
+        MacroRulesId, ModuleDefId, StructId, TypeAliasId,
     },
     item_tree::{AssocItem, AstId, ImportKind, ItemTree, ModItem, RawVisibility, item_tree},
 };
@@ -356,13 +356,6 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                 out.define_item(Namespace::Macros, &m.name, def, RawVisibility::Public, m.ast_id);
             }
             ModItem::Impl(idx) => out.scope.impls.push(ImplId::new(db, file, idx)),
-            // The items of an extern block are part of the file.
-            ModItem::ExternBlock(idx) => {
-                let block = ItemContainerId::ExternBlock(ExternBlockId::new(db, file, idx));
-                for &item in &tree.extern_blocks[idx.index()].items {
-                    out.define_assoc(db, tree, block, item, None);
-                }
-            }
             ModItem::Import(_) => {}
         }
     }

@@ -164,7 +164,6 @@ pub enum SyntaxKind {
     /// `does A + B` after a function's parameters or result type
     EFFECT_ROW,
     /// `extern` or `extern "C"`
-    ABI,
     /// `impl Trait` or `impl for[T] Trait`
     IMPL_TRAIT_TYPE,
 
@@ -271,7 +270,6 @@ pub enum SyntaxKind {
 
     // Declarations
     FUNC_DECL,
-    EXTERN_BLOCK,
     LET_STMT,
     RECORD_EXPR_FIELD_LIST,
     /// `type A = B;`, or `type Item: Bound;` in a trait
@@ -480,7 +478,6 @@ impl SyntaxKind {
             MUTABILITY_PARAM => "a mutability parameter",
             FN_TYPE => "a function type",
             RET_TYPE => "a return type",
-            ABI => "an ABI (like extern \"C\")",
             PARAM_LIST => "a parameter list",
             VARIADIC_PARAM => "a variadic parameter",
             PATH_TYPE => "a type",
@@ -558,7 +555,6 @@ impl SyntaxKind {
             EQUALS => "'='",
             ERROR => "an invalid node or token",
             EXCL => "'!'",
-            EXTERN_BLOCK => "an 'extern' block",
             FIELD_EXPR => "a field expression",
             FLOAT_NUMBER => "a floating-point number",
             FUNC_DECL => "a function declaration",

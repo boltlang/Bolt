@@ -542,8 +542,6 @@ pub enum TypeRef {
         /// The effects after `does`, if it's written.
         effects: Option<Box<[TypeRefId]>>,
         is_const: bool,
-        /// `Some` for `extern "C" fn`, with the ABI if one is given.
-        abi: Option<Option<String>>,
     },
     /// `impl Trait`, with the generic parameters of `impl for[T] Trait`.
     ImplTrait {

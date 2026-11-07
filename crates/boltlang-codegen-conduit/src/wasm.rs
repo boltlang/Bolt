@@ -4,7 +4,7 @@
 //! The module exports the entry file's top-level statements as `main`, and
 //! imports what the program asks of its host: the module `bolt`'s
 //! `write_file` and `flush` (see [`crate::host`]), and the functions of its
-//! `extern` blocks, from the modules they name.
+//! functions with `#[link(wasm, ..)]`, from the modules they name.
 //!
 //! Before it's emitted, the program is optimized, unless asked not to be,
 //! and its reference counts are made explicit, so that memory is freed,

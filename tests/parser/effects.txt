@@ -19,7 +19,8 @@ fn is_up(url: String) does Async = check(url);
 fn greet(name: String) does Log { log(name); }
 fn f[T](x: T) -> T does Log where Show[T] = x;
 fn double(x: i32) does Nothing = x * 2;
-extern "env" { fn log(message: String) does Console; }
+#[link(wasm, module = "env")]
+fn log(message: String) does Console;
 
 ================================================================================
 Function types with effects

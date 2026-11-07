@@ -225,7 +225,7 @@ fn test_runs_the_tests_compiled_to_wasm() {
         eprintln!("skipped: no `node` to run the tests with");
         return;
     }
-    let source = "extern \"env\" { fn missing(); }\n\
+    let source = "#[link(wasm, module = \"env\")]\nfn missing();\n\
         fn double(x: i32) -> i32 = x * 2;\n\
         #[test]\nfn doubles() { print(\"in doubles\"); assert(double(2) == 4); }\n\
         #[test]\nfn fails() { assert(double(2) == 5); }\n\

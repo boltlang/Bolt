@@ -12,7 +12,7 @@
 //!   pass in Conduit makes it a variable again.
 //! - A `match`, and a `let` with a pattern, in a statement or a condition,
 //!   follow the decision that `boltlang-pattern` makes for them.
-//! - The host functions of an `extern` block are Conduit externs, in the
+//! - The host functions, with `#[link(wasm, ..)]`, are Conduit externs, in the
 //!   module the block names. The module `bolt` has `write_file` and
 //!   `flush`, which `print` and a `match` that no arm takes write with
 //!   (see [`host`]). `abort` is a `trap`. An `unreachable` is only where Bolt can promise
@@ -154,7 +154,7 @@ impl fmt::Display for Error {
 }
 
 /// What a host function is, so that each one is declared once: a function
-/// of an `extern` block. The module `bolt`'s are in [`host`].
+/// with `#[link]`. The module `bolt`'s are in [`host`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ExternKey<'db> {
     Function(FunctionId<'db>),
@@ -926,19 +926,12 @@ fn declare_extern<'db>(
     let (key, module_name, name) = match u {
         Use::Extern(f) => {
             let own = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
-            // `#[link(wasm, module = "m", name = "n")]`, or a function of
-            // an `extern "m"` block.
-            let (module, name) = match boltlang_hir_ty::builtin::link(db, *f) {
-                Some(link) => {
-                    (link.module.clone().unwrap_or_default(), link.name.clone().unwrap_or(own))
-                }
-                None => match f.container(db) {
-                    boltlang_hir_def::ids::ItemContainerId::ExternBlock(b) => {
-                        (b.item(db).abi.clone().unwrap_or_else(|| "env".to_string()), own)
-                    }
-                    _ => ("env".to_string(), own),
-                },
+            // `#[link(wasm, module = "m", name = "n")]`.
+            let Some(link) = boltlang_hir_ty::builtin::link(db, *f) else {
+                return Err(ErrorKind::unsupported("a host function without `#[link]`"));
             };
+            let module = link.module.clone().unwrap_or_default();
+            let name = link.name.clone().unwrap_or(own);
             (ExternKey::Function(*f), module, name)
         }
         // `print` is a function of the module, `bolt_print`, which calls the

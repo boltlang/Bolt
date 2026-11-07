@@ -200,14 +200,12 @@ impl ExprCollector {
         let ret_type = ty.ret_type().map(|r| self.lower_opt_type(r.ty()));
         let effects = self.lower_effect_row(ty.effect_row());
         let has_token = |kind| ty.syntax().children_with_tokens().any(|t| t.kind() == kind);
-        let abi = ty.abi().map(|abi| abi.string().map(|s| unquote(s.text())));
         TypeRef::Fn {
             params: params.into(),
             is_variadic,
             ret_type,
             effects,
             is_const: has_token(CONST_KEYWORD),
-            abi,
         }
     }
 

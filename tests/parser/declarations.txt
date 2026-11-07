@@ -66,21 +66,6 @@ Diverging functions
 fn aborts() -> ! {}
 
 ================================================================================
-Extern function declarations
-================================================================================
-extern "C" fn foo() {}
-extern "C" fn printf(
-    c_char,
-    ...,
-) {}
-
-pub extern "C" fn c_variadic_no_use(fmt: i8, mut ap: ...) -> i32 {
-    // CHECK: call void @llvm.va_start
-    vprintf(fmt, ap.as_va_list())
-    // CHECK: call void @llvm.va_end
-}
-
-================================================================================
 Import declarations
 ================================================================================
 import "./abc";
@@ -478,15 +463,6 @@ fn foo[A]() where A: B + As[f64], f64: As[A] {}
 impl[A] Default[B[A]] where A: C + D {}
 
 ================================================================================
-External Modules
-================================================================================
-extern {
-  pub fn napi_module_register(mod_: napi_module);
-}
-
-extern "C" {}
-
-================================================================================
 Reserved keywords in path
 ================================================================================
 struct A {
@@ -598,14 +574,6 @@ type Item;
 type Iter: Iterator + Clone where Self: Sized;
 
 ================================================================================
-Extern blocks
-================================================================================
-extern "C" { fn malloc(size: usize) -> Ptr; const N: i32; }
-extern { }
-extern "C";
-extern "C" fn f() {}
-
-================================================================================
 Function with a block body
 ================================================================================
 fn id(x) { return x; }
@@ -627,8 +595,6 @@ pub fn a() {}
 pub(package) fn b() -> i32 = 1;
 pub(super) fn c() {}
 const fn d() {}
-extern "C" fn e(x: i32);
-const extern fn f() {}
 fn g[T](x: T) -> T where T: Ord + Hash, Vec[T]: Clone, { x }
 fn $name() {}
 fn a + b = add(a, b);
@@ -991,15 +957,14 @@ Generic impl item with a where clause
 impl[T] Show[List[T]] where Show[T] { fn show(xs) = "list"; }
 
 ================================================================================
-Extern block of builtins
-================================================================================
-extern "bolt" {
-  pub fn print(text: String);
-  pub fn panic(message: String) -> !;
-}
-
-================================================================================
 An imm struct
 ================================================================================
 pub imm struct String(Vec[u8]);
 imm struct Point { x: i32, y: i32 }
+
+================================================================================
+extern is reserved
+:error
+================================================================================
+extern "env" { fn log(x: i32); }
+extern "C" fn f() {}

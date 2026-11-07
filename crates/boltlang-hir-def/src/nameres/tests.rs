@@ -63,7 +63,8 @@ class C[T] { fn show(x: T); }
 const K: i32 = 1;
 type T = S;
 impl S {}
-extern "C" { fn malloc(n: usize); }
+#[link(wasm, module = "env")]
+fn malloc(n: usize);
 macro_rules! m { () => {} }
 fn f() {}
 const f: i32 = 1;

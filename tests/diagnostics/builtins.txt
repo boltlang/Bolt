@@ -88,7 +88,7 @@ A builtin has to be at the top level
 struct Num(i32);
 #[builtin]
 fn Num.i32_add(a: i32, b: i32) -> i32;
-     //^^^^^^^ error: a builtin must be a function at the top level of a file, not in a class, an impl, an `extern` block or the namespace of a type
+     //^^^^^^^ error: a builtin must be a function at the top level of a file, not in a class, an impl or the namespace of a type
 
 ================================================================================
 A function linked to the host
@@ -130,3 +130,13 @@ fn e(x: i32);
 #[link(wasm, module = env)]
 fn f(x: i32);
  //^ error: after `wasm`, `#[link]` takes `key = "string"` pairs; write it like `#[link(wasm, module = "env", name = "log")]`
+
+================================================================================
+extern is reserved
+================================================================================
+  extern "env" { fn log(x: i32); }
+//^ error: `extern` is reserved: a function the host provides is written `#[link(wasm, module = "env")] fn log(x: i32);`
+  extern "C" fn f() {}
+//^ error: `extern` is reserved: a function the host provides is written `#[link(wasm, module = "env")] fn log(x: i32);`
+let g: extern "C" fn() = f;
+     //^ error: `extern` is reserved: a function the host provides is written `#[link(wasm, module = "env")] fn log(x: i32);`

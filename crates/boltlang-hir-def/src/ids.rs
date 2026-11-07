@@ -1,7 +1,7 @@
 //! IDs for the items of a program.
 //!
 //! Like in rust-analyzer, an ID is an interned location: where the item is
-//! (its file, or its class, impl or extern block) and its index in the
+//! (its file, or its class, effect or impl) and its index in the
 //! [`ItemTree`] of that file. Items directly in a file only need their file;
 //! functions, consts and type aliases can also be in a container.
 
@@ -20,7 +20,6 @@ pub enum ItemContainerId<'db> {
     Class(ClassId<'db>),
     Effect(EffectId<'db>),
     Impl(ImplId<'db>),
-    ExternBlock(ExternBlockId<'db>),
 }
 
 impl<'db> ItemContainerId<'db> {
@@ -30,7 +29,6 @@ impl<'db> ItemContainerId<'db> {
             ItemContainerId::Class(id) => id.file(db),
             ItemContainerId::Effect(id) => id.file(db),
             ItemContainerId::Impl(id) => id.file(db),
-            ItemContainerId::ExternBlock(id) => id.file(db),
         }
     }
 }
@@ -86,7 +84,6 @@ file_item_id!(EnumId, Enum, enums);
 file_item_id!(ClassId, Class, classes);
 file_item_id!(EffectId, Effect, effects);
 file_item_id!(ImplId, Impl, impls);
-file_item_id!(ExternBlockId, ExternBlock, extern_blocks);
 file_item_id!(MacroRulesId, MacroRules, macro_rules);
 assoc_item_id!(FunctionId, Function, functions);
 assoc_item_id!(ConstId, Const, consts);

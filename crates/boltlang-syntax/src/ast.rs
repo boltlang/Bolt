@@ -209,15 +209,12 @@ impl BoundedType {
     }
 }
 
-/// `fn(A) -> B` or `extern "C" fn()`
+/// `fn(A) -> B`
 pub struct FnType(SyntaxNode);
 
 simple_node!(FnType, FN_TYPE);
 
 impl FnType {
-    pub fn abi(&self) -> Option<Abi> {
-        self.find_node()
-    }
     pub fn param_list(&self) -> Option<ParamList> {
         self.find_node()
     }
@@ -333,17 +330,6 @@ impl EffectRow {
     /// one, in the order they're written.
     pub fn effects(&self) -> ChildrenIter<Type> {
         ChildrenIter::new(&self.0)
-    }
-}
-
-/// `extern` or `extern "C"`
-pub struct Abi(SyntaxNode);
-
-simple_node!(Abi, ABI);
-
-impl Abi {
-    pub fn string(&self) -> Option<SyntaxToken> {
-        self.find_token(STRING)
     }
 }
 
@@ -1537,10 +1523,6 @@ impl FuncDecl {
         self.find_token(CONST_KEYWORD)
     }
 
-    pub fn abi(&self) -> Option<Abi> {
-        self.find_node()
-    }
-
     pub fn name(&self) -> Option<Name> {
         self.find_node()
     }
@@ -1659,7 +1641,6 @@ ast_enum!(
         Class(Class) = CLASS,
         Effect(Effect) = EFFECT,
         Impl(Impl) = IMPL,
-        ExternBlock(ExternBlock) = EXTERN_BLOCK,
         Import(Import) = IMPORT,
         MacroCall(MacroCall) = MACRO_CALL,
         MacroRules(MacroRules) = MACRO_RULES,
@@ -1750,20 +1731,6 @@ impl ImportAlias {
         self.find_node()
     }
     pub fn alias(&self) -> Option<Name> {
-        self.find_node()
-    }
-}
-
-/// `extern "C" { items }` or `extern "C";`
-pub struct ExternBlock(SyntaxNode);
-
-simple_node!(ExternBlock, EXTERN_BLOCK);
-
-impl ExternBlock {
-    pub fn abi(&self) -> Option<Abi> {
-        self.find_node()
-    }
-    pub fn item_list(&self) -> Option<ItemList> {
         self.find_node()
     }
 }
@@ -2139,7 +2106,6 @@ has_attrs!(
     Effect,
     Impl,
     ItemList,
-    ExternBlock,
     Import,
     Param,
     MatchArm,
@@ -2261,7 +2227,6 @@ has_docs!(
     Class,
     Effect,
     Impl,
-    ExternBlock,
     Import,
     MacroRules,
     Block,

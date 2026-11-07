@@ -100,7 +100,7 @@ nothing changes.
 
 ### What can't be found
 
-- **A function without a body**, like a class method or an `extern`
+- **A function without a body**, like a class method or a `#[link]`
   function, has nothing to find it from, so its parameters escape. A class
   could say that a method borrows a parameter, and its impls would be
   checked against that, as their types are.

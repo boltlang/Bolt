@@ -290,7 +290,7 @@ pub fn generic_chain<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<GenericDef
         ItemContainerId::Class(c) => chain.push(GenericDefId::Class(c)),
         ItemContainerId::Effect(e) => chain.push(GenericDefId::Effect(e)),
         ItemContainerId::Impl(i) => chain.push(GenericDefId::Impl(i)),
-        ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => {}
+        ItemContainerId::File(_) => {}
     }
     chain.push(GenericDefId::Function(f));
     chain

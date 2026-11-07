@@ -17,8 +17,8 @@ use boltlang_hir_def::{
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
     hir::{BindingId, Expr, MutabilityRef, PatId, TypeRef, TypeRefId},
     ids::{
-        ClassId, ConstId, EffectId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
-        ItemContainerId, StructId, TypeAliasId,
+        ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
+        StructId, TypeAliasId,
     },
     item_tree::{AssocItem, AstId, LinkError, ModItem, RawVisibility, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
@@ -460,7 +460,7 @@ pub enum BecauseKind<'db> {
 /// Why a function's `#[link(..)]` is wrong.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BadLink {
-    /// It's in a class, an impl, an extern block or a type's namespace.
+    /// It's in a class, an impl or a type's namespace.
     NotTopLevel,
     /// It has a body, which the host would replace.
     HasBody,
@@ -473,7 +473,7 @@ pub enum BadLink {
 /// Why a function's `#[builtin]` is wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BadBuiltin {
-    /// It's in a class, an impl, an extern block or a type's namespace.
+    /// It's in a class, an impl or a type's namespace.
     NotTopLevel,
     /// It has a body, which the compiler would replace.
     HasBody,
@@ -482,7 +482,7 @@ pub enum BadBuiltin {
 /// Why a function with `#[test]` can't be run as a test.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BadTest {
-    /// It's in a class, an impl, an extern block or a type's namespace.
+    /// It's in a class, an impl or a type's namespace.
     NotTopLevel,
     /// It takes parameters, which nothing gives it.
     Params,
@@ -500,7 +500,7 @@ pub enum ClassItemKind {
     Type,
 }
 
-/// An item of a class, impl or extern block.
+/// An item of a class, effect or impl.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AssocItemDef<'db> {
     Function(FunctionId<'db>),
@@ -733,10 +733,6 @@ impl<'db> Collector<'db> {
                 }
                 ModItem::Const(idx) => self.const_(ConstId::new(db, container, idx)),
                 ModItem::TypeAlias(idx) => self.type_alias(TypeAliasId::new(db, container, idx)),
-                ModItem::ExternBlock(idx) => {
-                    let id = ExternBlockId::new(db, file, idx);
-                    self.assoc_items(ItemContainerId::ExternBlock(id), &id.item(db).items);
-                }
                 // Imports are checked by name resolution.
                 ModItem::Import(_) | ModItem::MacroRules(_) => {}
             }

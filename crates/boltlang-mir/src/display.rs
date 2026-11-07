@@ -454,7 +454,7 @@ fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
             Some(name) => format!("{name}."),
             None => String::new(),
         },
-        ItemContainerId::File(_) | ItemContainerId::ExternBlock(_) => String::new(),
+        ItemContainerId::File(_) => String::new(),
     }
 }
 

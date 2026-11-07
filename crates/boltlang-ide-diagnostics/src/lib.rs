@@ -777,7 +777,7 @@ fn describe(
             C::BAD_LINK,
             match reason {
                 BadLink::NotTopLevel => "a function linked to the host must be at the top level of a file, not \
-                                         in a class, an impl, an `extern` block or the namespace of a type"
+                                         in a class, an impl or the namespace of a type"
                     .to_string(),
                 BadLink::HasBody => {
                     "a function linked to the host can't have a body: the host provides it".to_string()
@@ -790,8 +790,8 @@ fn describe(
             C::BAD_BUILTIN,
             match reason {
                 BadBuiltin::NotTopLevel => {
-                    "a builtin must be a function at the top level of a file, not in a class, an impl, an \
-                     `extern` block or the namespace of a type"
+                    "a builtin must be a function at the top level of a file, not in a class, an impl or the \
+                     namespace of a type"
                 }
                 BadBuiltin::HasBody => "a builtin can't have a body: the compiler provides it",
             }
@@ -801,8 +801,8 @@ fn describe(
             C::BAD_TEST,
             match reason {
                 BadTest::NotTopLevel => {
-                    "a test must be a function at the top level of a file, not in a class, an impl, an `extern` \
-                     block or the namespace of a type"
+                    "a test must be a function at the top level of a file, not in a class, an impl or the namespace \
+                     of a type"
                 }
                 BadTest::Params => "a test can't have parameters: nothing gives it any",
                 BadTest::Generic => "a test can't have type parameters: nothing decides them",
