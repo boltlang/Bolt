@@ -681,24 +681,13 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         arms: &[MatchArm],
         effect_arms: &[EffectArm],
     ) -> ExprId {
-        let db = self.db;
         let found = self.cx.decisions.matches.iter().find(|(m, _)| *m == e);
         let Some((_, Ok(value))) = found else { return self.unsupported(e, "this pattern") };
         let value = Box::new(value.clone());
         let decisions: Vec<&OperationDecision<'db>> =
             self.cx.decisions.operations.iter().filter(|o| o.expr == e).collect();
-        let mut effects: Vec<ItemContainerId<'db>> = Vec::new();
-        for d in &decisions {
-            if d.decision.is_err() {
-                return self.unsupported(e, "this pattern");
-            }
-            let container = d.op.container(db);
-            if !effects.contains(&container) {
-                effects.push(container);
-            }
-        }
-        if effects.len() > 1 {
-            return self.unsupported(e, "a match that handles several effects");
+        if decisions.iter().any(|d| d.decision.is_err()) {
+            return self.unsupported(e, "this pattern");
         }
         let body = self.expr(scrutinee);
         let mut pats: Vec<PatId> = arms.iter().map(|a| a.pat).collect();

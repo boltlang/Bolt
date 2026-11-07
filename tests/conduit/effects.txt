@@ -402,29 +402,329 @@ env.log(1)
 env.log(2)
 
 ================================================================================
-A match that handles several effects isn't supported yet
+A match can handle several effects
 :test-prelude
-:error
 ================================================================================
-effect Log { fn log(m: i32); }
+extern "env" { fn log(x: i32); }
+effect Log { fn log_it(m: i32); }
 effect Ask { fn ask() -> i32; }
 fn job() -> i32 does Log + Ask {
-  log(1);
-  ask()
+  log_it(1);
+  ask() + ask()
 }
 fn run() -> i32 =
   match job() {
     v => v,
-    effect log(m), k => resume(k, ()),
-    effect ask(), k => resume(k, 1),
+    effect log_it(m), k => { log(m); resume(k, ()) },
+    effect ask(), k => resume(k, 20),
   };
-run();
+log(run());
 --------------------------------------------------------------------------------
-error in run at `match job() {
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Log {
+  (i32) -> ()
+}
+
+effect Ask {
+  () -> (i32)
+}
+
+handler run_handler0 for Log, Ask env() ops(run_handle0_log_it; run_handle0_ask) ret run_handle0_return
+
+fn file() -> () {
+  let %0: i32 = call run()
+  let = call_extern log(%0)
+  jump ret()
+}
+
+fn run() -> (i32) {
+  let %0: mut fn() -> (i32) does Log + Ask = closure run_handle0()
+  let %1: i32 = handle run_handler0(%0)
+  jump ret(%1)
+}
+
+fn job() -> (i32) does Log + Ask {
+  let = perform Log.0(1i32)
+  let %0: i32 = perform Ask.0()
+  let %1: i32 = perform Ask.0()
+  let %2: i32 = call plus_i32(%0, %1)
+  jump ret(%2)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn run_handle0() -> (i32) does Log + Ask {
+  let %0: i32 = call job()
+  jump ret(%0)
+}
+
+fn run_handle0_return(%v: i32) -> (i32) {
+  jump ret(%v)
+}
+
+fn run_handle0_log_it(%0: i32, %k: cont() -> (i32)) -> (i32) {
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
+  let %m: i32 = get Tuple_i32.0.0(%2)
+  let = call_extern log(%m)
+  let %4: i32 = resume(%k)
+  jump ret(%4)
+}
+
+fn run_handle0_ask(%k: cont(i32) -> (i32)) -> (i32) {
+  let %1: i32 = resume(%k, 20i32)
+  jump ret(%1)
+}
+--------------------------------------------------------------------------------
+env.log(1)
+env.log(40)
+
+================================================================================
+An arm can be for operations of several effects
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Fail { fn fail(code: i32); }
+effect Abort { fn abort(code: i32); }
+fn work(n: i32) -> i32 does Fail + Abort {
+  if n == 1 { fail(10) };
+  if n == 2 { abort(20) };
+  n
+}
+fn attempt(n: i32) -> i32 =
+  match work(n) {
     v => v,
-    effect log(m), k => resume(k, ()),
-    effect ask(), k => resume(k, 1),
-  }`: a match that handles several effects isn't supported yet
+    effect fail(c) | abort(c), _ => c,
+  };
+log(attempt(1));
+log(attempt(2));
+log(attempt(3));
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Fail {
+  (i32) -> ()
+}
+
+effect Abort {
+  (i32) -> ()
+}
+
+handler attempt_handler0 for Fail, Abort env() ops(attempt_handle0_fail; attempt_handle0_abort) ret attempt_handle0_return
+
+fn file() -> () {
+  let %0: i32 = call attempt(1i32)
+  let = call_extern log(%0)
+  let %1: i32 = call attempt(2i32)
+  let = call_extern log(%1)
+  let %2: i32 = call attempt(3i32)
+  let = call_extern log(%2)
+  jump ret()
+}
+
+fn attempt(%n: i32) -> (i32) {
+  let %1: mut fn() -> (i32) does Fail + Abort = closure attempt_handle0(%n)
+  let %2: i32 = handle attempt_handler0(%1)
+  jump ret(%2)
+}
+
+fn work(%n: i32) -> (i32) does Fail + Abort {
+  join j1() =
+    join j2() = jump ret(%n)
+    in
+    let %2: i32 = call eq_eq_i32(%n, 2i32)
+    case %2 {
+      0 => jump j2()
+      _ =>
+        let = perform Abort.0(20i32)
+        jump j2()
+    }
+  in
+  let %1: i32 = call eq_eq_i32(%n, 1i32)
+  case %1 {
+    0 => jump j1()
+    _ =>
+      let = perform Fail.0(10i32)
+      jump j1()
+  }
+}
+
+fn eq_eq_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Eq_i32_eq(%a, %b)
+  jump ret(%2)
+}
+
+fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = eq(%a, %b)
+  jump ret(%2)
+}
+
+fn attempt_handle0(%n: i32) -> (i32) does Fail + Abort {
+  let %1: i32 = call work(%n)
+  jump ret(%1)
+}
+
+fn attempt_handle0_return(%v: i32) -> (i32) {
+  jump ret(%v)
+}
+
+fn attempt_handle0_fail(%0: i32, %1: cont() -> (i32)) -> (i32) {
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
+  let %c: i32 = get Tuple_i32.0.0(%2)
+  jump ret(%c)
+}
+
+fn attempt_handle0_abort(%0: i32, %1: cont() -> (i32)) -> (i32) {
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
+  let %c: i32 = get Tuple_i32.0.0(%2)
+  jump ret(%c)
+}
+--------------------------------------------------------------------------------
+env.log(10)
+env.log(20)
+env.log(3)
+
+================================================================================
+A handler of several effects lets the others through
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Yield { fn yield(value: i32); }
+effect Skip { fn skip(); }
+effect Ask { fn ask() -> i32; }
+fn job() does Yield + Skip + Ask { yield(ask()); skip(); yield(1); }
+fn sum[E](body: fn() does Yield + Skip + E) -> i32 does E =
+  match body() {
+    () => 0,
+    effect yield(x), k => x + resume(k, ()),
+    effect skip(), k => 100 + resume(k, ()),
+  };
+fn answer(body: fn() -> i32 does Ask) -> i32 =
+  match body() {
+    v => v,
+    effect ask(), k => resume(k, 10),
+  };
+log(answer(|| sum(job)));
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Ask {
+  () -> (i32)
+}
+
+effect Yield {
+  (i32) -> ()
+}
+
+effect Skip {
+  () -> ()
+}
+
+handler answer_handler0 for Ask env() ops(answer_handle0_ask) ret answer_handle0_return
+
+handler sum_handler1[E1] for Yield, Skip does E1 env() ops(sum_handle0_yield; sum_handle0_skip) ret sum_handle0_return
+
+fn file() -> () {
+  let %0: imm fn() -> (i32) does Ask = closure file_lambda0()
+  let %1: i32 = call answer[imm](%0)
+  let = call_extern log(%1)
+  jump ret()
+}
+
+fn answer['m1](%body: 'm1 fn() -> (i32) does Ask) -> (i32) {
+  let %1: mut fn() -> (i32) does Ask = closure answer_handle0['m1](%body)
+  let %2: i32 = handle answer_handler0(%1)
+  jump ret(%2)
+}
+
+fn sum['m1, E1](%body: 'm1 fn() -> () does Yield + Skip + E1) -> (i32) does E1 {
+  let %1: mut fn() -> () does Yield + Skip + E1 = closure sum_handle0['m1, E1](%body)
+  let %2: i32 = handle sum_handler1[E1](%1)
+  jump ret(%2)
+}
+
+fn job() -> () does Ask + Yield + Skip {
+  let %0: i32 = perform Ask.0()
+  let = perform Yield.0(%0)
+  let = perform Skip.0()
+  let = perform Yield.0(1i32)
+  jump ret()
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn file_lambda0() -> (i32) does Ask {
+  let %0: imm fn() -> () does Ask + Yield + Skip = closure job()
+  let %1: i32 = call sum[imm, Ask](%0)
+  jump ret(%1)
+}
+
+fn answer_handle0['m1](%body: 'm1 fn() -> (i32) does Ask) -> (i32) does Ask {
+  let %1: i32 = apply(%body)
+  jump ret(%1)
+}
+
+fn answer_handle0_return(%v: i32) -> (i32) {
+  jump ret(%v)
+}
+
+fn answer_handle0_ask(%k: cont(i32) -> (i32)) -> (i32) {
+  let %1: i32 = resume(%k, 10i32)
+  jump ret(%1)
+}
+
+fn sum_handle0['m1, E1](%body: 'm1 fn() -> () does Yield + Skip + E1) -> () does Yield + Skip + E1 {
+  let = apply(%body)
+  jump ret()
+}
+
+fn sum_handle0_return[E1]() -> (i32) does E1 {
+  jump ret(0i32)
+}
+
+fn sum_handle0_yield[E1](%0: i32, %k: cont() -> (i32) does E1) -> (i32) does E1 {
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
+  let %x: i32 = get Tuple_i32.0.0(%2)
+  let %4: i32 = resume(%k)
+  let %5: i32 = call plus_i32(%x, %4)
+  jump ret(%5)
+}
+
+fn sum_handle0_skip[E1](%k: cont() -> (i32) does E1) -> (i32) does E1 {
+  let %1: i32 = resume(%k)
+  let %2: i32 = call plus_i32(100i32, %1)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+env.log(111)
 
 ================================================================================
 An effect with type parameters is an effect for each of its arguments

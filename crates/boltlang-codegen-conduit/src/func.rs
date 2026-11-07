@@ -70,8 +70,9 @@ pub(crate) enum Part<'a> {
     HandleBody(u32, ExprId),
     /// Its value arms, as the handler's return clause.
     HandleRet(u32, ExprId),
-    /// The arms of the `i`th operation of its effect, as its clause.
-    HandleClause(u32, ExprId, usize),
+    /// The arms of the `j`th operation of the `i`th effect it handles, as
+    /// its clause.
+    HandleClause(u32, ExprId, usize, usize),
 }
 
 /// What a function of a handler is.
@@ -79,7 +80,8 @@ pub(crate) enum Part<'a> {
 enum HandlePart {
     Body,
     Ret,
-    Clause(usize),
+    /// The clause of an effect it handles, by index, and an operation of it.
+    Clause(usize, usize),
 }
 
 /// The function of the instance `iu`, or one of its lambdas or handlers.
@@ -135,7 +137,7 @@ pub(crate) fn lower_body<'db>(
         }
         Part::HandleBody(i, e) => (i, Some((e, HandlePart::Body))),
         Part::HandleRet(i, e) => (i, Some((e, HandlePart::Ret))),
-        Part::HandleClause(i, e, op) => (i, Some((e, HandlePart::Clause(op)))),
+        Part::HandleClause(i, e, effect, op) => (i, Some((e, HandlePart::Clause(effect, op)))),
     };
     let (id, mir) = match (handle, bodies) {
         (Some((e, which)), Some(bodies)) => {
@@ -143,7 +145,7 @@ pub(crate) fn lower_body<'db>(
             let id = match which {
                 HandlePart::Body => fns.body,
                 HandlePart::Ret => fns.ret,
-                HandlePart::Clause(op) => fns.clauses[op],
+                HandlePart::Clause(effect, op) => fns.effects[effect].1[op],
             };
             let mir = match body_index {
                 0 => &bodies.body,
@@ -370,19 +372,20 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     Ok(())
                 })?;
             }
-            HandlePart::Clause(index) => {
+            HandlePart::Clause(effect, index) => {
                 self.bind_given(&fns.env, &mut next)?;
+                let key = &fns.effects[effect].0;
                 let op = self
                     .cx
                     .effects
-                    .get(&fns.effect)
+                    .get(key)
                     .and_then(|(_, all)| all.get(index).copied())
                     .ok_or_else(|| ErrorKind::unsupported("this handler"))?;
                 let op_arms = ops.iter().find(|o| o.op == op).ok_or_else(|| {
                     ErrorKind::unsupported("a handler without an arm for each operation")
                 })?;
                 // The arguments, matched as a tuple.
-                let (tys, _) = crate::op_params(db, self.cx.root, &fns.effect, op)?;
+                let (tys, _) = crate::op_params(db, self.cx.root, key, op)?;
                 let mut args = Vec::new();
                 for t in &tys {
                     if self.cty(t)?.is_some() {

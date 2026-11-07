@@ -65,7 +65,7 @@ fn quiet(body: fn() -> () does Log) -> () = handle body() {
 }
 
 ================================================================================
-A match that handles several effects isn't supported yet
+A match can handle several effects
 :test-prelude
 ================================================================================
 effect Log { fn log(m: i32); }
@@ -77,4 +77,16 @@ fn run(body: fn() -> i32 does Log + Ask) -> i32 =
         effect ask(), k => resume(k, 1),
     };
 --------------------------------------------------------------------------------
-fn run(body: fn() -> i32 does Log + Ask) -> i32 = unsupported("a match that handles several effects")
+fn run(body: fn() -> i32 does Log + Ask) -> i32 = handle body() {
+  n0 = arm 0 with v = $0
+  arm 0 => v
+  effect Log.log {
+    $1 = $0.0
+    n0 = arm 0 with m = $1
+    arm 0, k#b3 => builtin.resume(k#b3, ())
+  }
+  effect Ask.ask {
+    n0 = arm 0
+    arm 0, k#b4 => builtin.resume(k#b4, 1)
+  }
+}
