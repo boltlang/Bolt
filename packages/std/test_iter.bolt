@@ -1,5 +1,7 @@
 // The tests of `iter.bolt`, and of patterns in `for`.
 
+import "./iter" *;
+import "./vec" (Vec, push);
 import "./io" (assert);
 import "./ops" *;
 
@@ -36,4 +38,33 @@ fn break_and_continue_in_a_for_with_a_pattern() {
     n = n + a;
   }
   assert(n == 4);
+}
+
+#[test]
+fn zip_gives_pairs() {
+  let a = Vec.from_array([1, 2, 3]);
+  let b = Vec.from_array([10, 20, 30]);
+  let mut n = 0;
+  for (x, y) in zip(a, b) {
+    n = n + x * y;
+  }
+  assert(n == 140);
+}
+
+// `a` and `b` are of either mutability here, so the iterator of a `Vec`
+// is too.
+fn dot(a: Vec[i32], b: Vec[i32]) -> i32 {
+  let mut n = 0;
+  for (x, y) in zip(a, b) {
+    n = n + x * y;
+  }
+  n
+}
+
+#[test]
+fn zip_in_a_function_of_either_mutability() {
+  assert(dot(Vec.from_array([1, 2]), Vec.from_array([3, 4])) == 11);
+  let a = Vec.new();
+  a.push(5);
+  assert(dot(a, Vec.from_array([2])) == 10);
 }

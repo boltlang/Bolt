@@ -656,6 +656,38 @@ impl<'db> Subst<'_, 'db> {
         if args.iter().any(MonoTy::has_erased) {
             return Ok(MonoTy::ErasedAssoc(alias, args.into()));
         }
+        // A mutability parameter of the instance that no slot is, like the
+        // `'0` of `C = '0 Vec[i32]`, gets a slot of its own, so that it
+        // stays a parameter in what the impl gives, like the `'v` of
+        // `VecIter[T, 'v]`, instead of becoming `imm`.
+        let mut extra: Vec<Slot<'db>> = Vec::new();
+        for t in &args {
+            t.map_muts(&mut |m| {
+                let slot = Slot::Mut(m);
+                if matches!(m, MonoMut::Param(_))
+                    && !self.slots.contains(&slot)
+                    && !extra.contains(&slot)
+                {
+                    extra.push(slot);
+                }
+                m
+            });
+        }
+        if !extra.is_empty() {
+            let slots: Vec<Slot<'db>> = self.slots.iter().cloned().chain(extra).collect();
+            let wider = Subst { slots: &slots, ..*self };
+            return wider.assoc_of(alias, &args);
+        }
+        self.assoc_of(alias, &args)
+    }
+
+    /// The associated type `alias` of closed `args`, which `back` can give
+    /// to the checker.
+    fn assoc_of(
+        &self,
+        alias: TypeAliasId<'db>,
+        args: &[MonoTy<'db>],
+    ) -> Result<MonoTy<'db>, TyError> {
         let args: Box<[Ty<'db>]> = args.iter().map(|t| self.back(t)).collect::<Result<_, _>>()?;
         let ty = normalize_assoc(self.db, self.root, &Ty::Assoc(alias, args));
         if matches!(ty, Ty::Assoc(..)) {
