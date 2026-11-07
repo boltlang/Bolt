@@ -1,7 +1,8 @@
 // How values look to the people who use a program, like Rust's `Display`:
 // `42` for a number. `Debug` is how they look in code.
 
-import "./string" (String, StringBuilder, build);
+import "./string" (String, StringBuilder, push, push_str, build);
+import "./char" (Char);
 import "./debug" (push_i64, push_u64, push_i128, push_u128);
 import "./ops" *;
 
@@ -31,3 +32,14 @@ impl Show[u32] { fn show_to(n, out) = push_u64(out, n as u64); }
 impl Show[u64] { fn show_to(n, out) = push_u64(out, n); }
 impl Show[u128] { fn show_to(n, out) = push_u128(out, n); }
 impl Show[usize] { fn show_to(n, out) = push_u64(out, n as u64); }
+
+/// `True` or `False`, as in code.
+impl Show[Bool] {
+  fn show_to(b, out) = out.push_str(if b { "True" } else { "False" });
+}
+
+/// A character is shown as it is, without quotes or escapes.
+impl Show[Char] { fn show_to(c, out) = out.push(c); }
+
+/// A string is shown as it is, without quotes or escapes.
+impl Show[String] { fn show_to(s, out) = out.push_str(s); }

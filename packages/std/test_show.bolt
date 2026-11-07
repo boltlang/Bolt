@@ -55,3 +55,34 @@ fn show_to_adds_to_a_builder() {
   show_to(10u8, out);
   assert(out.build() == "x = -5, y = 10");
 }
+
+#[test]
+fn booleans_are_shown_as_their_literals() {
+  assert(show(True) == "True");
+  assert(show(False) == "False");
+}
+
+#[test]
+fn characters_are_shown_as_they_are() {
+  assert(show('a') == "a");
+  assert(show('é') == "é");
+  assert(show('\n') == "\n");
+  assert(show('\'') == "'");
+}
+
+#[test]
+fn strings_are_shown_as_they_are() {
+  assert(show("") == "");
+  assert(show("hi") == "hi");
+  assert(show("a \"b\"\n wörld ✓") == "a \"b\"\n wörld ✓");
+}
+
+#[test]
+fn shown_values_can_be_put_together() {
+  let out = StringBuilder.new();
+  show_to("n = ", out);
+  show_to(-3, out);
+  show_to(',', out);
+  show_to(True, out);
+  assert(out.build() == "n = -3,True");
+}
