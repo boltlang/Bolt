@@ -1,3 +1,13 @@
+// The runtime of a Wasm module that Bolt compiled, for Node:
+//
+//   node node.mjs <module> <export>
+//
+// It calls the export, like `main` or a test, with Node's WASI preview 1
+// as `wasi_snapshot_preview1`, without arguments, environment or
+// preopened directories, and the module `bolt`'s `write_file` and `flush`,
+// on stdout and stderr. Any other function the module imports stops the
+// program. It exits with 1 when the export stops with an error, or exits
+// with a code other than 0, and with 2 when the module can't be run.
 import fs from "node:fs";
 import { WASI } from "node:wasi";
 const [, , path, name] = process.argv;

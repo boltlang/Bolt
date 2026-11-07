@@ -1,14 +1,15 @@
 //! Running a Wasm module of [`crate::wasm`] with Node, for `bolt run
 //! --wasm`, `bolt test --wasm` and the tests of `std`.
 //!
-//! The host, `node_host.mjs`, is run as `node host.mjs <module> <export>`
-//! and calls the export: `main`, or a test. It gives the module `bolt`'s
-//! `write_file` and `flush`, on stdout and stderr, Node's WASI preview 1
-//! as `wasi_snapshot_preview1`, with no arguments, environment or
-//! preopened directories, and every other import a function that stops
-//! the program, as the evaluator does for a host function it doesn't
-//! have. It exits with 1 when the export stops with an error, or exits
-//! with a code other than 0, and with 2 when the module can't be run.
+//! The runtime, `runtime/node.mjs` in the repository, is run as `node
+//! runtime.mjs <module> <export>` and calls the export: `main`, or a
+//! test. It gives the module `bolt`'s `write_file` and `flush`, on stdout
+//! and stderr, Node's WASI preview 1 as `wasi_snapshot_preview1`, with no
+//! arguments, environment or preopened directories, and every other
+//! import a function that stops the program, as the evaluator does for a
+//! host function it doesn't have. It exits with 1 when the export stops
+//! with an error, or exits with a code other than 0, and with 2 when the
+//! module can't be run.
 
 use std::{
     path::{Path, PathBuf},
@@ -16,28 +17,29 @@ use std::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-/// The script of the host.
-pub const HOST: &str = include_str!("node_host.mjs");
+/// The script of the runtime.
+pub const RUNTIME: &str =
+    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../runtime/node.mjs"));
 
 /// Whether there's a `node` to run modules with.
 pub fn available() -> bool {
     Command::new("node").arg("--version").output().is_ok_and(|o| o.status.success())
 }
 
-/// A directory with the host, for modules to be run with it. It's removed
+/// A directory with the runtime, for modules to be run with it. It's removed
 /// when this is dropped.
 pub struct NodeHost {
     pub dir: PathBuf,
 }
 
 impl NodeHost {
-    /// A new directory with the host, in the system's temporary directory.
+    /// A new directory with the runtime, in the system's temporary directory.
     pub fn new() -> std::io::Result<Self> {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("bolt-node-{}-{n}", std::process::id()));
         std::fs::create_dir_all(&dir)?;
-        std::fs::write(dir.join("host.mjs"), HOST)?;
+        std::fs::write(dir.join("runtime.mjs"), RUNTIME)?;
         Ok(NodeHost { dir })
     }
 
@@ -47,7 +49,7 @@ impl NodeHost {
         // Node's WASI warns that it's experimental.
         let status = Command::new("node")
             .arg("--no-warnings")
-            .arg(self.dir.join("host.mjs"))
+            .arg(self.dir.join("runtime.mjs"))
             .arg(module)
             .arg(name)
             .status()?;
@@ -69,7 +71,7 @@ impl NodeHost {
     ) -> std::io::Result<(Result<(), String>, String)> {
         let output = Command::new("node")
             .arg("--no-warnings")
-            .arg(self.dir.join("host.mjs"))
+            .arg(self.dir.join("runtime.mjs"))
             .arg(module)
             .arg(name)
             .output()?;
