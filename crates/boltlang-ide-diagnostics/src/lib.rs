@@ -797,6 +797,15 @@ fn describe(
                 ),
                 BadLink::Nolen => "`#[nolen]` is only for an array that a function linked with `abi = flat` takes"
                     .to_string(),
+                BadLink::EmuGated(key) => format!(
+                    "a function linked to `emu` can't be in a `#[cfg]` on `{key}`, only on `host`: the evaluator \
+                     is the same host for every machine it imitates"
+                ),
+                BadLink::EmuSize(ty) => format!(
+                    "a function linked to `emu` can't take or give a `{}`, whose width is the machine's: the \
+                     evaluator is the same host for every machine it imitates",
+                    ty.display_with(db, names)
+                ),
             },
         ),
         K::BadBuiltin { reason } => (

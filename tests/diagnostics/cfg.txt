@@ -79,3 +79,20 @@ fn f() {
 //^^^^^^^^^^^^^^^^^^^^ error: `#[cfg]` can only be on an item outside a body, like a function, a struct or an import
   fn g() {}
 }
+
+================================================================================
+A function linked to emu is the same for every machine
+================================================================================
+#[cfg(host = "emu")]
+#[link(emu, abi = flat)]
+fn fine(fd: i32, bytes: [u8]) -> (u16, i64);
+#[cfg(any(host = "emu", pointer_width = 32))]
+#[link(emu)]
+fn gated(x: i32);
+ //^^^^^ error: a function linked to `emu` can't be in a `#[cfg]` on `pointer_width`, only on `host`: the evaluator is the same host for every machine it imitates
+#[link(emu, abi = flat)]
+fn sized(n: usize) -> (u16, isize);
+ //^^^^^ error: a function linked to `emu` can't take or give a `usize`, whose width is the machine's: the evaluator is the same host for every machine it imitates
+#[cfg(host = "wasm")]
+#[link(emu)]
+fn only_for_wasm(x: isize);

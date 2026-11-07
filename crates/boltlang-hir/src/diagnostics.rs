@@ -482,6 +482,13 @@ pub enum BadLink<'db> {
     /// `#[nolen]` on a parameter that isn't an array of a function linked
     /// with `abi = flat`.
     Nolen,
+    /// An `emu` function in a `#[cfg]` on something other than `host`,
+    /// like `pointer_width`: the evaluator's host is the same for every
+    /// machine it imitates.
+    EmuGated(&'static str),
+    /// An `emu` function that takes or gives an `isize` or `usize`, whose
+    /// width is the machine's.
+    EmuSize(Ty<'db>),
 }
 
 /// Why a function's `#[builtin]` is wrong.
@@ -1139,6 +1146,53 @@ impl<'db> Collector<'db> {
         }
     }
 
+    /// Check that a function linked to `emu` is the same for every machine
+    /// the evaluator imitates: in no `#[cfg]` but on `host`, and without
+    /// `isize` or `usize`.
+    fn emu_link(&mut self, f: FunctionId<'db>) {
+        use boltlang_hir_def::cfg::{Cfg, is_cfg, parse};
+        use boltlang_syntax::ast::Node as _;
+        let db = self.db;
+        let range = Some(self.item_range(f.item(db).ast_id));
+        fn machine_key(cfg: &Cfg) -> Option<&'static str> {
+            match cfg {
+                Cfg::Host(_) => None,
+                Cfg::Arch(_) => Some("arch"),
+                Cfg::PointerWidth(_) => Some("pointer_width"),
+                Cfg::Endian(_) => Some("endian"),
+                Cfg::All(cfgs) | Cfg::Any(cfgs) => cfgs.iter().find_map(machine_key),
+                Cfg::Not(cfg) => machine_key(cfg),
+            }
+        }
+        if let Some(node) = f.item(db).ast_id.to_node(db, self.file, &self.root) {
+            let key = node
+                .children()
+                .filter_map(boltlang_syntax::ast::Attr::cast)
+                .filter_map(|attr| attr.meta())
+                .filter(is_cfg)
+                .filter_map(|meta| parse(&meta).ok())
+                .find_map(|cfg| machine_key(&cfg));
+            if let Some(key) = key {
+                self.push(range, DiagnosticKind::BadLink { reason: BadLink::EmuGated(key) });
+            }
+        }
+        fn sized<'db>(t: &Ty<'db>) -> bool {
+            use boltlang_hir_def::builtin_type::{BuiltinInt, BuiltinType, BuiltinUint};
+            match t {
+                Ty::Builtin(BuiltinType::Int(BuiltinInt::Isize))
+                | Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)) => true,
+                Ty::Array(_, elem) => sized(elem),
+                Ty::Tuple(tys, _) => tys.iter().any(sized),
+                _ => false,
+            }
+        }
+        let sig = fn_sig(db, f);
+        let tys = sig.params.iter().flatten().chain(sig.ret.iter());
+        if let Some(t) = tys.into_iter().find(|t| sized(t)) {
+            self.push(range, DiagnosticKind::BadLink { reason: BadLink::EmuSize(t.clone()) });
+        }
+    }
+
     /// Report `#[nolen]` on a parameter of a function that isn't linked
     /// with `abi = flat`.
     fn no_nolen(&mut self, f: FunctionId<'db>) {
@@ -1169,10 +1223,15 @@ impl<'db> Collector<'db> {
             };
             if let Some(reason) = reason {
                 self.push(range, DiagnosticKind::BadLink { reason });
-            } else if link.abi == LinkAbi::Flat {
+                return;
+            }
+            if link.abi == LinkAbi::Flat {
                 self.flat_link(f);
             } else {
                 self.no_nolen(f);
+            }
+            if link.kind == boltlang_hir_def::item_tree::LinkKind::Emu {
+                self.emu_link(f);
             }
             return;
         }
