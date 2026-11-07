@@ -3,7 +3,7 @@
 // with it, like the result of `bolt run`, and others as they are, like
 // `Some(1)`.
 
-import "./string" (String, StringBuilder, push, build);
+import "./string" (String, StringBuilder, push, push_str, build);
 import "./char" (Char);
 import "./ops" *;
 
@@ -82,3 +82,8 @@ impl Debug[u32] { fn debug(n, out) = push_u64(out, n as u64); }
 impl Debug[u64] { fn debug(n, out) = push_u64(out, n); }
 impl Debug[u128] { fn debug(n, out) = push_u128(out, n); }
 impl Debug[usize] { fn debug(n, out) = push_u64(out, n as u64); }
+
+/// `True` or `False`, as in code.
+impl Debug[Bool] {
+  fn debug(b, out) = out.push_str(if b { "True" } else { "False" });
+}

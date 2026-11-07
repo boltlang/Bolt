@@ -46,3 +46,9 @@ impl Debug[Point] {
 fn a_type_can_have_an_impl_of_its_own() {
   assert(debug_string(Point { x: 1, y: 2 }) == "<point>");
 }
+
+#[test]
+fn booleans_look_like_their_literals() {
+  assert(debug_string(True) == "True");
+  assert(debug_string(False) == "False");
+}
