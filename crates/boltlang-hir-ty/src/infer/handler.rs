@@ -5,8 +5,13 @@
 //! operation, whose signature gives the types of the arm's patterns, with
 //! the arguments of its effect shared by all the arms of the `match`. The
 //! continuation of an arm for `fn op(a: A) -> B` is a `Cont[B, U, ρ]`, where
-//! `U` is the type of the `match` and `ρ` is `s` without the effects that
-//! have arms. `ρ` is what's left for the code around the `match` to do.
+//! `U` is the type of the `match` and `ρ` the effects of the code around the
+//! `match`, which the arms run with. Handlers are deep: resuming runs the
+//! rest of the scrutinee, still handled, so the arms can run again, and `ρ`
+//! has their effects as well as those of `s` without the effects that have
+//! arms, which must be in it too. That's also the row Conduit gives a
+//! continuation. Only what the arms and `s` do would be more precise
+//! (#370).
 
 use boltlang_hir_def::{
     Name,
@@ -101,7 +106,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 let cont_ty = match cont {
                     Some(c) => Ty::adt(
                         AdtId::Struct(c),
-                        [ret, ty.clone(), left.clone()],
+                        [ret, ty.clone(), self.effects.clone()],
                         [],
                         Ty::Mutability(Mutability::Imm),
                     ),

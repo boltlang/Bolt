@@ -213,3 +213,28 @@ count: fn() -> i32 does State[i32]
 run: fn() -> i32
 --------------------------------------------------------------------------------
 error at `get()`: no arms for set, reset
+
+================================================================================
+Resuming a continuation can run the arms again
+:error
+:test-prelude
+================================================================================
+effect Yield { fn yield(value: i32); }
+effect Log { fn log(message: String); }
+fn later(k: Cont[(), (), Nothing]) { resume(k, ()) }
+fn later_with[E](k: Cont[(), (), E]) does E { resume(k, ()) }
+fn f() does Log = match yield(1) {
+  () => (),
+  effect yield(x), k => { log("yielded"); later(k) },
+};
+fn g() does Log = match yield(1) {
+  () => (),
+  effect yield(x), k => { log("yielded"); later_with(k) },
+};
+--------------------------------------------------------------------------------
+later: fn(Cont[(), (), Nothing]) -> ()
+later_with: forall E. fn(Cont[(), (), E]) -> () does E
+f: fn() -> () does Log
+g: fn() -> () does Log
+--------------------------------------------------------------------------------
+error at `k`: expected Cont[(), (), Nothing], found Cont[(), (), Log]

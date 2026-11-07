@@ -388,9 +388,15 @@ type $U$:
 
 - The value arms have patterns of type $T$, and must be exhaustive.
 - An arm for an operation `fn op(a: A) -> B` of $\mathit{Op}_i$ has patterns
-  of type $A$, and binds `k` to a `Cont[B, U, R]`, where `R` is $\rho$:
-  what resuming the continuation does. `R` is of kind $\mathsf{Effect}$.
-- `resume(k, b)` has type $U$ and does $\rho$.
+  of type $A$, and binds `k` to a `Cont[B, U, R]`, where `R` is what
+  resuming the continuation does. `R` is of kind $\mathsf{Effect}$.
+  Handlers are deep: resuming runs the rest of the scrutinee, still
+  handled, so its next operation runs an arm again. `R` is the row of the
+  enclosing function or closure, which the arms run with and which has
+  $\rho$ in it. That's also the row Conduit gives a continuation: its
+  handler's. Just $\rho$ plus what the arms do would be more precise
+  (#370).
+- `resume(k, b)` has type $U$ and does `R`.
 - The `match` does $\rho$, plus what its arms do.
 
 So `match` takes the effects it has arms for out of the row, and nothing
