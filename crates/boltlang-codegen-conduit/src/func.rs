@@ -939,12 +939,12 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     _ => Err(ErrorKind::unsupported("this literal")),
                 }
             }
-            Literal::Byte(n) => Ok(Some(Atom::Lit(Lit::I32(*n as i32)))),
+            Literal::Byte(n) => Ok(Some(Atom::Lit(Lit::I8(*n as i8)))),
             Literal::Char(c) => self.construct(e, 0, vec![Atom::Lit(Lit::I32(*c as u32 as i32))]),
             Literal::String(s) => {
                 // A `String` holds its UTF-8 bytes, as `[u8]`.
-                let bytes: Vec<Atom> = s.bytes().map(|b| Atom::Lit(Lit::I32(b as i32))).collect();
-                let xs = self.b.array_new(Ty::I32, Mutability::Imm, bytes);
+                let bytes: Vec<Atom> = s.bytes().map(|b| Atom::Lit(Lit::I8(b as i8))).collect();
+                let xs = self.b.array_new(Ty::I8, Mutability::Imm, bytes);
                 self.construct(e, 0, vec![Atom::Var(xs)])
             }
             Literal::ByteString(_) | Literal::CString(_) => {
@@ -1103,39 +1103,23 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             PrimOp::Neg => {
                 let zero = int_lit(s, 0);
                 let v = self.b.prim(Prim::Sub, [zero, args[0].clone()]);
-                return Ok(Some(self.wrap(s, Atom::Var(v))));
+                return Ok(Some(Atom::Var(v)));
             }
             PrimOp::Not => {
                 // `!` of a `Bool` flips its bit, and of an integer all of them.
                 let mask = if s == Scalar::Bool { int_lit(s, 1) } else { int_lit(s, -1) };
                 let v = self.b.prim(Prim::Xor, [args[0].clone(), mask]);
-                return Ok(Some(self.wrap(s, Atom::Var(v))));
+                return Ok(Some(Atom::Var(v)));
             }
         };
         let mut args = args;
-        // The amount of a shift is a `u32`, which a 64-bit shift needs as an
-        // `i64`.
-        if matches!(op, PrimOp::Shl | PrimOp::Shr) && s.ty() == Ty::I64 {
-            let n = self.b.convert(Ty::I64, Sign::Unsigned, args[1].clone());
+        // The amount of a shift is a `u32`, which a shift of another width
+        // needs as its own type.
+        if matches!(op, PrimOp::Shl | PrimOp::Shr) && s.ty() != Ty::I32 {
+            let n = self.b.convert(s.ty(), Sign::Unsigned, args[1].clone());
             args[1] = Atom::Var(n);
         }
-        let v = Atom::Var(self.b.prim(p, args));
-        let arith =
-            matches!(op, PrimOp::Add | PrimOp::Sub | PrimOp::Mul | PrimOp::Div | PrimOp::Shl);
-        Ok(Some(if arith { self.wrap(s, v) } else { v }))
-    }
-
-    /// An 8- or 16-bit integer in an `i32`, back in range after arithmetic.
-    fn wrap(&mut self, s: Scalar, v: Atom) -> Atom {
-        let Scalar::Int { bits: bits @ (8 | 16), signed } = s else { return v };
-        if signed {
-            let n = 32 - bits as i32;
-            let up = self.b.prim(Prim::Shl, [v, Atom::Lit(Lit::I32(n))]);
-            Atom::Var(self.b.prim(Prim::Shr(Sign::Signed), [Atom::Var(up), Atom::Lit(Lit::I32(n))]))
-        } else {
-            let mask = (1i32 << bits) - 1;
-            Atom::Var(self.b.prim(Prim::And, [v, Atom::Lit(Lit::I32(mask))]))
-        }
+        Ok(Some(Atom::Var(self.b.prim(p, args))))
     }
 
     fn cast(&mut self, inner: ExprId, e: ExprId, v: Val) -> R<Val> {
@@ -1147,9 +1131,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         if from == to {
             return Ok(Some(v));
         }
+        // Narrower keeps the low bits, and wider extends by the sign of what's
+        // cast. Of the same width, only how it's read changes.
         let sign = if from.signed() { Sign::Signed } else { Sign::Unsigned };
         let v = if from.ty() == to.ty() { v } else { Atom::Var(self.b.convert(to.ty(), sign, v)) };
-        Ok(Some(self.wrap(to, v)))
+        Ok(Some(v))
     }
 
     fn assign(&mut self, place: &MirPlace<'db>, op: Option<&Callee<'db>>, value: ExprId) -> R<()> {
@@ -1388,14 +1374,9 @@ fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_mir_mono::MonoMut]) -> Mono
 /// An integer or `Bool` literal of a scalar type, wrapped to its range.
 fn int_lit(s: Scalar, n: i128) -> Atom {
     match s {
+        Scalar::Int { bits: 8, .. } => Atom::Lit(Lit::I8(n as i8)),
+        Scalar::Int { bits: 16, .. } => Atom::Lit(Lit::I16(n as i16)),
         Scalar::Int { bits: 64, .. } => Atom::Lit(Lit::I64(n as i64)),
-        Scalar::Int { bits, signed: true } if bits < 32 => {
-            let shift = 32 - bits as u32;
-            Atom::Lit(Lit::I32(((n as i32) << shift) >> shift))
-        }
-        Scalar::Int { bits, signed: false } if bits < 32 => {
-            Atom::Lit(Lit::I32((n as i32) & ((1 << bits) - 1)))
-        }
         _ => Atom::Lit(Lit::I32(n as i32)),
     }
 }

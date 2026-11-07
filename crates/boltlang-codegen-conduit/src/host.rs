@@ -82,7 +82,9 @@ pub(crate) fn print_func(module: &Module, io: Io, string: &Ty) -> Result<Func, E
     b.call_extern(io.flush, [stdout.clone()]);
     b.ret(());
     b.default(case);
+    // The host takes a byte as an `i32`.
     let byte = b.array_get(bytes, i);
+    let byte = b.convert(Ty::I32, Sign::Unsigned, byte);
     b.call_extern(io.write_file, [stdout, Atom::Var(byte)]);
     let i = b.prim(Prim::Add, [Atom::Var(i), Atom::Lit(Lit::I32(1))]);
     b.jump(&next, [Atom::Var(i)]);

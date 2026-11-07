@@ -1048,7 +1048,7 @@ data Vec_i32 {
 }
 
 data String {
-  (imm [i32])
+  (imm [i8])
 }
 
 #[link(wasm, module = "env")]
@@ -1153,7 +1153,7 @@ fn Vec_with_capacity_i32(%capacity: i32) -> (mut Vec_i32) {
   case %1 {
     0 => jump j1()
     _ =>
-      let %2: imm [i32] = array_new(97i32, 32i32, 99i32, 97i32, 112i32, 97i32, 99i32, 105i32, 116i32, 121i32, 32i32, 99i32, 97i32, 110i32, 39i32, 116i32, 32i32, 98i32, 101i32, 32i32, 110i32, 101i32, 103i32, 97i32, 116i32, 105i32, 118i32, 101i32)
+      let %2: imm [i8] = array_new(97i8, 32i8, 99i8, 97i8, 112i8, 97i8, 99i8, 105i8, 116i8, 121i8, 32i8, 99i8, 97i8, 110i8, 39i8, 116i8, 32i8, 98i8, 101i8, 32i8, 110i8, 101i8, 103i8, 97i8, 116i8, 105i8, 118i8, 101i8)
       let %3: imm String = new String.0(%2)
       let = call panic(%3)
       unreachable
@@ -1253,7 +1253,7 @@ fn check_index_i32['m1](%v: 'm1 Vec_i32, %index: i32) -> () {
     case %3 {
       0 => jump j1()
       _ =>
-        let %6: imm [i32] = array_new(105i32, 110i32, 100i32, 101i32, 120i32, 32i32, 111i32, 117i32, 116i32, 32i32, 111i32, 102i32, 32i32, 98i32, 111i32, 117i32, 110i32, 100i32, 115i32)
+        let %6: imm [i8] = array_new(105i8, 110i8, 100i8, 101i8, 120i8, 32i8, 111i8, 117i8, 116i8, 32i8, 111i8, 102i8, 32i8, 98i8, 111i8, 117i8, 110i8, 100i8, 115i8)
         let %7: imm String = new String.0(%6)
         let = call panic(%7)
         unreachable
@@ -1284,7 +1284,7 @@ fn PartialOrd_i32_gte(%a: i32, %b: i32) -> (i32) {
 }
 
 fn bolt_print(%0: imm String) -> () {
-  let %1: imm [i32] = get String.0.0(%0)
+  let %1: imm [i8] = get String.0.0(%0)
   let %2: i32 = array_len(%1)
   join rec j1(%3: i32) =
     let %4: i32 = lt.s(%3, %2)
@@ -1294,10 +1294,11 @@ fn bolt_print(%0: imm String) -> () {
         let = call_extern flush(1i32)
         jump ret()
       _ =>
-        let %5: i32 = array_get(%1, %3)
-        let = call_extern write_file(1i32, %5)
-        let %6: i32 = add(%3, 1i32)
-        jump j1(%6)
+        let %5: i8 = array_get(%1, %3)
+        let %6: i32 = convert.u[i32](%5)
+        let = call_extern write_file(1i32, %6)
+        let %7: i32 = add(%3, 1i32)
+        jump j1(%7)
     }
   in jump j1(0i32)
 }
@@ -1329,7 +1330,7 @@ data Vec_0_i32['m1] {
 }
 
 data String {
-  (imm [i32])
+  (imm [i8])
 }
 
 #[link(wasm, module = "env")]
@@ -1536,7 +1537,7 @@ fn Vec_with_capacity_mut_i32(%capacity: i32) -> (mut Vec_0_i32[mut]) {
   case %1 {
     0 => jump j1()
     _ =>
-      let %2: imm [i32] = array_new(97i32, 32i32, 99i32, 97i32, 112i32, 97i32, 99i32, 105i32, 116i32, 121i32, 32i32, 99i32, 97i32, 110i32, 39i32, 116i32, 32i32, 98i32, 101i32, 32i32, 110i32, 101i32, 103i32, 97i32, 116i32, 105i32, 118i32, 101i32)
+      let %2: imm [i8] = array_new(97i8, 32i8, 99i8, 97i8, 112i8, 97i8, 99i8, 105i8, 116i8, 121i8, 32i8, 99i8, 97i8, 110i8, 39i8, 116i8, 32i8, 98i8, 101i8, 32i8, 110i8, 101i8, 103i8, 97i8, 116i8, 105i8, 118i8, 101i8)
       let %3: imm String = new String.0(%2)
       let = call panic(%3)
       unreachable
@@ -1647,7 +1648,7 @@ fn check_index_mut_i32['m1](%v: 'm1 Vec_0_i32[mut], %index: i32) -> () {
     case %3 {
       0 => jump j1()
       _ =>
-        let %6: imm [i32] = array_new(105i32, 110i32, 100i32, 101i32, 120i32, 32i32, 111i32, 117i32, 116i32, 32i32, 111i32, 102i32, 32i32, 98i32, 111i32, 117i32, 110i32, 100i32, 115i32)
+        let %6: imm [i8] = array_new(105i8, 110i8, 100i8, 101i8, 120i8, 32i8, 111i8, 117i8, 116i8, 32i8, 111i8, 102i8, 32i8, 98i8, 111i8, 117i8, 110i8, 100i8, 115i8)
         let %7: imm String = new String.0(%6)
         let = call panic(%7)
         unreachable
@@ -1670,7 +1671,7 @@ fn check_index_imm_i32['m1](%v: 'm1 Vec_0_i32[imm], %index: i32) -> () {
     case %3 {
       0 => jump j1()
       _ =>
-        let %6: imm [i32] = array_new(105i32, 110i32, 100i32, 101i32, 120i32, 32i32, 111i32, 117i32, 116i32, 32i32, 111i32, 102i32, 32i32, 98i32, 111i32, 117i32, 110i32, 100i32, 115i32)
+        let %6: imm [i8] = array_new(105i8, 110i8, 100i8, 101i8, 120i8, 32i8, 111i8, 117i8, 116i8, 32i8, 111i8, 102i8, 32i8, 98i8, 111i8, 117i8, 110i8, 100i8, 115i8)
         let %7: imm String = new String.0(%6)
         let = call panic(%7)
         unreachable
@@ -1701,7 +1702,7 @@ fn PartialOrd_i32_gte(%a: i32, %b: i32) -> (i32) {
 }
 
 fn bolt_print(%0: imm String) -> () {
-  let %1: imm [i32] = get String.0.0(%0)
+  let %1: imm [i8] = get String.0.0(%0)
   let %2: i32 = array_len(%1)
   join rec j1(%3: i32) =
     let %4: i32 = lt.s(%3, %2)
@@ -1711,10 +1712,11 @@ fn bolt_print(%0: imm String) -> () {
         let = call_extern flush(1i32)
         jump ret()
       _ =>
-        let %5: i32 = array_get(%1, %3)
-        let = call_extern write_file(1i32, %5)
-        let %6: i32 = add(%3, 1i32)
-        jump j1(%6)
+        let %5: i8 = array_get(%1, %3)
+        let %6: i32 = convert.u[i32](%5)
+        let = call_extern write_file(1i32, %6)
+        let %7: i32 = add(%3, 1i32)
+        jump j1(%7)
     }
   in jump j1(0i32)
 }
@@ -2934,7 +2936,7 @@ data RangeInclusive_i32 {
 }
 
 data RangeInclusive_u8 {
-  (i32, i32)
+  (i8, i8)
 }
 
 data RangeInclusiveIter_i32 {
@@ -2947,12 +2949,12 @@ data Option_i32 {
 }
 
 data RangeInclusiveIter_u8 {
-  (i32, i32, i32)
+  (i8, i8, i32)
 }
 
 data Option_u8 {
   ()
-  (i32)
+  (i8)
 }
 
 #[link(wasm, module = "env")]
@@ -2963,7 +2965,7 @@ fn file() -> () {
   let %1: mut RangeInclusiveIter_i32 = call Iterable_RangeInclusive_T_iter_i32[imm](%0)
   join j1() =
     let %n: ref i32 = ref_new(0i32)
-    let %5: imm RangeInclusive_u8 = new RangeInclusive_u8.0(0i32, 255i32)
+    let %5: imm RangeInclusive_u8 = new RangeInclusive_u8.0(0i8, -1i8)
     let %6: mut RangeInclusiveIter_u8 = call Iterable_RangeInclusive_T_iter_u8[imm](%5)
     join j3() =
       let %11: i32 = ref_get(%n)
@@ -3001,7 +3003,7 @@ fn file() -> () {
       let %7: imm Option_u8 = call Iterator_mut_RangeInclusiveIter_T_next_u8(%6)
       case %7 {
         Option_u8.1 =>
-          let %8: i32 = get Option_u8.1.0(%7)
+          let %8: i8 = get Option_u8.1.0(%7)
           let %9: i32 = ref_get(%n)
           let %10: i32 = call plus_i32(%9, 1i32)
           let = ref_set(%n, %10)
@@ -3077,8 +3079,8 @@ fn plus_i32(%a: i32, %b: i32) -> (i32) {
 }
 
 fn Iterable_RangeInclusive_T_iter_u8['m1](%r: 'm1 RangeInclusive_u8) -> (mut RangeInclusiveIter_u8) {
-  let %1: i32 = get RangeInclusive_u8.0.0(%r)
-  let %2: i32 = get RangeInclusive_u8.0.1(%r)
+  let %1: i8 = get RangeInclusive_u8.0.0(%r)
+  let %2: i8 = get RangeInclusive_u8.0.1(%r)
   let %3: mut RangeInclusiveIter_u8 = new RangeInclusiveIter_u8.0(%1, %2, 0i32)
   jump ret(%3)
 }
@@ -3091,15 +3093,15 @@ fn Iterator_mut_RangeInclusiveIter_T_next_u8(%it: mut RangeInclusiveIter_u8) -> 
     0 =>
       join j2(%3: imm Option_u8) = jump j1(%3)
       in
-      let %4: i32 = get RangeInclusiveIter_u8.0.0(%it)
-      let %5: i32 = get RangeInclusiveIter_u8.0.1(%it)
+      let %4: i8 = get RangeInclusiveIter_u8.0.0(%it)
+      let %5: i8 = get RangeInclusiveIter_u8.0.1(%it)
       let %6: i32 = call lt_u8(%4, %5)
       case %6 {
         0 =>
           join j3(%7: imm Option_u8) = jump j2(%7)
           in
-          let %8: i32 = get RangeInclusiveIter_u8.0.0(%it)
-          let %9: i32 = get RangeInclusiveIter_u8.0.1(%it)
+          let %8: i8 = get RangeInclusiveIter_u8.0.0(%it)
+          let %9: i8 = get RangeInclusiveIter_u8.0.1(%it)
           let %10: i32 = call lt_eq_u8(%8, %9)
           case %10 {
             0 =>
@@ -3108,13 +3110,13 @@ fn Iterator_mut_RangeInclusiveIter_T_next_u8(%it: mut RangeInclusiveIter_u8) -> 
               jump j3(%11)
             _ =>
               let = set RangeInclusiveIter_u8.0.2(%it, 1i32)
-              let %12: i32 = get RangeInclusiveIter_u8.0.0(%it)
+              let %12: i8 = get RangeInclusiveIter_u8.0.0(%it)
               let %13: imm Option_u8 = new Option_u8.1(%12)
               jump j3(%13)
           }
         _ =>
-          let %x: i32 = get RangeInclusiveIter_u8.0.0(%it)
-          let %15: i32 = call Step_u8_successor(%x)
+          let %x: i8 = get RangeInclusiveIter_u8.0.0(%it)
+          let %15: i8 = call Step_u8_successor(%x)
           let = set RangeInclusiveIter_u8.0.0(%it, %15)
           let %16: imm Option_u8 = new Option_u8.1(%x)
           jump j2(%16)
@@ -3145,17 +3147,17 @@ fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn lt_u8(%a: i32, %b: i32) -> (i32) {
+fn lt_u8(%a: i8, %b: i8) -> (i32) {
   let %2: i32 = call PartialOrd_u8_lt(%a, %b)
   jump ret(%2)
 }
 
-fn Step_u8_successor(%x: i32) -> (i32) {
-  let %1: i32 = call plus_u8(%x, 1i32)
+fn Step_u8_successor(%x: i8) -> (i8) {
+  let %1: i8 = call plus_u8(%x, 1i8)
   jump ret(%1)
 }
 
-fn lt_eq_u8(%a: i32, %b: i32) -> (i32) {
+fn lt_eq_u8(%a: i8, %b: i8) -> (i32) {
   let %2: i32 = call PartialOrd_u8_lte(%a, %b)
   jump ret(%2)
 }
@@ -3170,25 +3172,24 @@ fn PartialOrd_i32_lte(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn PartialOrd_u8_lt(%a: i32, %b: i32) -> (i32) {
+fn PartialOrd_u8_lt(%a: i8, %b: i8) -> (i32) {
   let %2: i32 = lt.u(%a, %b)
   jump ret(%2)
 }
 
-fn plus_u8(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = call Add_u8_add(%a, %b)
+fn plus_u8(%a: i8, %b: i8) -> (i8) {
+  let %2: i8 = call Add_u8_add(%a, %b)
   jump ret(%2)
 }
 
-fn PartialOrd_u8_lte(%a: i32, %b: i32) -> (i32) {
+fn PartialOrd_u8_lte(%a: i8, %b: i8) -> (i32) {
   let %2: i32 = le.u(%a, %b)
   jump ret(%2)
 }
 
-fn Add_u8_add(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = add(%a, %b)
-  let %3: i32 = and(%2, 255i32)
-  jump ret(%3)
+fn Add_u8_add(%a: i8, %b: i8) -> (i8) {
+  let %2: i8 = add(%a, %b)
+  jump ret(%2)
 }
 --------------------------------------------------------------------------------
 env.log(1)

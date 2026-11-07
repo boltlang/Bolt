@@ -158,40 +158,37 @@ let b: i8 = 100;
 logi(b + 100);
 --------------------------------------------------------------------------------
 #[link(wasm, module = "env")]
-extern log(i32) -> ()
+extern log(i8) -> ()
 
 #[link(wasm, module = "env")]
-extern logi(i32) -> ()
+extern logi(i8) -> ()
 
 fn file() -> () {
-  let %0: i32 = call plus_u8(200i32, 100i32)
+  let %0: i8 = call plus_u8(-56i8, 100i8)
   let = call_extern log(%0)
-  let %1: i32 = call plus_i8(100i32, 100i32)
+  let %1: i8 = call plus_i8(100i8, 100i8)
   let = call_extern logi(%1)
   jump ret()
 }
 
-fn plus_u8(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = call Add_u8_add(%a, %b)
+fn plus_u8(%a: i8, %b: i8) -> (i8) {
+  let %2: i8 = call Add_u8_add(%a, %b)
   jump ret(%2)
 }
 
-fn plus_i8(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = call Add_i8_add(%a, %b)
+fn plus_i8(%a: i8, %b: i8) -> (i8) {
+  let %2: i8 = call Add_i8_add(%a, %b)
   jump ret(%2)
 }
 
-fn Add_u8_add(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = add(%a, %b)
-  let %3: i32 = and(%2, 255i32)
-  jump ret(%3)
+fn Add_u8_add(%a: i8, %b: i8) -> (i8) {
+  let %2: i8 = add(%a, %b)
+  jump ret(%2)
 }
 
-fn Add_i8_add(%a: i32, %b: i32) -> (i32) {
-  let %2: i32 = add(%a, %b)
-  let %3: i32 = shl(%2, 24i32)
-  let %4: i32 = shr.s(%3, 24i32)
-  jump ret(%4)
+fn Add_i8_add(%a: i8, %b: i8) -> (i8) {
+  let %2: i8 = add(%a, %b)
+  jump ret(%2)
 }
 --------------------------------------------------------------------------------
 env.log(44)
@@ -323,7 +320,7 @@ print("é✓");
 print("");
 --------------------------------------------------------------------------------
 data String {
-  (imm [i32])
+  (imm [i8])
 }
 
 #[link(wasm, module = "bolt")]
@@ -333,20 +330,20 @@ extern write_file(i32, i32) -> ()
 extern flush(i32) -> ()
 
 fn file() -> () {
-  let %0: imm [i32] = array_new(104i32, 101i32, 108i32, 108i32, 111i32)
+  let %0: imm [i8] = array_new(104i8, 101i8, 108i8, 108i8, 111i8)
   let %1: imm String = new String.0(%0)
   let = call bolt_print(%1)
-  let %2: imm [i32] = array_new(195i32, 169i32, 226i32, 156i32, 147i32)
+  let %2: imm [i8] = array_new(-61i8, -87i8, -30i8, -100i8, -109i8)
   let %3: imm String = new String.0(%2)
   let = call bolt_print(%3)
-  let %4: imm [i32] = array_new()
+  let %4: imm [i8] = array_new()
   let %5: imm String = new String.0(%4)
   let = call bolt_print(%5)
   jump ret()
 }
 
 fn bolt_print(%0: imm String) -> () {
-  let %1: imm [i32] = get String.0.0(%0)
+  let %1: imm [i8] = get String.0.0(%0)
   let %2: i32 = array_len(%1)
   join rec j1(%3: i32) =
     let %4: i32 = lt.s(%3, %2)
@@ -356,10 +353,11 @@ fn bolt_print(%0: imm String) -> () {
         let = call_extern flush(1i32)
         jump ret()
       _ =>
-        let %5: i32 = array_get(%1, %3)
-        let = call_extern write_file(1i32, %5)
-        let %6: i32 = add(%3, 1i32)
-        jump j1(%6)
+        let %5: i8 = array_get(%1, %3)
+        let %6: i32 = convert.u[i32](%5)
+        let = call_extern write_file(1i32, %6)
+        let %7: i32 = add(%3, 1i32)
+        jump j1(%7)
     }
   in jump j1(0i32)
 }

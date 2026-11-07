@@ -1,8 +1,9 @@
 //! Bolt's types in Conduit.
 //!
-//! - `Bool`, the integers up to 32 bits and fieldless enums are `i32`. An
-//!   8- or 16-bit integer is kept in range after arithmetic. `i64` and
-//!   `u64` are `i64`, and `isize` and `usize` are 32 bits.
+//! - `Bool`, the 32-bit integers and fieldless enums are `i32`, and the
+//!   8- and 16-bit integers are Conduit's `i8` and `i16`, which wrap as
+//!   Bolt's do, and are packed in arrays and data types, so that `[u8]` is
+//!   bytes. `i64` and `u64` are `i64`, and `isize` and `usize` are 32 bits.
 //! - `()` and `!` are no values at all.
 //! - A struct, a tuple and an enum with fields are a data type, one per
 //!   struct or enum and type arguments. Each mutability in the type
@@ -43,7 +44,7 @@ const OWN: u32 = u32::MAX;
 /// How a value of a Bolt type is kept.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Scalar {
-    /// An integer of this many bits, in an `i32` or an `i64`.
+    /// An integer of this many bits, in an `i8`, `i16`, `i32` or `i64`.
     Int {
         bits: u8,
         signed: bool,
@@ -79,6 +80,8 @@ impl Scalar {
 
     pub(crate) fn ty(self) -> Ty {
         match self {
+            Scalar::Int { bits: 8, .. } => Ty::I8,
+            Scalar::Int { bits: 16, .. } => Ty::I16,
             Scalar::Int { bits: 64, .. } => Ty::I64,
             Scalar::Int { .. } | Scalar::Bool => Ty::I32,
             Scalar::F32 => Ty::F32,
