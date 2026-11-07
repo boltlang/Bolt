@@ -50,6 +50,7 @@
 
 mod func;
 mod host;
+pub mod node;
 pub mod run;
 mod ty;
 mod wasi;
