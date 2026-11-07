@@ -534,14 +534,14 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     // `panic`, if a `match` calls it: the `String` it takes is its first
     // parameter.
-    if let Some(instance) = boltlang_mir_mono::panic_instance(db, entry) {
-        if let Some(&id) = cx.funcs.get(&instance) {
-            let string = sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| {
-                let sig: &Sig = sig;
-                sig.params.first().cloned()
-            });
-            cx.panic = string.map(|t| (id, t));
-        }
+    if let Some(instance) = boltlang_mir_mono::panic_instance(db, entry)
+        && let Some(&id) = cx.funcs.get(&instance)
+    {
+        let string = sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| {
+            let sig: &Sig = sig;
+            sig.params.first().cloned()
+        });
+        cx.panic = string.map(|t| (id, t));
     }
     module.data = types.decls.clone();
     for (id, (sig, mut_params, effect_params)) in &sigs {
