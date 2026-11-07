@@ -17,6 +17,7 @@
 pub mod arena;
 pub mod body;
 pub mod builtin_type;
+pub mod cfg;
 pub mod expr_store;
 pub mod hir;
 pub mod ids;

@@ -83,6 +83,62 @@ fn ast_ids_point_back_to_their_items() {
     assert_eq!(names, ["a", "b", "c", "d"]);
 }
 
+#[test]
+fn cfg_leaves_out_items_and_those_in_them() {
+    let mut db = TestDb::new();
+    let text = r#"#[cfg(host = "wasm")]
+fn a() {}
+fn b() {}
+#[cfg(host = "wasm")]
+impl D[i32] { fn in_impl() {} }
+impl E[i32] { #[cfg(not(host = "emu"))] fn left_out() {} fn kept() {} }
+#[cfg(host = "emu")]
+fn c() {}
+#[cfg(pointer_width = 32)]
+type Size = u32;
+#[cfg(pointer_width = 64)]
+type Size = u64;
+fn d() {}
+"#;
+    let file = db.file("/main.bolt", text);
+    boltlang_base_db::Settings::change_target(
+        &mut db,
+        boltlang_base_db::Target::emu(boltlang_base_db::Arch::X86_64),
+    );
+    let tree = item_tree(&db, file);
+    let root = root(&db, file);
+    let names: Vec<_> = tree
+        .functions
+        .iter()
+        .map(|f| {
+            let node = f.ast_id.to_node(&db, file, &root).unwrap();
+            ast::FuncDecl::cast(node).unwrap().name().unwrap().text()
+        })
+        .collect();
+    assert_eq!(names, ["b", "kept", "c", "d"]);
+    assert_eq!(tree.impls.len(), 1);
+    let ModItem::Impl(imp) = tree.top_level[1] else { panic!() };
+    assert_eq!(tree.impls[imp.index()].items.len(), 1);
+    // The alias for 64 bits, the second, which its AstId finds.
+    assert_eq!(tree.type_aliases.len(), 1);
+    let node = tree.type_aliases[0].ast_id.to_node(&db, file, &root).unwrap();
+    assert!(node.text().to_string().contains("u64"));
+    // For another target, other items.
+    boltlang_base_db::Settings::change_target(&mut db, boltlang_base_db::Target::WASM);
+    let tree = item_tree(&db, file);
+    let names: Vec<_> = tree
+        .functions
+        .iter()
+        .map(|f| {
+            let node = f.ast_id.to_node(&db, file, &root).unwrap();
+            ast::FuncDecl::cast(node).unwrap().name().unwrap().text()
+        })
+        .collect();
+    assert_eq!(names, ["a", "b", "in_impl", "left_out", "kept", "d"]);
+    let node = tree.type_aliases[0].ast_id.to_node(&db, file, &root).unwrap();
+    assert!(node.text().to_string().contains("u32"));
+}
+
 fn root(db: &TestDb, file: File) -> SyntaxNode {
     SyntaxNode::new_root(parse_file(db, file).tree(db).clone())
 }

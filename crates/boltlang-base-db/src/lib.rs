@@ -8,6 +8,7 @@ mod files;
 mod parse;
 mod settings;
 mod system;
+mod target;
 mod test_db;
 mod text;
 mod vfs;
@@ -39,6 +40,7 @@ pub use {
         InMemorySystem, System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf,
         WritableSystem,
     },
+    target::{Arch, Endian, Host, Target},
     text::source_text,
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
 };

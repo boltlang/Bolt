@@ -1,0 +1,81 @@
+================================================================================
+Items for other targets are left out
+================================================================================
+// The tests compile for the evaluator, `host = "emu"`.
+#[cfg(host = "wasm")]
+fn only_for_wasm() -> i32 = True;
+#[cfg(host = "emu")]
+fn for_the_evaluator() -> i32 = 1;
+#[cfg(host = "wasm")]
+type Size = u32;
+#[cfg(not(host = "wasm"))]
+type Size = u64;
+#[cfg(all(host = "emu", any(endian = "little", endian = "big")))]
+const N: Size = 1;
+let a = for_the_evaluator();
+let b: u64 = N;
+let c = only_for_wasm();
+      //^^^^^^^^^^^^^ error: cannot find `only_for_wasm`
+
+================================================================================
+Items in a class or an impl can be left out
+================================================================================
+class C[T] {
+  fn f(x: T) -> i32;
+  #[cfg(host = "wasm")]
+  fn only_for_wasm(x: T) -> i32;
+}
+impl C[i32] {
+  #[cfg(host = "wasm")]
+  fn f(x) = True;
+  #[cfg(host = "emu")]
+  fn f(x) = x;
+}
+let a = f(1);
+let b = only_for_wasm(1);
+      //^^^^^^^^^^^^^ error: cannot find `only_for_wasm`
+
+================================================================================
+A cfg that's written wrong
+================================================================================
+  #[cfg(hots = "emu")]
+//^^^^^^^^^^^^^^^^^^^^ error: there is no `#[cfg]` key `hots`; the keys are `host`, `arch`, `pointer_width` and `endian`
+  fn a() {}
+  #[cfg(os = "linux")]
+//^^^^^^^^^^^^^^^^^^^^ error: `os` can't be used in `#[cfg]` yet: it's kept for when there's a native target
+  fn b() {}
+  #[cfg(host = "wsam")]
+//^^^^^^^^^^^^^^^^^^^^^ error: `"wsam"` isn't a `host` that `#[cfg]` knows; it's `"wasm"`, `"c"` or `"emu"`
+  fn c() {}
+  #[cfg(pointer_width = "64")]
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: `"64"` isn't a `pointer_width` that `#[cfg]` knows; it's `32` or `64`
+  fn d() {}
+  #[cfg]
+//^^^^^^ error: `#[cfg]` must say which targets the item is for; write it like `#[cfg(host = "emu")]`, with `all(..)`, `any(..)` and `not(..)` to combine conditions
+  fn e() {}
+  #[cfg(not(host = "emu", host = "wasm"))]
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: `not(..)` takes exactly one condition
+  fn f() {}
+
+================================================================================
+A cfg that's written wrong leaves its item out
+================================================================================
+  #[cfg(hots = "emu")]
+//^^^^^^^^^^^^^^^^^^^^ error: there is no `#[cfg]` key `hots`; the keys are `host`, `arch`, `pointer_width` and `endian`
+  fn a() {}
+  a();
+//^ error: cannot find `a`
+
+================================================================================
+A cfg can only be on an item outside a body
+================================================================================
+struct P {
+  #[cfg(host = "emu")]
+//^^^^^^^^^^^^^^^^^^^^ error: `#[cfg]` can only be on an item outside a body, like a function, a struct or an import
+  x: i32,
+}
+fn f() {
+  #[cfg(host = "emu")]
+//^^^^^^^^^^^^^^^^^^^^ error: `#[cfg]` can only be on an item outside a body, like a function, a struct or an import
+  fn g() {}
+}

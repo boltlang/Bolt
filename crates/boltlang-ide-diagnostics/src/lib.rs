@@ -127,6 +127,7 @@ impl DiagnosticCode {
     pub const MISSING_BODY: Self = Self("E0250");
     pub const BAD_BUILTIN: Self = Self("E0251");
     pub const BAD_LINK: Self = Self("E0252");
+    pub const BAD_CFG: Self = Self("E0253");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -483,6 +484,7 @@ fn describe(
     use DiagnosticKind as K;
     match kind {
         K::Syntax(message) => (C::SYNTAX, message),
+        K::BadCfg { error } => (C::BAD_CFG, cfg_error(&error)),
         K::BadManifest { message, .. } => {
             (C::BAD_MANIFEST, format!("the `bolt.toml` of this package has an error: {message}"))
         }
@@ -1065,6 +1067,42 @@ fn list_types(tys: &[String]) -> String {
         None => String::new(),
         Some((last, [])) => last.clone(),
         Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// `a`, `b` or `c`.
+fn either(items: &[String]) -> String {
+    let quoted: Vec<String> = items.iter().map(|t| format!("`{t}`")).collect();
+    match quoted.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+    }
+}
+
+/// What's wrong with a `#[cfg(..)]`.
+fn cfg_error(e: &boltlang_hir_def::cfg::CfgError) -> String {
+    use boltlang_hir_def::cfg::{CfgError as E, KEYS};
+    let keys: Vec<String> = KEYS.iter().map(|k| k.to_string()).collect();
+    match e {
+        E::Malformed => "`#[cfg]` must say which targets the item is for; write it like \
+                         `#[cfg(host = \"emu\")]`, with `all(..)`, `any(..)` and `not(..)` to combine \
+                         conditions"
+            .to_string(),
+        E::UnknownKey(key) => {
+            format!("there is no `#[cfg]` key `{key}`; the keys are {}", list_types(&keys))
+        }
+        E::Reserved(key) => {
+            format!("`{key}` can't be used in `#[cfg]` yet: it's kept for when there's a native target")
+        }
+        E::UnknownValue { key, value, expected } => {
+            format!("`{value}` isn't a `{key}` that `#[cfg]` knows; it's {}", either(expected))
+        }
+        E::NotArity => "`not(..)` takes exactly one condition".to_string(),
+        E::NotAnItem => {
+            "`#[cfg]` can only be on an item outside a body, like a function, a struct or an import"
+                .to_string()
+        }
     }
 }
 

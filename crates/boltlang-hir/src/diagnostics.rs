@@ -232,6 +232,11 @@ pub enum DiagnosticKind<'db> {
     /// A function at the top level of a file without a body, which only a
     /// builtin or a function the host provides can be.
     MissingBody,
+    /// `#[cfg(..)]` that's written wrong, or on something that isn't an
+    /// item.
+    BadCfg {
+        error: boltlang_hir_def::cfg::CfgError,
+    },
     /// `#[link(..)]` that's written wrong, or on a function that can't
     /// have one.
     BadLink {
@@ -582,6 +587,7 @@ pub fn file_diagnostics<'db>(db: &'db dyn Db, file: File) -> Vec<Diagnostic<'db>
         out: Vec::new(),
     };
     collector.syntax_errors();
+    collector.cfgs();
     collector.manifest();
     collector.name_resolution();
     collector.items();
@@ -629,6 +635,28 @@ impl<'db> Collector<'db> {
             let range =
                 TextRange::new(TextSize::from(span.start as u32), TextSize::from(span.end as u32));
             self.push(Some(range), DiagnosticKind::Syntax(error.message()));
+        }
+    }
+
+    /// Each `#[cfg(..)]` that's written wrong, or that isn't on an item
+    /// outside a body, whether it leaves its item out or not.
+    fn cfgs(&mut self) {
+        use boltlang_hir_def::cfg::{CfgError, is_cfg, parse};
+        use boltlang_syntax::ast::Node as _;
+        let items: Vec<TextRange> =
+            boltlang_hir_def::item_tree::item_nodes(&self.root).map(|n| n.text_range()).collect();
+        let attrs: Vec<_> =
+            self.root.descendants().filter_map(boltlang_syntax::ast::Attr::cast).collect();
+        for attr in attrs {
+            let Some(meta) = attr.meta() else { continue };
+            if !is_cfg(&meta) {
+                continue;
+            }
+            let on_item = attr.syntax().parent().is_some_and(|p| items.contains(&p.text_range()));
+            let error = if on_item { parse(&meta).err() } else { Some(CfgError::NotAnItem) };
+            if let Some(error) = error {
+                self.push(Some(attr.syntax().text_range()), DiagnosticKind::BadCfg { error });
+            }
         }
     }
 

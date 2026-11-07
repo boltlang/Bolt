@@ -2,7 +2,7 @@
 
 use salsa::{Durability, Setter};
 
-use crate::SystemPathBuf;
+use crate::{SystemPathBuf, Target};
 
 /// The package whose prelude files get when nothing else is said.
 pub const DEFAULT_PRELUDE: &str = "std";
@@ -29,6 +29,10 @@ pub struct Settings {
     #[default]
     #[returns(ref)]
     pub std_dir: Option<SystemPathBuf>,
+    /// What the program is compiled for, which `#[cfg(..)]` picks items
+    /// by: the evaluator imitating the compiler's machine, unless set.
+    #[default]
+    pub target: Target,
 }
 
 impl Settings {
@@ -45,6 +49,11 @@ impl Settings {
     /// Use the `std` in `dir`, or none that comes with the compiler.
     pub fn change_std_dir<Db: salsa::Database>(db: &mut Db, dir: Option<SystemPathBuf>) {
         Settings::get(db).set_std_dir(db).with_durability(Durability::HIGH).to(dir);
+    }
+
+    /// Compile for `target`.
+    pub fn change_target<Db: salsa::Database>(db: &mut Db, target: Target) {
+        Settings::get(db).set_target(db).with_durability(Durability::HIGH).to(target);
     }
 
     /// Change the prelude, keeping the durability high.

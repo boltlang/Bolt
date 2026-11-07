@@ -9,10 +9,14 @@
 //! an [`AstId`]: its position among the items of the same kind in the file.
 //! Unlike a text range, that position doesn't change when a body is edited.
 //! The [`AstIdMap`] of a file finds the syntax of each one.
+//!
+//! An item that `#[cfg(..)]` leaves out for the target isn't in the tree,
+//! nor are the items in it, so nothing can find them. They still count
+//! for the positions of the items after them.
 
 use std::collections::HashMap;
 
-use boltlang_base_db::{Db, File, parse_file};
+use boltlang_base_db::{Db, File, Settings, Target, parse_file};
 use boltlang_syntax::{
     SyntaxKind::{self, *},
     SyntaxNode,
@@ -31,9 +35,10 @@ pub fn item_tree(db: &dyn Db, file: File) -> ItemTree {
     let parse = parse_file(db, file);
     let root = SyntaxNode::new_root(parse.tree(db).clone());
     let mut tree = ItemTree::default();
+    let target = *Settings::get(db).target(db);
     if let Some(source_file) = ast::SourceFile::cast(root) {
         tree.top_level =
-            source_file.elements().filter_map(|element| tree.lower_item(element)).collect();
+            source_file.elements().filter_map(|element| tree.lower_item(element, target)).collect();
     }
     tree
 }
@@ -83,7 +88,7 @@ pub fn ast_id_map(db: &dyn Db, file: File) -> AstIdMap {
 
 /// The nodes of the items in a file in the order they appear, including the
 /// items in classes, impls and extern blocks, but not those in bodies.
-fn item_nodes(root: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> {
+pub fn item_nodes(root: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> {
     let mut stack = vec![root.clone()];
     let mut out = Vec::new();
     while let Some(node) = stack.pop() {
@@ -127,6 +132,9 @@ pub struct ItemTree {
     pub imports: Vec<Import>,
     pub macro_rules: Vec<MacroRules>,
     pub macro_calls: Vec<MacroCall>,
+    /// How many items of each kind `#[cfg]` left out, which count for the
+    /// [`AstId`]s of the others.
+    left_out: HashMap<SyntaxKind, u32>,
 }
 
 /// An item that can appear directly in a file.
@@ -394,15 +402,31 @@ impl ItemTree {
             MACRO_CALL => self.macro_calls.len(),
             _ => unreachable!("{kind:?} is not an item"),
         };
-        AstId { kind, index: count as u32 }
+        let left_out = self.left_out.get(&kind).copied().unwrap_or(0);
+        AstId { kind, index: count as u32 + left_out }
+    }
+
+    /// Whether the item `node` is compiled for `target`. When it isn't, it
+    /// and the items in it are counted as left out.
+    fn enabled(&mut self, node: &SyntaxNode, target: Target) -> bool {
+        if crate::cfg::enabled(node, target) {
+            return true;
+        }
+        for item in item_nodes(node) {
+            *self.left_out.entry(item.kind()).or_default() += 1;
+        }
+        false
     }
 
     /// Lower an item in a file. Statements and expressions aren't items.
     ///
     /// Items are lowered in the order they appear, before the items inside
     /// them, so that [`AstId`]s match the order of [`item_nodes`].
-    fn lower_item(&mut self, element: ast::SourceElement) -> Option<ModItem> {
+    fn lower_item(&mut self, element: ast::SourceElement, target: Target) -> Option<ModItem> {
         use ast::SourceElement as E;
+        if is_item_kind(element.syntax().kind()) && !self.enabled(element.syntax(), target) {
+            return None;
+        }
         let item = match element {
             E::FuncDecl(f) => ModItem::Function(self.lower_function(&f)),
             E::Struct(s) => {
@@ -429,7 +453,7 @@ impl ItemTree {
             // pushed after them at the index it had before.
             E::Class(c) => {
                 let ast_id = self.next_ast_id(CLASS);
-                let items = self.lower_assoc_items(c.item_list());
+                let items = self.lower_assoc_items(c.item_list(), target);
                 let class = Class {
                     name: name(c.name()),
                     visibility: RawVisibility::from_ast(c.visibility()),
@@ -440,7 +464,7 @@ impl ItemTree {
             }
             E::Impl(i) => {
                 let ast_id = self.next_ast_id(IMPL);
-                let items = self.lower_assoc_items(i.item_list());
+                let items = self.lower_assoc_items(i.item_list(), target);
                 ModItem::Impl(push(&mut self.impls, Impl { items, ast_id }))
             }
             E::Const(c) => ModItem::Const(self.lower_const(&c)),
@@ -464,7 +488,7 @@ impl ItemTree {
             }
             E::Effect(e) => {
                 let ast_id = self.next_ast_id(EFFECT);
-                let items = self.lower_assoc_items(e.item_list());
+                let items = self.lower_assoc_items(e.item_list(), target);
                 let effect = Effect {
                     name: name(e.name()),
                     visibility: RawVisibility::from_ast(e.visibility()),
@@ -478,13 +502,17 @@ impl ItemTree {
         Some(item)
     }
 
-    fn lower_assoc_items(&mut self, list: Option<ast::ItemList>) -> Vec<AssocItem> {
+    fn lower_assoc_items(&mut self, list: Option<ast::ItemList>, target: Target) -> Vec<AssocItem> {
         let Some(list) = list else {
             return Vec::new();
         };
         list.items()
             .filter_map(|element| {
                 use ast::SourceElement as E;
+                if is_item_kind(element.syntax().kind()) && !self.enabled(element.syntax(), target)
+                {
+                    return None;
+                }
                 Some(match element {
                     E::FuncDecl(f) => AssocItem::Function(self.lower_function(&f)),
                     E::Const(c) => AssocItem::Const(self.lower_const(&c)),
