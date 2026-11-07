@@ -12,16 +12,24 @@
 //! - **[`MonoMut::Param`]** is a mutability parameter of the instance.
 //!   Instances aren't specialized on mutabilities, so `fn f(xs: 'm [i32])`
 //!   is one instance for `mut` and `imm` arrays.
+//! - **[`MonoRow`]** is a row of effects, with the instance's row
+//!   parameters in it. Instances aren't specialized on rows either, so
+//!   `fn map[E](f: fn() does E) does E` is one instance for every row.
 
 use std::fmt;
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::resolver::GenericDefId;
-use boltlang_hir_def::{builtin_type::BuiltinType, hir::Mutability, ids::TypeAliasId};
+use boltlang_hir_def::{
+    builtin_type::BuiltinType,
+    hir::Mutability,
+    ids::{EffectId, TypeAliasId},
+};
 use boltlang_hir_ty::{
     AdtId, GenericParamId, Ty,
     lower::VariantDef,
     solve::{imm_of, normalize_assoc},
+    ty::EffectTy,
 };
 
 /// A mutability in an instance.
@@ -31,6 +39,96 @@ pub enum MonoMut {
     Mut,
     /// The `i`th mutability parameter of the instance.
     Param(u32),
+}
+
+/// An effect with its arguments, like `State[i32]`, in an instance.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct MonoEffect<'db> {
+    pub effect: EffectId<'db>,
+    pub args: Box<[MonoTy<'db>]>,
+}
+
+/// A row of effects in an instance: the effects it has, each once, and the
+/// instance's row parameters it's made of, both sorted, so that equal rows
+/// are equal.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct MonoRow<'db> {
+    pub effects: Box<[MonoEffect<'db>]>,
+    /// The row parameters, from 0.
+    pub params: Box<[u32]>,
+}
+
+impl<'db> MonoRow<'db> {
+    /// No effects.
+    pub fn nothing() -> Self {
+        MonoRow::default()
+    }
+
+    /// The `i`th row parameter.
+    pub fn param(i: u32) -> Self {
+        MonoRow { effects: Box::new([]), params: Box::new([i]) }
+    }
+
+    /// The row of `effects` and `params`, sorted, each once. Of two with the
+    /// same effect, the first stays: the checker gave them the same
+    /// arguments.
+    pub fn new(
+        effects: impl IntoIterator<Item = MonoEffect<'db>>,
+        params: impl IntoIterator<Item = u32>,
+    ) -> Self {
+        let mut known: Vec<MonoEffect<'db>> = Vec::new();
+        for e in effects {
+            if !known.iter().any(|k| k.effect == e.effect) {
+                known.push(e);
+            }
+        }
+        known.sort_by_key(|e| salsa::plumbing::AsId::as_id(&e.effect));
+        let mut params: Vec<u32> = params.into_iter().collect();
+        params.sort();
+        params.dedup();
+        MonoRow { effects: known.into(), params: params.into() }
+    }
+
+    pub fn is_nothing(&self) -> bool {
+        self.effects.is_empty() && self.params.is_empty()
+    }
+
+    /// What either may perform.
+    pub fn union(&self, other: &MonoRow<'db>) -> Self {
+        MonoRow::new(
+            self.effects.iter().chain(other.effects.iter()).cloned(),
+            self.params.iter().chain(other.params.iter()).copied(),
+        )
+    }
+
+    /// The row without `effect`.
+    pub fn without(&self, effect: EffectId<'db>) -> Self {
+        let effects = self.effects.iter().filter(|e| e.effect != effect).cloned();
+        MonoRow::new(effects, self.params.iter().copied())
+    }
+
+    /// The row with each parameter replaced by the row `f` gives it, and
+    /// the types in its effects' arguments by `ty`.
+    pub fn map(
+        &self,
+        param: &mut dyn FnMut(u32) -> MonoRow<'db>,
+        ty: &mut dyn FnMut(&MonoTy<'db>) -> MonoTy<'db>,
+    ) -> Self {
+        let effects: Vec<MonoEffect<'db>> = self
+            .effects
+            .iter()
+            .map(|e| MonoEffect { effect: e.effect, args: e.args.iter().map(&mut *ty).collect() })
+            .collect();
+        let mut row = MonoRow::new(effects, []);
+        for &p in self.params.iter() {
+            row = row.union(&param(p));
+        }
+        row
+    }
+
+    fn any_ty(&self, f: &mut dyn FnMut(&MonoTy<'db>) -> bool) -> bool {
+        self.effects.iter().flat_map(|e| e.args.iter()).any(f)
+    }
 }
 
 /// A type in an instance.
@@ -45,8 +143,11 @@ pub enum MonoTy<'db> {
     /// `(A, B)` and its mutability, and `()` when empty, which is `Imm`.
     Tuple(Box<[MonoTy<'db>]>, MonoMut),
     Array(MonoMut, Box<MonoTy<'db>>),
-    /// The parameters, the result, and the mutability of a closure.
-    Fn(Box<[MonoTy<'db>]>, Box<MonoTy<'db>>, MonoMut),
+    /// The parameters, the result, the mutability and the effects of a
+    /// closure.
+    Fn(Box<[MonoTy<'db>]>, Box<MonoTy<'db>>, MonoMut, MonoRow<'db>),
+    /// A row of effects where a type goes, like the `R` of `Cont[B, U, R]`.
+    Row(MonoRow<'db>),
     /// The type of an expression that never gives a value, like `return`.
     Never,
     /// The `i`th erased type of the instance: a value of any type, boxed.
@@ -70,7 +171,12 @@ impl<'db> MonoTy<'db> {
                 args.iter().any(MonoTy::has_erased)
             }
             MonoTy::Array(_, elem) => elem.has_erased(),
-            MonoTy::Fn(params, ret, _) => params.iter().any(MonoTy::has_erased) || ret.has_erased(),
+            MonoTy::Fn(params, ret, _, row) => {
+                params.iter().any(MonoTy::has_erased)
+                    || ret.has_erased()
+                    || row.any_ty(&mut MonoTy::has_erased)
+            }
+            MonoTy::Row(row) => row.any_ty(&mut MonoTy::has_erased),
         }
     }
 
@@ -96,8 +202,14 @@ impl<'db> MonoTy<'db> {
             }
             MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, map, next), *own),
             MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.renumber(map, next))),
-            MonoTy::Fn(params, ret, own) => {
-                MonoTy::Fn(all(params, map, next), Box::new(ret.renumber(map, next)), *own)
+            MonoTy::Fn(params, ret, own, row) => {
+                let params = all(params, map, next);
+                let ret = Box::new(ret.renumber(map, next));
+                let row = row.map(&mut MonoRow::param, &mut |t| t.renumber(map, next));
+                MonoTy::Fn(params, ret, *own, row)
+            }
+            MonoTy::Row(row) => {
+                MonoTy::Row(row.map(&mut MonoRow::param, &mut |t| t.renumber(map, next)))
             }
         }
     }
@@ -123,11 +235,35 @@ impl<'db> MonoTy<'db> {
                 let own = f(*own);
                 MonoTy::Array(own, Box::new(elem.map_muts(f)))
             }
-            MonoTy::Fn(params, ret, own) => {
+            MonoTy::Fn(params, ret, own, row) => {
                 let params = all(params, f);
                 let ret = Box::new(ret.map_muts(f));
-                MonoTy::Fn(params, ret, f(*own))
+                let own = f(*own);
+                let row = row.map(&mut MonoRow::param, &mut |t| t.map_muts(f));
+                MonoTy::Fn(params, ret, own, row)
             }
+            MonoTy::Row(row) => MonoTy::Row(row.map(&mut MonoRow::param, &mut |t| t.map_muts(f))),
+        }
+    }
+
+    /// The type with each row parameter replaced by the row `f` gives it.
+    pub fn map_rows(&self, f: &mut dyn FnMut(u32) -> MonoRow<'db>) -> Self {
+        let all = |tys: &[MonoTy<'db>], f: &mut dyn FnMut(u32) -> MonoRow<'db>| {
+            tys.iter().map(|t| t.map_rows(f)).collect::<Box<[_]>>()
+        };
+        match self {
+            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never => self.clone(),
+            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
+            MonoTy::Adt(adt, args, ms, own) => MonoTy::Adt(*adt, all(args, f), ms.clone(), *own),
+            MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, f), *own),
+            MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.map_rows(f))),
+            MonoTy::Fn(params, ret, own, row) => {
+                let params = all(params, f);
+                let ret = Box::new(ret.map_rows(f));
+                let row = map_row(row, f);
+                MonoTy::Fn(params, ret, *own, row)
+            }
+            MonoTy::Row(row) => MonoTy::Row(map_row(row, f)),
         }
     }
 
@@ -142,28 +278,48 @@ impl<'db> MonoTy<'db> {
             }
             MonoTy::Tuple(args, m) => param(m) || args.iter().any(MonoTy::has_mut_param),
             MonoTy::Array(m, elem) => param(m) || elem.has_mut_param(),
-            MonoTy::Fn(params, ret, m) => {
-                param(m) || params.iter().any(MonoTy::has_mut_param) || ret.has_mut_param()
+            MonoTy::Fn(params, ret, m, row) => {
+                param(m)
+                    || params.iter().any(MonoTy::has_mut_param)
+                    || ret.has_mut_param()
+                    || row.any_ty(&mut MonoTy::has_mut_param)
             }
+            MonoTy::Row(row) => row.any_ty(&mut MonoTy::has_mut_param),
         }
     }
 
     /// The type as the type checker writes it, to choose impls with, with
     /// each mutability parameter as `params`. `None` if it has an erased
     /// type.
+    /// Rows are left out, as `Nothing`: impls don't depend on them.
     pub(crate) fn to_ty(&self, params: Mutability) -> Option<Ty<'db>> {
-        self.to_ty_with(&|_| Ty::Mutability(params))
+        self.to_ty_with(&|_| Ty::Mutability(params), None)
     }
 
-    /// [`MonoTy::to_ty`], with `param` giving each mutability parameter.
-    pub(crate) fn to_ty_with(&self, param: &dyn Fn(u32) -> Ty<'db>) -> Option<Ty<'db>> {
+    /// [`MonoTy::to_ty`], with `param` giving each mutability parameter,
+    /// and `row`, if given, each row parameter. Without it, rows are
+    /// `Nothing`.
+    pub(crate) fn to_ty_with(
+        &self,
+        param: &dyn Fn(u32) -> Ty<'db>,
+        row: Option<&dyn Fn(u32) -> Ty<'db>>,
+    ) -> Option<Ty<'db>> {
         let m = |m: &MonoMut| match m {
             MonoMut::Imm => Ty::Mutability(Mutability::Imm),
             MonoMut::Mut => Ty::Mutability(Mutability::Mut),
             MonoMut::Param(i) => param(*i),
         };
         let all = |tys: &[MonoTy<'db>]| -> Option<Box<[Ty<'db>]>> {
-            tys.iter().map(|t| t.to_ty_with(param)).collect()
+            tys.iter().map(|t| t.to_ty_with(param, row)).collect()
+        };
+        let row_ty = |r: &MonoRow<'db>| -> Option<Ty<'db>> {
+            let Some(row) = row else { return Some(Ty::nothing()) };
+            let effects = r
+                .effects
+                .iter()
+                .map(|e| Some(EffectTy { effect: e.effect, args: all(&e.args)? }))
+                .collect::<Option<Vec<_>>>()?;
+            Some(Ty::row_of(effects, r.params.iter().map(|&i| row(i))))
         };
         Some(match self {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => return None,
@@ -174,15 +330,15 @@ impl<'db> MonoTy<'db> {
             }
             MonoTy::Tuple(tys, own) => Ty::tuple(all(tys)?, m(own)),
             MonoTy::Array(own, elem) => {
-                Ty::Array(Box::new(m(own)), Box::new(elem.to_ty_with(param)?))
+                Ty::Array(Box::new(m(own)), Box::new(elem.to_ty_with(param, row)?))
             }
-            // Instances don't keep effects, which only the checker needs.
-            MonoTy::Fn(ps, ret, own) => Ty::Fn(
+            MonoTy::Fn(ps, ret, own, r) => Ty::Fn(
                 all(ps)?,
-                Box::new(ret.to_ty_with(param)?),
+                Box::new(ret.to_ty_with(param, row)?),
                 Box::new(m(own)),
-                Box::new(Ty::nothing()),
+                Box::new(row_ty(r)?),
             ),
+            MonoTy::Row(r) => row_ty(r)?,
         })
     }
 
@@ -259,15 +415,67 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 write!(f, ")")
             }
             MonoTy::Array(own, elem) => write!(f, "{own} [{}]", DisplayMonoTy { db, ty: elem }),
-            MonoTy::Fn(params, ret, own) => {
+            MonoTy::Fn(params, ret, own, row) => {
                 if *own != MonoMut::Imm {
                     write!(f, "{own} ")?;
                 }
                 write!(f, "fn(")?;
                 list(f, params)?;
-                write!(f, ") -> {}", DisplayMonoTy { db, ty: ret })
+                write!(f, ") -> {}", DisplayMonoTy { db, ty: ret })?;
+                if !row.is_nothing() {
+                    write!(f, " does {}", row.display(db))?;
+                }
+                Ok(())
             }
+            MonoTy::Row(row) => write!(f, "{}", row.display(db)),
         }
+    }
+}
+
+/// `row` with each parameter replaced by the row `f` gives it.
+fn map_row<'db>(row: &MonoRow<'db>, f: &mut dyn FnMut(u32) -> MonoRow<'db>) -> MonoRow<'db> {
+    let effects: Vec<MonoEffect<'db>> = row
+        .effects
+        .iter()
+        .map(|e| MonoEffect {
+            effect: e.effect,
+            args: e.args.iter().map(|t| t.map_rows(f)).collect(),
+        })
+        .collect();
+    let mut out = MonoRow::new(effects, []);
+    for &p in row.params.iter() {
+        out = out.union(&f(p));
+    }
+    out
+}
+
+impl<'db> MonoRow<'db> {
+    /// The row as text: `Nothing`, or its effects and then its parameters,
+    /// like `State[i32] + E0`.
+    pub fn display(&self, db: &'db dyn Db) -> String {
+        if self.is_nothing() {
+            return "Nothing".into();
+        }
+        let effects = self.effects.iter().map(|e| {
+            let name = e.effect.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+            if e.args.is_empty() {
+                return name;
+            }
+            let args: Vec<String> = e.args.iter().map(|t| t.display(db).to_string()).collect();
+            format!("{name}[{}]", args.join(", "))
+        });
+        let params = self.params.iter().map(|i| format!("E{i}"));
+        effects.chain(params).collect::<Vec<_>>().join(" + ")
+    }
+
+    /// The row parameters in `ty`, in the order they appear, each once.
+    pub fn params_in(ty: &MonoTy<'db>, out: &mut Vec<u32>) {
+        ty.map_rows(&mut |i| {
+            if !out.contains(&i) {
+                out.push(i);
+            }
+            MonoRow::param(i)
+        });
     }
 }
 
@@ -327,8 +535,9 @@ pub fn closed_ty<'db>(
 pub enum Slot<'db> {
     Ty(MonoTy<'db>),
     Mut(MonoMut),
-    /// A row of effects, which instances don't keep.
-    Row,
+    /// A row of effects: instances aren't specialized on rows, so it's one
+    /// with the instance's row parameters in it.
+    Row(MonoRow<'db>),
 }
 
 /// Why a type couldn't be made closed.
@@ -365,9 +574,9 @@ impl<'db> Subst<'_, 'db> {
         Ok(match ty {
             Ty::Param(_) | Ty::Bound(_) => match self.slot(ty) {
                 Some(Slot::Ty(t)) => t.clone(),
-                // Instances don't keep rows of effects: a row that's a type
-                // argument, like the `R` of `Cont[B, U, R]`, is `()`.
-                Some(Slot::Row) => MonoTy::unit(),
+                // A row that's a type argument, like the `R` of
+                // `Cont[B, U, R]`.
+                Some(Slot::Row(r)) => MonoTy::Row(r.clone()),
                 _ => return Err(TyError::Unknown),
             },
             Ty::Builtin(b) => MonoTy::Builtin(*b),
@@ -380,9 +589,12 @@ impl<'db> Subst<'_, 'db> {
             ),
             Ty::Tuple(tys, own) => MonoTy::Tuple(all(tys)?, self.mutability(own)?),
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
-            Ty::Fn(params, ret, own, _) => {
-                MonoTy::Fn(all(params)?, Box::new(self.ty(ret)?), self.mutability(own)?)
-            }
+            Ty::Fn(params, ret, own, effects) => MonoTy::Fn(
+                all(params)?,
+                Box::new(self.ty(ret)?),
+                self.mutability(own)?,
+                self.row(effects)?,
+            ),
             // `F[A]` with `F` a type constructor, like `Option`.
             Ty::App(head, args) => match self.ty(head)? {
                 MonoTy::Adt(adt, given, ms, own) => {
@@ -405,7 +617,7 @@ impl<'db> Subst<'_, 'db> {
             // change what the code does.
             Ty::Var(_) => MonoTy::unit(),
             // A row as a type argument, as for a parameter above.
-            Ty::Row(..) => MonoTy::unit(),
+            Ty::Row(..) => MonoTy::Row(self.row(ty)?),
             Ty::Mutability(_) | Ty::Unwritten | Ty::Number(_) | Ty::Error => {
                 return Err(TyError::Unknown);
             }
@@ -434,15 +646,45 @@ impl<'db> Subst<'_, 'db> {
     /// it, so that what it gives can use it, like the `'v` of `VecIter[T,
     /// 'v]` that an impl gives, and maps back to the instance's.
     pub(crate) fn back(&self, t: &MonoTy<'db>) -> Result<Ty<'db>, TyError> {
-        let param = |i: u32| -> Ty<'db> {
-            let at = self.slots.iter().position(|s| *s == Slot::Mut(MonoMut::Param(i)));
-            match at {
+        let at = |slot: Slot<'db>, none: Ty<'db>| -> Ty<'db> {
+            match self.slots.iter().position(|s| *s == slot) {
                 Some(at) if at < self.params.len() => Ty::Param(self.params[at]),
                 Some(at) => Ty::Bound((at - self.params.len()) as u32),
-                None => Ty::Mutability(Mutability::Imm),
+                None => none,
             }
         };
-        t.to_ty_with(&param).ok_or(TyError::Unknown)
+        let param = |i: u32| at(Slot::Mut(MonoMut::Param(i)), Ty::Mutability(Mutability::Imm));
+        let row = |i: u32| at(Slot::Row(MonoRow::param(i)), Ty::nothing());
+        t.to_ty_with(&param, Some(&row)).ok_or(TyError::Unknown)
+    }
+
+    /// A row of effects of the body, in the instance.
+    pub fn row(&self, ty: &Ty<'db>) -> Result<MonoRow<'db>, TyError> {
+        Ok(match ty {
+            Ty::Row(effects, rest) => {
+                let effects = effects
+                    .iter()
+                    .map(|e| {
+                        let args = e.args.iter().map(|t| self.ty(t)).collect::<Result<_, _>>()?;
+                        Ok(MonoEffect { effect: e.effect, args })
+                    })
+                    .collect::<Result<Vec<_>, TyError>>()?;
+                let mut row = MonoRow::new(effects, []);
+                for part in rest.iter() {
+                    row = row.union(&self.row(part)?);
+                }
+                row
+            }
+            Ty::Param(_) | Ty::Bound(_) => match self.slot(ty) {
+                Some(Slot::Row(r)) => r.clone(),
+                Some(Slot::Ty(MonoTy::Row(r))) => r.clone(),
+                _ => return Err(TyError::Unknown),
+            },
+            // A row that nothing decided has no effects, its least solution;
+            // and the checker reported the error.
+            Ty::Var(_) | Ty::Error | Ty::Never => MonoRow::nothing(),
+            _ => return Err(TyError::Unknown),
+        })
     }
 
     pub fn mutability(&self, ty: &Ty<'db>) -> Result<MonoMut, TyError> {

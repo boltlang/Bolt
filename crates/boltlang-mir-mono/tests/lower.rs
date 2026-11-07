@@ -192,12 +192,16 @@ impl Program {
             out.push_str(&format!("{prefix}{}\n", i.instance.display(db)));
             for (_, u) in &i.uses {
                 match u {
-                    Use::Instance { instance, mutabilities, dicts } => {
+                    Use::Instance { instance, mutabilities, rows, dicts } => {
                         out.push_str(&format!("  -> {}", instance.display(db)));
                         if !mutabilities.is_empty() {
                             let ms: Vec<String> =
                                 mutabilities.iter().map(|m| m.to_string()).collect();
                             out.push_str(&format!(" with {}", ms.join(", ")));
+                        }
+                        if rows.iter().any(|r| !r.is_nothing()) {
+                            let rs: Vec<String> = rows.iter().map(|r| r.display(db)).collect();
+                            out.push_str(&format!(" rows {}", rs.join(", ")));
                         }
                         for d in dicts.iter() {
                             out.push_str(&format!(" dict {}", d.display(db)));

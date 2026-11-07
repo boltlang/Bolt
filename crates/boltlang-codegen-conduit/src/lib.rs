@@ -72,7 +72,7 @@ use boltlang_mir_build::{
     mir_bodies,
 };
 use boltlang_mir_mono::{
-    Cx, Instance, InstanceDef, MonoTy, Site, Use, UseError, closed_ty, program,
+    Cx, Instance, InstanceDef, MonoRow, MonoTy, Site, Use, UseError, closed_ty, program,
 };
 use boltlang_mir_transform::shim_body;
 use boltlang_pattern::decision::{Node, body_decisions};
@@ -176,9 +176,6 @@ pub(crate) struct Ctx<'db> {
     /// The effects of the program, one for each effect and its arguments,
     /// like `State[i32]`, with its operations in order.
     pub effects: HashMap<EffectKey<'db>, (conduit_ir::EffectId, Vec<FunctionId<'db>>)>,
-    /// The row of every function: `Any` in a program with effects, since
-    /// Bolt doesn't give Conduit its rows yet, and none otherwise.
-    pub row: Row,
     /// What each `match` with effect arms is lowered to, by its instance,
     /// the MIR body it's in (0 for the instance's, `i + 1` for its `i`th
     /// lambda's) and its node.
@@ -327,7 +324,6 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         io: None,
         helpers: host::Helpers::default(),
         effects: HashMap::new(),
-        row: Row::NOTHING,
         handles: HashMap::new(),
     };
     // From 0, in the order they're defined, so that the text format can
@@ -379,10 +375,6 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 }
             }
         }
-    }
-    if !effects.is_empty() {
-        cx.row = Row::ANY;
-        types.row = Row::ANY;
     }
     for key in effects {
         let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
@@ -506,7 +498,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     if let Some(string) = &cx.helpers.string {
         let id = FuncId(names.len() as u64);
         names.insert(id, "bolt_print".into());
-        sigs.push((id, (Sig::new(vec![string.clone()], Vec::new()), MutParams::default())));
+        sigs.push((id, (Sig::new(vec![string.clone()], Vec::new()), MutParams::default(), 0)));
         cx.helpers.print = Some(id);
     }
     let can_fail = p.instances.iter().filter_map(|iu| iu.instance.body(db)).any(|body| {
@@ -519,18 +511,15 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         host::declare_io(&mut module, &mut cx.io);
         let id = FuncId(names.len() as u64);
         names.insert(id, "bolt_unmatched".into());
-        sigs.push((id, (Sig::new(Vec::new(), Vec::new()), MutParams::default())));
+        sigs.push((id, (Sig::new(Vec::new(), Vec::new()), MutParams::default(), 0)));
         cx.helpers.unmatched = Some(id);
     }
     module.data = types.decls.clone();
-    let helpers = [cx.helpers.print, cx.helpers.unmatched];
-    for (id, (sig, mut_params)) in &sigs {
+    for (id, (sig, mut_params, effect_params)) in &sigs {
         let mut f = Func::new(sig.params.clone(), sig.results.clone());
         f.mut_params = mut_params.clone();
-        // The helpers only call the host, which performs nothing.
-        if !helpers.contains(&Some(*id)) {
-            f.row = cx.row.clone();
-        }
+        f.effect_params = *effect_params;
+        f.row = sig.row.clone();
         module.funcs.insert(*id, f);
     }
     let mut built = Vec::new();
@@ -586,6 +575,21 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         f.debug.name = Some(ident(&names[&id]).into());
         module.funcs.insert(id, f);
     }
+    // The effects that only rows name, which nothing performs or handles.
+    while !types.undeclared.is_empty() {
+        let key = types.undeclared.remove(0);
+        if cx.effects.contains_key(&key) {
+            continue;
+        }
+        let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+        if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, key) {
+            errors.push(Error { instance: name, at: None, kind });
+        }
+    }
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+    module.data = types.decls.clone();
     if let Err(es) = conduit_ir::verify::verify_module(&module) {
         return Err(es
             .into_iter()
@@ -609,12 +613,13 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     Ok(Lowered { module, entry: cx.funcs[&p.roots[0]], tests, names })
 }
 
-/// The Conduit signature of an instance, and its mutability parameters.
+/// The Conduit signature of an instance, its mutability parameters and how
+/// many effect parameters it has.
 fn instance_sig<'db>(
     types: &mut Types<'db>,
     lcx: &Cx<'_, 'db>,
     root: File,
-) -> Result<(Sig, MutParams), ErrorKind> {
+) -> Result<(Sig, MutParams, u32), ErrorKind> {
     let db = lcx.db;
     let mut sig = Sig::new(Vec::new(), Vec::new());
     let def = match lcx.instance.def(db) {
@@ -624,13 +629,14 @@ fn instance_sig<'db>(
     match def {
         // A shim is a function too.
         Some(DefWithBody::Function(_)) | None => {
-            let MonoTy::Fn(params, ret, _) = lcx.instance_ty()? else {
+            let MonoTy::Fn(params, ret, _, row) = lcx.instance_ty()? else {
                 return Err(ErrorKind::unsupported("a function whose type isn't a function"));
             };
             for t in params.iter() {
                 sig.params.extend(types.value(db, root, t)?);
             }
             sig.results.extend(types.value(db, root, &ret)?);
+            sig.row = types.row(&row);
         }
         Some(DefWithBody::Const(_)) => {
             sig.results.extend(types.value(db, root, &lcx.instance_ty()?)?)
@@ -641,7 +647,23 @@ fn instance_sig<'db>(
         }
     }
     let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
-    Ok((sig, mut_params))
+    Ok((sig, mut_params, lcx.instance.row_params(db) as u32))
+}
+
+/// The row of effects of a MIR body of the instance of `lcx`: that of its
+/// function or lambda, and none for the code of a file or a constant.
+fn body_row<'db>(
+    lcx: &Cx<'_, 'db>,
+    mir: &boltlang_mir::Body<'db>,
+) -> Result<MonoRow<'db>, ErrorKind> {
+    let ty = match mir.owner {
+        boltlang_mir::BodyOwner::Lambda { expr, .. } => lcx.expr_ty(expr)?,
+        _ => lcx.instance_ty()?,
+    };
+    Ok(match ty {
+        MonoTy::Fn(.., row) => row,
+        _ => MonoRow::nothing(),
+    })
 }
 
 /// The signature of a lifted lambda: its captures, then its parameters.
@@ -651,7 +673,7 @@ fn lambda_sig<'db>(
     lcx: &Cx<'_, 'db>,
     root: File,
     lambda: &Lambda,
-) -> Result<(Sig, MutParams), ErrorKind> {
+) -> Result<(Sig, MutParams, u32), ErrorKind> {
     let db = lcx.db;
     let Some(mir) = lcx.instance.body(db).and_then(|b| mir_bodies(db, b).lambda(lambda.expr))
     else {
@@ -664,15 +686,16 @@ fn lambda_sig<'db>(
             sig.params.push(if c.by_ref { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
         }
     }
-    let MonoTy::Fn(params, ret, _) = lcx.expr_ty(lambda.expr)? else {
+    let MonoTy::Fn(params, ret, _, row) = lcx.expr_ty(lambda.expr)? else {
         return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
     };
     for t in params.iter() {
         sig.params.extend(types.value(db, root, t)?);
     }
     sig.results.extend(types.value(db, root, &ret)?);
+    sig.row = types.row(&row);
     let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
-    Ok((sig, mut_params))
+    Ok((sig, mut_params, lcx.instance.row_params(db) as u32))
 }
 
 /// The signatures of the functions of the handlers in the instance of
@@ -682,7 +705,7 @@ fn handler_sigs<'db>(
     module: &mut Module,
     types: &mut Types<'db>,
     lcx: &Cx<'_, 'db>,
-    sigs: &mut Vec<(FuncId, (Sig, MutParams))>,
+    sigs: &mut Vec<(FuncId, (Sig, MutParams, u32))>,
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
     let instance = lcx.instance;
@@ -731,16 +754,28 @@ fn handler_sigs<'db>(
             types.value(db, cx.root, &body_ty)?.into_iter().collect();
         let results: Vec<conduit_ir::Ty> = types.value(db, cx.root, &ty)?.into_iter().collect();
         let none = MutParams::default();
-        // The body is a closure, like a lambda's, which has the instance's
-        // mutability parameters.
-        let own = MutParams { count: instance.mut_params(db) as u32, assumes: Vec::new() };
-        sigs.push((fns.body, (Sig::new(captures, body_results.clone()), own)));
-        let mut ret_params = env.clone();
-        ret_params.extend(body_results);
-        sigs.push((fns.ret, (Sig::new(ret_params, results.clone()), none.clone())));
-        let _ = ops;
+        // Every function of the handler, and the handler, have the
+        // instance's row parameters, which `handle` gives them.
+        let effect_params = instance.row_params(db) as u32;
+        // The handler's row is what its clauses can do, which is what the
+        // code around the `match` can do, and also what resuming its
+        // continuations does, as the checker has it.
+        let row = types.row(&body_row(lcx, mir)?);
         let Some((effect, effect_ops)) = cx.effects.get(&fns.effect) else { continue };
         let effect = *effect;
+        // The body is a closure, like a lambda's, which has the instance's
+        // mutability parameters. It can perform the handled effect, and
+        // what the handler can.
+        let own = MutParams { count: instance.mut_params(db) as u32, assumes: Vec::new() };
+        let mut body_sig = Sig::new(captures, body_results.clone());
+        body_sig.row = row.union(&Row::one(effect));
+        sigs.push((fns.body, (body_sig, own, effect_params)));
+        let mut ret_params = env.clone();
+        ret_params.extend(body_results);
+        let mut ret_sig = Sig::new(ret_params, results.clone());
+        ret_sig.row = row.clone();
+        sigs.push((fns.ret, (ret_sig, none.clone(), effect_params)));
+        let _ = ops;
         // The tuple of each operation's arguments, which its arms match.
         for &op in effect_ops {
             let (tys, _) = op_params(db, cx.root, &fns.effect, op)?;
@@ -753,12 +788,14 @@ fn handler_sigs<'db>(
             let k = conduit_ir::Ty::Cont(Box::new(Sig {
                 params: op.results.clone(),
                 results: results.clone(),
-                row: cx.row.clone(),
+                row: row.clone(),
             }));
             let mut params = env.clone();
             params.extend(op.params.iter().cloned());
             params.push(k);
-            sigs.push((clause, (Sig::new(params, results.clone()), none.clone())));
+            let mut sig = Sig::new(params, results.clone());
+            sig.row = row.clone();
+            sigs.push((clause, (sig, none.clone(), effect_params)));
         }
         let debug_name = Some(
             format!("{}_handler{}", ident(&instance.display(db).to_string()), fns.handler.0).into(),
@@ -766,11 +803,11 @@ fn handler_sigs<'db>(
         module.handlers.insert(
             fns.handler,
             conduit_ir::HandlerDecl {
-                effect_params: 0,
+                effect_params,
                 env,
                 ops: vec![(effect, fns.clauses.clone())],
                 ret: fns.ret,
-                row: cx.row.clone(),
+                row,
                 debug_name,
             },
         );
@@ -808,7 +845,7 @@ fn declare_effect<'db>(
         // An operation's signature has no row.
         sigs.push(Sig::new(params, results));
     }
-    let id = conduit_ir::EffectId(module.effects.len() as u64);
+    let id = types.effect(key.clone());
     let name = e.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
     let args: Vec<String> = key.1.iter().map(|t| t.display(db).to_string()).collect();
     let name = if args.is_empty() { name } else { format!("{name}[{}]", args.join(", ")) };
@@ -869,7 +906,7 @@ fn declare_extern<'db>(
     if cx.externs.contains_key(&key) {
         return Ok(());
     }
-    let MonoTy::Fn(params, ret, _) = use_ty(site)? else {
+    let MonoTy::Fn(params, ret, ..) = use_ty(site)? else {
         return Err(ErrorKind::unsupported("a host function whose type isn't a function"));
     };
     let mut sig = Sig::new(Vec::new(), Vec::new());

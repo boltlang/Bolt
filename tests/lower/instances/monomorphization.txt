@@ -92,3 +92,29 @@ let b = apply(Some, True);
   -> Option.Some[Bool]
 apply[i32, Option[i32]]
 apply[Bool, Option[Bool]]
+
+================================================================================
+Instances are generic in rows of effects
+================================================================================
+effect Log { fn log(x: i32); }
+fn twice[E](f: fn() does E) does E { f(); f() }
+fn hello() does Log { log(1); }
+fn both[E](f: fn() does E) does Log + E { twice(f); twice(hello) }
+fn quiet() {}
+fn run(f: fn() does Log) = match f() { () => (), effect log(x), k => resume(k, ()) };
+run(|| { both(hello); both(quiet) });
+--------------------------------------------------------------------------------
+<file>
+  -> run with imm
+  -> both with imm rows Log
+  -> hello
+  -> both with imm
+  -> quiet
+run
+both
+  -> twice with '0 rows E0
+  -> twice with imm rows Log
+  -> hello
+hello
+quiet
+twice

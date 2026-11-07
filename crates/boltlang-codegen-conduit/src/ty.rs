@@ -11,10 +11,16 @@
 //! - A struct's fields without `mut` or `imm` are `inherit`: they have the
 //!   struct's mutability, and the mutabilities a struct declares are its
 //!   first parameters.
-//! - An enum or a tuple can't be changed in place, but can hold values
-//!   that can, which Conduit's deep `imm` doesn't allow. So its mutability
-//!   is the most a value it holds can be: `imm` if they're all `imm`, the
-//!   parameter if one parameter can be `mut`, and `mut` otherwise.
+//! - An enum can't be changed in place, but can hold values that can, which
+//!   Conduit's deep `imm` doesn't allow. So its mutability is the most a
+//!   value it holds can be: `imm` if they're all `imm`, the parameter if
+//!   one parameter can be `mut`, and `mut` otherwise.
+//! - Each row of effects in the type arguments, like that of the closure in
+//!   `Option[fn() does Log]`, becomes an effect parameter of the
+//!   declaration, as mutabilities do.
+//! - A row's effects are Conduit's effects, one for each effect and its
+//!   arguments, and an instance's row parameters are its effect
+//!   parameters.
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -25,10 +31,10 @@ use boltlang_hir_def::{
     signatures::{FieldList, enum_signature},
 };
 use boltlang_hir_ty::{AdtId, lang::cont_struct, lower::VariantDef};
-use boltlang_mir_mono::{MonoMut, MonoTy, field_types};
-use conduit_ir::{CtorDecl, DataDecl, DataId, Mutability, Row, Sig, Ty};
+use boltlang_mir_mono::{MonoMut, MonoRow, MonoTy, field_types};
+use conduit_ir::{CtorDecl, DataDecl, DataId, EffectId, Mutability, Row, Sig, Ty};
 
-use crate::ErrorKind;
+use crate::{EffectKey, ErrorKind};
 
 /// The marker for a struct's own mutability in its field types, which is
 /// Conduit's `inherit`.
@@ -98,12 +104,35 @@ enum DataKey<'db> {
 pub(crate) struct Types<'db> {
     keys: HashMap<DataKey<'db>, DataId>,
     pub decls: BTreeMap<DataId, DataDecl>,
-    /// The row of every closure and continuation type: `Any` in a program
-    /// with effects, since Bolt doesn't give Conduit its rows yet.
-    pub row: Row,
+    /// The Conduit effect of each effect and its arguments, numbered as
+    /// they're met.
+    effects: HashMap<EffectKey<'db>, EffectId>,
+    /// The effects met in rows that aren't declared yet, which the module
+    /// must declare, in the order they were met.
+    pub undeclared: Vec<EffectKey<'db>>,
 }
 
 impl<'db> Types<'db> {
+    /// The Conduit effect of `key`, an effect and its arguments, which is
+    /// to be declared if it's new.
+    pub(crate) fn effect(&mut self, key: EffectKey<'db>) -> EffectId {
+        if let Some(&id) = self.effects.get(&key) {
+            return id;
+        }
+        let id = EffectId(self.effects.len() as u64);
+        self.effects.insert(key.clone(), id);
+        self.undeclared.push(key);
+        id
+    }
+
+    /// A row of effects in Conduit: an instance's row parameters are
+    /// numbered from 0 and Conduit's from 1.
+    pub(crate) fn row(&mut self, r: &MonoRow<'db>) -> Row {
+        let effects: Vec<EffectId> =
+            r.effects.iter().map(|e| self.effect((e.effect, e.args.clone()))).collect();
+        Row::with_params(effects, r.params.iter().map(|&i| i + 1))
+    }
+
     /// The Conduit type of a value of type `t`, or `None` for one that is
     /// no values, like `()` and `!`.
     pub(crate) fn value(
@@ -121,16 +150,21 @@ impl<'db> Types<'db> {
             MonoTy::Tuple(elems, _) if elems.is_empty() => return Ok(None),
             MonoTy::Tuple(elems, own) => {
                 let (args, extracted) = abstract_muts(elems, 0);
+                let (args, rows) = abstract_rows(&args);
                 let id = self.data(db, root, DataKey::Tuple(args))?;
                 let margs = extracted.iter().map(|&m| mutability(m)).collect();
-                Ty::Data(id, mutability(*own), margs, Vec::new())
+                let rows = rows.iter().map(|r| self.row(r)).collect();
+                Ty::Data(id, mutability(*own), margs, rows)
             }
             MonoTy::Adt(AdtId::Enum(e), ..) if is_fieldless(db, *e) => Ty::I32,
             MonoTy::Adt(adt @ AdtId::Enum(_), args, _, _) => {
                 let (args, extracted) = abstract_muts(args, 0);
+                let (args, rows) = abstract_rows(&args);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
                 let own = held_mutability(&extracted)?;
-                Ty::Data(id, own, extracted.iter().map(|&m| mutability(m)).collect(), Vec::new())
+                let margs = extracted.iter().map(|&m| mutability(m)).collect();
+                let rows = rows.iter().map(|r| self.row(r)).collect();
+                Ty::Data(id, own, margs, rows)
             }
             // A continuation, `Cont[B, U, R]`: resuming it with a `B` gives
             // a `U`.
@@ -140,27 +174,35 @@ impl<'db> Types<'db> {
                 };
                 let params = self.value(db, root, b)?.into_iter().collect();
                 let results = self.value(db, root, u)?.into_iter().collect();
-                Ty::Cont(Box::new(Sig { params, results, row: self.row.clone() }))
+                // What resuming it does: the row of its handler.
+                let row = match args.get(2) {
+                    Some(MonoTy::Row(r)) => self.row(r),
+                    _ => Row::NOTHING,
+                };
+                Ty::Cont(Box::new(Sig { params, results, row }))
             }
             MonoTy::Adt(adt @ AdtId::Struct(_), args, muts, own) => {
                 let (args, extracted) = abstract_muts(args, muts.len() as u32);
+                let (args, rows) = abstract_rows(&args);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
                 let margs = muts.iter().chain(&extracted).map(|&m| mutability(m)).collect();
-                Ty::Data(id, mutability(*own), margs, Vec::new())
+                let rows = rows.iter().map(|r| self.row(r)).collect();
+                Ty::Data(id, mutability(*own), margs, rows)
             }
             MonoTy::Array(m, elem) => match self.value(db, root, elem)? {
                 Some(elem) => Ty::Array(Box::new(elem), mutability(*m)),
                 None => return Err(ErrorKind::unsupported("an array of a type with no values")),
             },
-            MonoTy::Fn(params, ret, m) => {
+            MonoTy::Fn(params, ret, m, row) => {
                 let mut sig = Sig::new(Vec::new(), Vec::new());
                 for p in params {
                     sig.params.extend(self.value(db, root, p)?);
                 }
                 sig.results.extend(self.value(db, root, ret)?);
-                sig.row = self.row.clone();
+                sig.row = self.row(row);
                 Ty::Fn(Box::new(sig), mutability(*m))
             }
+            MonoTy::Row(_) => return Err(ErrorKind::unsupported("a row of effects as a value")),
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => {
                 return Err(ErrorKind::unsupported("erased types"));
             }
@@ -218,8 +260,7 @@ impl<'db> Types<'db> {
             DataKey::Tuple(elems) => {
                 let params = count_params(elems);
                 DataDecl {
-                    // Bolt doesn't give Conduit its effects yet.
-                    effect_params: 0,
+                    effect_params: count_rows(elems),
                     params,
                     ctors: vec![fields_of(self, elems.to_vec())?],
                     debug_name: Some(data_name(db, "Tuple", elems).into()),
@@ -236,8 +277,7 @@ impl<'db> Types<'db> {
                     field_types(db, root, VariantDef::Struct(*s), args, &muts, MonoMut::Param(OWN))
                         .map_err(unknown)?;
                 DataDecl {
-                    // Bolt doesn't give Conduit its effects yet.
-                    effect_params: 0,
+                    effect_params: count_rows(args),
                     params: declared + count_params(args),
                     ctors: vec![fields_of(self, tys)?],
                     debug_name: s
@@ -258,8 +298,7 @@ impl<'db> Types<'db> {
                     ctors.push(fields_of(self, tys)?);
                 }
                 DataDecl {
-                    // Bolt doesn't give Conduit its effects yet.
-                    effect_params: 0,
+                    effect_params: count_rows(args),
                     params: count_params(args),
                     ctors,
                     debug_name: e
@@ -327,15 +366,15 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
                 let m = next(m);
                 MonoTy::Array(m, Box::new(go(elem, next)))
             }
-            MonoTy::Fn(params, ret, m) => {
+            MonoTy::Fn(params, ret, m, row) => {
                 let params = params.iter().map(|a| go(a, next)).collect();
                 let ret = Box::new(go(ret, next));
-                MonoTy::Fn(params, ret, next(m))
+                MonoTy::Fn(params, ret, next(m), row.clone())
             }
             MonoTy::ErasedAssoc(alias, args) => {
                 MonoTy::ErasedAssoc(*alias, args.iter().map(|a| go(a, next)).collect())
             }
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => t.clone(),
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) | MonoTy::Row(_) => t.clone(),
         }
     }
     let out = tys.iter().map(|t| go(t, &mut next)).collect();
@@ -343,6 +382,48 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
 }
 
 /// How many parameters [`abstract_muts`] makes in types.
+/// `tys` with each row in them, like that of the closure in
+/// `Option[fn() does Log]`, replaced by a parameter, numbered from 0, and
+/// the rows that were replaced, in order.
+fn abstract_rows<'db>(tys: &[MonoTy<'db>]) -> (Box<[MonoTy<'db>]>, Vec<MonoRow<'db>>) {
+    fn go<'db>(t: &MonoTy<'db>, out: &mut Vec<MonoRow<'db>>) -> MonoTy<'db> {
+        let next = |r: &MonoRow<'db>, out: &mut Vec<MonoRow<'db>>| {
+            out.push(r.clone());
+            MonoRow::param(out.len() as u32 - 1)
+        };
+        let all = |tys: &[MonoTy<'db>], out: &mut Vec<MonoRow<'db>>| -> Box<[MonoTy<'db>]> {
+            tys.iter().map(|t| go(t, out)).collect()
+        };
+        match t {
+            MonoTy::Adt(adt, args, muts, own) => {
+                MonoTy::Adt(*adt, all(args, out), muts.clone(), *own)
+            }
+            MonoTy::Tuple(elems, own) => MonoTy::Tuple(all(elems, out), *own),
+            MonoTy::Array(m, elem) => MonoTy::Array(*m, Box::new(go(elem, out))),
+            MonoTy::Fn(params, ret, m, row) => {
+                let params = all(params, out);
+                let ret = Box::new(go(ret, out));
+                MonoTy::Fn(params, ret, *m, next(row, out))
+            }
+            MonoTy::Row(row) => MonoTy::Row(next(row, out)),
+            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => t.clone(),
+        }
+    }
+    let mut out = Vec::new();
+    let tys = tys.iter().map(|t| go(t, &mut out)).collect();
+    (tys, out)
+}
+
+/// How many row parameters `tys` have, which [`abstract_rows`] numbered.
+fn count_rows(tys: &[MonoTy<'_>]) -> u32 {
+    let mut found = Vec::new();
+    for t in tys {
+        MonoRow::params_in(t, &mut found);
+    }
+    found.iter().map(|&i| i + 1).max().unwrap_or(0)
+}
+
 fn count_params(tys: &[MonoTy<'_>]) -> u32 {
     abstract_muts(tys, 0).1.len() as u32
 }

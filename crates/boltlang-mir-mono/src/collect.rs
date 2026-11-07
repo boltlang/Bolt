@@ -288,7 +288,12 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
     match b {
         MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) => args.iter().any(|t| occurs(a, t)),
         MonoTy::Array(_, elem) => occurs(a, elem),
-        MonoTy::Fn(params, ret, _) => params.iter().any(|t| occurs(a, t)) || occurs(a, ret),
+        MonoTy::Fn(params, ret, _, row) => {
+            params.iter().any(|t| occurs(a, t))
+                || occurs(a, ret)
+                || row.effects.iter().flat_map(|e| e.args.iter()).any(|t| occurs(a, t))
+        }
+        MonoTy::Row(row) => row.effects.iter().flat_map(|e| e.args.iter()).any(|t| occurs(a, t)),
         MonoTy::ErasedAssoc(_, args) => args.iter().any(|t| occurs(a, t)),
         MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => false,
     }
@@ -402,7 +407,12 @@ fn consts_in<'db>(
         for c in consts {
             let body = DefWithBodyId::new(db, DefWithBody::Const(c));
             let instance = Instance::of_body(db, body, Box::default(), cx.instance.root(db));
-            let u = Use::Instance { instance, mutabilities: Box::default(), dicts: Box::default() };
+            let u = Use::Instance {
+                instance,
+                mutabilities: Box::default(),
+                rows: Box::default(),
+                dicts: Box::default(),
+            };
             push(at(Role::Const(c)), Ok(u));
         }
     }

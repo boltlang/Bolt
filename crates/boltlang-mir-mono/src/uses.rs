@@ -45,16 +45,21 @@ use crate::{
         Generics, GenericsError, Instance, InstanceDef, Kind, MonoConstraint, generics,
         instance_generics,
     },
-    ty::{MonoMut, MonoTy, Slot, Subst, TyError},
+    ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError},
 };
 
 /// What a use of a function or constant is in an instance.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Use<'db> {
     /// A function or constant with a body. `mutabilities` are what the use
-    /// gives the instance's mutability parameters, and `dicts` its
-    /// dictionary parameters.
-    Instance { instance: Instance<'db>, mutabilities: Box<[MonoMut]>, dicts: Box<[Dict<'db>]> },
+    /// gives the instance's mutability parameters, `rows` its row
+    /// parameters, and `dicts` its dictionary parameters.
+    Instance {
+        instance: Instance<'db>,
+        mutabilities: Box<[MonoMut]>,
+        rows: Box<[MonoRow<'db>]>,
+        dicts: Box<[Dict<'db>]>,
+    },
     /// A function the compiler provides, like `i32_add` or `array_len`.
     Builtin(Builtin),
     /// A function of the host, in an `extern` block, without a body.
@@ -204,18 +209,21 @@ impl<'a, 'db> Cx<'a, 'db> {
         }
         let order = std::cell::RefCell::new(Vec::<u32>::new());
         let key = from
-            .to_ty_with(&|i| {
-                let mut order = order.borrow_mut();
-                let at = order.iter().position(|&j| j == i).unwrap_or_else(|| {
-                    order.push(i);
-                    order.len() - 1
-                });
-                Ty::Bound(at as u32)
-            })
+            .to_ty_with(
+                &|i| {
+                    let mut order = order.borrow_mut();
+                    let at = order.iter().position(|&j| j == i).unwrap_or_else(|| {
+                        order.push(i);
+                        order.len() - 1
+                    });
+                    Ty::Bound(at as u32)
+                },
+                None,
+            )
             .ok_or(UseError::UnknownType)?;
         let root = self.instance.root(self.db);
         boltlang_mir_transform::check_imm_deep(self.db, root, &key).map_err(UseError::NoImpl)?;
-        let use_ty = MonoTy::Fn(Box::new([from]), Box::new(to), MonoMut::Imm);
+        let use_ty = MonoTy::Fn(Box::new([from]), Box::new(to), MonoMut::Imm, MonoRow::nothing());
         self.instance_use(InstanceDef::Shim(Shim::ImmDeep(key)), &use_ty, &[]).map(Some)
     }
 
@@ -462,34 +470,46 @@ impl<'a, 'db> Cx<'a, 'db> {
             .iter()
             .filter_map(|s| match s {
                 Slot::Mut(m) => Some(*m),
-                Slot::Ty(_) | Slot::Row => None,
+                Slot::Ty(_) | Slot::Row(_) => None,
+            })
+            .collect();
+        let mut rows: Vec<MonoRow<'db>> = actual
+            .iter()
+            .filter_map(|s| match s {
+                Slot::Row(r) => Some(r.clone()),
+                Slot::Ty(_) | Slot::Mut(_) => None,
             })
             .collect();
         // The mutability parameters of this instance in the type arguments,
         // like the `'m` of `T = 'm [i32]`, become parameters of the callee's
         // instance, after its own, which the use gives (#371).
+        // The same for row parameters.
         let own = mutabilities.len() as u32;
+        let own_rows = rows.len() as u32;
         let mut free: Vec<u32> = Vec::new();
+        let mut free_rows: Vec<u32> = Vec::new();
         let args: Box<[MonoTy<'db>]> = erased
             .iter()
             .filter_map(|s| match s {
-                Slot::Ty(t) => Some(t.map_muts(&mut |m| match m {
-                    MonoMut::Param(i) => {
-                        let at = free.iter().position(|&j| j == i).unwrap_or_else(|| {
-                            free.push(i);
-                            free.len() - 1
-                        });
-                        MonoMut::Param(own + at as u32)
-                    }
-                    m => m,
-                })),
-                Slot::Mut(_) | Slot::Row => None,
+                Slot::Ty(t) => Some(
+                    t.map_muts(&mut |m| match m {
+                        MonoMut::Param(i) => MonoMut::Param(own + index_in(&mut free, i)),
+                        m => m,
+                    })
+                    .map_rows(&mut |i| MonoRow::param(own_rows + index_in(&mut free_rows, i))),
+                ),
+                Slot::Mut(_) | Slot::Row(_) => None,
             })
             .collect();
         mutabilities.extend(free.iter().map(|&i| MonoMut::Param(i)));
-        let mutabilities = mutabilities.into();
+        rows.extend(free_rows.iter().map(|&i| MonoRow::param(i)));
         let instance = Instance::new(db, def, canonical(&args), self.instance.root(db));
-        Ok(Use::Instance { instance, mutabilities, dicts: dicts.into() })
+        Ok(Use::Instance {
+            instance,
+            mutabilities: mutabilities.into(),
+            rows: rows.into(),
+            dicts: dicts.into(),
+        })
     }
 
     /// Add the dictionary for the constraint `c` of a callee to `out`, if
@@ -542,7 +562,7 @@ impl<'a, 'db> Cx<'a, 'db> {
             .into_iter()
             .filter_map(|s| match s {
                 Slot::Ty(t) => Some(t),
-                Slot::Mut(_) | Slot::Row => None,
+                Slot::Mut(_) | Slot::Row(_) => None,
             })
             .collect();
         Ok(Dict::Impl { imp, args, subs: subs.into() })
@@ -726,7 +746,7 @@ fn fits<'db>(params: &[GenericParamId<'db>], pattern: &Ty<'db>, ty: &MonoTy<'db>
         (Ty::Adt(a, xs, ..), MonoTy::Adt(b, ys, ..)) => a == b && all(xs, ys),
         (Ty::Tuple(xs, _), MonoTy::Tuple(ys, _)) => all(xs, ys),
         (Ty::Array(_, x), MonoTy::Array(_, y)) => fits(params, x, y),
-        (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, y, _)) => all(xs, ys) && fits(params, x, y),
+        (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, y, ..)) => all(xs, ys) && fits(params, x, y),
         (Ty::Never, MonoTy::Never) => true,
         _ => false,
     }
@@ -756,6 +776,11 @@ pub(crate) fn bind<'db>(
             bind(params, p, t, found);
         }
     };
+    // A row where a type goes, like the `R` of `Cont[B, U, R]`.
+    if let MonoTy::Row(row) = ty {
+        bind_row(params, pattern, row, found);
+        return;
+    }
     if let Some(i) = index(pattern) {
         if let Some(slot) = found.get_mut(i) {
             slot.get_or_insert_with(|| Slot::Ty(ty.clone()));
@@ -785,12 +810,59 @@ pub(crate) fn bind<'db>(
             bind_mut(m, *n, found);
             bind(params, x, y, found);
         }
-        (Ty::Fn(xs, x, m, _), MonoTy::Fn(ys, y, n)) => {
+        (Ty::Fn(xs, x, m, e), MonoTy::Fn(ys, y, n, r)) => {
             all(xs, ys, found);
             bind(params, x, y, found);
             bind_mut(m, *n, found);
+            bind_row(params, e, r, found);
         }
         _ => {}
+    }
+}
+
+/// Match the row `pattern` of a scheme with a use's `row`: each row it's
+/// made of, like the `E` of `Log + E`, is what `row` has besides the
+/// effects `pattern` names. With several, like `E + F`, each gets all of
+/// it, which is more than it needs, and still fits. A row that's matched
+/// more than once gets all of what it's matched with.
+fn bind_row<'db>(
+    params: &[GenericParamId<'db>],
+    pattern: &Ty<'db>,
+    row: &MonoRow<'db>,
+    found: &mut [Option<Slot<'db>>],
+) {
+    let Some((effects, rest)) = pattern.row_parts() else { return };
+    let mut left = row.clone();
+    for e in effects {
+        if let Some(given) = row.effects.iter().find(|g| g.effect == e.effect) {
+            for (p, t) in e.args.iter().zip(given.args.iter()) {
+                bind(params, p, t, found);
+            }
+        }
+        left = left.without(e.effect);
+    }
+    for part in rest {
+        let i = match part {
+            Ty::Param(p) => params.iter().position(|q| *q == p),
+            Ty::Bound(i) => Some(params.len() + i as usize),
+            _ => None,
+        };
+        let Some(slot) = i.and_then(|i| found.get_mut(i)) else { continue };
+        *slot = Some(match slot.take() {
+            Some(Slot::Row(had)) => Slot::Row(had.union(&left)),
+            _ => Slot::Row(left.clone()),
+        });
+    }
+}
+
+/// Where `i` is in `list`, put at its end if it isn't there yet.
+fn index_in(list: &mut Vec<u32>, i: u32) -> u32 {
+    match list.iter().position(|&j| j == i) {
+        Some(at) => at as u32,
+        None => {
+            list.push(i);
+            list.len() as u32 - 1
+        }
     }
 }
 
@@ -805,9 +877,11 @@ fn fill<'db>(generics: &Generics<'db>, found: Vec<Option<Slot<'db>>>) -> Vec<Slo
         .map(|(kind, slot)| match (kind, slot) {
             (Kind::Ty, Some(s @ Slot::Ty(_))) => s,
             (Kind::Mut, Some(s @ Slot::Mut(_))) => s,
+            (Kind::Row, Some(s @ Slot::Row(_))) => s,
             (Kind::Ty, _) => Slot::Ty(MonoTy::unit()),
             (Kind::Mut, _) => Slot::Mut(MonoMut::Imm),
-            (Kind::Row, _) => Slot::Row,
+            // A row that nothing gives has no effects.
+            (Kind::Row, _) => Slot::Row(MonoRow::nothing()),
         })
         .collect()
 }

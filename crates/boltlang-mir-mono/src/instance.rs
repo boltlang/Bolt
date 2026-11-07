@@ -20,7 +20,7 @@ use boltlang_mir::Shim;
 use boltlang_mir_transform::ctor_sig;
 use boltlang_pattern::decision::Ctor;
 
-use crate::ty::{MonoMut, MonoTy, Slot, Subst, TyError};
+use crate::ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError};
 
 /// A body compiled for concrete types: a function, a constant, the
 /// statements at the top level of a file, or a shim that the compiler
@@ -97,11 +97,12 @@ impl<'db> Instance<'db> {
         }
     }
 
-    /// The slots of the instance's scheme: its types, and a mutability
-    /// parameter for each mutability.
+    /// The slots of the instance's scheme: its types, a mutability
+    /// parameter for each mutability, and a row parameter for each row.
     pub(crate) fn slots(self, db: &'db dyn Db, generics: &Generics<'db>) -> Vec<Slot<'db>> {
         let mut types = self.args(db).iter();
         let mut muts = 0;
+        let mut rows = 0;
         generics
             .kinds
             .iter()
@@ -111,7 +112,10 @@ impl<'db> Instance<'db> {
                     muts += 1;
                     Slot::Mut(MonoMut::Param(muts - 1))
                 }
-                Kind::Row => Slot::Row,
+                Kind::Row => {
+                    rows += 1;
+                    Slot::Row(MonoRow::param(rows - 1))
+                }
             })
             .collect()
     }
@@ -147,6 +151,19 @@ impl<'db> Instance<'db> {
             });
         }
         most
+    }
+
+    /// How many row parameters the instance has: those of its scheme, then
+    /// those its type arguments have, which its uses give, as for
+    /// mutabilities.
+    pub fn row_params(self, db: &'db dyn Db) -> usize {
+        let own = instance_generics(db, self.def(db))
+            .map_or(0, |g| g.kinds.iter().filter(|k| **k == Kind::Row).count());
+        let mut found = Vec::new();
+        for t in self.args(db).iter() {
+            MonoRow::params_in(t, &mut found);
+        }
+        found.iter().map(|&i| i as usize + 1).fold(own, usize::max)
     }
 
     pub fn display(self, db: &'db dyn Db) -> impl fmt::Display + 'db {
@@ -277,8 +294,8 @@ impl<'db> MonoConstraint<'db> {
 }
 
 /// Whether a parameter of a scheme is a type, a mutability, or a row of
-/// effects. An instance is only made for each type: it doesn't keep rows,
-/// which only the checker needs.
+/// effects. An instance is only made for each type: mutabilities and rows
+/// are its parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, salsa::SalsaValue)]
 pub enum Kind {
     Ty,

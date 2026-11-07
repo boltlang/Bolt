@@ -17,13 +17,13 @@ use boltlang_mir::{
     Body, Callee, ExprId, ExprKind, ItemRef, LabelId, Local, Pattern, Place as MirPlace, Stmt,
 };
 use boltlang_mir_build::{lambda::Lambda, mir_bodies};
-use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoTy, Use, field_types};
+use boltlang_mir_mono::{Cx, InstanceDef, InstanceUses, MonoRow, MonoTy, Use, field_types};
 use boltlang_mir_transform::shim_body;
 use boltlang_pattern::decision::{
     Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value,
 };
 use conduit_ir::{
-    Atom, CtorId, Func, Lit, Module, Mutability, Prim, Sign, Ty, build::FuncBuilder,
+    Atom, CtorId, Func, Lit, Module, Mutability, Prim, Row, Sign, Ty, build::FuncBuilder,
     build::JoinPoint,
 };
 
@@ -156,7 +156,8 @@ pub(crate) fn lower_body<'db>(
     let sig = &module.funcs[&id];
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
     b.set_mut_params(sig.mut_params.clone());
-    b.set_row(cx.row.clone());
+    b.set_effect_params(sig.effect_params);
+    b.set_row(sig.row.clone());
     let mut l = Lower {
         cx,
         lcx: &lcx,
@@ -394,11 +395,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 let scrutinee = if tys.is_empty() {
                     None
                 } else {
-                    let Some(Ty::Data(id, m, margs, _)) = self.cty(&t)? else {
+                    let Some(Ty::Data(id, m, margs, rows)) = self.cty(&t)? else {
                         return Err(ErrorKind::unsupported("the arguments of this operation"));
                     };
                     let ctor = CtorId { data: id, index: 0 };
-                    Some(Atom::Var(self.b.new_object_with(ctor, m, margs, args)))
+                    Some(Atom::Var(self.b.new_object_full(ctor, m, margs, rows, args)))
                 };
                 let guards: Vec<Option<ExprId>> = op_arms.arms.iter().map(|a| a.guard).collect();
                 let bodies: Vec<ExprId> = op_arms.arms.iter().map(|a| a.body).collect();
@@ -436,16 +437,28 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 None => return Err(ErrorKind::unsupported("a capture that isn't in scope")),
             }
         }
-        let MonoTy::Fn(_, _, m) = self.mono(e)? else {
+        let MonoTy::Fn(_, _, m, _) = self.mono(e)? else {
             return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
         };
-        Ok(Some(Atom::Var(self.b.closure_at(f, self.own_margs(), mutability(m), values))))
+        let (margs, rows) = (self.own_margs(), self.own_rows());
+        Ok(Some(Atom::Var(self.b.closure_with(f, margs, rows, mutability(m), values))))
     }
 
     /// The instance's own mutability parameters, to give a lifted lambda,
     /// which has them too.
     fn own_margs(&self) -> Vec<Mutability> {
         (1..=self.lcx.instance.mut_params(self.cx.db) as u32).map(Mutability::Param).collect()
+    }
+
+    /// The instance's own row parameters, to give a lifted lambda or a
+    /// handler, which have them too.
+    fn own_rows(&self) -> Vec<Row> {
+        (1..=self.lcx.instance.row_params(self.cx.db) as u32).map(Row::param).collect()
+    }
+
+    /// What a use gives the row parameters of an instance, in Conduit.
+    fn rows(&mut self, rows: &[MonoRow<'db>]) -> Vec<Row> {
+        rows.iter().map(|r| self.types.row(r)).collect()
     }
 
     fn bind(&mut self, local: Local, value: Val) -> R<()> {
@@ -580,10 +593,14 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 let v = val!(self.expr(*inner));
                 match self.lcx.imm_use(&mir[*inner].ty)? {
                     None => Ok(v),
-                    Some(Use::Instance { instance, mutabilities, dicts }) if dicts.is_empty() => {
+                    Some(Use::Instance { instance, mutabilities, rows, dicts })
+                        if dicts.is_empty() =>
+                    {
                         let f = self.cx.funcs[&instance];
                         let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
-                        let results = self.b.call_at(f, margs, v.into_iter().collect::<Vec<_>>());
+                        let rows = self.rows(&rows);
+                        let args = v.into_iter().collect::<Vec<_>>();
+                        let results = self.b.call_with(f, margs, rows, args);
                         Ok(results.first().map(|&r| Atom::Var(r)))
                     }
                     Some(_) => Err(ErrorKind::unsupported("this copy")),
@@ -659,9 +676,10 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 };
                 let mut env = given(self, &fns.env)?;
                 let captures = given(self, &fns.captures)?;
-                let body = self.b.closure_at(fns.body, self.own_margs(), Mutability::Mut, captures);
+                let (margs, rows) = (self.own_margs(), self.own_rows());
+                let body = self.b.closure_with(fns.body, margs, rows, Mutability::Mut, captures);
                 env.push(Atom::Var(body));
-                let results = self.b.handle(fns.handler, env);
+                let results = self.b.handle_with(fns.handler, self.own_rows(), env);
                 Ok(results.first().map(|&v| Atom::Var(v)))
             }
             ExprKind::Match { scrutinee, decision, arms } => {
@@ -761,7 +779,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             ItemRef::Op(op) => self.lcx.op_fn_use(*op, &self.mono(e)?)?,
             _ => self.use_of(item, &self.mir[e].ty)?,
         };
-        let Use::Instance { instance, mutabilities, dicts } = u else {
+        let Use::Instance { instance, mutabilities, rows, dicts } = u else {
             return Err(ErrorKind::unsupported("a builtin or a host function as a value"));
         };
         if !dicts.is_empty() {
@@ -769,14 +787,16 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         }
         let f = self.cx.funcs[&instance];
         let margs: Vec<Mutability> = mutabilities.iter().map(|&m| mutability(m)).collect();
+        let rows = self.rows(&rows);
         if let Some(DefWithBody::Const(_)) = instance.body(self.cx.db).map(|b| b.def(self.cx.db)) {
-            let results = self.b.call_at(f, margs, Vec::<Atom>::new());
+            let results = self.b.call_with(f, margs, rows, Vec::<Atom>::new());
             return Ok(results.first().map(|&v| Atom::Var(v)));
         }
-        let MonoTy::Fn(_, _, m) = self.mono(e)? else {
+        let MonoTy::Fn(_, _, m, _) = self.mono(e)? else {
             return Err(ErrorKind::unsupported("a function whose type isn't a function"));
         };
-        Ok(Some(Atom::Var(self.b.closure_at(f, margs, mutability(m), Vec::<Atom>::new()))))
+        let none = Vec::<Atom>::new();
+        Ok(Some(Atom::Var(self.b.closure_with(f, margs, rows, mutability(m), none))))
     }
 
     /// `for x in xs { .. }`: `iter(xs)` once, then `next` of it until it
@@ -847,21 +867,25 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     /// of the instance it calls.
     fn call_callee(&mut self, callee: &Callee<'db>, args: Vec<Val>) -> R<(Val, MonoTy<'db>)> {
         let u = self.use_of(&callee.item, &callee.ty)?;
-        let Use::Instance { instance, mutabilities, dicts } = u else {
+        let Use::Instance { instance, mutabilities, rows, dicts } = u else {
             return Err(ErrorKind::unsupported("this `for` loop"));
         };
         if !dicts.is_empty() {
             return Err(ErrorKind::unsupported("dictionaries"));
         }
         let callee = Cx::new(self.cx.db, instance, &self.cx.erased)?;
-        let MonoTy::Fn(_, ret, _) = callee.instance_ty()? else {
+        let MonoTy::Fn(_, ret, ..) = callee.instance_ty()? else {
             return Err(ErrorKind::unsupported("this `for` loop"));
         };
-        // The callee's own mutability parameters are the ones this use gives.
-        let ret = subst_muts(&ret, &mutabilities);
+        // The callee's own mutability and row parameters are the ones this
+        // use gives.
+        let ret = subst_muts(&ret, &mutabilities)
+            .map_rows(&mut |i| rows.get(i as usize).cloned().unwrap_or_default());
         let f = self.cx.funcs[&instance];
         let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
-        let results = self.b.call_at(f, margs, args.into_iter().flatten().collect::<Vec<_>>());
+        let crows = self.rows(&rows);
+        let args = args.into_iter().flatten().collect::<Vec<_>>();
+        let results = self.b.call_with(f, margs, crows, args);
         Ok((results.first().map(|&v| Atom::Var(v)), ret))
     }
 
@@ -940,10 +964,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     /// A new object of the type of `e`, made with its constructor `index`.
     fn construct(&mut self, e: ExprId, index: u32, fields: Vec<Atom>) -> R<Val> {
         let t = self.mono(e)?;
-        let Some(Ty::Data(id, m, margs, _)) = self.cty(&t)? else {
+        let Some(Ty::Data(id, m, margs, rows)) = self.cty(&t)? else {
             return Err(ErrorKind::unsupported("this value"));
         };
-        Ok(Some(Atom::Var(self.b.new_object_with(CtorId { data: id, index }, m, margs, fields))))
+        let ctor = CtorId { data: id, index };
+        Ok(Some(Atom::Var(self.b.new_object_full(ctor, m, margs, rows, fields))))
     }
 
     /// Call `item`, used at the type `use_ty`, with these arguments; the
@@ -958,13 +983,14 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let u = self.use_of(item, use_ty)?;
         let args: Vec<Atom> = args.into_iter().flatten().collect();
         let results = match u {
-            Use::Instance { instance, mutabilities, dicts } => {
+            Use::Instance { instance, mutabilities, rows, dicts } => {
                 if !dicts.is_empty() {
                     return Err(ErrorKind::unsupported("dictionaries"));
                 }
                 let f = self.cx.funcs[&instance];
                 let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
-                self.b.call_at(f, margs, args)
+                let rows = self.rows(&rows);
+                self.b.call_with(f, margs, rows, args)
             }
             Use::Extern(f) => {
                 let results = self.b.call_extern(self.cx.externs[&ExternKey::Function(f)], args);
@@ -991,7 +1017,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
 
     /// Call what a [`Callee`] calls, with these arguments.
     fn call_use(&mut self, callee: &Callee<'db>, args: Vec<Val>) -> R<Val> {
-        let MonoTy::Fn(_, ret, _) = self.mono_of(&callee.ty)? else {
+        let MonoTy::Fn(_, ret, ..) = self.mono_of(&callee.ty)? else {
             return Err(ErrorKind::unsupported("a call whose type isn't a function"));
         };
         self.call_item(&callee.item, &callee.ty, args, &ret)
@@ -1362,10 +1388,11 @@ fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_mir_mono::MonoMut]) -> Mono
             MonoTy::Tuple(tys.iter().map(|t| subst_muts(t, args)).collect(), m(own))
         }
         MonoTy::Array(own, elem) => MonoTy::Array(m(own), Box::new(subst_muts(elem, args))),
-        MonoTy::Fn(ps, r, own) => MonoTy::Fn(
+        MonoTy::Fn(ps, r, own, row) => MonoTy::Fn(
             ps.iter().map(|t| subst_muts(t, args)).collect(),
             Box::new(subst_muts(r, args)),
             m(own),
+            row.clone(),
         ),
         other => other.clone(),
     }
