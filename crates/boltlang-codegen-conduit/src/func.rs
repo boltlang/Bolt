@@ -1004,6 +1004,19 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 if matches!(result_ty, MonoTy::Never) {
                     self.b.trap();
                 }
+                // With `abi = flat`, a tuple is given back as its elements.
+                let flat = boltlang_hir_ty::builtin::link(self.cx.db, f)
+                    .is_some_and(|l| l.abi == boltlang_hir_def::item_tree::LinkAbi::Flat);
+                if flat && matches!(result_ty, MonoTy::Tuple(elems, _) if !elems.is_empty()) {
+                    let Some(Ty::Data(id, m, margs, rows)) = self.cty(result_ty)? else {
+                        return Err(ErrorKind::unsupported("this tuple"));
+                    };
+                    let ctor = CtorId { data: id, index: 0 };
+                    let fields: Vec<Atom> = results.iter().map(|&v| Atom::Var(v)).collect();
+                    return Ok(Some(Atom::Var(
+                        self.b.new_object_full(ctor, m, margs, rows, fields),
+                    )));
+                }
                 results
             }
             Use::Builtin(builtin) => return self.builtin(builtin, args, result_ty),

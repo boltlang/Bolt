@@ -784,6 +784,17 @@ fn describe(
                 }
                 BadLink::Builtin => "a function can't be both a builtin and linked to the host".to_string(),
                 BadLink::Written(e) => link_error(&e),
+                BadLink::FlatParam(ty) => format!(
+                    "a function linked with `abi = flat` can't take a `{}`: only scalars, arrays of them, and \
+                     arrays of `[u8]`",
+                    ty.display_with(db, names)
+                ),
+                BadLink::FlatResult(ty) => format!(
+                    "a function linked with `abi = flat` can't give a `{}`: only scalars, or a tuple of them",
+                    ty.display_with(db, names)
+                ),
+                BadLink::Nolen => "`#[nolen]` is only for an array that a function linked with `abi = flat` takes"
+                    .to_string(),
             },
         ),
         K::BadBuiltin { reason } => (
@@ -1069,8 +1080,13 @@ fn link_error(e: &boltlang_hir_def::item_tree::LinkError) -> String {
             )
         }
         E::NoModule => format!("`#[link(wasm, ..)]` needs the Wasm module of the import; {FORM}"),
-        E::UnknownKey(k) => format!("`#[link]` has no `{k}`; it takes `module` and `name`"),
+        E::UnknownKey(k) => format!("`#[link]` has no `{k}`; it takes `module`, `name` and `abi`"),
+        E::UnknownAbi(a) => format!("there's no ABI `{a}`; the only one is `flat`"),
         E::Repeated(k) => format!("`{k}` is given twice"),
-        E::Malformed => format!("after `wasm`, `#[link]` takes `key = \"string\"` pairs; {FORM}"),
+        E::Malformed => {
+            format!(
+                "after `wasm`, `#[link]` takes `key = \"string\"` pairs, and `abi = flat`; {FORM}"
+            )
+        }
     }
 }

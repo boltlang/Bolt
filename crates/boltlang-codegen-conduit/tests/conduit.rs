@@ -106,7 +106,7 @@ impl Host for Log {
         _: ExternId,
         decl: &Extern,
         args: &[Value],
-        _: &mut conduit_eval::Arrays<'_, '_>,
+        arrays: &mut conduit_eval::Arrays<'_, '_>,
     ) -> Result<Vec<Value>, String> {
         if &*decl.module == "bolt" {
             match (&*decl.name, args) {
@@ -131,12 +131,37 @@ impl Host for Log {
                 _ => {}
             }
         }
-        let args: Vec<String> = args.iter().map(show_value).collect();
+        // A flat extern's arrays are shown with their elements, like
+        // `[1, 2]`, and its results are 1, 2 and so on, so that a test sees
+        // where each goes.
+        let flat = decl.abi == conduit_ir::Abi::Flat;
+        let show = |v: &Value| if flat { show_array(arrays, v) } else { show_value(v) };
+        let args: Vec<String> = args.iter().map(show).collect();
         self.lines.borrow_mut().push(format!("{}.{}({})", decl.module, decl.name, args.join(", ")));
+        if flat {
+            let results = decl.sig.results.iter().enumerate().map(|(i, t)| match t {
+                conduit_ir::Ty::I64 => Value::I64(i as i64 + 1),
+                conduit_ir::Ty::I16 => Value::I16(i as i16 + 1),
+                conduit_ir::Ty::I8 => Value::I8(i as i8 + 1),
+                _ => Value::I32(i as i32 + 1),
+            });
+            return Ok(results.collect());
+        }
         if !decl.sig.results.is_empty() {
             return Err(format!("`{}` gives a value, which the tests' host can't", decl.name));
         }
         Ok(Vec::new())
+    }
+}
+
+/// A value, with the elements of an array in it, as `[1, [2, 3]]`.
+fn show_array(arrays: &conduit_eval::Arrays<'_, '_>, v: &Value) -> String {
+    match arrays.get(v) {
+        Some(elems) => {
+            let elems: Vec<String> = elems.iter().map(|e| show_array(arrays, e)).collect();
+            format!("[{}]", elems.join(", "))
+        }
+        None => show_value(v),
     }
 }
 

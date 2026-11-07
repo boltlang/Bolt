@@ -85,6 +85,9 @@ pub struct FunctionSignature {
 pub struct ParamData {
     pub type_ref: Option<TypeRefId>,
     pub default: Option<ExprId>,
+    /// Whether it has `#[nolen]`: an array that a function linked with
+    /// `abi = flat` is given the address of, without its length.
+    pub nolen: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -314,7 +317,8 @@ fn lower_function<'db>(
             for param in list.params() {
                 let type_ref = param.type_expr().map(|t| c.lower_type(t));
                 let default = param.default().map(|e| c.lower_expr(e));
-                params.push(ParamData { type_ref, default });
+                let nolen = crate::item_tree::has_attr(&param, "nolen");
+                params.push(ParamData { type_ref, default, nolen });
             }
         }
         ret_type = decl.ret_type().map(|r| c.lower_opt_type(r.ty()));

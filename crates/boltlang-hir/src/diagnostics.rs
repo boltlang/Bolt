@@ -20,7 +20,7 @@ use boltlang_hir_def::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         StructId, TypeAliasId,
     },
-    item_tree::{AssocItem, AstId, LinkError, ModItem, RawVisibility, item_tree},
+    item_tree::{AssocItem, AstId, LinkAbi, LinkError, ModItem, RawVisibility, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
@@ -235,7 +235,7 @@ pub enum DiagnosticKind<'db> {
     /// `#[link(..)]` that's written wrong, or on a function that can't
     /// have one.
     BadLink {
-        reason: BadLink,
+        reason: BadLink<'db>,
     },
     /// `#[builtin]` on a function that can't be one.
     BadBuiltin {
@@ -459,7 +459,7 @@ pub enum BecauseKind<'db> {
 
 /// Why a function's `#[link(..)]` is wrong.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BadLink {
+pub enum BadLink<'db> {
     /// It's in a class, an impl or a type's namespace.
     NotTopLevel,
     /// It has a body, which the host would replace.
@@ -468,6 +468,15 @@ pub enum BadLink {
     Builtin,
     /// How it's written.
     Written(LinkError),
+    /// With `abi = flat`, a parameter of a type that can't be passed so:
+    /// only scalars, arrays of them, and arrays of `[u8]`.
+    FlatParam(Ty<'db>),
+    /// With `abi = flat`, a result that can't be given back so: only
+    /// scalars, or a tuple of them.
+    FlatResult(Ty<'db>),
+    /// `#[nolen]` on a parameter that isn't an array of a function linked
+    /// with `abi = flat`.
+    Nolen,
 }
 
 /// Why a function's `#[builtin]` is wrong.
@@ -1040,6 +1049,78 @@ impl<'db> Collector<'db> {
         self.no_values(GenericDefId::Enum(id));
     }
 
+    /// Check the types of a function linked with `abi = flat`: what its
+    /// parameters and results can be, and that `#[nolen]` is on arrays.
+    fn flat_link(&mut self, f: FunctionId<'db>) {
+        let db = self.db;
+        let range = Some(self.item_range(f.item(db).ast_id));
+        let sig = fn_sig(db, f);
+        let declared = function_signature(db, f);
+        let scalar = |t: &Ty<'db>| match t {
+            Ty::Builtin(_) | Ty::Error => true,
+            Ty::Adt(boltlang_hir_ty::AdtId::Enum(e), ..) => {
+                boltlang_hir_def::signatures::enum_signature(db, *e)
+                    .variants
+                    .iter()
+                    .all(|v| matches!(v.fields, boltlang_hir_def::signatures::FieldList::Unit))
+            }
+            _ => false,
+        };
+        let bytes = |t: &Ty<'db>| {
+            matches!(
+                t,
+                Ty::Builtin(boltlang_hir_def::builtin_type::BuiltinType::Uint(
+                    boltlang_hir_def::builtin_type::BuiltinUint::U8
+                ))
+            ) || matches!(
+                t,
+                Ty::Builtin(boltlang_hir_def::builtin_type::BuiltinType::Int(
+                    boltlang_hir_def::builtin_type::BuiltinInt::I8
+                ))
+            )
+        };
+        for (i, ty) in sig.params.iter().enumerate() {
+            let Some(ty) = ty else { continue };
+            let nolen = declared.params.get(i).is_some_and(|p| p.nolen);
+            let ok = match ty {
+                Ty::Array(_, elem) if scalar(elem) => true,
+                Ty::Array(_, elem) => !nolen && matches!(&**elem, Ty::Array(_, b) if bytes(b)),
+                t => !nolen && scalar(t),
+            };
+            if !ok {
+                let reason = if nolen && !matches!(ty, Ty::Array(..)) {
+                    BadLink::Nolen
+                } else {
+                    BadLink::FlatParam(ty.clone())
+                };
+                self.push(range, DiagnosticKind::BadLink { reason });
+            }
+        }
+        if let Some(ret) = &sig.ret {
+            let ok = match ret {
+                Ty::Tuple(tys, _) => tys.iter().all(scalar),
+                Ty::Never => true,
+                t => scalar(t),
+            };
+            if !ok {
+                self.push(
+                    range,
+                    DiagnosticKind::BadLink { reason: BadLink::FlatResult(ret.clone()) },
+                );
+            }
+        }
+    }
+
+    /// Report `#[nolen]` on a parameter of a function that isn't linked
+    /// with `abi = flat`.
+    fn no_nolen(&mut self, f: FunctionId<'db>) {
+        let db = self.db;
+        if function_signature(db, f).params.iter().any(|p| p.nolen) {
+            let range = Some(self.item_range(f.item(db).ast_id));
+            self.push(range, DiagnosticKind::BadLink { reason: BadLink::Nolen });
+        }
+    }
+
     /// Report a function at the top level without a body that isn't a
     /// builtin or linked to the host, check its `#[link(..)]`, and check one
     /// with `#[builtin]`: it must be a builtin, with its type.
@@ -1060,9 +1141,14 @@ impl<'db> Collector<'db> {
             };
             if let Some(reason) = reason {
                 self.push(range, DiagnosticKind::BadLink { reason });
+            } else if link.abi == LinkAbi::Flat {
+                self.flat_link(f);
+            } else {
+                self.no_nolen(f);
             }
             return;
         }
+        self.no_nolen(f);
         if !item.is_builtin {
             if top && !item.has_body {
                 self.push(range, DiagnosticKind::MissingBody);

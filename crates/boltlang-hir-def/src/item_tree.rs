@@ -231,15 +231,28 @@ pub struct Function {
     pub ast_id: AstId,
 }
 
-/// What `#[link(wasm, module = "m", name = "n")]` says: that the host
-/// provides a function, as the import `n` of the Wasm module `m`. `name`
-/// is the function's own name if it's left out.
+/// What `#[link(wasm, module = "m", name = "n", abi = flat)]` says: that
+/// the host provides a function, as the import `n` of the Wasm module `m`.
+/// `name` is the function's own name if it's left out, and `abi` says how
+/// it's called.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Link {
     pub module: Option<String>,
     pub name: Option<String>,
+    pub abi: LinkAbi,
     /// What's wrong with how it's written, if anything: the first problem.
     pub error: Option<LinkError>,
+}
+
+/// How a function the host provides is called.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum LinkAbi {
+    /// As Conduit passes values: an object is its address.
+    #[default]
+    Conduit,
+    /// `abi = flat`: addresses and lengths, as C compilers for wasm32 pass
+    /// them, for WASI and other C-like hosts.
+    Flat,
 }
 
 /// A problem with how `#[link(..)]` is written.
@@ -251,8 +264,10 @@ pub enum LinkError {
     UnknownTarget(String),
     /// It has no `module = ".."`.
     NoModule,
-    /// A key other than `module` and `name`.
+    /// A key other than `module`, `name` and `abi`.
     UnknownKey(String),
+    /// An `abi` other than `flat`.
+    UnknownAbi(String),
     /// A key given twice.
     Repeated(String),
     /// Something that isn't `key = "string"` after the target.
@@ -572,7 +587,7 @@ fn import_kind(i: &ast::Import) -> ImportKind {
 }
 
 /// Whether `node` has the attribute `#[name]`, without arguments.
-fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
+pub(crate) fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
     node.attrs().any(|attr| {
         attr.meta().is_some_and(|meta| {
             meta.token_tree().is_none()
@@ -587,7 +602,7 @@ fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
     let meta = node.attrs().filter_map(|attr| attr.meta()).find(|meta| {
         meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == "link")
     })?;
-    let mut link = Link { module: None, name: None, error: None };
+    let mut link = Link { module: None, name: None, abi: LinkAbi::Conduit, error: None };
     let Some(tree) = meta.token_tree() else {
         link.error = Some(LinkError::NoTarget);
         return Some(link);
@@ -611,7 +626,21 @@ fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
             Some([(IDENT, target)]) => return Some(LinkError::UnknownTarget(target.clone())),
             _ => return Some(LinkError::NoTarget),
         }
+        let mut abi = false;
         for part in parts {
+            if let [(IDENT, key), (EQUALS, _), (IDENT, value)] = part
+                && key == "abi"
+            {
+                if abi {
+                    return Some(LinkError::Repeated(key.clone()));
+                }
+                abi = true;
+                match value.as_str() {
+                    "flat" => link.abi = LinkAbi::Flat,
+                    _ => return Some(LinkError::UnknownAbi(value.clone())),
+                }
+                continue;
+            }
             let [(IDENT, key), (EQUALS, _), (STRING, value)] = part else {
                 return Some(LinkError::Malformed);
             };
