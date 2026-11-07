@@ -1,9 +1,9 @@
 import "./string" (String, bytes);
 import "./ops" *;
 #[cfg(host = "wasm")]
-import "./wasi" (fd_write);
+import "./sys/wasi" (fd_write);
 #[cfg(host = "emu")]
-import "./emu" (write);
+import "./sys/emu" (write);
 
 /// Write `text` and a newline to stdout.
 pub fn print(text: String) {

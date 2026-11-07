@@ -1,10 +1,10 @@
-// The tests of `emu.bolt`, which only the evaluator has: `bolt test`.
+// The tests of `sys/emu.bolt`, which only the evaluator has: `bolt test`.
 
 import "./emu" *;
-import "./io" (assert);
-import "./ops" *;
-import "./array" (array_len);
-import "./string" (bytes);
+import "../io" (assert);
+import "../ops" *;
+import "../array" (array_len);
+import "../string" (bytes);
 
 fn ok(e: Error) -> Bool = match e {
   Error.Success => True,

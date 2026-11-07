@@ -1,5 +1,5 @@
 //! The evaluator's host: the functions of `#[link(emu, ..)]`, which std's
-//! `emu.bolt` declares. They're like POSIX's and WASI's, but simpler: one
+//! `sys/emu.bolt` declares. They're like POSIX's and WASI's, but simpler: one
 //! buffer instead of a list of them, paths as they are, from the current
 //! directory, and an `Error` first in what each gives back.
 //!

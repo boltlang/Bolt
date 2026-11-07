@@ -8,8 +8,8 @@
 //
 // They're for `std` to build its I/O on, so they're `pub(package)`.
 
-import "./ops" *;
-import "./array" (array_len, array_alloc, array_set, array_freeze);
+import "../ops" *;
+import "../array" (array_len, array_alloc, array_set, array_freeze);
 
 pub(package) type Size = u32;
 pub(package) type Filesize = u64;

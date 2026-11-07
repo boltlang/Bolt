@@ -8,7 +8,7 @@
 // evaluator's `write`, and a few functions the compiler provides. It's a copy of what `packages/std` has of them, so that a case
 // that only needs these doesn't change when `std` does.
 
-/// Write `bytes` to the file `fd`, as `std`'s `emu.bolt` does: an error
+/// Write `bytes` to the file `fd`, as `std`'s `sys/emu.bolt` does: an error
 /// number, and how many bytes it wrote.
 #[link(emu, abi = flat)]
 fn write(fd: i32, bytes: [u8]) -> (u16, i32);

@@ -11,11 +11,20 @@ use crate::program;
 #[test]
 fn the_tests_of_std_collect_without_errors() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
-    let mut names: Vec<String> = std::fs::read_dir(dir)
-        .unwrap()
-        .map(|e| e.unwrap().file_name().to_str().unwrap().to_string())
-        .filter(|n| n.starts_with("test_") && n.ends_with(".bolt"))
-        .collect();
+    // The test files, by their path in `std`, like `sys/test_emu.bolt`.
+    fn test_files(dir: &std::path::Path, prefix: &str, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let name = entry.file_name().to_str().unwrap().to_string();
+            if entry.path().is_dir() {
+                test_files(&entry.path(), &format!("{prefix}{name}/"), out);
+            } else if name.starts_with("test_") && name.ends_with(".bolt") {
+                out.push(format!("{prefix}{name}"));
+            }
+        }
+    }
+    let mut names = Vec::new();
+    test_files(&dir, "", &mut names);
     names.sort();
     assert!(!names.is_empty());
     let mut problems = Vec::new();

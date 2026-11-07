@@ -1,10 +1,10 @@
-// The tests of `wasi.bolt`, which only Wasm has: `bolt test --wasm`.
+// The tests of `sys/wasi.bolt`, which only Wasm has: `bolt test --wasm`.
 
 import "./wasi" *;
-import "./io" (assert);
-import "./ops" *;
-import "./array" (array_len);
-import "./string" (bytes);
+import "../io" (assert);
+import "../ops" *;
+import "../array" (array_len);
+import "../string" (bytes);
 
 fn succeeded(e: Errno) -> Bool = match e {
   Errno.Success => True,
