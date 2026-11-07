@@ -123,31 +123,26 @@ bolt build hello.bolt
 ```
 
 That writes `hello.wasm`, and `-o` chooses another path. The module
-exports `main`, which runs the file's statements, and imports two
-functions from the module `bolt`, which `print` writes with:
-`write_file(file, byte)` adds a byte to what a file has waiting, 1 for
-stdout and 2 for stderr, and `flush(file)` writes it out. In Node, a host
-for it is:
-
-```js title="host.mjs"
-import fs from "node:fs";
-const pending = { 1: [], 2: [] };
-const files = { 1: process.stdout, 2: process.stderr };
-const bolt = {
-  write_file: (f, b) => pending[f].push(b),
-  flush: (f) => { files[f].write(Buffer.from(pending[f])); pending[f] = []; },
-};
-const bytes = fs.readFileSync(process.argv[2]);
-const { instance } = await WebAssembly.instantiate(bytes, { bolt });
-instance.exports.main();
-```
+exports `main`, which runs the file's statements, and its `print` writes
+with WASI preview 1, the `fd_write` of the module
+`wasi_snapshot_preview1`. The repository has a runtime for Node that
+gives it Node's WASI and calls an export:
 
 ```bash
-node host.mjs hello.wasm
+node --no-warnings runtime/node.mjs hello.wasm main
 ```
 
 ```text
 Hello, world!
+```
+
+`bolt run --wasm hello.bolt` does both at once. For a web page,
+`runtime/browser.mjs` has a WASI of its own, which writes what the
+program prints to the browser's console:
+
+```js
+import { run } from "./browser.mjs";
+await run("hello.wasm");
 ```
 
 The module uses tail calls and exception handling, which are part of

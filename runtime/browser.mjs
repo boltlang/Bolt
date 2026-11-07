@@ -9,8 +9,7 @@
 // at a time. Stdin is empty, there are no arguments, environment or
 // preopened directories, and the clocks and random bytes are the
 // browser's. Other WASI functions answer `nosys`, and any other function
-// the module imports stops the program, unless `imports` gives it. The
-// module `bolt`'s `write_file` and `flush` write to stdout and stderr too.
+// the module imports stops the program, unless `imports` gives it.
 
 /** `errno` values. */
 const SUCCESS = 0;
@@ -152,19 +151,7 @@ export async function instantiate(source, options = {}) {
       throw new Exit(code);
     },
   };
-  const pending = { 1: [], 2: [] };
-  const imports = {
-    ...given,
-    bolt: {
-      write_file: (f, b) => pending[f]?.push(b),
-      flush: (f) => {
-        if (pending[f]?.length > 0) files[f].push(new Uint8Array(pending[f]));
-        pending[f] = [];
-      },
-      ...given.bolt,
-    },
-    wasi_snapshot_preview1: { ...wasi },
-  };
+  const imports = { ...given, wasi_snapshot_preview1: { ...wasi } };
   for (const i of WebAssembly.Module.imports(module)) {
     if (i.kind !== "function") continue;
     if (i.module === "wasi_snapshot_preview1") {

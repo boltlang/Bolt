@@ -2,9 +2,8 @@
 //! with Conduit's Wasm backend, which puts objects in linear memory.
 //!
 //! The module exports the entry file's top-level statements as `main`, and
-//! imports what the program asks of its host: the module `bolt`'s
-//! `write_file` and `flush` (see [`crate::host`]), and the functions of its
-//! functions with `#[link(wasm, ..)]`, from the modules they name.
+//! imports the functions with `#[link(wasm, ..)]` from the modules they
+//! name, like WASI's `fd_write`, which std's `print` writes with.
 //!
 //! Before it's emitted, the program is optimized, unless asked not to be,
 //! and its reference counts are made explicit, so that memory is freed,

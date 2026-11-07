@@ -143,24 +143,10 @@ fn build_writes_nothing_with_errors() {
     assert!(!dir.join("a.wasm").exists());
 }
 
-/// A host for a module of `bolt build` in Node: Node's WASI preview 1,
-/// which std's `print` writes with, and `write_file` and `flush` of the
-/// module `bolt`, on stdout and stderr, and a run of `main`.
-const NODE_HOST: &str = r#"
-import fs from "node:fs";
-import { WASI } from "node:wasi";
-const pending = { 1: [], 2: [] };
-const files = { 1: process.stdout, 2: process.stderr };
-const bolt = {
-  write_file: (f, b) => pending[f].push(b),
-  flush: (f) => { files[f].write(Buffer.from(pending[f])); pending[f] = []; },
-};
-const wasi = new WASI({ version: "preview1", args: [], env: {} });
-const imports = { bolt, wasi_snapshot_preview1: wasi.wasiImport };
-const { instance } = await WebAssembly.instantiate(fs.readFileSync(process.argv[2]), imports);
-wasi.initialize(instance);
-instance.exports.main();
-"#;
+/// Bolt's runtime for Node, which runs a module of `bolt build`.
+fn node_runtime() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../runtime/node.mjs")
+}
 
 #[test]
 fn build_makes_a_module_that_runs_in_node() {
@@ -174,10 +160,15 @@ fn build_makes_a_module_that_runs_in_node() {
           match body() { () => 0, effect yield(x), k => x + resume(k, ()) };\n\
         print(\"hello\");\n\
         if sum(produce) == 3 { print(\"3\") } else { print(\"?\") };\n";
-    let dir = dir_with("build-node", &[("a.bolt", program), ("host.mjs", NODE_HOST)]);
+    let dir = dir_with("build-node", &[("a.bolt", program)]);
     let o = bolt_std(&dir, "build", &["a.bolt"]);
     assert!(o.ok, "{}", o.err);
-    let run = Command::new("node").args(["host.mjs", "a.wasm"]).current_dir(&dir).output().unwrap();
+    let run = Command::new("node")
+        .arg(node_runtime())
+        .args(["a.wasm", "main"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     let err = String::from_utf8(run.stderr).unwrap();
     assert!(run.status.success(), "{err}");
     assert_eq!(String::from_utf8(run.stdout).unwrap(), "hello\n3\n");

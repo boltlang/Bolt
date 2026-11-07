@@ -153,7 +153,7 @@ impl fmt::Display for Error {
 }
 
 /// What a host function is, so that each one is declared once: a function
-/// with `#[link]`. The module `bolt`'s are in [`host`].
+/// with `#[link]`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum ExternKey<'db> {
     Function(FunctionId<'db>),

@@ -3,11 +3,10 @@
 //!
 //! The runtime, `runtime/node.mjs` in the repository, is run as `node
 //! runtime.mjs <module> <export>` and calls the export: `main`, or a
-//! test. It gives the module `bolt`'s `write_file` and `flush`, on stdout
-//! and stderr, Node's WASI preview 1 as `wasi_snapshot_preview1`, with no
-//! arguments, environment or preopened directories, and every other
-//! import a function that stops the program, as the evaluator does for a
-//! host function it doesn't have. It exits with 1 when the export stops
+//! test. It gives the module Node's WASI preview 1 as
+//! `wasi_snapshot_preview1`, with no arguments, environment or preopened
+//! directories, and every other import a function that stops the
+//! program, as the evaluator does for a host function it doesn't have. It exits with 1 when the export stops
 //! with an error, or exits with a code other than 0, and with 2 when the
 //! module can't be run.
 
