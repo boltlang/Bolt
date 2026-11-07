@@ -11,7 +11,7 @@ use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{
     DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text,
 };
-use boltlang_codegen_conduit::{Lowered, lower, run::run};
+use boltlang_codegen_conduit::{Lowered, lower, node::NodeHost, run::run};
 use boltlang_hir_def::nameres::test_functions;
 use boltlang_ide_diagnostics::{
     Diagnostic, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
@@ -202,115 +202,19 @@ struct TestCommand {
     wasm: bool,
 }
 
-/// The host that `bolt run --wasm` and `bolt test --wasm` run a module
-/// with, in Node: `node host.mjs <module> <export>`, which calls the
-/// export: `main`, or a test. It gives the module `bolt`'s `write_file` and
-/// `flush`, on stdout and stderr, Node's WASI preview 1 as
-/// `wasi_snapshot_preview1`, with no arguments, environment or preopened
-/// directories, and every other import a function that stops the program,
-/// as the evaluator does for a host function it doesn't have. It exits
-/// with 1 when the export stops with an error, or exits with a code other
-/// than 0, and with 2 when the module can't be run.
-const NODE_HOST: &str = r#"import fs from "node:fs";
-import { WASI } from "node:wasi";
-const [, , path, name] = process.argv;
-const pending = { 1: [], 2: [] };
-const files = { 1: process.stdout, 2: process.stderr };
-const flush = (f) => {
-  if (pending[f].length > 0) files[f].write(Buffer.from(pending[f]));
-  pending[f] = [];
-};
-const wasi = new WASI({ version: "preview1", args: [], env: {} });
-const imports = {
-  bolt: { write_file: (f, b) => pending[f].push(b), flush },
-  wasi_snapshot_preview1: {
-    ...wasi.wasiImport,
-    // What `print` wrote goes first, and a code other than 0 fails.
-    proc_exit: (code) => {
-      flush(1);
-      flush(2);
-      if (code !== 0) process.stderr.write(`the program exited with code ${code}\n`);
-      process.exit(code === 0 ? 0 : 1);
-    },
-  },
-};
-let instance;
-try {
-  const module = await WebAssembly.compile(fs.readFileSync(path));
-  for (const i of WebAssembly.Module.imports(module)) {
-    if (i.module !== "bolt" && i.module !== "wasi_snapshot_preview1" && i.kind === "function") {
-      (imports[i.module] ??= {})[i.name] = () => {
-        throw new Error(`no host for ${i.module}.${i.name}`);
-      };
+/// The Node runtime, `runtime/node.mjs`, for `command`, like `bolt test
+/// --wasm`, if there's a `node` to run it with.
+fn node_host(command: &str) -> anyhow::Result<NodeHost> {
+    if !boltlang_codegen_conduit::node::available() {
+        anyhow::bail!("`{command}` runs the program with Node, but there's no `node`");
     }
-  }
-  instance = await WebAssembly.instantiate(module, imports);
-  wasi.initialize(instance);
-} catch (e) {
-  process.stderr.write(`can't run the module: ${e.message}
-`);
-  process.exit(2);
-}
-try {
-  instance.exports[name]();
-} catch (e) {
-  flush(1);
-  flush(2);
-  process.stderr.write(`${e.message}
-`);
-  process.exit(1);
-}
-"#;
-
-/// Where `bolt run --wasm` and `bolt test --wasm` put the modules they
-/// run, and the host.
-struct NodeHost {
-    dir: PathBuf,
-}
-
-impl NodeHost {
-    /// A new directory with the host, if there's a `node` to run it with.
-    /// `command` is the one that needs it, like `bolt test --wasm`.
-    fn new(command: &str) -> anyhow::Result<Self> {
-        let found = std::process::Command::new("node").arg("--version").output();
-        if !found.is_ok_and(|o| o.status.success()) {
-            anyhow::bail!("`{command}` runs the program with Node, but there's no `node`");
-        }
-        let dir = std::env::temp_dir().join(format!("bolt-wasm-{}", std::process::id()));
-        std::fs::create_dir_all(&dir)?;
-        std::fs::write(dir.join("host.mjs"), NODE_HOST)?;
-        Ok(NodeHost { dir })
-    }
-
-    /// Call the export `name` of the module `module`, with its output on
-    /// ours: `Err` with why it stopped, if it stopped with an error.
-    fn run(&self, module: &std::path::Path, name: &str) -> anyhow::Result<Result<(), String>> {
-        // Node's WASI warns that it's experimental.
-        let status = std::process::Command::new("node")
-            .arg("--no-warnings")
-            .arg(self.dir.join("host.mjs"))
-            .arg(module)
-            .arg(name)
-            .status()?;
-        Ok(match status.code() {
-            Some(0) => Ok(()),
-            Some(2) => Err("the module couldn't be run".into()),
-            _ => Err("the program stopped with an error".into()),
-        })
-    }
-}
-
-impl Drop for NodeHost {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
-    }
+    Ok(NodeHost::new()?)
 }
 
 /// Check a file, then compile it to a WebAssembly module, whose export
 /// `main` runs the statements at its top level. It imports the functions
 /// with `#[link(wasm, ..)]` from the modules they name, like WASI's
-/// `fd_write`, which std's `print` writes with, and `write_file` and
-/// `flush` from the module `bolt`, for what the compiler writes itself.
+/// `fd_write`, which std's `print` writes with.
 #[derive(clap::Parser)]
 struct BuildCommand {
     file: PathBuf,
@@ -344,7 +248,7 @@ impl Exec for RunCommand {
                     return Ok(false);
                 }
             };
-            let host = NodeHost::new("bolt run --wasm")?;
+            let host = node_host("bolt run --wasm")?;
             let module = host.dir.join("main.wasm");
             std::fs::write(&module, bytes)?;
             host.run(&module, "main")?
@@ -379,7 +283,7 @@ impl Exec for TestCommand {
             }
         }
         let selected = |name: &str| self.filter.as_ref().is_none_or(|f| name.contains(f.as_str()));
-        let wasm = if self.wasm { Some(NodeHost::new("bolt test --wasm")?) } else { None };
+        let wasm = if self.wasm { Some(node_host("bolt test --wasm")?) } else { None };
         let (mut passed, mut failed, mut skipped) = (0, 0, 0);
         for (index, &file) in files.iter().enumerate() {
             let count = test_functions(&db, file)
