@@ -329,3 +329,29 @@ fn a_missing_std_is_a_warning() {
         "warning: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"
     );
 }
+
+/// The directory of `std`, whose `test_*.bolt` files are its tests.
+fn std_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packages/std")
+}
+
+/// Every test of `std` runs with the evaluator, and passes: none fails,
+/// and no file is left out because it can't be compiled.
+#[test]
+fn the_tests_of_std_pass() {
+    let o = bolt_std(&std_dir(), "test", &[]);
+    assert!(o.ok, "{}\n{}", o.out, o.err);
+    assert!(!o.out.contains("not run"), "{}", o.out);
+}
+
+/// Every test of `std` passes in WebAssembly too.
+#[test]
+fn the_tests_of_std_pass_in_wasm() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipped: no `node` to run the modules with");
+        return;
+    }
+    let o = bolt_std(&std_dir(), "test", &["--wasm"]);
+    assert!(o.ok, "{}\n{}", o.out, o.err);
+    assert!(!o.out.contains("not run"), "{}", o.out);
+}
