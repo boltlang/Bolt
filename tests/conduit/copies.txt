@@ -697,7 +697,7 @@ fn lt_i32(%a: i32, %b: i32) -> (i32) {
 }
 
 fn panic(%message: imm String) -> () {
-  let = call print(%message)
+  let = call eprint(%message)
   trap
 }
 
@@ -753,8 +753,8 @@ fn PartialOrd_i32_lt(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn print(%text: imm String) -> () {
-  let = call write_line(1i32, %text)
+fn eprint(%text: imm String) -> () {
+  let = call write_line(2i32, %text)
   jump ret()
 }
 

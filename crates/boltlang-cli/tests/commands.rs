@@ -196,7 +196,8 @@ fn run_stops_with_an_error() {
     let dir = dir_with("run-error", &[("a.bolt", "print(\"before\");\npanic(\"oops\");\n")]);
     let o = bolt_std(&dir, "run", &["a.bolt"]);
     assert!(!o.ok);
-    assert_eq!(o.out, "before\noops\n");
+    assert_eq!(o.out, "before\n");
+    assert!(o.err.contains("oops\n"), "{}", o.err);
     assert!(o.err.contains("stopped with an error"), "{}", o.err);
 }
 

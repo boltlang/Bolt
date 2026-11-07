@@ -22,9 +22,9 @@ fn write_line(fd: Fd, text: String) {
 #[builtin]
 pub fn abort() -> !;
 
-/// Stop the program with an error, after writing `message`.
+/// Stop the program with an error, after writing `message` to stderr.
 pub fn panic(message: String) -> ! {
-  print(message);
+  eprint(message);
   abort()
 }
 
