@@ -32,7 +32,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, InferenceResult, Ty,
-    builtin::{Builtin, is_builtin_block},
+    builtin::Builtin,
     check::{unmet_assoc_bounds, unmet_assoc_equalities},
     function_scheme,
     infer::mut_inside_imm,
@@ -229,6 +229,13 @@ pub enum DiagnosticKind<'db> {
         candidates: Vec<String>,
     },
     /// A function with `#[test]` that can't be run as a test.
+    /// A function at the top level of a file without a body, which only a
+    /// builtin can be.
+    MissingBody,
+    /// `#[builtin]` on a function that can't be one.
+    BadBuiltin {
+        reason: BadBuiltin,
+    },
     BadTest {
         reason: BadTest,
     },
@@ -376,7 +383,7 @@ pub enum DiagnosticKind<'db> {
         field_ty: Ty<'db>,
     },
 
-    /// An item of an `extern "bolt"` block that isn't a builtin.
+    /// A function with `#[builtin]` whose name isn't a builtin's.
     UnknownBuiltin {
         name: Name,
     },
@@ -443,6 +450,15 @@ pub enum BecauseKind<'db> {
     /// A bound or `where` clause that asks for it, and the function, struct
     /// or enum it's of, if any.
     Bound { item: Option<Name> },
+}
+
+/// Why a function with `#[test]` can't be run as a test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BadBuiltin {
+    /// It's in a class, an impl, an extern block or a type's namespace.
+    NotTopLevel,
+    /// It has a body, which the compiler would replace.
+    HasBody,
 }
 
 /// Why a function with `#[test]` can't be run as a test.
@@ -702,9 +718,6 @@ impl<'db> Collector<'db> {
                 ModItem::ExternBlock(idx) => {
                     let id = ExternBlockId::new(db, file, idx);
                     self.assoc_items(ItemContainerId::ExternBlock(id), &id.item(db).items);
-                    if is_builtin_block(db, id) {
-                        self.builtins(id);
-                    }
                 }
                 // Imports are checked by name resolution.
                 ModItem::Import(_) | ModItem::MacroRules(_) => {}
@@ -978,6 +991,7 @@ impl<'db> Collector<'db> {
         self.fallback = self.item_range(id.item(db).ast_id);
         self.overlapping_functions(id);
         self.test(id);
+        self.builtin_decl(id);
         let (sig, map) = function_signature_with_source_map(db, id);
         self.lower(map, &fn_sig(db, id).diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::Function(id)).diagnostics);
@@ -1012,37 +1026,45 @@ impl<'db> Collector<'db> {
         self.no_values(GenericDefId::Enum(id));
     }
 
-    /// Check the declarations of an `extern "bolt"` block: they must be
-    /// builtins, with their types.
-    fn builtins(&mut self, block: ExternBlockId<'db>) {
+    /// Report a function at the top level without a body that isn't a
+    /// builtin, and check one with `#[builtin]`: it must be a builtin, with
+    /// its type.
+    fn builtin_decl(&mut self, f: FunctionId<'db>) {
         let db = self.db;
-        for item in
-            AssocItemDef::all(db, ItemContainerId::ExternBlock(block), &block.item(db).items)
-        {
-            let Some(name) = item.name(db) else { continue };
-            let range = Some(self.item_range(item.ast_id(db)));
-            let (AssocItemDef::Function(f), Some(builtin)) =
-                (item, Builtin::by_name(name.as_str()))
-            else {
-                self.push(range, DiagnosticKind::UnknownBuiltin { name });
-                continue;
-            };
-            let sig = fn_sig(db, f);
-            let declared = Ty::func_does(
-                sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect::<Box<[_]>>(),
-                sig.ret.clone().unwrap_or(Ty::Error),
-                sig.effects.clone().unwrap_or_else(Ty::nothing),
-            );
-            let file = block.file(db);
-            if !builtin.has_signature(db, file, &declared) && !has_error(&declared) {
-                self.push(
-                    range,
-                    DiagnosticKind::BuiltinSignature {
-                        name,
-                        expected: builtin.signature(db, file),
-                    },
-                );
+        let item = f.item(db);
+        let range = Some(self.item_range(item.ast_id));
+        let top = matches!(f.container(db), ItemContainerId::File(_));
+        if !item.is_builtin {
+            if top && !item.has_body {
+                self.push(range, DiagnosticKind::MissingBody);
             }
+            return;
+        }
+        if !top || item.owner.is_some() {
+            self.push(range, DiagnosticKind::BadBuiltin { reason: BadBuiltin::NotTopLevel });
+            return;
+        }
+        if item.has_body {
+            self.push(range, DiagnosticKind::BadBuiltin { reason: BadBuiltin::HasBody });
+            return;
+        }
+        let Some(name) = item.display_name() else { return };
+        let Some(builtin) = Builtin::by_name(name.as_str()) else {
+            self.push(range, DiagnosticKind::UnknownBuiltin { name });
+            return;
+        };
+        let sig = fn_sig(db, f);
+        let declared = Ty::func_does(
+            sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect::<Box<[_]>>(),
+            sig.ret.clone().unwrap_or(Ty::Error),
+            sig.effects.clone().unwrap_or_else(Ty::nothing),
+        );
+        let file = f.file(db);
+        if !builtin.has_signature(db, file, &declared) && !has_error(&declared) {
+            self.push(
+                range,
+                DiagnosticKind::BuiltinSignature { name, expected: builtin.signature(db, file) },
+            );
         }
     }
 

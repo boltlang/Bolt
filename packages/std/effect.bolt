@@ -9,11 +9,8 @@ pub imm struct Cont[B, U, R] {
   resume: fn(B) -> U does R,
 }
 
-extern "bolt" {
-
-  /// Go on with the computation `k` stopped, with `value` as the result of
-  /// its operation. It gives what the handler's `match` gives for the rest
-  /// of the computation.
-  pub fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R;
-
-}
+/// Go on with the computation `k` stopped, with `value` as the result of
+/// its operation. It gives what the handler's `match` gives for the rest
+/// of the computation.
+#[builtin]
+pub fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R;

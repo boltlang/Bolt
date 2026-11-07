@@ -65,7 +65,7 @@ fn a <+> b = a * 10 + b;
 ================================================================================
 Operators on structs call their functions
 ================================================================================
-extern "bolt" { fn i32_sub(a: i32, b: i32) -> i32; fn i32_neg(a: i32) -> i32; }
+#[builtin] fn i32_sub(a: i32, b: i32) -> i32; fn i32_neg(a: i32) -> i32;
 struct V { x: i32 }
 fn a - b = V { x: i32_sub(a.x, b.x) };
 fn -a = V { x: i32_neg(a.x) };

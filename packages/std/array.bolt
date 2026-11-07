@@ -9,31 +9,33 @@ import "./mutability" (
 );
 import "./io" (assert);
 
-extern "bolt" {
+/// The number of elements of `xs`.
+#[builtin]
+pub fn array_len[T](xs: [T]) -> i32;
 
-  /// The number of elements of `xs`.
-  pub fn array_len[T](xs: [T]) -> i32;
+/// A new array of `len` elements that aren't set yet. Reading one before
+/// it's set stops the program, so it's only for `std`, for types that
+/// keep track of which elements are set, like `Vec`.
+#[builtin]
+pub(package) fn array_alloc[T](len: i32) -> mut [T];
 
-  /// A new array of `len` elements that aren't set yet. Reading one before
-  /// it's set stops the program, so it's only for `std`, for types that
-  /// keep track of which elements are set, like `Vec`.
-  pub(package) fn array_alloc[T](len: i32) -> mut [T];
+/// The element at `i`. Use `xs[i]` instead.
+#[builtin]
+pub(package) fn array_get[T](xs: [T], i: i32) -> T;
 
-  /// The element at `i`. Use `xs[i]` instead.
-  pub(package) fn array_get[T](xs: [T], i: i32) -> T;
+/// Replace the element at `i` with `x`. Use `xs[i] = x` instead.
+#[builtin]
+pub(package) fn array_set[T](xs: mut [T], i: i32, x: T);
 
-  /// Replace the element at `i` with `x`. Use `xs[i] = x` instead.
-  pub(package) fn array_set[T](xs: mut [T], i: i32, x: T);
+/// Copy `count` elements of `src` from `src_start` to `dst` from
+/// `dst_start`. `src` and `dst` can be the same array, and the ranges can
+/// overlap.
+#[builtin]
+pub fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32);
 
-  /// Copy `count` elements of `src` from `src_start` to `dst` from
-  /// `dst_start`. `src` and `dst` can be the same array, and the ranges can
-  /// overlap.
-  pub fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32);
-
-  /// A copy of `xs` that can't be changed. Use `to_imm(xs)` instead.
-  pub(package) fn array_freeze[T](xs: [T]) -> imm [T];
-
-}
+/// A copy of `xs` that can't be changed. Use `to_imm(xs)` instead.
+#[builtin]
+pub(package) fn array_freeze[T](xs: [T]) -> imm [T];
 
 /// `xs[i]`: the element at `i`.
 impl[T] Index[[T]] {

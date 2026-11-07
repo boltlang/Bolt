@@ -1,10 +1,10 @@
 //! Builtins: functions that the compiler provides, rather than Bolt code.
-//! The standard library declares them in `extern "bolt"` blocks, like
+//! The standard library declares them as functions without a body, with
+//! `#[builtin]` before them, like
 //!
 //! ```text
-//! extern "bolt" {
-//!     pub fn print(text: String);
-//! }
+//! #[builtin]
+//! pub fn print(text: String);
 //! ```
 //!
 //! so that the type checker sees ordinary signatures, and each backend
@@ -23,7 +23,7 @@ use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::Mutability,
-    ids::{ExternBlockId, FunctionId, ItemContainerId},
+    ids::{FunctionId, ItemContainerId},
     item_tree::FunctionName,
 };
 
@@ -69,9 +69,6 @@ pub enum CmpOp {
     Gt,
     GtEq,
 }
-
-/// The ABI of the `extern` blocks that declare builtins.
-pub const ABI: &str = "bolt";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Builtin {
@@ -413,16 +410,19 @@ fn canonical<'db>(ty: &Ty<'db>) -> Ty<'db> {
     })
 }
 
-/// Whether an `extern` block declares builtins.
-pub fn is_builtin_block(db: &dyn Db, block: ExternBlockId<'_>) -> bool {
-    block.item(db).abi.as_deref() == Some(ABI)
+/// Whether `f` is declared as a builtin: a function at the top level of a
+/// file, without a body, with `#[builtin]`.
+pub fn is_builtin_decl(db: &dyn Db, f: FunctionId<'_>) -> bool {
+    let item = f.item(db);
+    item.is_builtin
+        && !item.has_body
+        && item.owner.is_none()
+        && matches!(f.container(db), ItemContainerId::File(_))
 }
 
-/// The builtin that `f` is, if it's declared in an `extern "bolt"` block
-/// with the name of one.
+/// The builtin that `f` is, if it's declared as one with the name of one.
 pub fn builtin(db: &dyn Db, f: FunctionId<'_>) -> Option<Builtin> {
-    let ItemContainerId::ExternBlock(block) = f.container(db) else { return None };
-    if !is_builtin_block(db, block) {
+    if !is_builtin_decl(db, f) {
         return None;
     }
     match &f.item(db).name {

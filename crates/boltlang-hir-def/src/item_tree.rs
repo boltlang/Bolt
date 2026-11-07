@@ -224,6 +224,9 @@ pub struct Function {
     /// Whether it's a test, with `#[test]` before it. A test isn't in the
     /// file's scope: it's only found by [`crate::nameres::test_functions`].
     pub is_test: bool,
+    /// Whether it's a builtin, with `#[builtin]` before it: a function
+    /// without a body that the compiler provides.
+    pub is_builtin: bool,
     pub ast_id: AstId,
 }
 
@@ -490,6 +493,7 @@ impl ItemTree {
             is_const: f.const_token().is_some(),
             has_body: f.body().is_some(),
             is_test: has_attr(f, "test"),
+            is_builtin: has_attr(f, "builtin"),
             ast_id,
         };
         push(&mut self.functions, function)

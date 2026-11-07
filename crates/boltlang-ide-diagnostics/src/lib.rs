@@ -15,7 +15,9 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
-use boltlang_hir::{BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
+use boltlang_hir::{
+    BadBuiltin, BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError,
+};
 /// The manifest of a file's package, and the name of manifests.
 pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
 /// The files a file uses, through its prelude and its imports.
@@ -121,6 +123,8 @@ impl DiagnosticCode {
     pub const NOT_AN_OPERATION: Self = Self("E0247");
     pub const AMBIGUOUS_OPERATION: Self = Self("E0248");
     pub const MISSING_OPERATIONS: Self = Self("E0249");
+    pub const MISSING_BODY: Self = Self("E0250");
+    pub const BAD_BUILTIN: Self = Self("E0251");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -761,6 +765,23 @@ fn describe(
                 format!("there is no instance `{instance}`, which class `{class}` asks of its type `{name}`"),
             )
         }
+        K::MissingBody => (
+            C::MISSING_BODY,
+            "this function has no body; only a function with `#[builtin]`, which the compiler provides, \
+             can do without one"
+                .to_string(),
+        ),
+        K::BadBuiltin { reason } => (
+            C::BAD_BUILTIN,
+            match reason {
+                BadBuiltin::NotTopLevel => {
+                    "a builtin must be a function at the top level of a file, not in a class, an impl, an \
+                     `extern` block or the namespace of a type"
+                }
+                BadBuiltin::HasBody => "a builtin can't have a body: the compiler provides it",
+            }
+            .to_string(),
+        ),
         K::BadTest { reason } => (
             C::BAD_TEST,
             match reason {

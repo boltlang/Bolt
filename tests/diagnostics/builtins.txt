@@ -7,49 +7,47 @@ pub imm struct String(i32);
 //- /main.bolt
 // A builtin's string is the prelude's `String`, so this has a prelude
 // that has one.
-extern "bolt" {
-  fn print(text: String);
-  fn prnt(text: String);
-   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `abort`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`, `resume`, and the operations of the primitive types, like `i32_add`
-  fn abort(code: i32) -> !;
-   //^^^^^ error: the builtin `abort` must have the type `fn() -> !`
-}
+#[builtin]
+fn print(text: String);
+#[builtin]
+fn prnt(text: String);
+ //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `abort`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`, `resume`, and the operations of the primitive types, like `i32_add`
+#[builtin]
+fn abort(code: i32) -> !;
+ //^^^^^ error: the builtin `abort` must have the type `fn() -> !`
 
 ================================================================================
 The type parameters of a builtin can have any name
 ================================================================================
-extern "bolt" { fn array_len[Elem](items: [Elem]) -> i32; }
+#[builtin] fn array_len[Elem](items: [Elem]) -> i32;
 
 ================================================================================
 A builtin array_len that takes a mut array
 ================================================================================
-extern "bolt" {
-  fn array_len[T](xs: mut [T]) -> i32;
-   //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
-}
+#[builtin]
+fn array_len[T](xs: mut [T]) -> i32;
+ //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
 
 ================================================================================
 A builtin array_len that gives an element
 ================================================================================
-extern "bolt" {
-  fn array_len[T](xs: [T]) -> T;
-   //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
-}
+#[builtin]
+fn array_len[T](xs: [T]) -> T;
+ //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
 
 ================================================================================
 A builtin array_alloc that gives a mut array
 ================================================================================
-extern "bolt" { fn array_alloc[T](len: i32) -> mut [T]; }
+#[builtin] fn array_alloc[T](len: i32) -> mut [T];
 
 ================================================================================
 A builtin array_alloc that gives an imm array
 ================================================================================
 // Without `mut`, the result would be `imm`, and the elements could never
 // be set.
-extern "bolt" {
-  fn array_alloc[T](len: i32) -> [T];
-   //^^^^^^^^^^^ error: the builtin `array_alloc` must have the type `fn(i32) -> mut [a]`
-}
+#[builtin]
+fn array_alloc[T](len: i32) -> [T];
+ //^^^^^^^^^^^ error: the builtin `array_alloc` must have the type `fn(i32) -> mut [a]`
 
 ================================================================================
 A builtin resume takes the prelude's Cont
@@ -58,7 +56,7 @@ A builtin resume takes the prelude's Cont
 //- /toolchain/std/__prelude__.bolt
 pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
 //- /main.bolt
-extern "bolt" { fn resume[A, B, E](k: Cont[A, B, E], value: A) -> B does E; }
+#[builtin] fn resume[A, B, E](k: Cont[A, B, E], value: A) -> B does E;
 
 ================================================================================
 A builtin resume without the effects of the computation
@@ -67,7 +65,28 @@ A builtin resume without the effects of the computation
 //- /toolchain/std/__prelude__.bolt
 pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
 //- /main.bolt
-extern "bolt" {
-  fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U;
-   //^^^^^^ error: the builtin `resume` must have the type `fn(Cont[a, b, c], a) -> b does c`
+#[builtin]
+fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U;
+ //^^^^^^ error: the builtin `resume` must have the type `fn(Cont[a, b, c], a) -> b does c`
+
+================================================================================
+A function without a body has to be a builtin
+================================================================================
+fn nothing(x: i32);
+ //^^^^^^^ error: this function has no body; only a function with `#[builtin]`, which the compiler provides, can do without one
+
+================================================================================
+A builtin can't have a body
+================================================================================
+#[builtin]
+fn i32_add(a: i32, b: i32) -> i32 { a }
+ //^^^^^^^ error: a builtin can't have a body: the compiler provides it
+
+================================================================================
+A builtin has to be at the top level
+================================================================================
+extern "env" {
+  #[builtin]
+  fn i32_add(a: i32, b: i32) -> i32;
+   //^^^^^^^ error: a builtin must be a function at the top level of a file, not in a class, an impl, an `extern` block or the namespace of a type
 }
