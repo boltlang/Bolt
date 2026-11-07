@@ -853,12 +853,12 @@ impl Eq[Char] {
 }
 
 /// How values look in code, like `std`'s `Debug`, but giving a `String`.
-/// The evaluator shows values of types with an impl with `debug_string`.
+/// The evaluator shows values of types with an impl with `repr`.
 pub class Debug[T] {
   fn debug(x: T) -> String;
 }
 
-pub fn debug_string[T](x: T) -> String where Debug[T] = debug(x);
+pub fn repr[T](x: T) -> String where Debug[T] = debug(x);
 
 /// Characters look like `'a'`. Only ASCII ones without escapes, which is
 /// what the tests show.

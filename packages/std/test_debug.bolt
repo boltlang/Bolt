@@ -10,30 +10,30 @@ import "./ops" *;
 
 #[test]
 fn characters_look_like_their_literals() {
-  assert(debug_string('a') == "'a'");
-  assert(debug_string('é') == "'é'");
-  assert(debug_string('"') == "'\"'");
-  assert(debug_string('\'') == "'\\''");
-  assert(debug_string('\\') == "'\\\\'");
-  assert(debug_string('\n') == "'\\n'");
-  assert(debug_string('\t') == "'\\t'");
-  assert(debug_string('\0') == "'\\0'");
+  assert(repr('a') == "'a'");
+  assert(repr('é') == "'é'");
+  assert(repr('"') == "'\"'");
+  assert(repr('\'') == "'\\''");
+  assert(repr('\\') == "'\\\\'");
+  assert(repr('\n') == "'\\n'");
+  assert(repr('\t') == "'\\t'");
+  assert(repr('\0') == "'\\0'");
 }
 
 #[test]
 fn other_control_characters_look_like_unicode_escapes() {
-  assert(debug_string(unwrap(Char.from_u32(0x1B))) == "'\\u{1b}'");
-  assert(debug_string(unwrap(Char.from_u32(0x7F))) == "'\\u{7f}'");
-  assert(debug_string(unwrap(Char.from_u32(0x01))) == "'\\u{1}'");
+  assert(repr(unwrap(Char.from_u32(0x1B))) == "'\\u{1b}'");
+  assert(repr(unwrap(Char.from_u32(0x7F))) == "'\\u{7f}'");
+  assert(repr(unwrap(Char.from_u32(0x01))) == "'\\u{1}'");
 }
 
 #[test]
 fn strings_look_like_their_literals() {
-  assert(debug_string("hi") == "\"hi\"");
-  assert(debug_string("") == "\"\"");
-  assert(debug_string("it's") == "\"it's\"");
-  assert(debug_string("a \"b\"\n") == "\"a \\\"b\\\"\\n\"");
-  assert(debug_string("wörld ✓") == "\"wörld ✓\"");
+  assert(repr("hi") == "\"hi\"");
+  assert(repr("") == "\"\"");
+  assert(repr("it's") == "\"it's\"");
+  assert(repr("a \"b\"\n") == "\"a \\\"b\\\"\\n\"");
+  assert(repr("wörld ✓") == "\"wörld ✓\"");
 }
 
 struct Point { x: i32, y: i32 }
@@ -44,11 +44,11 @@ impl Debug[Point] {
 
 #[test]
 fn a_type_can_have_an_impl_of_its_own() {
-  assert(debug_string(Point { x: 1, y: 2 }) == "<point>");
+  assert(repr(Point { x: 1, y: 2 }) == "<point>");
 }
 
 #[test]
 fn booleans_look_like_their_literals() {
-  assert(debug_string(True) == "True");
-  assert(debug_string(False) == "False");
+  assert(repr(True) == "True");
+  assert(repr(False) == "False");
 }

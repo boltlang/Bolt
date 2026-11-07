@@ -79,11 +79,11 @@ pub fn char_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
     char_struct(db, file).map(imm_struct_ty)
 }
 
-/// The function `debug_string` of the prelude, as `file` sees it: how a
+/// The function `repr` of the prelude, as `file` sees it: how a
 /// value of a type with an impl of `Debug` looks, as a `String`.
-pub fn debug_string_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
+pub fn repr_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
     let lib = prelude_lib(db, file)?;
-    match file_scope(db, lib).scope.get(Namespace::Values, &Name::new("debug_string"))?.def {
+    match file_scope(db, lib).scope.get(Namespace::Values, &Name::new("repr"))?.def {
         ModuleDefId::Function(id) => Some(id),
         _ => None,
     }

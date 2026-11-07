@@ -14,7 +14,7 @@ pub class Debug[T] {
 }
 
 /// How `x` looks in code, as a `String`.
-pub fn debug_string[T](x: T) -> String where Debug[T] {
+pub fn repr[T](x: T) -> String where Debug[T] {
   let out = StringBuilder.new();
   debug(x, out);
   out.build()

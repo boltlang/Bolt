@@ -3,7 +3,7 @@
 // can't run 128-bit integers yet (#185).
 
 import "./show" *;
-import "./debug" (debug_string);
+import "./debug" (repr);
 import "./string" *;
 import "./io" (assert);
 import "./ops" *;
@@ -41,9 +41,9 @@ fn unsigned_integers_are_shown_in_decimal() {
 
 #[test]
 fn integers_look_like_their_literals() {
-  assert(debug_string(-42) == "-42");
-  assert(debug_string(255u8) == "255");
-  assert(debug_string(18446744073709551615u64) == "18446744073709551615");
+  assert(repr(-42) == "-42");
+  assert(repr(255u8) == "255");
+  assert(repr(18446744073709551615u64) == "18446744073709551615");
 }
 
 #[test]
