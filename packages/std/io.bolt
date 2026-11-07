@@ -1,5 +1,6 @@
 import "./string" (String);
 import "./ops" *;
+import "./array" (array_len, array_alloc, array_set, array_freeze);
 
 /// Write `text` and a newline.
 #[builtin]
@@ -22,3 +23,714 @@ pub fn assert(cond: Bool) {
     panic("assertion failed");
   }
 }
+
+// WASI preview 1, the module `wasi_snapshot_preview1`, which hosts like
+// Wasmtime, Node and browsers' shims provide. Each function is the host's,
+// with WASI's types: its enums are Bolt enums, passed as their index, its
+// integer types are aliases, and its flags are constants. What WASI gives
+// back through pointers is the rest of a tuple, after the `Errno`, and its
+// structs are Bolt structs, which the functions that take or give them
+// encode to or decode from WASI's layout.
+//
+// They're for `std` to build its I/O on, so they're `pub(package)`.
+
+pub(package) type Size = u32;
+pub(package) type Filesize = u64;
+pub(package) type Timestamp = u64;
+pub(package) type Fd = u32;
+pub(package) type Filedelta = i64;
+pub(package) type Dircookie = u64;
+pub(package) type Dirnamlen = u32;
+pub(package) type Inode = u64;
+pub(package) type Device = u64;
+pub(package) type Linkcount = u64;
+pub(package) type Userdata = u64;
+pub(package) type Exitcode = u32;
+
+/// What went wrong, as `errno.h` says it, or `Success`.
+pub(package) enum Errno {
+  Success,
+  TooBig,
+  Acces,
+  Addrinuse,
+  Addrnotavail,
+  Afnosupport,
+  Again,
+  Already,
+  Badf,
+  Badmsg,
+  Busy,
+  Canceled,
+  Child,
+  Connaborted,
+  Connrefused,
+  Connreset,
+  Deadlk,
+  Destaddrreq,
+  Dom,
+  Dquot,
+  Exist,
+  Fault,
+  Fbig,
+  Hostunreach,
+  Idrm,
+  Ilseq,
+  Inprogress,
+  Intr,
+  Inval,
+  Io,
+  Isconn,
+  Isdir,
+  Loop,
+  Mfile,
+  Mlink,
+  Msgsize,
+  Multihop,
+  Nametoolong,
+  Netdown,
+  Netreset,
+  Netunreach,
+  Nfile,
+  Nobufs,
+  Nodev,
+  Noent,
+  Noexec,
+  Nolck,
+  Nolink,
+  Nomem,
+  Nomsg,
+  Noprotoopt,
+  Nospc,
+  Nosys,
+  Notconn,
+  Notdir,
+  Notempty,
+  Notrecoverable,
+  Notsock,
+  Notsup,
+  Notty,
+  Nxio,
+  Overflow,
+  Ownerdead,
+  Perm,
+  Pipe,
+  Proto,
+  Protonosupport,
+  Prototype,
+  Range,
+  Rofs,
+  Spipe,
+  Srch,
+  Stale,
+  Timedout,
+  Txtbsy,
+  Xdev,
+  Notcapable,
+}
+
+/// Which clock to read.
+pub(package) enum Clockid { Realtime, Monotonic, ProcessCputimeId, ThreadCputimeId }
+
+/// Where `fd_seek` counts from.
+pub(package) enum Whence { Set, Cur, End }
+
+/// What a file is.
+pub(package) enum Filetype {
+  Unknown,
+  BlockDevice,
+  CharacterDevice,
+  Directory,
+  RegularFile,
+  SocketDgram,
+  SocketStream,
+  SymbolicLink,
+}
+
+/// How a file will be read, for `fd_advise`.
+pub(package) enum Advice { Normal, Sequential, Random, Willneed, Dontneed, Noreuse }
+
+/// What a subscription of `poll_oneoff` waits for.
+pub(package) enum Eventtype { Clock, FdRead, FdWrite }
+
+/// A signal, for `proc_raise`.
+pub(package) enum Signal {
+  None,
+  Hup,
+  Int,
+  Quit,
+  Ill,
+  Trap,
+  Abrt,
+  Bus,
+  Fpe,
+  Kill,
+  Usr1,
+  Segv,
+  Usr2,
+  Pipe,
+  Alrm,
+  Term,
+  Chld,
+  Cont,
+  Stop,
+  Tstp,
+  Ttin,
+  Ttou,
+  Urg,
+  Xcpu,
+  Xfsz,
+  Vtalrm,
+  Prof,
+  Winch,
+  Poll,
+  Pwr,
+  Sys,
+}
+
+/// What a preopened file descriptor is.
+pub(package) enum Preopentype { Dir }
+
+/// What a file descriptor may do: a set of the `RIGHT_` flags.
+pub(package) type Rights = u64;
+pub(package) const RIGHT_FD_DATASYNC: Rights = 1;
+pub(package) const RIGHT_FD_READ: Rights = 2;
+pub(package) const RIGHT_FD_SEEK: Rights = 4;
+pub(package) const RIGHT_FD_FDSTAT_SET_FLAGS: Rights = 8;
+pub(package) const RIGHT_FD_SYNC: Rights = 16;
+pub(package) const RIGHT_FD_TELL: Rights = 32;
+pub(package) const RIGHT_FD_WRITE: Rights = 64;
+pub(package) const RIGHT_FD_ADVISE: Rights = 128;
+pub(package) const RIGHT_FD_ALLOCATE: Rights = 256;
+pub(package) const RIGHT_PATH_CREATE_DIRECTORY: Rights = 512;
+pub(package) const RIGHT_PATH_CREATE_FILE: Rights = 1024;
+pub(package) const RIGHT_PATH_LINK_SOURCE: Rights = 2048;
+pub(package) const RIGHT_PATH_LINK_TARGET: Rights = 4096;
+pub(package) const RIGHT_PATH_OPEN: Rights = 8192;
+pub(package) const RIGHT_FD_READDIR: Rights = 16384;
+pub(package) const RIGHT_PATH_READLINK: Rights = 32768;
+pub(package) const RIGHT_PATH_RENAME_SOURCE: Rights = 65536;
+pub(package) const RIGHT_PATH_RENAME_TARGET: Rights = 131072;
+pub(package) const RIGHT_PATH_FILESTAT_GET: Rights = 262144;
+pub(package) const RIGHT_PATH_FILESTAT_SET_SIZE: Rights = 524288;
+pub(package) const RIGHT_PATH_FILESTAT_SET_TIMES: Rights = 1048576;
+pub(package) const RIGHT_FD_FILESTAT_GET: Rights = 2097152;
+pub(package) const RIGHT_FD_FILESTAT_SET_SIZE: Rights = 4194304;
+pub(package) const RIGHT_FD_FILESTAT_SET_TIMES: Rights = 8388608;
+pub(package) const RIGHT_PATH_SYMLINK: Rights = 16777216;
+pub(package) const RIGHT_PATH_REMOVE_DIRECTORY: Rights = 33554432;
+pub(package) const RIGHT_PATH_UNLINK_FILE: Rights = 67108864;
+pub(package) const RIGHT_POLL_FD_READWRITE: Rights = 134217728;
+pub(package) const RIGHT_SOCK_SHUTDOWN: Rights = 268435456;
+pub(package) const RIGHT_SOCK_ACCEPT: Rights = 536870912;
+
+/// How a file descriptor reads and writes: a set of the `FDFLAG_` flags.
+pub(package) type Fdflags = u16;
+pub(package) const FDFLAG_APPEND: Fdflags = 1;
+pub(package) const FDFLAG_DSYNC: Fdflags = 2;
+pub(package) const FDFLAG_NONBLOCK: Fdflags = 4;
+pub(package) const FDFLAG_RSYNC: Fdflags = 8;
+pub(package) const FDFLAG_SYNC: Fdflags = 16;
+
+/// Which times `fd_filestat_set_times` sets: a set of the `FSTFLAG_` flags.
+pub(package) type Fstflags = u16;
+pub(package) const FSTFLAG_ATIM: Fstflags = 1;
+pub(package) const FSTFLAG_ATIM_NOW: Fstflags = 2;
+pub(package) const FSTFLAG_MTIM: Fstflags = 4;
+pub(package) const FSTFLAG_MTIM_NOW: Fstflags = 8;
+
+/// How a path is looked up: a set of the `LOOKUPFLAG_` flags.
+pub(package) type Lookupflags = u32;
+pub(package) const LOOKUPFLAG_SYMLINK_FOLLOW: Lookupflags = 1;
+
+/// How `path_open` opens a file: a set of the `OFLAG_` flags.
+pub(package) type Oflags = u16;
+pub(package) const OFLAG_CREAT: Oflags = 1;
+pub(package) const OFLAG_DIRECTORY: Oflags = 2;
+pub(package) const OFLAG_EXCL: Oflags = 4;
+pub(package) const OFLAG_TRUNC: Oflags = 8;
+
+/// What happened to a file descriptor that `poll_oneoff` waited for.
+pub(package) type Eventrwflags = u16;
+pub(package) const EVENTRWFLAG_FD_READWRITE_HANGUP: Eventrwflags = 1;
+
+/// How a clock subscription's timeout counts.
+pub(package) type Subclockflags = u16;
+pub(package) const SUBCLOCKFLAG_SUBSCRIPTION_CLOCK_ABSTIME: Subclockflags = 1;
+
+/// How `sock_recv` receives: a set of the `RIFLAG_` flags.
+pub(package) type Riflags = u16;
+pub(package) const RIFLAG_RECV_PEEK: Riflags = 1;
+pub(package) const RIFLAG_RECV_WAITALL: Riflags = 2;
+
+/// What `sock_recv` says about what it received.
+pub(package) type Roflags = u16;
+pub(package) const ROFLAG_RECV_DATA_TRUNCATED: Roflags = 1;
+
+/// How `sock_send` sends: no flags yet.
+pub(package) type Siflags = u16;
+
+/// Which sides `sock_shutdown` shuts down.
+pub(package) type Sdflags = u8;
+pub(package) const SDFLAG_RD: Sdflags = 1;
+pub(package) const SDFLAG_WR: Sdflags = 2;
+
+/// What `fd_fdstat_get` says about a file descriptor.
+pub(package) struct Fdstat {
+  pub(package) filetype: Filetype,
+  pub(package) flags: Fdflags,
+  pub(package) rights_base: Rights,
+  pub(package) rights_inheriting: Rights,
+}
+
+/// What `fd_filestat_get` and `path_filestat_get` say about a file.
+pub(package) struct Filestat {
+  pub(package) dev: Device,
+  pub(package) ino: Inode,
+  pub(package) filetype: Filetype,
+  pub(package) nlink: Linkcount,
+  pub(package) size: Filesize,
+  pub(package) atim: Timestamp,
+  pub(package) mtim: Timestamp,
+  pub(package) ctim: Timestamp,
+}
+
+/// What `fd_prestat_get` says about a preopened file descriptor: a
+/// directory, and the length of its name.
+pub(package) struct Prestat {
+  pub(package) kind: Preopentype,
+  pub(package) name_len: Size,
+}
+
+/// An entry of a directory, as `fd_readdir` writes them, before its name.
+pub(package) struct Dirent {
+  pub(package) next: Dircookie,
+  pub(package) ino: Inode,
+  pub(package) namlen: Dirnamlen,
+  pub(package) filetype: Filetype,
+}
+
+/// What `poll_oneoff` waits for, and its `userdata`.
+pub(package) enum Subscription {
+  Clock { userdata: Userdata, id: Clockid, timeout: Timestamp, precision: Timestamp, flags: Subclockflags },
+  FdRead { userdata: Userdata, fd: Fd },
+  FdWrite { userdata: Userdata, fd: Fd },
+}
+
+/// What happened to a subscription of `poll_oneoff`, by its `userdata`.
+pub(package) struct Event {
+  pub(package) userdata: Userdata,
+  pub(package) error: Errno,
+  pub(package) kind: Eventtype,
+  pub(package) nbytes: Filesize,
+  pub(package) flags: Eventrwflags,
+}
+
+/// The size of each struct in WASI's layout.
+const FDSTAT_SIZE: i32 = 24;
+const FILESTAT_SIZE: i32 = 64;
+const PRESTAT_SIZE: i32 = 8;
+pub(package) const DIRENT_SIZE: i32 = 24;
+const SUBSCRIPTION_SIZE: i32 = 48;
+const EVENT_SIZE: i32 = 32;
+
+// The functions of the host.
+
+/// Write the arguments to `buf`, each ending in a zero, and their
+/// addresses to `argv`. `args_sizes_get` says how big each must be.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn args_get(#[nolen] argv: mut [u32], #[nolen] buf: mut [u8]) -> Errno;
+
+/// How many arguments there are, and how many bytes they take.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn args_sizes_get() -> (Errno, Size, Size);
+
+/// Write the environment variables to `buf` as `KEY=value`, each ending in
+/// a zero, and their addresses to `environ`.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn environ_get(#[nolen] environ: mut [u32], #[nolen] buf: mut [u8]) -> Errno;
+
+/// How many environment variables there are, and how many bytes they take.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn environ_sizes_get() -> (Errno, Size, Size);
+
+/// The resolution of a clock.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn clock_res_get(id: Clockid) -> (Errno, Timestamp);
+
+/// The time of a clock, in nanoseconds, to at least `precision`.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn clock_time_get(id: Clockid, precision: Timestamp) -> (Errno, Timestamp);
+
+/// Say how a range of a file will be used.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_advise(fd: Fd, offset: Filesize, len: Filesize, advice: Advice) -> Errno;
+
+/// Make sure the space of a range of a file is there.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_allocate(fd: Fd, offset: Filesize, len: Filesize) -> Errno;
+
+/// Close a file descriptor.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_close(fd: Fd) -> Errno;
+
+/// Write a file's data to its device.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_datasync(fd: Fd) -> Errno;
+
+#[link(wasm, module = "wasi_snapshot_preview1", name = "fd_fdstat_get", abi = flat)]
+fn fd_fdstat_get_bytes(fd: Fd, #[nolen] stat: mut [u8]) -> Errno;
+
+/// What a file descriptor is, and may do.
+pub(package) fn fd_fdstat_get(fd: Fd) -> (Errno, Fdstat) {
+  let buf = mut [0u8; FDSTAT_SIZE as usize];
+  let e = fd_fdstat_get_bytes(fd, buf);
+  let stat = Fdstat {
+    filetype: filetype_of(buf[0]),
+    flags: read_u16(buf, 2),
+    rights_base: read_u64(buf, 8),
+    rights_inheriting: read_u64(buf, 16),
+  };
+  (e, stat)
+}
+
+/// Set how a file descriptor reads and writes.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_fdstat_set_flags(fd: Fd, flags: Fdflags) -> Errno;
+
+/// Take rights away from a file descriptor.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_fdstat_set_rights(fd: Fd, base: Rights, inheriting: Rights) -> Errno;
+
+#[link(wasm, module = "wasi_snapshot_preview1", name = "fd_filestat_get", abi = flat)]
+fn fd_filestat_get_bytes(fd: Fd, #[nolen] stat: mut [u8]) -> Errno;
+
+/// What an open file is.
+pub(package) fn fd_filestat_get(fd: Fd) -> (Errno, Filestat) {
+  let buf = mut [0u8; FILESTAT_SIZE as usize];
+  let e = fd_filestat_get_bytes(fd, buf);
+  (e, filestat_of(buf))
+}
+
+/// Make an open file this big, cutting it or adding zeros.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_filestat_set_size(fd: Fd, size: Filesize) -> Errno;
+
+/// Set when an open file was last read and changed.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_filestat_set_times(fd: Fd, atim: Timestamp, mtim: Timestamp, flags: Fstflags) -> Errno;
+
+/// Read into `iovs`, from `offset`, without moving the file's position:
+/// how many bytes it read.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_pread(fd: Fd, iovs: [mut [u8]], offset: Filesize) -> (Errno, Size);
+
+#[link(wasm, module = "wasi_snapshot_preview1", name = "fd_prestat_get", abi = flat)]
+fn fd_prestat_get_bytes(fd: Fd, #[nolen] stat: mut [u8]) -> Errno;
+
+/// What a preopened file descriptor is: `Badf` once there are no more.
+pub(package) fn fd_prestat_get(fd: Fd) -> (Errno, Prestat) {
+  let buf = mut [0u8; PRESTAT_SIZE as usize];
+  let e = fd_prestat_get_bytes(fd, buf);
+  (e, Prestat { kind: Preopentype.Dir, name_len: read_u32(buf, 4) })
+}
+
+/// The name of a preopened directory, written to `path`.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_prestat_dir_name(fd: Fd, path: mut [u8]) -> Errno;
+
+/// Write `iovs` at `offset`, without moving the file's position: how many
+/// bytes it wrote.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_pwrite(fd: Fd, iovs: [[u8]], offset: Filesize) -> (Errno, Size);
+
+/// Read into `iovs`: how many bytes it read, `0` at the end.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_read(fd: Fd, iovs: [mut [u8]]) -> (Errno, Size);
+
+/// Write the entries of a directory to `buf`, from `cookie`, each a dirent
+/// and then its name: how many bytes it wrote. Fewer than fit means the
+/// end. `dirent_of` reads an entry.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_readdir(fd: Fd, buf: mut [u8], cookie: Dircookie) -> (Errno, Size);
+
+/// Make `to` the file descriptor `fd` is, closing what `to` was.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_renumber(fd: Fd, to: Fd) -> Errno;
+
+/// Move the file's position: the new one.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_seek(fd: Fd, offset: Filedelta, whence: Whence) -> (Errno, Filesize);
+
+/// Write a file's data and what's known of it to its device.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_sync(fd: Fd) -> Errno;
+
+/// The file's position.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_tell(fd: Fd) -> (Errno, Filesize);
+
+/// Write `iovs`: how many bytes it wrote.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn fd_write(fd: Fd, iovs: [[u8]]) -> (Errno, Size);
+
+/// Make a directory.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_create_directory(fd: Fd, path: [u8]) -> Errno;
+
+#[link(wasm, module = "wasi_snapshot_preview1", name = "path_filestat_get", abi = flat)]
+fn path_filestat_get_bytes(fd: Fd, flags: Lookupflags, path: [u8], #[nolen] stat: mut [u8]) -> Errno;
+
+/// What a file is, by its path.
+pub(package) fn path_filestat_get(fd: Fd, flags: Lookupflags, path: [u8]) -> (Errno, Filestat) {
+  let buf = mut [0u8; FILESTAT_SIZE as usize];
+  let e = path_filestat_get_bytes(fd, flags, path, buf);
+  (e, filestat_of(buf))
+}
+
+/// Set when a file was last read and changed, by its path.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_filestat_set_times(
+  fd: Fd,
+  flags: Lookupflags,
+  path: [u8],
+  atim: Timestamp,
+  mtim: Timestamp,
+  fst_flags: Fstflags,
+) -> Errno;
+
+/// Make a hard link.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_link(old_fd: Fd, old_flags: Lookupflags, old_path: [u8], new_fd: Fd, new_path: [u8]) -> Errno;
+
+/// Open a file or directory: its new file descriptor.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_open(
+  fd: Fd,
+  dirflags: Lookupflags,
+  path: [u8],
+  oflags: Oflags,
+  rights_base: Rights,
+  rights_inheriting: Rights,
+  fdflags: Fdflags,
+) -> (Errno, Fd);
+
+/// Write what a symbolic link points to to `buf`: how many bytes it wrote.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_readlink(fd: Fd, path: [u8], buf: mut [u8]) -> (Errno, Size);
+
+/// Remove an empty directory.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_remove_directory(fd: Fd, path: [u8]) -> Errno;
+
+/// Rename a file or directory.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_rename(fd: Fd, old_path: [u8], new_fd: Fd, new_path: [u8]) -> Errno;
+
+/// Make a symbolic link at `new_path` to `old_path`.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_symlink(old_path: [u8], fd: Fd, new_path: [u8]) -> Errno;
+
+/// Remove a file.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn path_unlink_file(fd: Fd, path: [u8]) -> Errno;
+
+#[link(wasm, module = "wasi_snapshot_preview1", name = "poll_oneoff", abi = flat)]
+fn poll_oneoff_bytes(#[nolen] subs: [u8], #[nolen] events: mut [u8], count: Size) -> (Errno, Size);
+
+/// Wait until one of `subs` happens: the events that did.
+pub(package) fn poll_oneoff(subs: [Subscription]) -> (Errno, [Event]) {
+  let n = array_len(subs);
+  let input = mut [0u8; (SUBSCRIPTION_SIZE * n) as usize];
+  let mut i = 0;
+  while i < n {
+    write_subscription(input, i * SUBSCRIPTION_SIZE, subs[i]);
+    i = i + 1;
+  }
+  let output = mut [0u8; (EVENT_SIZE * n) as usize];
+  let r = poll_oneoff_bytes(input, output, n as u32);
+  let count = r.1 as i32;
+  let events = array_alloc(count);
+  let mut j = 0;
+  while j < count {
+    array_set(events, j, event_of(output, j * EVENT_SIZE));
+    j = j + 1;
+  }
+  (r.0, array_freeze(events))
+}
+
+/// Stop the program, with `code` as its exit code.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn proc_exit(code: Exitcode) -> !;
+
+/// Send the program a signal.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn proc_raise(sig: Signal) -> Errno;
+
+/// Let other threads run.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn sched_yield() -> Errno;
+
+/// Fill `buf` with random bytes.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn random_get(buf: mut [u8]) -> Errno;
+
+/// Accept a connection on a socket: its file descriptor.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn sock_accept(fd: Fd, flags: Fdflags) -> (Errno, Fd);
+
+/// Receive into `ri_data`: how many bytes it received, and what it says
+/// about them.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn sock_recv(fd: Fd, ri_data: [mut [u8]], ri_flags: Riflags) -> (Errno, Size, Roflags);
+
+/// Send `si_data`: how many bytes it sent.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn sock_send(fd: Fd, si_data: [[u8]], si_flags: Siflags) -> (Errno, Size);
+
+/// Shut down a socket's sides.
+#[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
+pub(package) fn sock_shutdown(fd: Fd, how: Sdflags) -> Errno;
+
+// WASI's layouts, little-endian.
+
+fn read_u16(buf: [u8], at: i32) -> u16 = (buf[at] as u16) | ((buf[at + 1] as u16) << 8);
+
+fn read_u32(buf: [u8], at: i32) -> u32 {
+  let mut n: u32 = 0;
+  let mut i = 3;
+  while i >= 0 {
+    n = (n << 8) | (buf[at + i] as u32);
+    i = i - 1;
+  }
+  n
+}
+
+fn read_u64(buf: [u8], at: i32) -> u64 {
+  let mut n: u64 = 0;
+  let mut i = 7;
+  while i >= 0 {
+    n = (n << 8) | (buf[at + i] as u64);
+    i = i - 1;
+  }
+  n
+}
+
+fn write_u16(buf: mut [u8], at: i32, n: u16) {
+  buf[at] = n as u8;
+  buf[at + 1] = (n >> 8) as u8;
+}
+
+fn write_u32(buf: mut [u8], at: i32, n: u32) {
+  let mut i = 0;
+  while i < 4 {
+    buf[at + i] = (n >> (8 * i as u32)) as u8;
+    i = i + 1;
+  }
+}
+
+fn write_u64(buf: mut [u8], at: i32, n: u64) {
+  let mut i = 0;
+  while i < 8 {
+    buf[at + i] = (n >> (8 * i as u32)) as u8;
+    i = i + 1;
+  }
+}
+
+fn filetype_of(n: u8) -> Filetype = match n {
+  1 => Filetype.BlockDevice,
+  2 => Filetype.CharacterDevice,
+  3 => Filetype.Directory,
+  4 => Filetype.RegularFile,
+  5 => Filetype.SocketDgram,
+  6 => Filetype.SocketStream,
+  7 => Filetype.SymbolicLink,
+  _ => Filetype.Unknown,
+};
+
+fn eventtype_of(n: u8) -> Eventtype = match n {
+  1 => Eventtype.FdRead,
+  2 => Eventtype.FdWrite,
+  _ => Eventtype.Clock,
+};
+
+fn filestat_of(buf: [u8]) -> Filestat = Filestat {
+  dev: read_u64(buf, 0),
+  ino: read_u64(buf, 8),
+  filetype: filetype_of(buf[16]),
+  nlink: read_u64(buf, 24),
+  size: read_u64(buf, 32),
+  atim: read_u64(buf, 40),
+  mtim: read_u64(buf, 48),
+  ctim: read_u64(buf, 56),
+};
+
+/// The entry of a directory at `at` in what `fd_readdir` wrote. Its name
+/// is the `namlen` bytes after it, at `at + DIRENT_SIZE`.
+pub(package) fn dirent_of(buf: [u8], at: i32) -> Dirent = Dirent {
+  next: read_u64(buf, at),
+  ino: read_u64(buf, at + 8),
+  namlen: read_u32(buf, at + 16),
+  filetype: filetype_of(buf[at + 20]),
+};
+
+fn event_of(buf: [u8], at: i32) -> Event = Event {
+  userdata: read_u64(buf, at),
+  error: errno_of(read_u16(buf, at + 8)),
+  kind: eventtype_of(buf[at + 10]),
+  nbytes: read_u64(buf, at + 16),
+  flags: read_u16(buf, at + 24),
+};
+
+fn write_subscription(buf: mut [u8], at: i32, sub: Subscription) {
+  match sub {
+    Subscription.Clock { userdata, id, timeout, precision, flags } => {
+      write_u64(buf, at, userdata);
+      buf[at + 8] = 0u8;
+      write_u32(buf, at + 16, clockid_code(id));
+      write_u64(buf, at + 24, timeout);
+      write_u64(buf, at + 32, precision);
+      write_u16(buf, at + 40, flags);
+    }
+    Subscription.FdRead { userdata, fd } => {
+      write_u64(buf, at, userdata);
+      buf[at + 8] = 1u8;
+      write_u32(buf, at + 16, fd);
+    }
+    Subscription.FdWrite { userdata, fd } => {
+      write_u64(buf, at, userdata);
+      buf[at + 8] = 2u8;
+      write_u32(buf, at + 16, fd);
+    }
+  }
+}
+
+fn clockid_code(id: Clockid) -> u32 = match id {
+  Clockid.Realtime => 0,
+  Clockid.Monotonic => 1,
+  Clockid.ProcessCputimeId => 2,
+  Clockid.ThreadCputimeId => 3,
+};
+
+/// The `Errno` with the code `n`, which a host gives in an event.
+fn errno_of(n: u16) -> Errno = match n {
+  0 => Errno.Success, 1 => Errno.TooBig, 2 => Errno.Acces, 3 => Errno.Addrinuse,
+  4 => Errno.Addrnotavail, 5 => Errno.Afnosupport, 6 => Errno.Again, 7 => Errno.Already,
+  8 => Errno.Badf, 9 => Errno.Badmsg, 10 => Errno.Busy, 11 => Errno.Canceled,
+  12 => Errno.Child, 13 => Errno.Connaborted, 14 => Errno.Connrefused, 15 => Errno.Connreset,
+  16 => Errno.Deadlk, 17 => Errno.Destaddrreq, 18 => Errno.Dom, 19 => Errno.Dquot,
+  20 => Errno.Exist, 21 => Errno.Fault, 22 => Errno.Fbig, 23 => Errno.Hostunreach,
+  24 => Errno.Idrm, 25 => Errno.Ilseq, 26 => Errno.Inprogress, 27 => Errno.Intr,
+  28 => Errno.Inval, 29 => Errno.Io, 30 => Errno.Isconn, 31 => Errno.Isdir,
+  32 => Errno.Loop, 33 => Errno.Mfile, 34 => Errno.Mlink, 35 => Errno.Msgsize,
+  36 => Errno.Multihop, 37 => Errno.Nametoolong, 38 => Errno.Netdown, 39 => Errno.Netreset,
+  40 => Errno.Netunreach, 41 => Errno.Nfile, 42 => Errno.Nobufs, 43 => Errno.Nodev,
+  44 => Errno.Noent, 45 => Errno.Noexec, 46 => Errno.Nolck, 47 => Errno.Nolink,
+  48 => Errno.Nomem, 49 => Errno.Nomsg, 50 => Errno.Noprotoopt, 51 => Errno.Nospc,
+  52 => Errno.Nosys, 53 => Errno.Notconn, 54 => Errno.Notdir, 55 => Errno.Notempty,
+  56 => Errno.Notrecoverable, 57 => Errno.Notsock, 58 => Errno.Notsup, 59 => Errno.Notty,
+  60 => Errno.Nxio, 61 => Errno.Overflow, 62 => Errno.Ownerdead, 63 => Errno.Perm,
+  64 => Errno.Pipe, 65 => Errno.Proto, 66 => Errno.Protonosupport, 67 => Errno.Prototype,
+  68 => Errno.Range, 69 => Errno.Rofs, 70 => Errno.Spipe, 71 => Errno.Srch,
+  72 => Errno.Stale, 73 => Errno.Timedout, 74 => Errno.Txtbsy, 75 => Errno.Xdev,
+  _ => Errno.Notcapable,
+};

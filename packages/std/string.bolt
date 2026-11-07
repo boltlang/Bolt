@@ -13,6 +13,9 @@ import "./debug" (Debug);
 /// array, not a `Vec`: a `StringBuilder` is what grows.
 pub imm struct String([u8]);
 
+/// The UTF-8 bytes of `s`, for `std`'s I/O.
+pub(package) fn bytes(s: String) -> imm [u8] = s.0;
+
 /// A `String` never changes, so its deep copy is the `String` itself.
 impl ToMutDeep[String] { type MutDeep = String; fn to_mut_deep(s) = s; }
 impl ToImmDeep[String] { fn to_imm_deep(s) = s; }

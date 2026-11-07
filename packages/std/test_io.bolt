@@ -1,0 +1,99 @@
+import "./io" *;
+import "./ops" *;
+import "./array" (array_len);
+import "./string" (bytes);
+
+fn succeeded(e: Errno) -> Bool = match e {
+  Errno.Success => True,
+  _ => False,
+};
+
+fn not_there(e: Errno) -> Bool = match e {
+  Errno.Nosys | Errno.Badf => True,
+  _ => False,
+};
+
+#[test]
+fn fd_write_writes_its_iovecs() {
+  let r = fd_write(1, [bytes("io: "), bytes("hello\n")]);
+  assert(succeeded(r.0));
+  assert(r.1 == 10);
+}
+
+#[test]
+fn fd_write_to_a_file_that_isnt_open() {
+  assert(!succeeded(fd_write(1000, [bytes("x")]).0));
+}
+
+#[test]
+fn there_are_no_arguments_or_environment() {
+  let args = args_sizes_get();
+  assert(succeeded(args.0));
+  assert(args.1 == 0);
+  let env = environ_sizes_get();
+  assert(succeeded(env.0));
+  assert(env.1 == 0);
+}
+
+#[test]
+fn clocks_go_forward() {
+  let a = clock_time_get(Clockid.Monotonic, 1);
+  let b = clock_time_get(Clockid.Monotonic, 1);
+  assert(succeeded(a.0));
+  assert(b.1 >= a.1);
+  let now = clock_time_get(Clockid.Realtime, 1);
+  assert(succeeded(now.0));
+  // After 2020.
+  assert(now.1 > 1577836800000000000);
+}
+
+#[test]
+fn random_get_fills_its_buffer() {
+  let buf = mut [0u8; 32];
+  assert(succeeded(random_get(buf)));
+  let mut zeros = 0;
+  let mut i = 0;
+  while i < 32 {
+    if buf[i] == 0 {
+      zeros = zeros + 1;
+    }
+    i = i + 1;
+  }
+  assert(zeros < 32);
+}
+
+#[test]
+fn there_are_no_preopened_directories() {
+  assert(not_there(fd_prestat_get(3).0));
+}
+
+#[test]
+fn sched_yield_succeeds() {
+  assert(succeeded(sched_yield()));
+}
+
+#[test]
+fn poll_oneoff_waits_for_a_clock() {
+  let sub = Subscription.Clock {
+    userdata: 7,
+    id: Clockid.Monotonic,
+    timeout: 1000000,
+    precision: 1,
+    flags: 0,
+  };
+  let r = poll_oneoff([sub]);
+  if succeeded(r.0) {
+    assert(array_len(r.1) == 1);
+    let event = r.1[0];
+    assert(event.userdata == 7);
+    assert(succeeded(event.error));
+    assert(match event.kind { Eventtype.Clock => True, _ => False });
+  } else {
+    assert(not_there(r.0));
+  }
+}
+
+#[test]
+fn proc_exit_with_0_ends_the_program() {
+  proc_exit(0);
+}
