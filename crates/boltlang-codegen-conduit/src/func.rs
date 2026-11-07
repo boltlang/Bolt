@@ -1617,6 +1617,15 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                     }
                     _ => v,
                 };
+                // Conduit's `case` is on an `i32`, so an 8- or 16-bit integer
+                // is widened, by its sign, and its tags are its values.
+                let v = match Scalar::of(&t)? {
+                    Some(sc @ Scalar::Int { bits: 8 | 16, .. }) => {
+                        let sign = if sc.signed() { Sign::Signed } else { Sign::Unsigned };
+                        Atom::Var(l.b.convert(Ty::I32, sign, v))
+                    }
+                    _ => v,
+                };
                 let data = match l.cty(&t)? {
                     Some(Ty::Data(id, ..))
                         if !matches!(cases.first(), Some((Case::Char(_), _))) =>
