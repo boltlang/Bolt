@@ -766,10 +766,9 @@ fn handler_sigs<'db>(
         module.handlers.insert(
             fns.handler,
             conduit_ir::HandlerDecl {
-                effect,
                 effect_params: 0,
                 env,
-                ops: fns.clauses.clone(),
+                ops: vec![(effect, fns.clauses.clone())],
                 ret: fns.ret,
                 row: cx.row.clone(),
                 debug_name,
