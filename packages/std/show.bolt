@@ -1,6 +1,33 @@
-import "./string" (String);
+// How values look to the people who use a program, like Rust's `Display`:
+// `42` for a number. `Debug` is how they look in code.
 
+import "./string" (String, StringBuilder, build);
+import "./debug" (push_i64, push_u64, push_i128, push_u128);
+import "./ops" *;
 
-class Show[T] {
-  fn show(self: T) -> String;
+/// Types whose values can be shown to the people who use a program.
+pub class Show[T] {
+  /// Add how `x` looks to the end of `out`.
+  fn show_to(x: T, out: mut StringBuilder);
 }
+
+/// How `x` looks, as a `String`.
+pub fn show[T](x: T) -> String where Show[T] {
+  let out = StringBuilder.new();
+  show_to(x, out);
+  out.build()
+}
+
+// Integers in decimal, with a `-` when they're negative.
+impl Show[i8] { fn show_to(n, out) = push_i64(out, n as i64); }
+impl Show[i16] { fn show_to(n, out) = push_i64(out, n as i64); }
+impl Show[i32] { fn show_to(n, out) = push_i64(out, n as i64); }
+impl Show[i64] { fn show_to(n, out) = push_i64(out, n); }
+impl Show[i128] { fn show_to(n, out) = push_i128(out, n); }
+impl Show[isize] { fn show_to(n, out) = push_i64(out, n as i64); }
+impl Show[u8] { fn show_to(n, out) = push_u64(out, n as u64); }
+impl Show[u16] { fn show_to(n, out) = push_u64(out, n as u64); }
+impl Show[u32] { fn show_to(n, out) = push_u64(out, n as u64); }
+impl Show[u64] { fn show_to(n, out) = push_u64(out, n); }
+impl Show[u128] { fn show_to(n, out) = push_u128(out, n); }
+impl Show[usize] { fn show_to(n, out) = push_u64(out, n as u64); }

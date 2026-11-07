@@ -29,3 +29,56 @@ pub(package) fn push_hex(out: mut StringBuilder, n: u32) {
   let digit = n & 0xF;
   out.push(Char(if digit < 10 { 0x30 + digit } else { 0x57 + digit }));
 }
+
+/// Add `n` in decimal to the end of `out`.
+pub(package) fn push_u64(out: mut StringBuilder, n: u64) {
+  if n >= 10 {
+    push_u64(out, n / 10);
+  }
+  let digit = (n % 10) as u32;
+  out.push(Char(0x30 + digit));
+}
+
+/// Add `n` in decimal to the end of `out`, with a `-` when it's negative.
+pub(package) fn push_i64(out: mut StringBuilder, n: i64) {
+  if n < 0 {
+    out.push('-');
+    // Not `-n`, which overflows for the smallest `i64`.
+    push_u64(out, ((-(n + 1)) as u64) + 1);
+  } else {
+    push_u64(out, n as u64);
+  }
+}
+
+/// Add `n` in decimal to the end of `out`.
+pub(package) fn push_u128(out: mut StringBuilder, n: u128) {
+  if n >= 10 {
+    push_u128(out, n / 10);
+  }
+  let digit = (n % 10) as u32;
+  out.push(Char(0x30 + digit));
+}
+
+/// Add `n` in decimal to the end of `out`, with a `-` when it's negative.
+pub(package) fn push_i128(out: mut StringBuilder, n: i128) {
+  if n < 0 {
+    out.push('-');
+    push_u128(out, ((-(n + 1)) as u128) + 1);
+  } else {
+    push_u128(out, n as u128);
+  }
+}
+
+// Integers look like their literals without a suffix, like `-42`.
+impl Debug[i8] { fn debug(n, out) = push_i64(out, n as i64); }
+impl Debug[i16] { fn debug(n, out) = push_i64(out, n as i64); }
+impl Debug[i32] { fn debug(n, out) = push_i64(out, n as i64); }
+impl Debug[i64] { fn debug(n, out) = push_i64(out, n); }
+impl Debug[i128] { fn debug(n, out) = push_i128(out, n); }
+impl Debug[isize] { fn debug(n, out) = push_i64(out, n as i64); }
+impl Debug[u8] { fn debug(n, out) = push_u64(out, n as u64); }
+impl Debug[u16] { fn debug(n, out) = push_u64(out, n as u64); }
+impl Debug[u32] { fn debug(n, out) = push_u64(out, n as u64); }
+impl Debug[u64] { fn debug(n, out) = push_u64(out, n); }
+impl Debug[u128] { fn debug(n, out) = push_u128(out, n); }
+impl Debug[usize] { fn debug(n, out) = push_u64(out, n as u64); }

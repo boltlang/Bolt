@@ -1738,18 +1738,18 @@ Tuples of up to ten elements are compared element by element
 ================================================================================
 #[link(wasm, module = "env")]
 fn log(x: i32);
-fn show(b: Bool) { if b { log(1); } else { log(0); } }
+fn log_bool(b: Bool) { if b { log(1); } else { log(0); } }
 fn order(o: Ordering) {
   match o { Ordering.Less => log(-1), Ordering.Equal => log(0), Ordering.Greater => log(1) }
 }
 let a = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 let b = (1, 2, 3, 4, 5, 6, 7, 8, 9, 11);
-show(a == a);
-show(a == b);
-show(a < b);
+log_bool(a == a);
+log_bool(a == b);
+log_bool(a < b);
 order(cmp(b, a));
 order(cmp((1, 2, 3, 4, 5), (1, 2, 0, 4, 5)));
-show((1, 2, 3, 4, 5) <= (1, 2, 3, 4, 5));
+log_bool((1, 2, 3, 4, 5) <= (1, 2, 3, 4, 5));
 --------------------------------------------------------------------------------
 data Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32 {
   (i32, i32, i32, i32, i32, i32, i32, i32, i32, i32)
@@ -1799,11 +1799,11 @@ fn file() -> () {
   let %a: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32, 5i32, 6i32, 7i32, 8i32, 9i32, 10i32)
   let %b: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32, 5i32, 6i32, 7i32, 8i32, 9i32, 11i32)
   let %2: i32 = call eq_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a, %a)
-  let = call show(%2)
+  let = call log_bool(%2)
   let %3: i32 = call eq_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a, %b)
-  let = call show(%3)
+  let = call log_bool(%3)
   let %4: i32 = call lt_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a, %b)
-  let = call show(%4)
+  let = call log_bool(%4)
   let %5: i32 = call Ord_A_B_C_D_E_F_G_H_I_J_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32[imm](%b, %a)
   let = call order(%5)
   let %6: imm Tuple_i32_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32, 5i32)
@@ -1813,11 +1813,11 @@ fn file() -> () {
   let %9: imm Tuple_i32_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32, 5i32)
   let %10: imm Tuple_i32_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32, 5i32)
   let %11: i32 = call lt_eq_i32_i32_i32_i32_i32(%9, %10)
-  let = call show(%11)
+  let = call log_bool(%11)
   jump ret()
 }
 
-fn show(%b: i32) -> () {
+fn log_bool(%b: i32) -> () {
   join j1() = jump ret()
   in
   case %b {

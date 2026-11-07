@@ -1,0 +1,57 @@
+// The tests of `show.bolt`, and of the impls of `Debug` of the integers of
+// `debug.bolt`. Those of `i128` and `u128` aren't here, since Conduit
+// can't run 128-bit integers yet (#185).
+
+import "./show" *;
+import "./debug" (debug_string);
+import "./string" *;
+import "./io" (assert);
+import "./ops" *;
+
+#[test]
+fn signed_integers_are_shown_in_decimal() {
+  assert(show(0) == "0");
+  assert(show(7) == "7");
+  assert(show(42) == "42");
+  assert(show(-42) == "-42");
+  assert(show(1000000) == "1000000");
+  assert(show(-128i8) == "-128");
+  assert(show(127i8) == "127");
+  assert(show(-32768i16) == "-32768");
+  assert(show(2147483647) == "2147483647");
+  assert(show(-2147483648) == "-2147483648");
+  assert(show(-3isize) == "-3");
+}
+
+#[test]
+fn the_smallest_i64_is_shown_without_overflowing() {
+  assert(show(-9223372036854775808i64) == "-9223372036854775808");
+  assert(show(9223372036854775807i64) == "9223372036854775807");
+}
+
+#[test]
+fn unsigned_integers_are_shown_in_decimal() {
+  assert(show(0u8) == "0");
+  assert(show(255u8) == "255");
+  assert(show(65535u16) == "65535");
+  assert(show(4294967295u32) == "4294967295");
+  assert(show(18446744073709551615u64) == "18446744073709551615");
+  assert(show(10usize) == "10");
+}
+
+#[test]
+fn integers_look_like_their_literals() {
+  assert(debug_string(-42) == "-42");
+  assert(debug_string(255u8) == "255");
+  assert(debug_string(18446744073709551615u64) == "18446744073709551615");
+}
+
+#[test]
+fn show_to_adds_to_a_builder() {
+  let out = StringBuilder.new();
+  out.push_str("x = ");
+  show_to(-5, out);
+  out.push_str(", y = ");
+  show_to(10u8, out);
+  assert(out.build() == "x = -5, y = 10");
+}

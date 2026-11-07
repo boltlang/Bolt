@@ -7,6 +7,7 @@ pub import "./ops" *;
 pub import "./iter" *;
 pub import "./mutability" *;
 pub import "./debug" *;
+pub import "./show" *;
 
 // Types
 pub import "./array" *;
