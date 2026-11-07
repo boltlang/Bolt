@@ -881,9 +881,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             return Err(ErrorKind::unsupported("this `for` loop"));
         };
         // The callee's own mutability and row parameters are the ones this
-        // use gives.
-        let ret = subst_muts(&ret, &mutabilities)
-            .map_rows(&mut |i| rows.get(i as usize).cloned().unwrap_or_default());
+        // use gives, which has one for each.
+        if rows.len() < instance.row_params(self.cx.db) {
+            return Err(ErrorKind::unsupported("a call without a row for each row parameter"));
+        }
+        let ret = subst_muts(&ret, &mutabilities).map_rows(&mut |i| rows[i as usize].clone());
         let f = self.cx.funcs[&instance];
         let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
         let crows = self.rows(&rows);
@@ -1373,32 +1375,14 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     }
 }
 
-/// `t` with the `i`th mutability parameter replaced by `args[i]`.
+/// `t` with the `i`th mutability parameter replaced by `args[i]`, also in
+/// the arguments of the effects in its rows.
 fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_mir_mono::MonoMut]) -> MonoTy<'db> {
     use boltlang_mir_mono::MonoMut;
-    let m = |m: &MonoMut| match m {
-        MonoMut::Param(i) => args.get(*i as usize).copied().unwrap_or(*m),
-        other => *other,
-    };
-    match t {
-        MonoTy::Adt(adt, tys, muts, own) => MonoTy::Adt(
-            *adt,
-            tys.iter().map(|t| subst_muts(t, args)).collect(),
-            muts.iter().map(m).collect(),
-            m(own),
-        ),
-        MonoTy::Tuple(tys, own) => {
-            MonoTy::Tuple(tys.iter().map(|t| subst_muts(t, args)).collect(), m(own))
-        }
-        MonoTy::Array(own, elem) => MonoTy::Array(m(own), Box::new(subst_muts(elem, args))),
-        MonoTy::Fn(ps, r, own, row) => MonoTy::Fn(
-            ps.iter().map(|t| subst_muts(t, args)).collect(),
-            Box::new(subst_muts(r, args)),
-            m(own),
-            row.clone(),
-        ),
-        other => other.clone(),
-    }
+    t.map_muts(&mut |m| match m {
+        MonoMut::Param(i) => args.get(i as usize).copied().unwrap_or(m),
+        other => other,
+    })
 }
 
 /// An integer or `Bool` literal of a scalar type, wrapped to its range.

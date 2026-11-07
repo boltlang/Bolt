@@ -416,19 +416,43 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 let Ok(handled) = handled_effects(&lcx, ops) else { continue };
                 let body_fn = fresh(format!("{instance}::handle{n}"));
                 let ret = fresh(format!("{instance}::handle{n}_return"));
-                let effects = handled
+                let op_name = |op: FunctionId<'_>| {
+                    op.item(db).name.as_ref().map(|n| n.name().to_string()).unwrap_or_default()
+                };
+                let all_ops: Vec<(EffectKey<'_>, Vec<FunctionId<'_>>)> = handled
                     .into_iter()
                     .map(|effect| {
-                        let effect_ops =
-                            cx.effects.get(&effect).map(|(_, ops)| ops.clone()).unwrap_or_default();
+                        let ops = cx.effects.get(&effect).map(|(_, ops)| ops.clone());
+                        (effect, ops.unwrap_or_default())
+                    })
+                    .collect();
+                // A clause is named after its operation, and also its effect
+                // when another effect it handles has an operation of that
+                // name, like `Reader.get` and `State.get`.
+                let shared = |name: &str| {
+                    all_ops
+                        .iter()
+                        .filter(|(_, ops)| ops.iter().any(|&o| op_name(o) == name))
+                        .count()
+                        > 1
+                };
+                let effects = all_ops
+                    .iter()
+                    .map(|(effect, effect_ops)| {
                         let clauses = effect_ops
                             .iter()
                             .map(|&op| {
-                                let name = op.item(db).name.as_ref().map(|n| n.name().to_string());
-                                fresh(format!("{instance}::handle{n}_{}", name.unwrap_or_default()))
+                                let name = op_name(op);
+                                let name = if shared(&name) {
+                                    let e = effect.0.item(db).name.as_ref();
+                                    format!("{}_{name}", e.map_or("?", |n| n.as_str()))
+                                } else {
+                                    name
+                                };
+                                fresh(format!("{instance}::handle{n}_{name}"))
                             })
                             .collect();
-                        (effect, clauses)
+                        (effect.clone(), clauses)
                     })
                     .collect();
                 let mut code: Vec<boltlang_mir::ExprId> = Vec::new();
@@ -597,13 +621,14 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     // The effects that only rows name, which nothing performs or handles.
     while !types.undeclared.is_empty() {
-        let key = types.undeclared.remove(0);
-        if cx.effects.contains_key(&key) {
-            continue;
-        }
-        let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
-        if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, key) {
-            errors.push(Error { instance: name, at: None, kind });
+        for key in std::mem::take(&mut types.undeclared) {
+            if cx.effects.contains_key(&key) {
+                continue;
+            }
+            let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+            if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, key) {
+                errors.push(Error { instance: name, at: None, kind });
+            }
         }
     }
     if !errors.is_empty() {
@@ -739,7 +764,7 @@ fn handler_sigs<'db>(
             0 => &bodies.body,
             i => &bodies.lambdas[i as usize - 1],
         };
-        let boltlang_mir::ExprKind::Handle { body: scrutinee, ops, .. } = &mir[key.2].kind else {
+        let boltlang_mir::ExprKind::Handle { body: scrutinee, .. } = &mir[key.2].kind else {
             continue;
         };
         let mut clause_tys = Vec::new();
@@ -781,7 +806,6 @@ fn handler_sigs<'db>(
         // code around the `match` can do, and also what resuming its
         // continuations does, as the checker has it.
         let row = types.row(&body_row(lcx, mir)?);
-        let _ = ops;
         // The Conduit effect of each effect it handles, and its clauses.
         let mut handled = Vec::new();
         for (key, clauses) in &fns.effects {
@@ -848,6 +872,9 @@ fn declare_effect<'db>(
     key: EffectKey<'db>,
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
+    // Before the operations' types, whose rows can name other effects, so
+    // that effects are numbered in the order they're declared.
+    let id = types.effect(key.clone());
     let e = key.0;
     let ops: Vec<FunctionId<'db>> = e
         .item(db)
@@ -869,7 +896,6 @@ fn declare_effect<'db>(
         // An operation's signature has no row.
         sigs.push(Sig::new(params, results));
     }
-    let id = types.effect(key.clone());
     let name = e.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
     let args: Vec<String> = key.1.iter().map(|t| t.display(db).to_string()).collect();
     let name = if args.is_empty() { name } else { format!("{name}[{}]", args.join(", ")) };

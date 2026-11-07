@@ -386,32 +386,8 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
 /// `Option[fn() does Log]`, replaced by a parameter, numbered from 0, and
 /// the rows that were replaced, in order.
 fn abstract_rows<'db>(tys: &[MonoTy<'db>]) -> (Box<[MonoTy<'db>]>, Vec<MonoRow<'db>>) {
-    fn go<'db>(t: &MonoTy<'db>, out: &mut Vec<MonoRow<'db>>) -> MonoTy<'db> {
-        let next = |r: &MonoRow<'db>, out: &mut Vec<MonoRow<'db>>| {
-            out.push(r.clone());
-            MonoRow::param(out.len() as u32 - 1)
-        };
-        let all = |tys: &[MonoTy<'db>], out: &mut Vec<MonoRow<'db>>| -> Box<[MonoTy<'db>]> {
-            tys.iter().map(|t| go(t, out)).collect()
-        };
-        match t {
-            MonoTy::Adt(adt, args, muts, own) => {
-                MonoTy::Adt(*adt, all(args, out), muts.clone(), *own)
-            }
-            MonoTy::Tuple(elems, own) => MonoTy::Tuple(all(elems, out), *own),
-            MonoTy::Array(m, elem) => MonoTy::Array(*m, Box::new(go(elem, out))),
-            MonoTy::Fn(params, ret, m, row) => {
-                let params = all(params, out);
-                let ret = Box::new(go(ret, out));
-                MonoTy::Fn(params, ret, *m, next(row, out))
-            }
-            MonoTy::Row(row) => MonoTy::Row(next(row, out)),
-            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => t.clone(),
-        }
-    }
     let mut out = Vec::new();
-    let tys = tys.iter().map(|t| go(t, &mut out)).collect();
+    let tys = tys.iter().map(|t| t.abstract_rows(0, &mut out)).collect();
     (tys, out)
 }
 

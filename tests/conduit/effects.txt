@@ -1557,3 +1557,182 @@ fn sum_handle0_yield(%0: i32, %k: cont() -> (i32)) -> (i32) {
 }
 --------------------------------------------------------------------------------
 env.log(3)
+
+================================================================================
+The clauses of operations of the same name are named after their effects
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Reader { fn get() -> i32; }
+effect State { fn get() -> i32; }
+fn job() -> i32 does Reader + State = Reader.get() * State.get();
+fn run() -> i32 =
+  match job() {
+    v => v,
+    effect Reader.get(), k => resume(k, 6),
+    effect State.get(), k => resume(k, 7),
+  };
+log(run());
+--------------------------------------------------------------------------------
+extern log "env" "log" (i32) -> ()
+
+effect Reader {
+  () -> (i32)
+}
+
+effect State {
+  () -> (i32)
+}
+
+handler run_handler0 for Reader, State env() ops(run_handle0_Reader_get; run_handle0_State_get) ret run_handle0_return
+
+fn file() -> () {
+  let %0: i32 = call run()
+  let = call_extern log(%0)
+  jump ret()
+}
+
+fn run() -> (i32) {
+  let %0: mut fn() -> (i32) does Reader + State = closure run_handle0()
+  let %1: i32 = handle run_handler0(%0)
+  jump ret(%1)
+}
+
+fn job() -> (i32) does Reader + State {
+  let %0: i32 = perform Reader.0()
+  let %1: i32 = perform State.0()
+  let %2: i32 = call star_i32(%0, %1)
+  jump ret(%2)
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+
+fn run_handle0() -> (i32) does Reader + State {
+  let %0: i32 = call job()
+  jump ret(%0)
+}
+
+fn run_handle0_return(%v: i32) -> (i32) {
+  jump ret(%v)
+}
+
+fn run_handle0_Reader_get(%k: cont(i32) -> (i32)) -> (i32) {
+  let %1: i32 = resume(%k, 6i32)
+  jump ret(%1)
+}
+
+fn run_handle0_State_get(%k: cont(i32) -> (i32)) -> (i32) {
+  let %1: i32 = resume(%k, 7i32)
+  jump ret(%1)
+}
+--------------------------------------------------------------------------------
+env.log(42)
+
+================================================================================
+Instances aren't specialized on the rows in their type arguments
+:test-prelude
+================================================================================
+extern "env" { fn log(x: i32); }
+effect Yield { fn yield(value: i32); }
+effect Ask { fn ask() -> i32; }
+fn id[T](x: T) -> T = x;
+fn sum() -> i32 =
+  match id(|| { yield(ask()); yield(2) })() {
+    () => 0,
+    effect yield(x), k => x + resume(k, ()),
+    effect ask(), k => resume(k, 1),
+  };
+log(sum());
+id(|| log(3))();
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+extern log "env" "log" (i32) -> ()
+
+effect Yield {
+  (i32) -> ()
+}
+
+effect Ask {
+  () -> (i32)
+}
+
+handler sum_handler0 for Yield, Ask env() ops(sum_handle0_yield; sum_handle0_ask) ret sum_handle0_return
+
+fn file() -> () {
+  let %0: i32 = call sum()
+  let = call_extern log(%0)
+  let %1: imm fn() -> () = closure file_lambda0()
+  let %2: imm fn() -> () = call id_fn_minus_gt_does_E0[Nothing](%1)
+  let = apply(%2)
+  jump ret()
+}
+
+fn sum() -> (i32) {
+  let %0: mut fn() -> () does Yield + Ask = closure sum_handle0()
+  let %1: i32 = handle sum_handler0(%0)
+  jump ret(%1)
+}
+
+fn id_fn_minus_gt_does_E0[E1](%x: imm fn() -> () does E1) -> (imm fn() -> () does E1) {
+  jump ret(%x)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn file_lambda0() -> () {
+  let = call_extern log(3i32)
+  jump ret()
+}
+
+fn sum_lambda0() -> () does Yield + Ask {
+  let %0: i32 = perform Ask.0()
+  let = perform Yield.0(%0)
+  let = perform Yield.0(2i32)
+  jump ret()
+}
+
+fn sum_handle0() -> () does Yield + Ask {
+  let %0: imm fn() -> () does Yield + Ask = closure sum_lambda0()
+  let %1: imm fn() -> () does Yield + Ask = call id_fn_minus_gt_does_E0[Yield + Ask](%0)
+  let = apply(%1)
+  jump ret()
+}
+
+fn sum_handle0_return() -> (i32) {
+  jump ret(0i32)
+}
+
+fn sum_handle0_yield(%0: i32, %k: cont() -> (i32)) -> (i32) {
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
+  let %x: i32 = get Tuple_i32.0.0(%2)
+  let %4: i32 = resume(%k)
+  let %5: i32 = call plus_i32(%x, %4)
+  jump ret(%5)
+}
+
+fn sum_handle0_ask(%k: cont(i32) -> (i32)) -> (i32) {
+  let %1: i32 = resume(%k, 1i32)
+  jump ret(%1)
+}
+--------------------------------------------------------------------------------
+env.log(3)
+env.log(3)

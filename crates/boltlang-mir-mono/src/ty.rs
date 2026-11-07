@@ -246,6 +246,38 @@ impl<'db> MonoTy<'db> {
         }
     }
 
+    /// The type with each of its rows, like that of the closure in
+    /// `Option[fn() does Log]`, replaced by a row parameter, numbered from
+    /// `first` in the order they appear, an equal row by the same one.
+    /// `out` gets the rows that were replaced, by their number.
+    pub fn abstract_rows(&self, first: u32, out: &mut Vec<MonoRow<'db>>) -> Self {
+        let param = |r: &MonoRow<'db>, out: &mut Vec<MonoRow<'db>>| {
+            let at = out.iter().position(|o| o == r).unwrap_or_else(|| {
+                out.push(r.clone());
+                out.len() - 1
+            });
+            MonoRow::param(first + at as u32)
+        };
+        let all = |tys: &[MonoTy<'db>], out: &mut Vec<MonoRow<'db>>| -> Box<[MonoTy<'db>]> {
+            tys.iter().map(|t| t.abstract_rows(first, out)).collect()
+        };
+        match self {
+            MonoTy::Adt(adt, args, muts, own) => {
+                MonoTy::Adt(*adt, all(args, out), muts.clone(), *own)
+            }
+            MonoTy::Tuple(elems, own) => MonoTy::Tuple(all(elems, out), *own),
+            MonoTy::Array(m, elem) => MonoTy::Array(*m, Box::new(elem.abstract_rows(first, out))),
+            MonoTy::Fn(params, ret, m, row) => {
+                let params = all(params, out);
+                let ret = Box::new(ret.abstract_rows(first, out));
+                MonoTy::Fn(params, ret, *m, param(row, out))
+            }
+            MonoTy::Row(row) => MonoTy::Row(param(row, out)),
+            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => self.clone(),
+        }
+    }
+
     /// The type with each row parameter replaced by the row `f` gives it.
     pub fn map_rows(&self, f: &mut dyn FnMut(u32) -> MonoRow<'db>) -> Self {
         let all = |tys: &[MonoTy<'db>], f: &mut dyn FnMut(u32) -> MonoRow<'db>| {
@@ -432,21 +464,12 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
     }
 }
 
-/// `row` with each parameter replaced by the row `f` gives it.
+/// `row` with each parameter replaced by the row `f` gives it, also in its
+/// effects' arguments. [`MonoRow::map`] calls one of its two functions at a
+/// time, so they can share `f`.
 fn map_row<'db>(row: &MonoRow<'db>, f: &mut dyn FnMut(u32) -> MonoRow<'db>) -> MonoRow<'db> {
-    let effects: Vec<MonoEffect<'db>> = row
-        .effects
-        .iter()
-        .map(|e| MonoEffect {
-            effect: e.effect,
-            args: e.args.iter().map(|t| t.map_rows(f)).collect(),
-        })
-        .collect();
-    let mut out = MonoRow::new(effects, []);
-    for &p in row.params.iter() {
-        out = out.union(&f(p));
-    }
-    out
+    let f = std::cell::RefCell::new(f);
+    row.map(&mut |p| (f.borrow_mut())(p), &mut |t| t.map_rows(&mut **f.borrow_mut()))
 }
 
 impl<'db> MonoRow<'db> {

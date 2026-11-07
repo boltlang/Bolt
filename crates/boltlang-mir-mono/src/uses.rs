@@ -483,11 +483,13 @@ impl<'a, 'db> Cx<'a, 'db> {
         // The mutability parameters of this instance in the type arguments,
         // like the `'m` of `T = 'm [i32]`, become parameters of the callee's
         // instance, after its own, which the use gives (#371).
-        // The same for row parameters.
+        // Each row in them, like that of `T = fn() does Log`, becomes a row
+        // parameter of the callee's instance, which the use gives, so that
+        // instances aren't specialized on rows.
         let own = mutabilities.len() as u32;
         let own_rows = rows.len() as u32;
         let mut free: Vec<u32> = Vec::new();
-        let mut free_rows: Vec<u32> = Vec::new();
+        let mut free_rows: Vec<MonoRow<'db>> = Vec::new();
         let args: Box<[MonoTy<'db>]> = erased
             .iter()
             .filter_map(|s| match s {
@@ -496,13 +498,13 @@ impl<'a, 'db> Cx<'a, 'db> {
                         MonoMut::Param(i) => MonoMut::Param(own + index_in(&mut free, i)),
                         m => m,
                     })
-                    .map_rows(&mut |i| MonoRow::param(own_rows + index_in(&mut free_rows, i))),
+                    .abstract_rows(own_rows, &mut free_rows),
                 ),
                 Slot::Mut(_) | Slot::Row(_) => None,
             })
             .collect();
         mutabilities.extend(free.iter().map(|&i| MonoMut::Param(i)));
-        rows.extend(free_rows.iter().map(|&i| MonoRow::param(i)));
+        rows.extend(free_rows);
         let instance = Instance::new(db, def, canonical(&args), self.instance.root(db));
         Ok(Use::Instance {
             instance,
