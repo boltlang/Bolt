@@ -31,6 +31,11 @@ pub fn build_exporting(
     exports: &[(FuncId, &str)],
 ) -> Result<Vec<u8>, String> {
     let mut m = program.module.clone();
+    // Before the passes, which keep what's exported, and its parameters
+    // owned, since a caller from outside gives away what it passes.
+    for &(f, name) in exports {
+        m.exports.insert(f, conduit_ir::Export::Wasm { name: name.into() });
+    }
     if optimize {
         conduit_opt::optimize_module(&mut m);
     }
@@ -41,5 +46,5 @@ pub fn build_exporting(
         .map_err(|e| format!("making reference counts explicit: {e}"))?;
     let options =
         Options { stack_switching: false, counts: true, cycles: true, ..Options::default() };
-    emit_module_with(&m, exports, &options).map_err(|e| e.to_string())
+    emit_module_with(&m, &options).map_err(|e| e.to_string())
 }

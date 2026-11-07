@@ -414,7 +414,7 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 [[package]]
 name = "conduit-effects"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=b8b2b2b#b8b2b2b7f649b28bc2c528a39a66b19b0d15a7ab"
+source = "git+https://github.com/boltlang/conduit?rev=f931f44#f931f4451ff2c539f02797c1d9e3e6d9fbae8344"
 dependencies = [
  "conduit-ir",
 ]
@@ -422,7 +422,7 @@ dependencies = [
 [[package]]
 name = "conduit-eval"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=b8b2b2b#b8b2b2b7f649b28bc2c528a39a66b19b0d15a7ab"
+source = "git+https://github.com/boltlang/conduit?rev=f931f44#f931f4451ff2c539f02797c1d9e3e6d9fbae8344"
 dependencies = [
  "conduit-ir",
 ]
@@ -430,7 +430,7 @@ dependencies = [
 [[package]]
 name = "conduit-ir"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=b8b2b2b#b8b2b2b7f649b28bc2c528a39a66b19b0d15a7ab"
+source = "git+https://github.com/boltlang/conduit?rev=f931f44#f931f4451ff2c539f02797c1d9e3e6d9fbae8344"
 dependencies = [
  "stacker",
 ]
@@ -438,7 +438,7 @@ dependencies = [
 [[package]]
 name = "conduit-opt"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=b8b2b2b#b8b2b2b7f649b28bc2c528a39a66b19b0d15a7ab"
+source = "git+https://github.com/boltlang/conduit?rev=f931f44#f931f4451ff2c539f02797c1d9e3e6d9fbae8344"
 dependencies = [
  "conduit-eval",
  "conduit-ir",
@@ -447,7 +447,7 @@ dependencies = [
 [[package]]
 name = "conduit-wasm"
 version = "0.1.0"
-source = "git+https://github.com/boltlang/conduit?rev=b8b2b2b#b8b2b2b7f649b28bc2c528a39a66b19b0d15a7ab"
+source = "git+https://github.com/boltlang/conduit?rev=f931f44#f931f4451ff2c539f02797c1d9e3e6d9fbae8344"
 dependencies = [
  "conduit-effects",
  "conduit-ir",
