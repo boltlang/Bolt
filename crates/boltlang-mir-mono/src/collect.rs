@@ -316,7 +316,7 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
         }
         MonoTy::Row(row) => row.effects.iter().flat_map(|e| e.args.iter()).any(|t| occurs(a, t)),
         MonoTy::ErasedAssoc(_, args) => args.iter().any(|t| occurs(a, t)),
-        MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => false,
+        MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) | MonoTy::Any => false,
     }
 }
 

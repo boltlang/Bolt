@@ -221,6 +221,9 @@ impl<'db> Types<'db> {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => {
                 return Err(ErrorKind::unsupported("erased types"));
             }
+            // A boxed value of an operation's type parameter, which can be
+            // `imm` or `mut`.
+            MonoTy::Any => Ty::Any(Mutability::ReadOnly),
         }))
     }
 
@@ -389,7 +392,11 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
             MonoTy::ErasedAssoc(alias, args) => {
                 MonoTy::ErasedAssoc(*alias, args.iter().map(|a| go(a, next)).collect())
             }
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) | MonoTy::Row(_) => t.clone(),
+            MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Erased(_)
+            | MonoTy::Any
+            | MonoTy::Row(_) => t.clone(),
         }
     }
     let out = tys.iter().map(|t| go(t, &mut next)).collect();

@@ -239,7 +239,7 @@ impl<'a, 'db> Cx<'a, 'db> {
 
     /// The use of the operation `op` at the type `use_ty`, which gives the
     /// arguments of its effect. Its own type parameters, like the `T` of
-    /// `fn raise[T](e: E) -> T`, aren't supported yet.
+    /// `fn raise[T](e: E) -> T`, are [`MonoTy::Any`] in its declaration.
     fn op_use(&self, op: FunctionId<'db>, use_ty: &MonoTy<'db>) -> Result<Use<'db>, UseError> {
         let db = self.db;
         let ItemContainerId::Effect(effect) = op.container(db) else {

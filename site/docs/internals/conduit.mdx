@@ -91,9 +91,9 @@ function, like `say` in `xs.each(say)`, is a closure of a shim that
 performs it. A `match` with arms for several effects is one handler of
 all of them, with a clause for each of their operations: an arm for
 operations of two effects, like `effect fail(c) | abort(c), _ => c`, is
-the clause of each. Not lowered yet: operations with type parameters of
-their own, and a handler whose arms hold values of a mutability that's a
-parameter, since a clause can't have mutability parameters in Conduit.
+the clause of each. Not lowered yet: a handler whose arms hold values of
+a mutability that's a parameter, since a clause can't have mutability
+parameters in Conduit.
 
 Every function, closure and continuation gets its row from the checker:
 
@@ -127,6 +127,13 @@ Bolt's are: `Effect20`.
   can't happen at run time.
 - **An effect with type parameters,** like `State[i32]`, becomes one
   Conduit effect per instance, as a generic data type does.
+- **An operation's own type parameters are `any`.** The `T` of
+  `fn fail[T](error: E) -> T` is Conduit's boxed `any` in the operation's
+  signature, so every use of `fail` is the same operation, and its
+  handlers' arms see `any` for `T`. A `perform` boxes the arguments of
+  type `T` and unboxes the result, at the types of that use. It isn't
+  monomorphized, as a function of which the performance matters would be.
+  A `T` inside another type, like `-> Option[T]`, isn't lowered yet.
 - **`handle` is typed as Bolt types a handler:** it takes its effect out of
   what the body performs, and puts back what the clauses perform.
 - **Rows tell Conduit what suspends.** A function whose row has no
@@ -141,6 +148,3 @@ Still to decide, for Conduit:
 
 - Effects whose parameters are rows, like
   `effect Spawn[E] { fn spawn[T](task: fn() -> T does E) -> Task[T]; }`.
-- Operations with type parameters of their own, like
-  `fn raise[T](error: E) -> T`: erase `T` to Conduit's boxed `any`, or make
-  one operation per instance.

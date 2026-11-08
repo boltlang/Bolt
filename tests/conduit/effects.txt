@@ -1770,3 +1770,224 @@ fn sum_handle0_ask(%k: cont(i32) -> (i32)) -> (i32) {
 --------------------------------------------------------------------------------
 log(3)
 log(3)
+
+================================================================================
+An operation's own type parameter is any: what has it is boxed
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+effect Pick { fn pick[T](a: T, b: T) -> T; }
+fn first[R](body: fn() -> R does Pick) -> R = match body() {
+  v => v,
+  effect pick(a, b), k => resume(k, a),
+};
+fn job() -> i32 does Pick {
+  pick((), ());
+  if pick(True, False) { log(1) } else { log(2) };
+  pick(10, 20)
+}
+log(first(job));
+--------------------------------------------------------------------------------
+data Tuple_any_any {
+  (ro any, ro any)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+effect Pick {
+  (ro any, ro any) -> (ro any)
+}
+
+handler first_i32_handler0 for Pick env() ops(first_i32_handle0_pick) ret first_i32_handle0_return
+
+fn file() -> () {
+  let %0: imm fn() -> (i32) does Pick = closure job()
+  let %1: i32 = call first_i32[imm](%0)
+  let = call_extern log(%1)
+  jump ret()
+}
+
+fn first_i32['m1](%body: 'm1 fn() -> (i32) does Pick) -> (i32) {
+  let %1: mut fn() -> (i32) does Pick = closure first_i32_handle0['m1](%body)
+  let %2: i32 = handle first_i32_handler0(%1)
+  jump ret(%2)
+}
+
+fn job() -> (i32) does Pick {
+  let %0: imm any = box[i8](0i8)
+  let %1: imm any = box[i8](0i8)
+  let %2: ro any = perform Pick.0(%0, %1)
+  join j1() =
+    let %7: imm any = box[i32](10i32)
+    let %8: imm any = box[i32](20i32)
+    let %9: ro any = perform Pick.0(%7, %8)
+    let %10: i32 = unbox[i32](%9)
+    jump ret(%10)
+  in
+  let %3: imm any = box[i32](1i32)
+  let %4: imm any = box[i32](0i32)
+  let %5: ro any = perform Pick.0(%3, %4)
+  let %6: i32 = unbox[i32](%5)
+  case %6 {
+    0 =>
+      let = call_extern log(2i32)
+      jump j1()
+    _ =>
+      let = call_extern log(1i32)
+      jump j1()
+  }
+}
+
+fn first_i32_handle0['m1](%body: 'm1 fn() -> (i32) does Pick) -> (i32) does Pick {
+  let %1: i32 = apply(%body)
+  jump ret(%1)
+}
+
+fn first_i32_handle0_return(%v: i32) -> (i32) {
+  jump ret(%v)
+}
+
+fn first_i32_handle0_pick(%0: ro any, %1: ro any, %k: cont(ro any) -> (i32)) -> (i32) {
+  let %3: mut Tuple_any_any = new Tuple_any_any.0(%0, %1)
+  let %a: ro any = get Tuple_any_any.0.0(%3)
+  let %b: ro any = get Tuple_any_any.0.1(%3)
+  let %6: i32 = resume(%k, %a)
+  jump ret(%6)
+}
+--------------------------------------------------------------------------------
+log(1)
+log(10)
+
+================================================================================
+An operation that never returns, like failing
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+effect Raise[E] { fn raise[T](error: E) -> T; }
+fn catch[T](body: fn() -> T does Raise[i32]) -> i32 = match body() {
+  _ => 0,
+  effect raise(e), _ => e,
+};
+fn half(n: i32) -> i32 does Raise[i32] = if n % 2 == 0 { n / 2 } else { raise(n) };
+log(catch(|| half(4)));
+log(catch(|| half(7)));
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+effect Raise_i32 {
+  (i32) -> (ro any)
+}
+
+handler catch_i32_handler0 for Raise_i32 env() ops(catch_i32_handle0_raise) ret catch_i32_handle0_return
+
+fn file() -> () {
+  let %0: imm fn() -> (i32) does Raise_i32 = closure file_lambda0()
+  let %1: i32 = call catch_i32[imm](%0)
+  let = call_extern log(%1)
+  let %2: imm fn() -> (i32) does Raise_i32 = closure file_lambda1()
+  let %3: i32 = call catch_i32[imm](%2)
+  let = call_extern log(%3)
+  jump ret()
+}
+
+fn catch_i32['m1](%body: 'm1 fn() -> (i32) does Raise_i32) -> (i32) {
+  let %1: mut fn() -> (i32) does Raise_i32 = closure catch_i32_handle0['m1](%body)
+  let %2: i32 = handle catch_i32_handler0(%1)
+  jump ret(%2)
+}
+
+fn half(%n: i32) -> (i32) does Raise_i32 {
+  join j1(%1: i32) = jump ret(%1)
+  in
+  let %2: i32 = call percent_i32(%n, 2i32)
+  let %3: i32 = call eq_eq_i32(%2, 0i32)
+  case %3 {
+    0 =>
+      let %4: ro any = perform Raise_i32.0(%n)
+      let %5: i32 = unbox[i32](%4)
+      jump j1(%5)
+    _ =>
+      let %6: i32 = call slash_i32(%n, 2i32)
+      jump j1(%6)
+  }
+}
+
+fn percent_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Rem_i32_rem(%a, %b)
+  jump ret(%2)
+}
+
+fn eq_eq_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Eq_i32_eq(%a, %b)
+  jump ret(%2)
+}
+
+fn slash_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Div_i32_div(%a, %b)
+  jump ret(%2)
+}
+
+fn Rem_i32_rem(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = rem.s(%a, %b)
+  jump ret(%2)
+}
+
+fn Eq_i32_eq(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = eq(%a, %b)
+  jump ret(%2)
+}
+
+fn Div_i32_div(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = div.s(%a, %b)
+  jump ret(%2)
+}
+
+fn file_lambda0() -> (i32) does Raise_i32 {
+  let %0: i32 = call half(4i32)
+  jump ret(%0)
+}
+
+fn file_lambda1() -> (i32) does Raise_i32 {
+  let %0: i32 = call half(7i32)
+  jump ret(%0)
+}
+
+fn catch_i32_handle0['m1](%body: 'm1 fn() -> (i32) does Raise_i32) -> (i32) does Raise_i32 {
+  let %1: i32 = apply(%body)
+  jump ret(%1)
+}
+
+fn catch_i32_handle0_return(%0: i32) -> (i32) {
+  jump ret(0i32)
+}
+
+fn catch_i32_handle0_raise(%0: i32, %1: cont(ro any) -> (i32)) -> (i32) {
+  let %2: mut Tuple_i32 = new Tuple_i32.0(%0)
+  let %e: i32 = get Tuple_i32.0.0(%2)
+  jump ret(%e)
+}
+--------------------------------------------------------------------------------
+log(0)
+log(7)
+
+================================================================================
+An operation's type parameter inside another type
+:error
+:test-prelude
+================================================================================
+effect Wrap { fn wrap[T](x: T) -> Option[T]; }
+fn none[R](body: fn() -> R does Wrap) -> R = match body() {
+  v => v,
+  effect wrap(x), k => resume(k, None),
+};
+none(|| wrap(1));
+--------------------------------------------------------------------------------
+error in <file> at `wrap(1)`: an operation's type parameter inside another type isn't supported yet

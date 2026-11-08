@@ -7,6 +7,7 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
     hir::{self, Literal, LogicOp},
+    ids::{FunctionId, ItemContainerId},
 };
 use boltlang_hir_ty::{
     AdtId,
@@ -29,7 +30,7 @@ use conduit_ir::{
 
 use crate::{
     Ctx, Error, ErrorKind, ExternKey,
-    ty::{Scalar, Types, is_fieldless, mutability, placeholder},
+    ty::{PLACEHOLDER, Scalar, Types, is_fieldless, mutability, placeholder},
 };
 
 type R<T> = Result<T, ErrorKind>;
@@ -983,6 +984,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         result_ty: &MonoTy<'db>,
     ) -> R<Val> {
         let u = self.use_of(item, use_ty)?;
+        if let Use::Op { op, effect_args } = u {
+            return self.perform(op, &effect_args, use_ty, args, result_ty);
+        }
         let args: Vec<Atom> = args.into_iter().flatten().collect();
         let results = match u {
             Use::Instance { instance, mutabilities, rows, dicts } => {
@@ -1018,16 +1022,72 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
             Use::Builtin(builtin) => return self.builtin(builtin, args, result_ty),
             Use::Method { .. } => return Err(ErrorKind::unsupported("dictionaries")),
-            // A `perform`, which the nearest handler of its effect runs.
-            Use::Op { op: f, effect_args } => {
-                let (effect, op) = self
-                    .cx
-                    .op(f, &effect_args)
-                    .ok_or_else(|| ErrorKind::unsupported("this operation"))?;
-                self.b.perform(effect, op, args)
-            }
+            Use::Op { .. } => unreachable!("performed above"),
         };
         Ok(results.first().map(|&v| Atom::Var(v)))
+    }
+
+    /// A `perform` of the operation `f`, which the nearest handler of its
+    /// effect runs. What has a type parameter of the operation as its type
+    /// is boxed on the way in and unboxed on the way out, since the
+    /// operation's declaration, and so its handlers, has `any` there.
+    fn perform(
+        &mut self,
+        f: FunctionId<'db>,
+        effect_args: &[MonoTy<'db>],
+        use_ty: &boltlang_hir_ty::Ty<'db>,
+        args: Vec<Val>,
+        result_ty: &MonoTy<'db>,
+    ) -> R<Val> {
+        let db = self.cx.db;
+        let (effect, index) =
+            self.cx.op(f, effect_args).ok_or_else(|| ErrorKind::unsupported("this operation"))?;
+        let ItemContainerId::Effect(e) = f.container(db) else {
+            return Err(ErrorKind::unsupported("this operation"));
+        };
+        let (declared, ret) = crate::op_params(db, self.cx.root, &(e, effect_args.into()), f)?;
+        let MonoTy::Fn(given, ..) = self.mono_of(use_ty)? else {
+            return Err(ErrorKind::unsupported("this operation"));
+        };
+        let mut atoms = Vec::new();
+        for ((v, declared), given) in args.into_iter().zip(&declared).zip(given.iter()) {
+            if !matches!(declared, MonoTy::Any) || matches!(given, MonoTy::Any) {
+                if declared.has_any() && declared != given {
+                    return Err(ErrorKind::unsupported(
+                        "an operation's type parameter inside another type",
+                    ));
+                }
+                atoms.extend(v);
+                continue;
+            }
+            // A value of a type with no values, like `()`, is boxed as a
+            // placeholder.
+            let (t, v) = match (self.cty(given)?, v) {
+                (Some(t), Some(v)) => (t, v),
+                _ => (PLACEHOLDER, placeholder()),
+            };
+            atoms.push(Atom::Var(self.b.boxed(t, v)));
+        }
+        let results = self.b.perform(effect, index, atoms);
+        let result = results.first().map(|&v| Atom::Var(v));
+        if !matches!(ret, MonoTy::Any) || matches!(result_ty, MonoTy::Any) {
+            if ret.has_any() && ret != *result_ty {
+                return Err(ErrorKind::unsupported(
+                    "an operation's type parameter inside another type",
+                ));
+            }
+            return Ok(result);
+        }
+        // A handler can't resume with a value of a type that has none, so
+        // the operation doesn't return then.
+        if matches!(result_ty, MonoTy::Never) {
+            self.b.trap();
+            return Ok(None);
+        }
+        Ok(match (self.cty(result_ty)?, result) {
+            (Some(t), Some(r)) => Some(Atom::Var(self.b.unbox(t, r))),
+            _ => None,
+        })
     }
 
     /// Call what a [`Callee`] calls, with these arguments.
