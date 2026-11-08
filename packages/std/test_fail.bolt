@@ -1,0 +1,51 @@
+// The tests of `fail.bolt`.
+
+import "./fail" *;
+import "./io" (assert);
+import "./ops" *;
+import "./result" *;
+import "./string" (String);
+import "./effect" (resume);
+
+effect Log {
+  fn log(n: i32);
+}
+
+fn half(n: i32) -> i32 does Fail[String] =
+  if n % 2 == 0 { n / 2 } else { fail("odd") };
+
+#[test]
+fn attempt_gives_ok_when_nothing_fails() {
+  assert(attempt(|| half(4)) == Ok(2));
+}
+
+#[test]
+fn attempt_gives_the_error_that_stopped_it() {
+  assert(attempt(|| half(4) + half(3)) == Err("odd"));
+}
+
+#[test]
+fn or_fail_gives_the_value_of_an_ok() {
+  let r: Result[String, i32] = Ok(5);
+  assert(attempt(|| r.or_fail() + 1) == Ok(6));
+}
+
+#[test]
+fn or_fail_fails_with_the_error_of_an_err() {
+  let r: Result[String, i32] = Err("no");
+  assert(attempt(|| r.or_fail() + 1) == Err("no"));
+}
+
+#[test]
+fn attempt_leaves_the_other_effects() {
+  let mut sum = 0;
+  let r = match attempt(|| { log(1); log(2); half(3) }) {
+    v => v,
+    effect log(n), k => {
+      sum += n;
+      resume(k, ())
+    },
+  };
+  assert(r == Err("odd"));
+  assert(sum == 3);
+}
