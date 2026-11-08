@@ -21,6 +21,7 @@ pub import "./range" *;
 
 // Effects
 pub import "./effect" *;
+pub import "./fail" *;
 
 // Interfacing with the system
 pub import "./io" *;

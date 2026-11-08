@@ -142,6 +142,28 @@ expected, like the `i32` of `divide`.
 
 `Raise` has a parameter, the type of its errors, like a struct can.
 
+std has this effect already, as `Fail[E]` with the operation `fail`. Two
+functions go between it and `Result`: `r.or_fail()` gives the value of an
+`Ok` and fails with the error of an `Err`, and `attempt(body)` runs `body`
+and gives a `Result`. `attempt` leaves the other effects of `body` to the
+code around it:
+
+```bolt
+fn parse(s: String) -> Result[String, i32] =
+  if s == "42" { Ok(42) } else { Err("not a number") };
+
+fn twice(s: String) -> i32 does Fail[String] = parse(s).or_fail() * 2;
+
+[attempt(|| twice("42")), attempt(|| twice("x"))];
+```
+
+```text
+[Ok(84), Err("not a number")]
+```
+
+`?` doesn't fail with `Fail`: it returns the `Err` from the function it's
+in, which must give a `Result`.
+
 ## Effects are inferred
 
 Effects don't have to be written. A function without a written result type

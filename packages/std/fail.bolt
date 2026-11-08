@@ -1,0 +1,24 @@
+// Failing as an effect: `fail` stops the code that calls it, and a handler
+// decides what that means. `or_fail` and `attempt` go between it and
+// `Result`.
+
+import "./result" (Result, Ok, Err);
+
+/// Code that can stop with an error of type `E`. `fail` never returns, so
+/// it can stand where a value of any type is expected.
+pub effect Fail[E] {
+  fn fail[T](error: E) -> T;
+}
+
+/// The value of an `Ok`. An `Err` fails with its error.
+pub fn or_fail[E, T](r: Result[E, T]) -> T does Fail[E] = match r {
+  Ok(x) => x,
+  Err(e) => fail(e),
+};
+
+/// Run `body`, and give `Ok` with its value, or `Err` with the error it
+/// failed with. The other effects of `body` are left as they are.
+pub fn attempt[E, T, R](body: fn() -> T does Fail[E] + R) -> Result[E, T] does R = match body() {
+  value => Ok(value),
+  effect fail(error), _ => Err(error),
+};
