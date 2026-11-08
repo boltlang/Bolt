@@ -129,8 +129,11 @@ with WASI preview 1, the `fd_write` of the module
 gives it Node's WASI and calls an export:
 
 ```bash
-node --no-warnings runtime/node.mjs hello.wasm main
+node --no-warnings --experimental-wasm-exnref runtime/node.mjs hello.wasm main
 ```
+
+`--experimental-wasm-exnref` turns on Wasm's exception handling, which
+code with effect handlers needs in Node 24.
 
 ```text
 Hello, world!

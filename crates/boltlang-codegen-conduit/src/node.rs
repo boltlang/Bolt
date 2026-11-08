@@ -70,6 +70,11 @@ pub struct NodeHost {
     pub dir: PathBuf,
 }
 
+/// The flags Node runs a module with: no warnings, since Node's WASI warns
+/// that it's experimental, and Wasm's exception handling, which Conduit's
+/// handlers use and Node 24 has only behind a flag (#389).
+const NODE_FLAGS: [&str; 2] = ["--no-warnings", "--experimental-wasm-exnref"];
+
 impl NodeHost {
     /// A new directory with the runtimes, in the system's temporary
     /// directory.
@@ -89,7 +94,7 @@ impl NodeHost {
     pub fn run(&self, module: &Path, name: &str) -> std::io::Result<Result<(), String>> {
         // Node's WASI warns that it's experimental.
         let status = Command::new("node")
-            .arg("--no-warnings")
+            .args(NODE_FLAGS)
             .arg(self.dir.join("runtime.mjs"))
             .arg(module)
             .arg(name)
@@ -113,7 +118,7 @@ impl NodeHost {
         name: &str,
     ) -> std::io::Result<(Result<(), String>, String)> {
         let output = Command::new("node")
-            .arg("--no-warnings")
+            .args(NODE_FLAGS)
             .arg(self.dir.join(runtime.script()))
             .arg(module)
             .arg(name)

@@ -1,6 +1,6 @@
 // The runtime of a Wasm module that Bolt compiled, for Node:
 //
-//   node node.mjs <module> <export>
+//   node --experimental-wasm-exnref node.mjs <module> <export>
 //
 // It calls the export, like `main` or a test, with Node's WASI preview 1
 // as `wasi_snapshot_preview1`, without arguments, environment or

@@ -164,6 +164,7 @@ fn build_makes_a_module_that_runs_in_node() {
     let o = bolt_std(&dir, "build", &["a.bolt"]);
     assert!(o.ok, "{}", o.err);
     let run = Command::new("node")
+        .arg("--experimental-wasm-exnref")
         .arg(node_runtime())
         .args(["a.wasm", "main"])
         .current_dir(&dir)
