@@ -55,13 +55,11 @@ class Lines {
 }
 
 /**
- * What a module is compiled with. The JS String Builtins, which
- * `std/js/string.bolt` imports from `wasm:js-string`, would go here as
- * `builtins: ["js-string"]`, but those that give a string need a
- * `(ref extern)` result, which Conduit doesn't give yet (#399). Until
- * then, `jsString` below runs instead.
+ * What a module is compiled with: the JS String Builtins, which
+ * `std/js/string.bolt` imports from `wasm:js-string`. An engine without
+ * them ignores the option, and uses `jsString` below instead.
  */
-export const compileOptions = {};
+export const compileOptions = { builtins: ["js-string"] };
 
 /** Stop the program, as the builtins do on a wrong argument. */
 const trap = (what) => {
