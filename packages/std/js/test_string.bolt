@@ -1,0 +1,79 @@
+// The tests of `js/string.bolt`, which only Wasm has.
+
+import "./string" *;
+import "../io" (assert);
+import "../ops" *;
+import "../string" (String);
+import "../semigroup" *;
+
+#[cfg(host = "wasm")]
+#[test]
+fn a_string_goes_to_javascript_and_back() {
+  let s = "héllo, wörld 🎉";
+  assert(JsString.from(s).to_string() == s);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn the_empty_string_goes_to_javascript_and_back() {
+  assert(JsString.from("").to_string() == "");
+  assert(JsString.from("").len() == 0);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn len_counts_utf16_code_units() {
+  assert(JsString.from("abc").len() == 3);
+  assert(JsString.from("é").len() == 1);
+  assert(JsString.from("🎉").len() == 2);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn code_units_and_points() {
+  let s = JsString.from("a🎉");
+  assert(char_code_at(s, 0) == 97);
+  assert(char_code_at(s, 1) == 0xD83C);
+  assert(code_point_at(s, 1) == 0x1F389);
+  assert(code_point_at(s, 2) == 0xDF89);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn concat_and_substring() {
+  let s = JsString.from("hello, ") <> JsString.from("world");
+  assert(s.to_string() == "hello, world");
+  assert(substring(s, 7, 12).to_string() == "world");
+  assert(substring(s, -3, 2).to_string() == "he");
+  assert(substring(s, 5, 99).to_string() == ", world");
+  assert(substring(s, 4, 2).len() == 0);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn comparing() {
+  assert(JsString.from("x") == JsString.from("x"));
+  assert(JsString.from("x") != JsString.from("y"));
+  assert(JsString.from("a") < JsString.from("b"));
+  assert(JsString.from("b") > JsString.from("a"));
+  assert(JsString.from("Z") < JsString.from("a"));
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn a_lone_surrogate_becomes_the_replacement_character() {
+  let s = JsString.from_char_code(0xD800);
+  assert(s.len() == 1);
+  assert(s.to_string() == "\u{FFFD}");
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn many_strings_reuse_their_slots() {
+  let mut i = 0;
+  while i < 5000 {
+    let s = JsString.from("x");
+    assert(s.len() == 1);
+    i += 1;
+  }
+}

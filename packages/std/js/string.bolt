@@ -1,0 +1,170 @@
+// JavaScript strings, as the JavaScript engine holds them: UTF-16 code
+// units, with the JS String Builtins (`wasm:js-string`), which the engine
+// runs without leaving Wasm. A `JsString` is only converted to a Bolt
+// `String`, which is UTF-8, when that's asked for.
+//
+// Only for Wasm: the evaluator has no JavaScript.
+
+import "../ops" *;
+import "../option" (Option, Some);
+import "../semigroup" (Semigroup);
+import "../debug" (Debug, debug);
+import "../string" (String, StringBuilder, bytes);
+import "../array" (array_alloc, array_freeze);
+import "../io" (panic);
+
+/// A string of JavaScript's. Like a `String`, it never changes.
+#[cfg(host = "wasm")]
+#[link(wasm)]
+pub type JsString;
+
+// The builtins. The engine checks the strings and indices they get, and
+// stops the program on a wrong one, so the functions below check first.
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "length")]
+fn js_length(s: JsString) -> i32;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "charCodeAt")]
+fn js_char_code_at(s: JsString, i: i32) -> i32;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "codePointAt")]
+fn js_code_point_at(s: JsString, i: i32) -> i32;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "concat")]
+fn js_concat(a: JsString, b: JsString) -> JsString;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "substring")]
+fn js_substring(s: JsString, start: i32, end: i32) -> JsString;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "equals")]
+fn js_equals(a: JsString, b: JsString) -> i32;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "compare")]
+fn js_compare(a: JsString, b: JsString) -> i32;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "fromCharCode")]
+fn js_from_char_code(c: i32) -> JsString;
+
+// Bolt's runtimes, which convert between UTF-8 in memory and a JavaScript
+// string with `TextDecoder` and `TextEncoder`. A host value can't go
+// through memory, so each conversion is two calls: one that gives the
+// runtime the text, and one that takes the result.
+
+/// Decode the UTF-8 `bytes`, for `take_string`.
+#[cfg(host = "wasm")]
+#[link(wasm, module = "bolt:js", name = "stage_utf8", abi = flat)]
+fn stage_utf8(bytes: imm [u8]);
+
+/// The string `stage_utf8` decoded.
+#[cfg(host = "wasm")]
+#[link(wasm, module = "bolt:js", name = "take_string")]
+fn take_string() -> JsString;
+
+/// Encode `s` in UTF-8, for `take_utf8`, and give the number of bytes.
+#[cfg(host = "wasm")]
+#[link(wasm, module = "bolt:js", name = "encode_utf8")]
+fn encode_utf8(s: JsString) -> i32;
+
+/// Write the bytes `encode_utf8` made to `out`, which has room for them.
+#[cfg(host = "wasm")]
+#[link(wasm, module = "bolt:js", name = "take_utf8", abi = flat)]
+fn take_utf8(out: mut [u8]);
+
+/// `s` as a JavaScript string.
+#[cfg(host = "wasm")]
+pub fn JsString.from(s: String) -> JsString {
+  stage_utf8(bytes(s));
+  take_string()
+}
+
+/// The JavaScript string of the UTF-16 code unit `c`, which is taken
+/// modulo 65536, as `String.fromCharCode` does.
+#[cfg(host = "wasm")]
+pub fn JsString.from_char_code(c: i32) -> JsString = js_from_char_code(c);
+
+/// `s` as a Bolt `String`, in UTF-8. A lone surrogate, which isn't valid
+/// UTF-16, becomes U+FFFD, as `TextEncoder` makes it.
+#[cfg(host = "wasm")]
+pub fn to_string(s: JsString) -> String {
+  let out: mut [u8] = array_alloc(encode_utf8(s));
+  take_utf8(out);
+  String.from_bytes(array_freeze(out))
+}
+
+/// The number of UTF-16 code units of `s`, as JavaScript's `length` counts
+/// them. A character outside the Basic Multilingual Plane, like most emoji,
+/// is two.
+#[cfg(host = "wasm")]
+pub fn len(s: JsString) -> i32 = js_length(s);
+
+#[cfg(host = "wasm")]
+fn check_index(s: JsString, i: i32) {
+  if i < 0 || i >= len(s) {
+    panic("index out of bounds of a JsString");
+  }
+}
+
+/// The UTF-16 code unit at `i`.
+#[cfg(host = "wasm")]
+pub fn char_code_at(s: JsString, i: i32) -> i32 {
+  check_index(s, i);
+  js_char_code_at(s, i)
+}
+
+/// The code point that starts at `i`: a surrogate pair is joined, and a
+/// lone surrogate is given as it is.
+#[cfg(host = "wasm")]
+pub fn code_point_at(s: JsString, i: i32) -> i32 {
+  check_index(s, i);
+  js_code_point_at(s, i)
+}
+
+/// The code units of `s` from `start` up to `end`. Both are clamped to the
+/// string, and an `end` before `start` gives the empty string.
+#[cfg(host = "wasm")]
+pub fn substring(s: JsString, start: i32, end: i32) -> JsString {
+  let n = len(s);
+  let clamp = |i: i32| if i < 0 { 0 } else if i > n { n } else { i };
+  let (a, b) = (clamp(start), clamp(end));
+  js_substring(s, a, if b < a { a } else { b })
+}
+
+/// `a <> b` is `b` after `a`.
+#[cfg(host = "wasm")]
+impl Semigroup[JsString] {
+  fn concat(a, b) = js_concat(a, b);
+}
+
+/// Strings are equal when their code units are.
+#[cfg(host = "wasm")]
+impl Eq[JsString] {
+  fn eq(a, b) = js_equals(a, b) != 0;
+}
+
+/// The order of their code units, as JavaScript's `<` orders strings.
+#[cfg(host = "wasm")]
+impl Ord[JsString] {
+  fn cmp(a, b) = {
+    let c = js_compare(a, b);
+    if c < 0 { Ordering.Less } else if c > 0 { Ordering.Greater } else { Ordering.Equal }
+  };
+}
+
+#[cfg(host = "wasm")]
+impl PartialOrd[JsString] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+}
+
+/// A `JsString` looks like the `String` it converts to, like `"hi"`.
+#[cfg(host = "wasm")]
+impl Debug[JsString] {
+  fn debug(s, out) = debug(to_string(s), out);
+}
