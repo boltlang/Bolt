@@ -27,7 +27,7 @@ use conduit_ir::{
 
 use crate::{
     ErrorKind,
-    ty::{PLACEHOLDER, Types, placeholder},
+    ty::{PLACEHOLDER, Types, is_nullable_host, placeholder},
 };
 
 /// How a value of one type becomes one of the other.
@@ -77,6 +77,12 @@ impl<'db> ConvCx<'_, 'db> {
             (MonoTy::Any(_), MonoTy::Any(_)) => Ok(Step::Same),
             (_, MonoTy::Any(_)) => Ok(Step::Box),
             (MonoTy::Any(_), _) => Ok(Step::Unbox),
+            // A `nullable host` isn't an object of `Option`'s data type.
+            _ if is_nullable_host(self.db, self.root, from)
+                || is_nullable_host(self.db, self.root, to) =>
+            {
+                Err(unsupported("converting an `Option` of a type of the host"))
+            }
             _ if self.value(from)? == self.value(to)? => Ok(Step::Same),
             _ => Ok(Step::Call),
         }

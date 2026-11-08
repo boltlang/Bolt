@@ -5,6 +5,8 @@ import "../io" (assert);
 import "../ops" *;
 import "../string" (String);
 import "../semigroup" *;
+import "../option" (Option, Some, None);
+import "../vec" (Vec, push);
 
 #[cfg(host = "wasm")]
 #[test]
@@ -76,4 +78,39 @@ fn many_strings_reuse_their_slots() {
     assert(s.len() == 1);
     i += 1;
   }
+}
+
+// An `Option[JsString]` is a `nullable host`: `None` is null.
+
+#[cfg(host = "wasm")]
+fn first_char(s: Option[JsString]) -> Option[JsString] {
+  let s = s?;
+  if s.len() == 0 { None } else { Some(substring(s, 0, 1)) }
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn an_option_of_a_js_string_is_some_or_none() {
+  let some: Option[JsString] = Some(JsString.from("hi"));
+  let none: Option[JsString] = None;
+  assert(match some { Some(s) => s.to_string() == "hi", None => False });
+  assert(match none { Some(_) => False, None => True });
+  assert(match first_char(some) { Some(c) => c.to_string() == "h", None => False });
+  assert(match first_char(none) { Some(_) => False, None => True });
+  assert(some == Some(JsString.from("hi")));
+  assert(none == None);
+  assert(some != none);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn a_for_loop_over_js_strings() {
+  let xs: mut Vec[JsString] = Vec.new();
+  xs.push(JsString.from("a"));
+  xs.push(JsString.from("b"));
+  let mut all = JsString.from("");
+  for x in xs {
+    all = all <> x;
+  }
+  assert(all.to_string() == "ab");
 }

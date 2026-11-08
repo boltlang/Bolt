@@ -19,6 +19,9 @@
 //! - Each row of effects in the type arguments, like that of the closure in
 //!   `Option[fn() does Log]`, becomes an effect parameter of the
 //!   declaration, as mutabilities do.
+//! - An `Option` of a type of the host, like `Option[JsString]`, is
+//!   Conduit's `nullable host`: `None` is null, and `Some(x)` is `x`, as
+//!   a JavaScript function that may give `null` gives it.
 //! - A row's effects are Conduit's effects, one for each effect and its
 //!   arguments, and an instance's row parameters are its effect
 //!   parameters.
@@ -31,7 +34,11 @@ use boltlang_hir_def::{
     ids::{EnumId, EnumVariantId},
     signatures::{FieldList, enum_signature},
 };
-use boltlang_hir_ty::{AdtId, lang::cont_struct, lower::VariantDef};
+use boltlang_hir_ty::{
+    AdtId,
+    lang::{cont_struct, option_enum},
+    lower::VariantDef,
+};
 use boltlang_mir_mono::{MonoMut, MonoRow, MonoTy, field_types};
 use conduit_ir::{CtorDecl, DataDecl, DataId, EffectId, Mutability, Row, Sig, Ty};
 
@@ -169,6 +176,7 @@ impl<'db> Types<'db> {
                 Ty::Data(id, holding_any(elems, mutability(*own)), margs, rows)
             }
             MonoTy::Adt(AdtId::Enum(e), ..) if is_fieldless(db, *e) => Ty::I32,
+            _ if is_nullable_host(db, root, t) => Ty::NullableHost,
             MonoTy::Adt(adt @ AdtId::Enum(_), args, _, _) => {
                 let held = args.clone();
                 let (args, extracted) = abstract_muts(args, 0);
@@ -348,6 +356,20 @@ fn data_name(db: &dyn Db, name: &str, args: &[MonoTy<'_>]) -> String {
 /// of its variant, an `i32`. An enum without variants is one too.
 pub(crate) fn is_fieldless(db: &dyn Db, id: EnumId<'_>) -> bool {
     enum_signature(db, id).variants.iter().all(|v| matches!(v.fields, FieldList::Unit))
+}
+
+/// Whether `t` is an `Option` of a type of the host, which is a `nullable
+/// host`.
+pub(crate) fn is_nullable_host(db: &dyn Db, root: File, t: &MonoTy<'_>) -> bool {
+    matches!(t, MonoTy::Adt(AdtId::Enum(e), args, ..)
+        if matches!(&args[..], [MonoTy::Host(_)]) && Some(*e) == option_enum(db, root))
+}
+
+/// The index of the variant `None` of the enum `Option`, which is null in
+/// a `nullable host`.
+pub(crate) fn none_index(db: &dyn Db, option: EnumId<'_>) -> u32 {
+    let variants = &enum_signature(db, option).variants;
+    variants.iter().position(|v| v.name.as_str() == "None").unwrap_or(0) as u32
 }
 
 /// A Bolt mutability as Conduit's: an instance's parameters are numbered

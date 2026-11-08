@@ -24,14 +24,14 @@ use boltlang_pattern::decision::{
     Bound, Case, Ctor, Decision, Node, NodeId, Place, PlaceId, Value,
 };
 use conduit_ir::{
-    Atom, CtorId, Func, Lit, Module, Mutability, Prim, Row, Sign, Ty, build::FuncBuilder,
+    Atom, CtorId, Func, Lit, Module, Mutability, Op, Prim, Row, Sign, Ty, build::FuncBuilder,
     build::JoinPoint,
 };
 
 use crate::{
     Ctx, Error, ErrorKind, ExternKey,
     conv::ConvCx,
-    ty::{Scalar, Types, is_fieldless, mutability, placeholder},
+    ty::{Scalar, Types, is_fieldless, is_nullable_host, mutability, none_index, placeholder},
 };
 
 type R<T> = Result<T, ErrorKind>;
@@ -575,6 +575,11 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             ExprKind::Field { base, ctor, index } => {
                 let t = self.mono(*base)?;
                 let obj = val!(self.expr(*base));
+                // The `x` of a `Some(x)` that's a `nullable host`.
+                if self.nullable_host(&t) {
+                    let obj = obj.ok_or_else(|| ErrorKind::unsupported("this host value"))?;
+                    return Ok(Some(self.host_unwrap(obj)));
+                }
                 let mut data = self.data_ctor(&t)?;
                 // A variant's field, which is read where a `case` found it.
                 if let Ctor::Variant(v) = ctor {
@@ -834,18 +839,27 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             .position(|v| v.name.as_str() == "Some")
             .ok_or_else(|| ErrorKind::unsupported("an `Option` without `Some`"))?
             as u32;
-        let Some(Ty::Data(id, ..)) = self.cty(&item_ty)? else {
-            return Err(ErrorKind::unsupported("this `for` loop"));
-        };
         let item = item.ok_or_else(|| ErrorKind::unsupported("this `for` loop"))?;
-        let case = self.b.case(item.clone());
-        let ctor = CtorId { data: id, index: some };
-        self.b.arm(case, ctor);
         let variant = boltlang_hir_def::ids::EnumVariantId { parent: *option, index: some };
         let field_ty = field_ty(self, &item_ty, Ctor::Variant(variant), 0)?;
-        let x = match self.cty(&field_ty)? {
-            Some(_) => Some(Atom::Var(self.b.get(ctor, 0, item))),
-            None => None,
+        let (case, x) = if self.nullable_host(&item_ty) {
+            // A host value, until a null.
+            let null = self.host_is_null(item.clone());
+            let case = self.b.case(null);
+            self.b.arm(case, 0);
+            (case, Some(self.host_unwrap(item)))
+        } else {
+            let Some(Ty::Data(id, ..)) = self.cty(&item_ty)? else {
+                return Err(ErrorKind::unsupported("this `for` loop"));
+            };
+            let case = self.b.case(item.clone());
+            let ctor = CtorId { data: id, index: some };
+            self.b.arm(case, ctor);
+            let x = match self.cty(&field_ty)? {
+                Some(_) => Some(Atom::Var(self.b.get(ctor, 0, item))),
+                None => None,
+            };
+            (case, x)
         };
         match pat {
             Pattern::Local(Some(local)) => self.bind(*local, x)?,
@@ -962,7 +976,30 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         if is_fieldless(self.cx.db, v.parent) {
             return Ok(Some(Atom::Lit(Lit::I32(v.index as i32))));
         }
+        // `None` is null, and `Some(x)` is `x`, which fits.
+        if self.nullable_host(&self.mono(e)?) {
+            return Ok(match fields.into_iter().next() {
+                Some(x) => Some(x),
+                None => Some(Atom::Var(self.b.op(Op::HostNull, ())[0])),
+            });
+        }
         self.construct(e, v.index, fields)
+    }
+
+    /// Whether `t` is an `Option` of a type of the host, which is a
+    /// `nullable host`.
+    fn nullable_host(&self, t: &MonoTy<'db>) -> bool {
+        is_nullable_host(self.cx.db, self.cx.root, t)
+    }
+
+    /// The `host` in the `nullable host` `v`, which isn't null.
+    fn host_unwrap(&mut self, v: Atom) -> Atom {
+        Atom::Var(self.b.op(Op::HostUnwrap, [v])[0])
+    }
+
+    /// Whether the `nullable host` `v` is null, as an `i32`.
+    fn host_is_null(&mut self, v: Atom) -> Atom {
+        Atom::Var(self.b.op(Op::HostIsNull, [v])[0])
     }
 
     /// A new object of the type of `e`, made with its constructor `index`.
@@ -1593,6 +1630,13 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             Place::Field { of, ctor, index } => {
                 let obj = self.place(l, of, env)?;
                 let of_ty = self.place_tys[of as usize].clone();
+                // The `x` of a `Some(x)` that's a `nullable host`.
+                if l.nullable_host(&of_ty) {
+                    let obj = obj.ok_or_else(|| ErrorKind::unsupported("this host value"))?;
+                    let v = Some(l.host_unwrap(obj));
+                    env.insert(p, v.clone());
+                    return Ok(v);
+                }
                 let Some(Ty::Data(id, ..)) = l.cty(&of_ty)? else {
                     return Err(ErrorKind::unsupported("a field of this type"));
                 };
@@ -1656,6 +1700,9 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                 };
                 // Conduit's `case` is on an `i32`, so an 8- or 16-bit integer
                 // is widened, by its sign, and its tags are its values.
+                // A `nullable host` is tested by whether it's null, `None`.
+                let nullable = l.nullable_host(&t);
+                let v = if nullable { l.host_is_null(v) } else { v };
                 let v = match Scalar::of(&t)? {
                     Some(sc @ Scalar::Int { bits: 8 | 16, .. }) => {
                         let sign = if sc.signed() { Sign::Signed } else { Sign::Unsigned };
@@ -1665,7 +1712,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                 };
                 let data = match l.cty(&t)? {
                     Some(Ty::Data(id, ..))
-                        if !matches!(cases.first(), Some((Case::Char(_), _))) =>
+                        if !matches!(cases.first(), Some((Case::Char(_), _))) && !nullable =>
                     {
                         Some(id)
                     }
@@ -1676,6 +1723,10 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                     match (c, data) {
                         (Case::Variant(variant), Some(id)) => {
                             l.b.arm(case, CtorId { data: id, index: variant.index });
+                        }
+                        (Case::Variant(variant), None) if nullable => {
+                            let null = variant.index == none_index(l.cx.db, variant.parent);
+                            l.b.arm(case, null as i64);
                         }
                         (Case::Variant(variant), None) => {
                             l.b.arm(case, variant.index as i64);

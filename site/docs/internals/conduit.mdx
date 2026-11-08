@@ -133,6 +133,13 @@ Bolt's are: `Effect20`.
   so a `JsString` can't be given where an `Element` is expected, though
   both are `host` in Conduit. Like a struct, it can have functions in its
   namespace, like `JsString.from`.
+- **An `Option` of a type of the host,** like `Option[Element]`, is
+  Conduit's `nullable host`, not a data type: `None` is `host_null()`,
+  `Some(x)` is `x`, a `match` tests `host_is_null`, and the `x` it binds
+  is `host_unwrap`. So a function the host provides that may give `null`,
+  like `getElementById`, is declared to give an `Option[Element]`, and a
+  JavaScript `null` arrives as `None`. Giving one to an operation's type
+  parameter isn't supported yet.
 - **An operation's own type parameters are `any`.** The `T` of
   `fn fail[T](error: E) -> T` is Conduit's boxed `any` in the operation's
   signature, so every use of `fail` is the same operation, and its
