@@ -323,14 +323,6 @@ impl<'db> Solver<'db> {
                 if keep.contains(&var) || !self.is_unbound(var) {
                     continue;
                 }
-                // A row that a combination or a handler decides isn't free
-                // to choose.
-                let combined = self.pending_rows.iter().any(|(c, _)| {
-                    c.decided().is_some_and(|row| self.unifier.resolve(row) == Ty::Var(var))
-                });
-                if combined {
-                    continue;
-                }
                 // What must fit in it, each once: a function called twice
                 // adds its effects twice.
                 let mut below: Vec<(Ty<'db>, Origin<'db>)> = Vec::new();
@@ -348,7 +340,62 @@ impl<'db> Solver<'db> {
                     Ty::Var(v) => keep.contains(v),
                     _ => true,
                 };
-                if !below.iter().all(|(t, _)| settled(t)) {
+                let all_settled = below.iter().all(|(t, _)| settled(t));
+                // A row that a combination or a handler decides isn't free
+                // to choose. The goal of a combination whose unknown parts
+                // are free, like the `g` of `Fail ⊙ r ~ g` for a closure
+                // given where `fn() does Fail + R` is expected, still gets
+                // its least solution: what must fit in it and its known
+                // parts. The combination then gives `r` the rest (#384).
+                let mut decided = false;
+                let mut least = None;
+                for (c, _) in &self.pending_rows {
+                    let Some(row) = c.decided() else { continue };
+                    if self.unifier.resolve(row) != Ty::Var(var) {
+                        continue;
+                    }
+                    decided = true;
+                    if let RowConstraint::Combine { parts, .. } = c
+                        && least.is_none()
+                    {
+                        let parts: Vec<Ty<'db>> =
+                            parts.iter().map(|p| self.unifier.resolve(p)).collect();
+                        let free = parts.iter().all(|p| match p {
+                            Ty::Var(v) => *v != var && !keep.contains(v),
+                            p => p.row_parts().is_some() || *p == Ty::Error,
+                        });
+                        if free {
+                            least = Some(parts);
+                        }
+                    }
+                }
+                if decided {
+                    let Some(parts) = least else { continue };
+                    if below.is_empty() || !all_settled {
+                        continue;
+                    }
+                    let mut rows = below.clone();
+                    for p in parts.into_iter().filter(|p| p.row_parts().is_some()) {
+                        rows.push((p, below[0].1));
+                    }
+                    let rows: Vec<(Ty<'db>, Origin<'db>)> = rows
+                        .into_iter()
+                        .map(|(t, origin)| match t {
+                            Ty::Var(_) => (Ty::Row(Box::new([]), Box::new([t])), origin),
+                            t => (t, origin),
+                        })
+                        .collect();
+                    let solution = self.union(&rows);
+                    self.equal(&Ty::Var(var), &solution, below[0].1);
+                    progress = true;
+                    continue;
+                }
+                // An unknown part of such a combination waits for its goal,
+                // when nothing else must fit in it.
+                if below.is_empty() && self.waits_for_goal(var, keep) {
+                    continue;
+                }
+                if !all_settled {
                     continue;
                 }
                 let rows: Vec<(Ty<'db>, Origin<'db>)> = below
@@ -410,6 +457,17 @@ impl<'db> Solver<'db> {
             }
         }
         false
+    }
+
+    /// Whether `var` is a part of a combination whose goal is a row
+    /// variable that settling is still free to choose.
+    fn waits_for_goal(&self, var: TyVar, keep: &[TyVar]) -> bool {
+        self.pending_rows.iter().any(|(c, _)| {
+            let RowConstraint::Combine { parts, goal } = c else { return false };
+            let in_parts = parts.iter().any(|p| self.unifier.resolve(p) == Ty::Var(var));
+            in_parts
+                && matches!(self.unifier.resolve(goal), Ty::Var(g) if g != var && !keep.contains(&g))
+        })
     }
 
     fn is_unbound(&self, var: TyVar) -> bool {

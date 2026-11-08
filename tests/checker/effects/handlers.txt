@@ -238,3 +238,22 @@ f: fn() -> () does Log
 g: fn() -> () does Log
 --------------------------------------------------------------------------------
 error at `k`: expected Cont[(), (), Nothing], found Cont[(), (), Log]
+
+================================================================================
+A closure given where an open row is expected keeps its other effects
+:test-prelude
+================================================================================
+effect Log { fn log(m: String); }
+effect Boom { fn boom[T]() -> T; }
+fn catch_boom[T, R](body: fn() -> T does Boom + R) -> Option[T] does R = match body() {
+  v => Some(v),
+  effect boom(), _ => None,
+};
+fn written() -> Option[i32] does Log = catch_boom(|| { log("a"); boom() });
+fn inferred() = catch_boom(|| { log("a"); boom() });
+fn pure() = catch_boom(|| boom());
+--------------------------------------------------------------------------------
+catch_boom: forall T R. fn(fn() -> T does Boom + R) -> Option[T] does R
+written: fn() -> Option[i32] does Log
+inferred: forall a. fn() -> Option[a] does Log
+pure: forall a. fn() -> Option[a]
