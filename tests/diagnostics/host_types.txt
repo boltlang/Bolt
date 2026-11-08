@@ -1,0 +1,73 @@
+================================================================================
+A type of the host
+================================================================================
+#[link(wasm)]
+type JsString;
+#[link(wasm, module = "env", name = "hello")]
+fn hello() -> JsString;
+
+================================================================================
+A type alias without a type
+================================================================================
+type Extern;
+   //^^^^^^ error: this type alias has no type; only a type the host provides, with `#[link(wasm)]`, can do without one
+fn f(x: Extern) -> Extern = x;
+
+================================================================================
+An associated type has no type in its class
+================================================================================
+class Container[C] {
+  type Item;
+}
+
+================================================================================
+A type linked to the host can't have a type
+================================================================================
+#[link(wasm)]
+type Handle = i32;
+   //^^^^^^ error: a type linked to the host can't have `= ..`: the host provides it
+
+================================================================================
+A type linked to the host can't have type parameters
+================================================================================
+#[link(wasm)]
+type Box[T];
+   //^^^ error: a type linked to the host can't have type parameters yet
+
+================================================================================
+A type of the host is declared with just #[link(wasm)]
+================================================================================
+#[link(wasm, module = "env")]
+type A;
+   //^ error: a type of the host is declared with just `#[link(wasm)]`: it has no module, name or ABI, and only Wasm has types of the host
+#[link(wasm, abi = flat)]
+type B;
+   //^ error: a type of the host is declared with just `#[link(wasm)]`: it has no module, name or ABI, and only Wasm has types of the host
+#[link(emu)]
+type C;
+   //^ error: a type of the host is declared with just `#[link(wasm)]`: it has no module, name or ABI, and only Wasm has types of the host
+#[link(c)]
+type D;
+   //^ error: a type of the host is declared with just `#[link(wasm)]`: it has no module, name or ABI, and only Wasm has types of the host
+
+================================================================================
+An associated type can't be linked to the host
+================================================================================
+class Container[C] {
+  #[link(wasm)]
+  type Item;
+     //^^^^ error: a function or type linked to the host must be at the top level of a file, not in a class, an impl or the namespace of a type
+}
+
+================================================================================
+#[link] is only for functions and types
+================================================================================
+  #[link(wasm)]
+//^^^^^^^^^^^^^ error: `#[link]` can only be on a function or a type, which the host provides
+imm struct Wrapper;
+  #[link(wasm, module = "env")]
+//^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: `#[link]` can only be on a function or a type, which the host provides
+enum Choice { Yes, No }
+  #[link(wasm)]
+//^^^^^^^^^^^^^ error: `#[link]` can only be on a function or a type, which the host provides
+const N: i32 = 1;

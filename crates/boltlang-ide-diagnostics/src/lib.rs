@@ -129,6 +129,7 @@ impl DiagnosticCode {
     pub const BAD_LINK: Self = Self("E0252");
     pub const BAD_CFG: Self = Self("E0253");
     pub const BAD_TRY: Self = Self("E0254");
+    pub const MISSING_TYPE: Self = Self("E0255");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -781,10 +782,26 @@ fn describe(
              host, with `#[link(..)]`, can do without one"
                 .to_string(),
         ),
+        K::MissingType => (
+            C::MISSING_TYPE,
+            "this type alias has no type; only a type the host provides, with `#[link(wasm)]`, can do \
+             without one"
+                .to_string(),
+        ),
         K::BadLink { reason } => (
             C::BAD_LINK,
             match reason {
-                BadLink::NotTopLevel => "a function linked to the host must be at the top level of a file, not \
+                BadLink::NotFunctionOrType => {
+                    "`#[link]` can only be on a function or a type, which the host provides".to_string()
+                }
+                BadLink::TypeHasValue => {
+                    "a type linked to the host can't have `= ..`: the host provides it".to_string()
+                }
+                BadLink::TypeParams => "a type linked to the host can't have type parameters yet".to_string(),
+                BadLink::TypeNotWasm => "a type of the host is declared with just `#[link(wasm)]`: it has no \
+                                         module, name or ABI, and only Wasm has types of the host"
+                    .to_string(),
+                BadLink::NotTopLevel => "a function or type linked to the host must be at the top level of a file, not \
                                          in a class, an impl or the namespace of a type"
                     .to_string(),
                 BadLink::HasBody => {

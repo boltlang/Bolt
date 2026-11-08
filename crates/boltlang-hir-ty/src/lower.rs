@@ -583,10 +583,8 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 Ty::Error
             }
             Some(ty) => subst_params(ty, GenericDefId::TypeAlias(alias), &args),
-            None => {
-                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                Ty::Error
-            }
+            // An alias without a type, which is reported where it's declared.
+            None => Ty::Error,
         };
         (ty, Some(Kind::Type))
     }

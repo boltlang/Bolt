@@ -232,6 +232,9 @@ pub enum DiagnosticKind<'db> {
     /// A function at the top level of a file without a body, which only a
     /// builtin or a function the host provides can be.
     MissingBody,
+    /// A type alias at the top level of a file without a type, which only
+    /// a type the host provides can be.
+    MissingType,
     /// `#[cfg(..)]` that's written wrong, or on something that isn't an
     /// item.
     BadCfg {
@@ -469,12 +472,22 @@ pub enum BecauseKind<'db> {
 /// Why a function's `#[link(..)]` is wrong.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BadLink<'db> {
+    /// It's on something other than a function or a type alias.
+    NotFunctionOrType,
     /// It's in a class, an impl or a type's namespace.
     NotTopLevel,
     /// It has a body, which the host would replace.
     HasBody,
     /// It's a builtin too.
     Builtin,
+    /// It's a type alias with a type, which the host would replace.
+    TypeHasValue,
+    /// It's a type with type parameters, which a type of the host can't
+    /// have yet.
+    TypeParams,
+    /// It's a type, with something other than `#[link(wasm)]`: a type has
+    /// no module, name or ABI, and only Wasm has types of the host.
+    TypeNotWasm,
     /// How it's written.
     Written(LinkError),
     /// With `abi = flat`, a parameter of a type that can't be passed so:
@@ -599,6 +612,7 @@ pub fn file_diagnostics<'db>(db: &'db dyn Db, file: File) -> Vec<Diagnostic<'db>
     };
     collector.syntax_errors();
     collector.cfgs();
+    collector.links();
     collector.manifest();
     collector.name_resolution();
     collector.items();
@@ -667,6 +681,29 @@ impl<'db> Collector<'db> {
             let error = if on_item { parse(&meta).err() } else { Some(CfgError::NotAnItem) };
             if let Some(error) = error {
                 self.push(Some(attr.syntax().text_range()), DiagnosticKind::BadCfg { error });
+            }
+        }
+    }
+
+    /// Each `#[link(..)]` on something other than a function or a type
+    /// alias, which the host can't provide.
+    fn links(&mut self) {
+        use boltlang_syntax::ast::Node as _;
+        let attrs: Vec<_> =
+            self.root.descendants().filter_map(boltlang_syntax::ast::Attr::cast).collect();
+        for attr in attrs {
+            let is_link = attr
+                .meta()
+                .and_then(|m| m.path())
+                .is_some_and(|path| path.syntax().text().to_string().trim() == "link");
+            let on_decl = attr.syntax().parent().is_some_and(|p| {
+                matches!(p.kind(), SyntaxKind::FUNC_DECL | SyntaxKind::TYPE_ALIAS)
+            });
+            if is_link && !on_decl {
+                self.push(
+                    Some(attr.syntax().text_range()),
+                    DiagnosticKind::BadLink { reason: BadLink::NotFunctionOrType },
+                );
             }
         }
     }
@@ -1337,6 +1374,48 @@ impl<'db> Collector<'db> {
         self.lower(map, &ty.diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::TypeAlias(id)).diagnostics);
         self.lower(map, &assoc_type_bounds(db, id).diagnostics);
+        self.host_type(id);
+    }
+
+    /// Report a type alias at the top level without a type that isn't
+    /// linked to the host, and check one with `#[link(..)]`: it must be a
+    /// type of the host, declared with just `#[link(wasm)]`.
+    fn host_type(&mut self, id: TypeAliasId<'db>) {
+        use boltlang_hir_def::item_tree::LinkKind;
+        let db = self.db;
+        let item = id.item(db);
+        let range = Some(self.item_range(item.ast_id));
+        let top = matches!(id.container(db), ItemContainerId::File(_));
+        let Some(link) = &item.link else {
+            if top && !item.has_value {
+                self.push(range, DiagnosticKind::MissingType);
+            }
+            return;
+        };
+        let reason = if !top {
+            BadLink::NotTopLevel
+        } else if item.has_value {
+            BadLink::TypeHasValue
+        } else if !GenericDefId::TypeAlias(id).generic_params(db).type_params.is_empty() {
+            BadLink::TypeParams
+        } else {
+            match &link.error {
+                // A type has no module.
+                None | Some(LinkError::NoModule) => {
+                    let plain = link.kind == LinkKind::Wasm
+                        && link.module.is_none()
+                        && link.name.is_none()
+                        && link.abi == LinkAbi::Conduit;
+                    if plain {
+                        return;
+                    }
+                    BadLink::TypeNotWasm
+                }
+                Some(LinkError::NoNativeTarget) => BadLink::TypeNotWasm,
+                Some(e) => BadLink::Written(e.clone()),
+            }
+        };
+        self.push(range, DiagnosticKind::BadLink { reason });
     }
 
     /// Report a type written at `type_ref` that can't have values, like
