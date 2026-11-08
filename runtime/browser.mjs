@@ -8,8 +8,10 @@
 // `console.log`, and what it writes to stderr to `console.error`, a line
 // at a time. Stdin is empty, there are no arguments, environment or
 // preopened directories, and the clocks and random bytes are the
-// browser's. Other WASI functions answer `nosys`, and any other function
-// the module imports stops the program, unless `imports` gives it.
+// browser's. Other WASI functions answer `nosys`. `std/js` gets the JS
+// String Builtins, `wasm:js-string`, and the module `bolt:js`, which
+// converts strings. Any other function the module imports stops the
+// program, unless `imports` gives it.
 
 /** `errno` values. */
 const SUCCESS = 0;
@@ -52,6 +54,75 @@ class Lines {
   }
 }
 
+/**
+ * What a module is compiled with. The JS String Builtins, which
+ * `std/js/string.bolt` imports from `wasm:js-string`, would go here as
+ * `builtins: ["js-string"]`, but those that give a string need a
+ * `(ref extern)` result, which Conduit doesn't give yet (#399). Until
+ * then, `jsString` below runs instead.
+ */
+export const compileOptions = {};
+
+/** Stop the program, as the builtins do on a wrong argument. */
+const trap = (what) => {
+  throw new WebAssembly.RuntimeError(what);
+};
+const string = (s) => (typeof s === "string" ? s : trap("not a string"));
+const index = (s, i) => (i >>> 0 < string(s).length ? i : trap("index out of bounds"));
+
+/**
+ * The JS String Builtins that `std` uses, for engines that don't have
+ * them. An engine that has them uses its own, and doesn't look at these.
+ */
+export const jsString = {
+  length: (s) => string(s).length,
+  charCodeAt: (s, i) => s.charCodeAt(index(s, i)),
+  codePointAt: (s, i) => s.codePointAt(index(s, i)),
+  concat: (a, b) => string(a) + string(b),
+  substring(s, start, end) {
+    [start, end] = [start >>> 0, end >>> 0];
+    return start > string(s).length || start > end ? "" : s.substring(start, end);
+  },
+  equals(a, b) {
+    if (a !== null) string(a);
+    if (b !== null) string(b);
+    return a === b ? 1 : 0;
+  },
+  compare: (a, b) => (string(a) < string(b) ? -1 : a > b ? 1 : 0),
+  fromCharCode: (c) => String.fromCharCode(c),
+};
+
+/**
+ * The module `bolt:js`, which `std/js` converts strings with, between
+ * UTF-8 in the memory that `memory()` gives and JavaScript strings. A
+ * string can't go through memory, so each way is two calls: one that
+ * gives the text, and one that takes it.
+ */
+export function boltJs(memory) {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  let decoded = "";
+  let encoded = new Uint8Array(0);
+  return {
+    stage_utf8(at, len) {
+      decoded = decoder.decode(new Uint8Array(memory().buffer, at, len));
+    },
+    take_string() {
+      const s = decoded;
+      decoded = "";
+      return s;
+    },
+    encode_utf8(s) {
+      encoded = encoder.encode(s);
+      return encoded.length;
+    },
+    take_utf8(at, len) {
+      new Uint8Array(memory().buffer, at, len).set(encoded.subarray(0, len));
+      encoded = new Uint8Array(0);
+    },
+  };
+}
+
 /** The bytes of `source`: a URL, a `Response`, a module or the bytes. */
 async function compile(source) {
   if (source instanceof WebAssembly.Module) return source;
@@ -59,9 +130,9 @@ async function compile(source) {
   if (source instanceof Promise) source = await source;
   if (typeof Response !== "undefined" && source instanceof Response) {
     if (!source.ok) throw new Error(`can't fetch the module: ${source.status} ${source.statusText}`);
-    return WebAssembly.compile(await source.arrayBuffer());
+    return WebAssembly.compile(await source.arrayBuffer(), compileOptions);
   }
-  return WebAssembly.compile(source);
+  return WebAssembly.compile(source, compileOptions);
 }
 
 /**
@@ -151,7 +222,12 @@ export async function instantiate(source, options = {}) {
       throw new Exit(code);
     },
   };
-  const imports = { ...given, wasi_snapshot_preview1: { ...wasi } };
+  const imports = {
+    "wasm:js-string": jsString,
+    "bolt:js": boltJs(() => memory),
+    ...given,
+    wasi_snapshot_preview1: { ...wasi },
+  };
   for (const i of WebAssembly.Module.imports(module)) {
     if (i.kind !== "function") continue;
     if (i.module === "wasi_snapshot_preview1") {
