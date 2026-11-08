@@ -197,6 +197,7 @@ fn show_value(v: &Value) -> String {
         Value::Obj(id) => format!("#{}", id.0),
         Value::Unset => "unset".to_string(),
         Value::Host(n) => format!("host {n}"),
+        Value::Null => "null".to_string(),
     }
 }
 
