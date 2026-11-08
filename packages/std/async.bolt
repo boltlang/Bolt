@@ -1,0 +1,86 @@
+// Code that waits, as the effect `Async`, with tasks that run next to each
+// other and an executor that runs them, like tokio's.
+//
+// The effect's operations are untyped: they schedule closures and park
+// the current task. What's typed, a task's result, lives in `Task[T]`,
+// which `spawn` and `wait` work with as ordinary functions.
+
+import "./vec" (Vec, push, is_empty, remove, clear);
+import "./ops" *;
+import "./effect" (resume);
+
+/// Code that waits, and runs next to other tasks.
+pub effect Async {
+  /// Let the other tasks that are ready run first.
+  fn pause();
+  /// Run `task` next to the code that calls `fork`.
+  fn fork(task: mut fn() does Async);
+  /// Stop until the waker that `start` is given is called. `start` keeps
+  /// the waker, like in a list of tasks waiting for something, and calling
+  /// it once lets the task go on. Calling it again does nothing.
+  fn suspend(start: mut fn(mut fn()));
+}
+
+/// Run `task` until it's done or waits, with what's ready next on `queue`.
+/// The arms put the rest of the task on the queue and return, so that the
+/// stack doesn't grow from one task to the next.
+fn step(queue: mut Vec[mut fn()], task: mut fn() does Async) = match task() {
+  () => (),
+  effect pause(), k => queue.push(|| resume(k, ())),
+  effect fork(t), k => {
+    queue.push(|| step(queue, t));
+    queue.push(|| resume(k, ()));
+  },
+  effect suspend(start), k => {
+    let mut woken = False;
+    start(|| {
+      if !woken {
+        woken = True;
+        queue.push(|| resume(k, ()));
+      }
+    });
+  },
+};
+
+/// Run `main` and every task it spawns, until all of them are done. Tasks
+/// can't outlive it.
+pub fn block_on(main: mut fn() does Async) {
+  let queue: mut Vec[mut fn()] = Vec.new();
+  step(queue, main);
+  while !queue.is_empty() {
+    let next = queue.remove(0);
+    next();
+  }
+}
+
+/// A task that `spawn` started, which gives a `T` once it's done.
+pub struct Task[T] {
+  /// Its result, once it's done.
+  result: Vec[T],
+  /// The wakers of the tasks waiting for it.
+  waiting: Vec[fn()],
+}
+
+/// Start running `f` next to the code that calls `spawn`.
+pub fn spawn[T](f: mut fn() -> T does Async) -> mut Task[T] does Async {
+  let task = mut Task { result: Vec.new(), waiting: Vec.new() };
+  fork(|| {
+    task.result.push(f());
+    for wake in task.waiting {
+      wake();
+    }
+    task.waiting.clear();
+  });
+  task
+}
+
+/// Whether `task` is done.
+pub fn is_done[T](task: Task[T]) -> Bool = !task.result.is_empty();
+
+/// Wait until `task` is done, and give its result.
+pub fn wait[T](task: mut Task[T]) -> T does Async {
+  if !is_done(task) {
+    suspend(|wake| task.waiting.push(wake));
+  }
+  task.result[0]
+}
