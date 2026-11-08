@@ -162,6 +162,8 @@ pub enum MonoTy<'db> {
     /// parameter, so that it can be given back to the checker, as when
     /// choosing an impl for `[T]`.
     Any(GenericParamId<'db>),
+    /// A type of the host, like a JavaScript string: see [`Ty::Host`].
+    Host(TypeAliasId<'db>),
 }
 
 impl<'db> MonoTy<'db> {
@@ -173,7 +175,7 @@ impl<'db> MonoTy<'db> {
     pub fn has_erased(&self) -> bool {
         match self {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => true,
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => false,
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Host(_) => false,
             MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) => {
                 args.iter().any(MonoTy::has_erased)
             }
@@ -191,7 +193,7 @@ impl<'db> MonoTy<'db> {
     pub fn has_any(&self) -> bool {
         match self {
             MonoTy::Any(_) => true,
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => false,
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) | MonoTy::Host(_) => false,
             MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::ErasedAssoc(_, args) => {
                 args.iter().any(MonoTy::has_any)
             }
@@ -221,7 +223,7 @@ impl<'db> MonoTy<'db> {
                 }
             },
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, map, next)),
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => self.clone(),
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Host(_) => self.clone(),
             MonoTy::Adt(adt, args, ms, own) => {
                 MonoTy::Adt(*adt, all(args, map, next), ms.clone(), *own)
             }
@@ -245,7 +247,11 @@ impl<'db> MonoTy<'db> {
             tys.iter().map(|t| t.map_muts(f)).collect::<Box<[_]>>()
         };
         match self {
-            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => self.clone(),
+            MonoTy::Erased(_)
+            | MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Any(_)
+            | MonoTy::Host(_) => self.clone(),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
             MonoTy::Adt(adt, args, ms, own) => {
                 let args = all(args, f);
@@ -299,7 +305,11 @@ impl<'db> MonoTy<'db> {
             }
             MonoTy::Row(row) => MonoTy::Row(param(row, out)),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Erased(_) => self.clone(),
+            MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Any(_)
+            | MonoTy::Host(_)
+            | MonoTy::Erased(_) => self.clone(),
         }
     }
 
@@ -309,7 +319,11 @@ impl<'db> MonoTy<'db> {
             tys.iter().map(|t| t.map_rows(f)).collect::<Box<[_]>>()
         };
         match self {
-            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => self.clone(),
+            MonoTy::Erased(_)
+            | MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Any(_)
+            | MonoTy::Host(_) => self.clone(),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
             MonoTy::Adt(adt, args, ms, own) => MonoTy::Adt(*adt, all(args, f), ms.clone(), *own),
             MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, f), *own),
@@ -328,7 +342,11 @@ impl<'db> MonoTy<'db> {
     pub fn has_mut_param(&self) -> bool {
         let param = |m: &MonoMut| matches!(m, MonoMut::Param(_));
         match self {
-            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => false,
+            MonoTy::Erased(_)
+            | MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Any(_)
+            | MonoTy::Host(_) => false,
             MonoTy::ErasedAssoc(_, args) => args.iter().any(MonoTy::has_mut_param),
             MonoTy::Adt(_, args, ms, m) => {
                 param(m) || ms.iter().any(param) || args.iter().any(MonoTy::has_mut_param)
@@ -382,6 +400,7 @@ impl<'db> MonoTy<'db> {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => return None,
             MonoTy::Any(p) => Ty::Param(*p),
             MonoTy::Builtin(b) => Ty::Builtin(*b),
+            MonoTy::Host(alias) => Ty::Host(*alias),
             MonoTy::Never => Ty::Never,
             MonoTy::Adt(adt, args, ms, own) => {
                 Ty::Adt(*adt, all(args)?, ms.iter().map(m).collect(), Box::new(m(own)))
@@ -435,6 +454,9 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
         match self.ty {
             MonoTy::Erased(i) => write!(f, "any{i}"),
             MonoTy::Any(_) => write!(f, "any"),
+            MonoTy::Host(alias) => {
+                write!(f, "{}", alias.item(db).name.as_ref().map_or("?", |n| n.as_str()))
+            }
             MonoTy::ErasedAssoc(alias, args) => {
                 let name = alias.item(db).name.clone();
                 write!(f, "any({}[", name.as_ref().map_or("?", |n| n.as_str()))?;
@@ -646,6 +668,7 @@ impl<'db> Subst<'_, 'db> {
                 _ => return Err(TyError::Unknown),
             },
             Ty::Builtin(b) => MonoTy::Builtin(*b),
+            Ty::Host(alias) => MonoTy::Host(*alias),
             Ty::Never => MonoTy::Never,
             Ty::Adt(adt, args, ms, own) => MonoTy::Adt(
                 *adt,

@@ -1,0 +1,55 @@
+================================================================================
+A type of the host is a type of its own
+================================================================================
+#[link(wasm)]
+type JsString;
+#[link(wasm)]
+type Element;
+#[link(wasm, module = "dom", name = "text")]
+fn text() -> JsString;
+#[link(wasm, module = "dom", name = "set_text")]
+fn set_text(e: Element, s: JsString);
+fn copy(s: JsString) -> JsString = imm s;
+fn twice(e: Element) = (e, imm e);
+--------------------------------------------------------------------------------
+text: fn() -> JsString
+set_text: fn(Element, JsString) -> ()
+copy: fn(JsString) -> JsString
+twice: fn(Element) -> imm (Element, Element)
+
+================================================================================
+Two types of the host aren't the same
+:error
+================================================================================
+#[link(wasm)]
+type JsString;
+#[link(wasm)]
+type Element;
+#[link(wasm, module = "dom", name = "text")]
+fn text() -> JsString;
+#[link(wasm, module = "dom", name = "set_text")]
+fn set_text(e: Element, s: JsString);
+fn wrong() = set_text(text(), text());
+--------------------------------------------------------------------------------
+text: fn() -> JsString
+set_text: fn(Element, JsString) -> ()
+wrong: fn() -> ()
+--------------------------------------------------------------------------------
+error at `text()`: expected Element, found JsString
+
+================================================================================
+A type of the host has functions in its namespace
+================================================================================
+//- /js.bolt
+#[link(wasm)]
+pub type JsString;
+#[link(wasm, module = "bolt:js", name = "make")]
+fn make(n: i32) -> JsString;
+pub fn JsString.of(n: i32) -> JsString = make(n);
+//- /main.bolt
+import "./js" (JsString);
+let s = JsString.of(1);
+--------------------------------------------------------------------------------
+/js.bolt: make: fn(i32) -> JsString
+/js.bolt: JsString.of: fn(i32) -> JsString
+/main.bolt: let s: JsString

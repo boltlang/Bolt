@@ -227,6 +227,8 @@ impl<'db> Types<'db> {
             // A boxed value of an operation's type parameter, which can be
             // `imm` or `mut`.
             MonoTy::Any(_) => Ty::Any(Mutability::ReadOnly),
+            // A value of the host, like a JavaScript string.
+            MonoTy::Host(_) => Ty::Host,
         }))
     }
 
@@ -399,6 +401,7 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
             | MonoTy::Never
             | MonoTy::Erased(_)
             | MonoTy::Any(_)
+            | MonoTy::Host(_)
             | MonoTy::Row(_) => t.clone(),
         }
     }

@@ -572,6 +572,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 Some(Kind::Type),
             );
         }
+        // A type of the host, which is a type of its own.
+        let item = alias.item(self.db);
+        if item.link.is_some() && !item.has_value {
+            return (Ty::Host(alias), Some(Kind::Type));
+        }
         let ty = match &type_alias_ty(self.db, alias).ty {
             Some(ty) if *ty == Ty::Error && type_alias_ty(self.db, alias).recursive => {
                 self.diagnostics.push(LowerDiagnostic::RecursiveAlias(id));

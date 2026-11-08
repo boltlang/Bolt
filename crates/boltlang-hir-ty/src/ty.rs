@@ -86,6 +86,12 @@ pub enum Ty<'db> {
     /// those an `Adt` or one `App`, so that each type has one form.
     App(Box<Ty<'db>>, Box<[Ty<'db>]>),
     Builtin(BuiltinType),
+    /// A type of the host, declared with `#[link(..)] type JsString;`: a
+    /// value the host gives, like a JavaScript string, that Bolt can only
+    /// hold and pass back. Each declaration is a type of its own, so two
+    /// of them are never equal. Nothing in Bolt can change one, so it's
+    /// always `imm`.
+    Host(TypeAliasId<'db>),
     /// `(A, B)` and its mutability: like a struct with numeric fields, a
     /// `mut` tuple's fields can be assigned, and an `imm` one holds nothing
     /// `mut`. The unit type is the empty tuple, which is always `Imm`.
@@ -382,6 +388,7 @@ impl<'db> Ty<'db> {
             Ty::Imm(ty) => f(ty),
             Ty::Var(_)
             | Ty::Builtin(_)
+            | Ty::Host(_)
             | Ty::Mutability(_)
             | Ty::Unwritten
             | Ty::Param(_)
@@ -430,6 +437,7 @@ impl<'db> Ty<'db> {
             Ty::Imm(ty) => Ty::Imm(Box::new(ty.fold(f))),
             Ty::Var(_)
             | Ty::Builtin(_)
+            | Ty::Host(_)
             | Ty::Mutability(_)
             | Ty::Unwritten
             | Ty::Param(_)
@@ -746,6 +754,10 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 f.write_str("]")
             }
             Ty::Builtin(ty) => write!(f, "{ty}"),
+            Ty::Host(alias) => match &alias.item(db).name {
+                Some(name) => write!(f, "{name}"),
+                None => f.write_str("?"),
+            },
             Ty::Tuple(tys, mutability) => {
                 if !tys.is_empty() {
                     self.write_mutability(f, mutability)?;

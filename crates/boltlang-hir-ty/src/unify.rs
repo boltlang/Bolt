@@ -278,6 +278,7 @@ impl<'db> Unifier<'db> {
                 xs.iter().zip(ys).try_for_each(|(x, y)| self.unify_all(&x.args, &y.args))
             }
             (Ty::Builtin(x), Ty::Builtin(y)) if x == y => Ok(()),
+            (Ty::Host(x), Ty::Host(y)) if x == y => Ok(()),
             (Ty::Param(x), Ty::Param(y)) if x == y => Ok(()),
             (Ty::Bound(x), Ty::Bound(y)) if x == y => Ok(()),
             // `C.Item` only equals itself.

@@ -359,8 +359,11 @@ pub struct TypeAlias {
     pub name: Option<Name>,
     pub visibility: RawVisibility,
     /// Whether it has a type, as opposed to an associated type in a class
-    /// like `type Item;`.
+    /// like `type Item;`, or a type of the host.
     pub has_value: bool,
+    /// What its `#[link(..)]` says: a type without a value that the host
+    /// provides, like `#[link(wasm)] type JsString;`.
+    pub link: Option<Link>,
     pub ast_id: AstId,
 }
 
@@ -585,7 +588,13 @@ impl ItemTree {
         let visibility = RawVisibility::from_ast(t.visibility());
         push(
             &mut self.type_aliases,
-            TypeAlias { name: name(t.name()), visibility, has_value: t.ty().is_some(), ast_id },
+            TypeAlias {
+                name: name(t.name()),
+                visibility,
+                has_value: t.ty().is_some(),
+                link: link_attr(t),
+                ast_id,
+            },
         )
     }
 }

@@ -127,6 +127,12 @@ Bolt's are: `Effect20`.
   can't happen at run time.
 - **An effect with type parameters,** like `State[i32]`, becomes one
   Conduit effect per instance, as a generic data type does.
+- **A type of the host,** declared as `#[link(wasm)] type JsString;`, is
+  Conduit's `host`: an `externref` in Wasm, which Conduit counts and keeps
+  in a table. Each such declaration is a type of its own to the checker,
+  so a `JsString` can't be given where an `Element` is expected, though
+  both are `host` in Conduit. Like a struct, it can have functions in its
+  namespace, like `JsString.from`.
 - **An operation's own type parameters are `any`.** The `T` of
   `fn fail[T](error: E) -> T` is Conduit's boxed `any` in the operation's
   signature, so every use of `fail` is the same operation, and its

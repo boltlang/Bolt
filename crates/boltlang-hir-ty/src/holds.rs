@@ -118,6 +118,7 @@ pub fn split<'db>(
         // changed.
         Ty::Imm(_)
         | Ty::Builtin(_)
+        | Ty::Host(_)
         | Ty::Mutability(_)
         | Ty::Unwritten
         | Ty::Row(..)

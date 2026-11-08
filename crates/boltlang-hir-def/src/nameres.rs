@@ -364,8 +364,9 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
 }
 
 /// Add the functions of `file` that are in the namespace of one of its
-/// types, like `fn Vec.new()`. The type must be a struct or enum of the
-/// same file, so that only the file that defines a type adds to it.
+/// types, like `fn Vec.new()`. The type must be a struct, an enum or a type
+/// of the host of the same file, so that only the file that defines a type
+/// adds to it.
 fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut FileScope<'db>) {
     let container = ItemContainerId::File(file);
     for item in &tree.top_level {
@@ -378,6 +379,11 @@ fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut F
         let variants = match out.scope.get(Namespace::Types, owner).map(|entry| entry.def) {
             Some(ModuleDefId::Struct(_)) => &[][..],
             Some(ModuleDefId::Enum(id)) => &id.item(db).variants[..],
+            Some(ModuleDefId::TypeAlias(id))
+                if id.item(db).link.is_some() && !id.item(db).has_value =>
+            {
+                &[][..]
+            }
             _ => {
                 out.diagnostics.push(NameResDiagnostic::UnresolvedOwner {
                     function: f.ast_id,
