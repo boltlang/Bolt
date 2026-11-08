@@ -166,14 +166,15 @@ impl<'db> Types<'db> {
                 let id = self.data(db, root, DataKey::Tuple(args))?;
                 let margs = extracted.iter().map(|&m| mutability(m)).collect();
                 let rows = rows.iter().map(|r| self.row(r)).collect();
-                Ty::Data(id, mutability(*own), margs, rows)
+                Ty::Data(id, holding_any(elems, mutability(*own)), margs, rows)
             }
             MonoTy::Adt(AdtId::Enum(e), ..) if is_fieldless(db, *e) => Ty::I32,
             MonoTy::Adt(adt @ AdtId::Enum(_), args, _, _) => {
+                let held = args.clone();
                 let (args, extracted) = abstract_muts(args, 0);
                 let (args, rows) = abstract_rows(&args);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
-                let own = held_mutability(&extracted)?;
+                let own = holding_any(&held, held_mutability(&extracted)?);
                 let margs = extracted.iter().map(|&m| mutability(m)).collect();
                 let rows = rows.iter().map(|r| self.row(r)).collect();
                 Ty::Data(id, own, margs, rows)
@@ -194,19 +195,21 @@ impl<'db> Types<'db> {
                 Ty::Cont(Box::new(Sig { params, results, row }))
             }
             MonoTy::Adt(adt @ AdtId::Struct(_), args, muts, own) => {
+                let held = args.clone();
                 let (args, extracted) = abstract_muts(args, muts.len() as u32);
                 let (args, rows) = abstract_rows(&args);
                 let id = self.data(db, root, DataKey::Adt(*adt, args))?;
                 let margs = muts.iter().chain(&extracted).map(|&m| mutability(m)).collect();
                 let rows = rows.iter().map(|r| self.row(r)).collect();
-                Ty::Data(id, mutability(*own), margs, rows)
+                Ty::Data(id, holding_any(&held, mutability(*own)), margs, rows)
             }
             // An array of a type with no values, like the `[]` of
             // `array_len([])`, still has a length: its elements are
             // placeholders.
             MonoTy::Array(m, elem) => {
+                let m = holding_any(std::slice::from_ref(elem), mutability(*m));
                 let elem = self.value(db, root, elem)?.unwrap_or(PLACEHOLDER);
-                Ty::Array(Box::new(elem), mutability(*m))
+                Ty::Array(Box::new(elem), m)
             }
             MonoTy::Fn(params, ret, m, row) => {
                 let mut sig = Sig::new(Vec::new(), Vec::new());
@@ -223,7 +226,7 @@ impl<'db> Types<'db> {
             }
             // A boxed value of an operation's type parameter, which can be
             // `imm` or `mut`.
-            MonoTy::Any => Ty::Any(Mutability::ReadOnly),
+            MonoTy::Any(_) => Ty::Any(Mutability::ReadOnly),
         }))
     }
 
@@ -395,7 +398,7 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
             MonoTy::Builtin(_)
             | MonoTy::Never
             | MonoTy::Erased(_)
-            | MonoTy::Any
+            | MonoTy::Any(_)
             | MonoTy::Row(_) => t.clone(),
         }
     }
@@ -428,6 +431,15 @@ fn count_params(tys: &[MonoTy<'_>]) -> u32 {
 
 /// The mutability of an enum that holds values with these
 /// mutabilities: the most any of them can be.
+/// The mutability in Conduit of an object of mutability `m` that holds
+/// values of the types `held`: `mut` if an operation's type parameter is
+/// somewhere in them. Such a value is a `readonly any`, which only a `mut`
+/// object can hold, since it may be `mut`. Bolt's types still say what can
+/// be changed.
+fn holding_any(held: &[MonoTy<'_>], m: Mutability) -> Mutability {
+    if held.iter().any(MonoTy::has_any) { Mutability::Mut } else { m }
+}
+
 fn held_mutability(held: &[MonoMut]) -> Result<Mutability, ErrorKind> {
     if held.contains(&MonoMut::Mut) {
         return Ok(Mutability::Mut);

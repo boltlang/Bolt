@@ -30,7 +30,8 @@ use conduit_ir::{
 
 use crate::{
     Ctx, Error, ErrorKind, ExternKey,
-    ty::{PLACEHOLDER, Scalar, Types, is_fieldless, mutability, placeholder},
+    conv::ConvCx,
+    ty::{Scalar, Types, is_fieldless, mutability, placeholder},
 };
 
 type R<T> = Result<T, ErrorKind>;
@@ -1028,9 +1029,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     }
 
     /// A `perform` of the operation `f`, which the nearest handler of its
-    /// effect runs. What has a type parameter of the operation as its type
-    /// is boxed on the way in and unboxed on the way out, since the
-    /// operation's declaration, and so its handlers, has `any` there.
+    /// effect runs. Its arguments are converted to the types of the
+    /// operation's declaration, which has `any` for its own type
+    /// parameters, and its result back (see [`crate::conv`]).
     fn perform(
         &mut self,
         f: FunctionId<'db>,
@@ -1049,45 +1050,22 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let MonoTy::Fn(given, ..) = self.mono_of(use_ty)? else {
             return Err(ErrorKind::unsupported("this operation"));
         };
+        let mut ccx = ConvCx { db, root: self.cx.root, types: self.types };
         let mut atoms = Vec::new();
-        for ((v, declared), given) in args.into_iter().zip(&declared).zip(given.iter()) {
-            if !matches!(declared, MonoTy::Any) || matches!(given, MonoTy::Any) {
-                if declared.has_any() && declared != given {
-                    return Err(ErrorKind::unsupported(
-                        "an operation's type parameter inside another type",
-                    ));
-                }
-                atoms.extend(v);
-                continue;
-            }
-            // A value of a type with no values, like `()`, is boxed as a
-            // placeholder.
-            let (t, v) = match (self.cty(given)?, v) {
-                (Some(t), Some(v)) => (t, v),
-                _ => (PLACEHOLDER, placeholder()),
-            };
-            atoms.push(Atom::Var(self.b.boxed(t, v)));
+        for ((v, d), g) in args.into_iter().zip(&declared).zip(given.iter()) {
+            atoms.extend(self.cx.convs.emit(&mut ccx, &mut self.b, v, g, d)?);
         }
         let results = self.b.perform(effect, index, atoms);
         let result = results.first().map(|&v| Atom::Var(v));
-        if !matches!(ret, MonoTy::Any) || matches!(result_ty, MonoTy::Any) {
-            if ret.has_any() && ret != *result_ty {
-                return Err(ErrorKind::unsupported(
-                    "an operation's type parameter inside another type",
-                ));
-            }
-            return Ok(result);
-        }
         // A handler can't resume with a value of a type that has none, so
         // the operation doesn't return then.
         if matches!(result_ty, MonoTy::Never) {
-            self.b.trap();
+            if !matches!(ret, MonoTy::Never) {
+                self.b.trap();
+            }
             return Ok(None);
         }
-        Ok(match (self.cty(result_ty)?, result) {
-            (Some(t), Some(r)) => Some(Atom::Var(self.b.unbox(t, r))),
-            _ => None,
-        })
+        self.cx.convs.emit(&mut ccx, &mut self.b, result, &ret, result_ty)
     }
 
     /// Call what a [`Callee`] calls, with these arguments.

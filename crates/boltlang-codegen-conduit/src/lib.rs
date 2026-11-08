@@ -48,6 +48,7 @@
 //! mutability parameters. Using one is an
 //! [`ErrorKind::Unsupported`] or an [`ErrorKind::MissingInConduit`] error.
 
+mod conv;
 mod emu;
 mod func;
 pub mod node;
@@ -179,6 +180,9 @@ pub(crate) struct Ctx<'db> {
     /// the MIR body it's in (0 for the instance's, `i + 1` for its `i`th
     /// lambda's) and its node.
     pub handles: HashMap<HandleKey<'db>, HandleFns<'db>>,
+    /// The functions that convert values between the types a use of an
+    /// operation gives them and those of its declaration.
+    pub convs: conv::Convs<'db>,
 }
 
 pub(crate) type HandleKey<'db> = (Instance<'db>, u32, boltlang_mir::ExprId);
@@ -278,6 +282,39 @@ pub(crate) fn op_params<'db>(
     Ok((args, ret))
 }
 
+/// Find the conversions that a `perform` of the operation `op`, at the
+/// type `use_ty`, needs between the types of its arguments and result and
+/// those of the operation's declaration.
+#[allow(clippy::too_many_arguments)]
+fn plan_perform<'db>(
+    convs: &mut conv::Convs<'db>,
+    types: &mut Types<'db>,
+    lcx: &Cx<'_, 'db>,
+    root: File,
+    op: FunctionId<'db>,
+    use_ty: &boltlang_hir_ty::Ty<'db>,
+    names: &mut BTreeMap<FuncId, String>,
+    sigs: &mut Vec<(FuncId, (Sig, MutParams, u32))>,
+) -> Result<(), ErrorKind> {
+    let db = lcx.db;
+    let Ok(mono) = lcx.ty(use_ty) else { return Ok(()) };
+    let MonoTy::Fn(given, ret, ..) = &mono else { return Ok(()) };
+    let Ok(Use::Op { effect_args, .. }) = lcx.item_use(&boltlang_mir::ItemRef::Op(op), &mono)
+    else {
+        return Ok(());
+    };
+    let ItemContainerId::Effect(e) = op.container(db) else { return Ok(()) };
+    let (declared, declared_ret) = op_params(db, root, &(e, effect_args), op)?;
+    let mut cx = conv::ConvCx { db, root, types };
+    for (g, d) in given.iter().zip(&declared) {
+        convs.plan(&mut cx, g, d, names, sigs)?;
+    }
+    if !matches!(**ret, MonoTy::Never) {
+        convs.plan(&mut cx, &declared_ret, ret, names, sigs)?;
+    }
+    Ok(())
+}
+
 /// The program of `entry` and its tests, in Conduit.
 pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     let p = program(db, entry);
@@ -331,6 +368,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         panic: None,
         effects: HashMap::new(),
         handles: HashMap::new(),
+        convs: conv::Convs::default(),
     };
     // From 0, in the order they're defined, so that the text format can
     // write each by its name alone.
@@ -477,6 +515,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     // Every type a body has, so that the data types are all declared before
     // the bodies are built. An error is reported where the type is used.
     let mut sigs = Vec::new();
+    let mut convs = conv::Convs::default();
     for iu in &p.instances {
         let error = |kind: ErrorKind| Error {
             instance: iu.instance.display(db).to_string(),
@@ -509,6 +548,24 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                     let _ = types.value(db, entry, &t);
                 }
             }
+            for (_, node) in mir.exprs() {
+                if let boltlang_mir::ExprKind::Call { callee, .. } = &node.kind
+                    && let boltlang_mir::ExprKind::Item(boltlang_mir::ItemRef::Op(op)) =
+                        &mir[*callee].kind
+                    && let Err(kind) = plan_perform(
+                        &mut convs,
+                        &mut types,
+                        &lcx,
+                        entry,
+                        *op,
+                        &mir[*callee].ty,
+                        &mut names,
+                        &mut sigs,
+                    )
+                {
+                    errors.push(error(kind));
+                }
+            }
         }
         match instance_sig(&mut types, &lcx, entry) {
             Ok(sig) => sigs.push((cx.funcs[&iu.instance], sig)),
@@ -530,6 +587,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             }
         }
     }
+    cx.convs = convs;
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -586,6 +644,11 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 Err(e) => errors.push(e),
             }
         }
+    }
+    let mut ccx = conv::ConvCx { db, root: entry, types: &mut types };
+    match cx.convs.build(&mut ccx, &module) {
+        Ok(fs) => built.extend(fs),
+        Err(kind) => errors.push(Error { instance: "a conversion".into(), at: None, kind }),
     }
     if !errors.is_empty() {
         return Err(errors);

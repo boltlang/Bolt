@@ -158,8 +158,10 @@ pub enum MonoTy<'db> {
     /// A type parameter of an operation, like the `T` of
     /// `fn fail[T](error: E) -> T`: a boxed value of any type. Operations
     /// aren't specialized on their own type parameters, so a handler's arm
-    /// sees the same type for every use of the operation.
-    Any,
+    /// sees the same type for every use of the operation. It keeps the
+    /// parameter, so that it can be given back to the checker, as when
+    /// choosing an impl for `[T]`.
+    Any(GenericParamId<'db>),
 }
 
 impl<'db> MonoTy<'db> {
@@ -171,7 +173,7 @@ impl<'db> MonoTy<'db> {
     pub fn has_erased(&self) -> bool {
         match self {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => true,
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any => false,
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => false,
             MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) => {
                 args.iter().any(MonoTy::has_erased)
             }
@@ -188,7 +190,7 @@ impl<'db> MonoTy<'db> {
     /// Whether an operation's type parameter is somewhere in the type.
     pub fn has_any(&self) -> bool {
         match self {
-            MonoTy::Any => true,
+            MonoTy::Any(_) => true,
             MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) => false,
             MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::ErasedAssoc(_, args) => {
                 args.iter().any(MonoTy::has_any)
@@ -219,7 +221,7 @@ impl<'db> MonoTy<'db> {
                 }
             },
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, map, next)),
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any => self.clone(),
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => self.clone(),
             MonoTy::Adt(adt, args, ms, own) => {
                 MonoTy::Adt(*adt, all(args, map, next), ms.clone(), *own)
             }
@@ -243,7 +245,7 @@ impl<'db> MonoTy<'db> {
             tys.iter().map(|t| t.map_muts(f)).collect::<Box<[_]>>()
         };
         match self {
-            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any => self.clone(),
+            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => self.clone(),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
             MonoTy::Adt(adt, args, ms, own) => {
                 let args = all(args, f);
@@ -297,7 +299,7 @@ impl<'db> MonoTy<'db> {
             }
             MonoTy::Row(row) => MonoTy::Row(param(row, out)),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any | MonoTy::Erased(_) => self.clone(),
+            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Erased(_) => self.clone(),
         }
     }
 
@@ -307,7 +309,7 @@ impl<'db> MonoTy<'db> {
             tys.iter().map(|t| t.map_rows(f)).collect::<Box<[_]>>()
         };
         match self {
-            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any => self.clone(),
+            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => self.clone(),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
             MonoTy::Adt(adt, args, ms, own) => MonoTy::Adt(*adt, all(args, f), ms.clone(), *own),
             MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, f), *own),
@@ -326,7 +328,7 @@ impl<'db> MonoTy<'db> {
     pub fn has_mut_param(&self) -> bool {
         let param = |m: &MonoMut| matches!(m, MonoMut::Param(_));
         match self {
-            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any => false,
+            MonoTy::Erased(_) | MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) => false,
             MonoTy::ErasedAssoc(_, args) => args.iter().any(MonoTy::has_mut_param),
             MonoTy::Adt(_, args, ms, m) => {
                 param(m) || ms.iter().any(param) || args.iter().any(MonoTy::has_mut_param)
@@ -377,7 +379,8 @@ impl<'db> MonoTy<'db> {
             Some(Ty::row_of(effects, r.params.iter().map(|&i| row(i))))
         };
         Some(match self {
-            MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) | MonoTy::Any => return None,
+            MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => return None,
+            MonoTy::Any(p) => Ty::Param(*p),
             MonoTy::Builtin(b) => Ty::Builtin(*b),
             MonoTy::Never => Ty::Never,
             MonoTy::Adt(adt, args, ms, own) => {
@@ -431,7 +434,7 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
         };
         match self.ty {
             MonoTy::Erased(i) => write!(f, "any{i}"),
-            MonoTy::Any => write!(f, "any"),
+            MonoTy::Any(_) => write!(f, "any"),
             MonoTy::ErasedAssoc(alias, args) => {
                 let name = alias.item(db).name.clone();
                 write!(f, "any({}[", name.as_ref().map_or("?", |n| n.as_str()))?;
@@ -582,6 +585,13 @@ fn is_op_param(db: &dyn Db, ty: &Ty<'_>) -> bool {
         if matches!(f.container(db), ItemContainerId::Effect(_))))
 }
 
+fn op_param<'db>(ty: &Ty<'db>) -> GenericParamId<'db> {
+    match ty {
+        Ty::Param(p) => *p,
+        _ => unreachable!("only a parameter is an operation's"),
+    }
+}
+
 /// What a parameter of a scheme is in an instance: a type, or one of the
 /// instance's mutabilities.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -632,7 +642,7 @@ impl<'db> Subst<'_, 'db> {
                 Some(Slot::Row(r)) => MonoTy::Row(r.clone()),
                 // An operation's own type parameter, which a handler's arm
                 // or the operation's declaration has.
-                None if is_op_param(self.db, ty) => MonoTy::Any,
+                None if is_op_param(self.db, ty) => MonoTy::Any(op_param(ty)),
                 _ => return Err(TyError::Unknown),
             },
             Ty::Builtin(b) => MonoTy::Builtin(*b),
@@ -781,6 +791,9 @@ impl<'db> Subst<'_, 'db> {
             Ty::Mutability(Mutability::Mut) => MonoMut::Mut,
             Ty::Param(_) | Ty::Bound(_) => match self.slot(ty) {
                 Some(Slot::Mut(m)) => *m,
+                // An operation's own mutability parameter, as its
+                // declaration has it: unwritten, so `imm`.
+                None if is_op_param(self.db, ty) => MonoMut::Imm,
                 _ => return Err(TyError::Unknown),
             },
             // A mutability left undecided is `imm`, as the checker defaults it.

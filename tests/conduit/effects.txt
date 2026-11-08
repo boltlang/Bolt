@@ -1979,15 +1979,383 @@ log(0)
 log(7)
 
 ================================================================================
-An operation's type parameter inside another type
+An operation's type parameter inside data is converted, rebuilding the data
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+enum List[T] { Nil, Cons(T, List[T]) }
+import List.*;
+effect Wrap { fn wrap[T](x: T) -> Option[T]; fn twice[T](xs: List[T]) -> List[T]; }
+fn handle[R](body: imm fn() -> R does Wrap) -> R = match body() {
+  v => v,
+  effect wrap(x), k => resume(k, Some(x)),
+  effect twice(xs), k => resume(k, match xs { Cons(x, _) => Cons(x, xs), Nil => Nil }),
+};
+fn sum(xs: List[i32]) -> i32 = match xs { Nil => 0, Cons(x, rest) => x + sum(rest) };
+handle(|| {
+  match wrap(1) { Some(n) => log(n), None => log(0) };
+  log(sum(twice(Cons(2, Cons(3, Nil)))));
+});
+--------------------------------------------------------------------------------
+data Option_any {
+  ()
+  (ro any)
+}
+
+data List_any {
+  ()
+  (ro any, mut List_any)
+}
+
+data Option_i32 {
+  ()
+  (i32)
+}
+
+data List_i32 {
+  ()
+  (i32, imm List_i32)
+}
+
+data Tuple_any {
+  (ro any)
+}
+
+data Tuple_List_any {
+  (mut List_any)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+effect Wrap {
+  (ro any) -> (mut Option_any)
+  (mut List_any) -> (mut List_any)
+}
+
+handler handle_handler0 for Wrap env() ops(handle_handle0_wrap, handle_handle0_twice) ret handle_handle0_return
+
+fn file() -> () {
+  let %0: imm fn() -> () does Wrap = closure file_lambda0()
+  let = call handle(%0)
+  jump ret()
+}
+
+fn handle(%body: imm fn() -> () does Wrap) -> () {
+  let %1: mut fn() -> () does Wrap = closure handle_handle0(%body)
+  let = handle handle_handler0(%1)
+  jump ret()
+}
+
+fn sum(%xs: imm List_i32) -> (i32) {
+  join j1(%1: i32) = jump ret(%1)
+  in
+  case %xs {
+    List_i32.0 => jump j1(0i32)
+    List_i32.1 =>
+      let %x: i32 = get List_i32.1.0(%xs)
+      let %rest: imm List_i32 = get List_i32.1.1(%xs)
+      let %4: i32 = call sum(%rest)
+      let %5: i32 = call plus_i32(%x, %4)
+      jump j1(%5)
+  }
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn file_lambda0() -> () does Wrap {
+  let %0: imm any = box[i32](1i32)
+  let %1: mut Option_any = perform Wrap.0(%0)
+  let %2: imm Option_i32 = call convert_Option_any_Option_i32(%1)
+  join j1() =
+    let %4: imm List_i32 = new List_i32.0()
+    let %5: imm List_i32 = new List_i32.1(3i32, %4)
+    let %6: imm List_i32 = new List_i32.1(2i32, %5)
+    let %7: mut List_any = call convert_List_i32_List_any(%6)
+    let %8: mut List_any = perform Wrap.1(%7)
+    let %9: imm List_i32 = call convert_List_any_List_i32(%8)
+    let %10: i32 = call sum(%9)
+    let = call_extern log(%10)
+    jump ret()
+  in
+  case %2 {
+    Option_i32.1 =>
+      let %n: i32 = get Option_i32.1.0(%2)
+      let = call_extern log(%n)
+      jump j1()
+    Option_i32.0 =>
+      let = call_extern log(0i32)
+      jump j1()
+  }
+}
+
+fn handle_handle0(%body: imm fn() -> () does Wrap) -> () does Wrap {
+  let = apply(%body)
+  jump ret()
+}
+
+fn handle_handle0_return() -> () {
+  jump ret()
+}
+
+fn handle_handle0_wrap(%0: ro any, %k: cont(mut Option_any) -> ()) -> () {
+  let %2: mut Tuple_any = new Tuple_any.0(%0)
+  let %x: ro any = get Tuple_any.0.0(%2)
+  let %4: mut Option_any = new Option_any.1(%x)
+  let = resume(%k, %4)
+  jump ret()
+}
+
+fn handle_handle0_twice(%0: mut List_any, %k: cont(mut List_any) -> ()) -> () {
+  let %2: mut Tuple_List_any = new Tuple_List_any.0(%0)
+  let %xs: mut List_any = get Tuple_List_any.0.0(%2)
+  join j1(%4: mut List_any) =
+    let = resume(%k, %4)
+    jump ret()
+  in
+  case %xs {
+    List_any.1 =>
+      let %x: ro any = get List_any.1.0(%xs)
+      let %6: mut List_any = new List_any.1(%x, %xs)
+      jump j1(%6)
+    List_any.0 =>
+      let %7: mut List_any = new List_any.0()
+      jump j1(%7)
+  }
+}
+
+fn convert_Option_any_Option_i32(%0: mut Option_any) -> (imm Option_i32) {
+  case %0 {
+    Option_any.0 =>
+      let %1: imm Option_i32 = new Option_i32.0()
+      jump ret(%1)
+    Option_any.1 =>
+      let %2: ro any = get Option_any.1.0(%0)
+      let %3: i32 = unbox[i32](%2)
+      let %4: imm Option_i32 = new Option_i32.1(%3)
+      jump ret(%4)
+  }
+}
+
+fn convert_List_i32_List_any(%0: imm List_i32) -> (mut List_any) {
+  case %0 {
+    List_i32.0 =>
+      let %1: mut List_any = new List_any.0()
+      jump ret(%1)
+    List_i32.1 =>
+      let %2: i32 = get List_i32.1.0(%0)
+      let %3: imm List_i32 = get List_i32.1.1(%0)
+      let %4: imm any = box[i32](%2)
+      let %5: mut List_any = call convert_List_i32_List_any(%3)
+      let %6: mut List_any = new List_any.1(%4, %5)
+      jump ret(%6)
+  }
+}
+
+fn convert_List_any_List_i32(%0: mut List_any) -> (imm List_i32) {
+  case %0 {
+    List_any.0 =>
+      let %1: imm List_i32 = new List_i32.0()
+      jump ret(%1)
+    List_any.1 =>
+      let %2: ro any = get List_any.1.0(%0)
+      let %3: mut List_any = get List_any.1.1(%0)
+      let %4: i32 = unbox[i32](%2)
+      let %5: imm List_i32 = call convert_List_any_List_i32(%3)
+      let %6: imm List_i32 = new List_i32.1(%4, %5)
+      jump ret(%6)
+  }
+}
+--------------------------------------------------------------------------------
+log(1)
+log(7)
+
+================================================================================
+An operation's type parameter in an array or a closure
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+effect Ask {
+  fn first[T](xs: [T]) -> T;
+  fn suspend[T](start: fn(mut fn(T) -> ()) -> ()) -> T;
+}
+fn handle[R](body: imm fn() -> R does Ask) -> R = match body() {
+  v => v,
+  effect first(xs), k => resume(k, xs[0]),
+  effect suspend(start), k => {
+    let mut got = None;
+    start(|x| { got = Some(x); });
+    match got { Some(x) => resume(k, x), None => abort() }
+  },
+};
+handle(|| {
+  log(first([7, 8]));
+  log(suspend(|done| done(9)));
+});
+--------------------------------------------------------------------------------
+data Option_any {
+  ()
+  (ro any)
+}
+
+data Tuple_0_any['m1] {
+  (mut [ro any])
+}
+
+data Tuple_1_fn_0_fn_any_minus_gt_does_E0_minus_gt_does_E0['m1, 'm2, E1] {
+  ('m2 fn('m1 fn(ro any) -> () does E1) -> () does E1)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+effect Ask {
+  (mut [ro any]) -> (ro any)
+  (imm fn(mut fn(ro any) -> ()) -> ()) -> (ro any)
+}
+
+handler handle_handler0 for Ask env() ops(handle_handle0_first, handle_handle0_suspend) ret handle_handle0_return
+
+fn file() -> () {
+  let %0: imm fn() -> () does Ask = closure file_lambda0()
+  let = call handle(%0)
+  jump ret()
+}
+
+fn handle(%body: imm fn() -> () does Ask) -> () {
+  let %1: mut fn() -> () does Ask = closure handle_handle0(%body)
+  let = handle handle_handler0(%1)
+  jump ret()
+}
+
+fn Index_T_index_any['m1](%xs: mut [ro any], %i: i32) -> (ro any) {
+  let %2: ro any = array_get(%xs, %i)
+  jump ret(%2)
+}
+
+fn file_lambda0() -> () does Ask {
+  let %0: imm [i32] = array_new(7i32, 8i32)
+  let %1: mut [ro any] = call convert_imm_i32_imm_any(%0)
+  let %2: ro any = perform Ask.0(%1)
+  let %3: i32 = unbox[i32](%2)
+  let = call_extern log(%3)
+  let %4: imm fn(mut fn(i32) -> ()) -> () = closure file_lambda1()
+  let %5: imm fn(mut fn(ro any) -> ()) -> () = call convert_fn_mut_fn_i32_minus_gt_minus_gt_fn_mut_fn_any_minus_gt_minus_gt(%4)
+  let %6: ro any = perform Ask.1(%5)
+  let %7: i32 = unbox[i32](%6)
+  let = call_extern log(%7)
+  jump ret()
+}
+
+fn file_lambda1(%done: mut fn(i32) -> ()) -> () {
+  let = apply(%done, 9i32)
+  jump ret()
+}
+
+fn handle_lambda0(%got: ref mut Option_any, %x: ro any) -> () {
+  let %2: mut Option_any = new Option_any.1(%x)
+  let = ref_set(%got, %2)
+  jump ret()
+}
+
+fn handle_handle0(%body: imm fn() -> () does Ask) -> () does Ask {
+  let = apply(%body)
+  jump ret()
+}
+
+fn handle_handle0_return() -> () {
+  jump ret()
+}
+
+fn handle_handle0_first(%0: mut [ro any], %k: cont(ro any) -> ()) -> () {
+  let %2: mut Tuple_0_any[imm] = new Tuple_0_any.0(%0)
+  let %xs: mut [ro any] = get Tuple_0_any.0.0(%2)
+  let %4: ro any = call Index_T_index_any[imm](%xs, 0i32)
+  let = resume(%k, %4)
+  jump ret()
+}
+
+fn handle_handle0_suspend(%0: imm fn(mut fn(ro any) -> ()) -> (), %k: cont(ro any) -> ()) -> () {
+  let %2: mut Tuple_1_fn_0_fn_any_minus_gt_does_E0_minus_gt_does_E0[mut, imm, Nothing] = new Tuple_1_fn_0_fn_any_minus_gt_does_E0_minus_gt_does_E0.0(%0)
+  let %start: imm fn(mut fn(ro any) -> ()) -> () = get Tuple_1_fn_0_fn_any_minus_gt_does_E0_minus_gt_does_E0.0.0(%2)
+  let %4: mut Option_any = new Option_any.0()
+  let %got: ref mut Option_any = ref_new(%4)
+  let %6: mut fn(ro any) -> () = closure handle_lambda0(%got)
+  let = apply(%start, %6)
+  let %7: mut Option_any = ref_get(%got)
+  join j1() = jump ret()
+  in
+  case %7 {
+    Option_any.1 =>
+      let %x: ro any = get Option_any.1.0(%7)
+      let = resume(%k, %x)
+      jump j1()
+    Option_any.0 => trap
+  }
+}
+
+fn convert_imm_i32_imm_any(%0: imm [i32]) -> (mut [ro any]) {
+  let %1: i32 = array_len(%0)
+  let %2: mut [ro any] = array_alloc(%1)
+  join rec j1(%3: i32) =
+    let %4: i32 = lt.s(%3, %1)
+    case %4 {
+      0 => jump ret(%2)
+      _ =>
+        let %5: i32 = array_get(%0, %3)
+        let %6: imm any = box[i32](%5)
+        let = array_set(%2, %3, %6)
+        let %7: i32 = add(%3, 1i32)
+        jump j1(%7)
+    }
+  in jump j1(0i32)
+}
+
+fn convert_fn_mut_fn_i32_minus_gt_minus_gt_fn_mut_fn_any_minus_gt_minus_gt(%0: imm fn(mut fn(i32) -> ()) -> ()) -> (imm fn(mut fn(ro any) -> ()) -> ()) {
+  let %1: imm fn(mut fn(ro any) -> ()) -> () = closure convert_fn_mut_fn_i32_minus_gt_minus_gt_fn_mut_fn_any_minus_gt_minus_gt_closure(%0)
+  jump ret(%1)
+}
+
+fn convert_fn_mut_fn_i32_minus_gt_minus_gt_fn_mut_fn_any_minus_gt_minus_gt_closure(%0: imm fn(mut fn(i32) -> ()) -> (), %1: mut fn(ro any) -> ()) -> () {
+  let %2: mut fn(i32) -> () = call convert_mut_fn_any_minus_gt_mut_fn_i32_minus_gt(%1)
+  let = apply(%0, %2)
+  jump ret()
+}
+
+fn convert_mut_fn_any_minus_gt_mut_fn_i32_minus_gt(%0: mut fn(ro any) -> ()) -> (mut fn(i32) -> ()) {
+  let %1: mut fn(i32) -> () = closure convert_mut_fn_any_minus_gt_mut_fn_i32_minus_gt_closure(%0)
+  jump ret(%1)
+}
+
+fn convert_mut_fn_any_minus_gt_mut_fn_i32_minus_gt_closure(%0: mut fn(ro any) -> (), %1: i32) -> () {
+  let %2: imm any = box[i32](%1)
+  let = apply(%0, %2)
+  jump ret()
+}
+--------------------------------------------------------------------------------
+log(7)
+log(9)
+
+================================================================================
+An operation's type parameter in a mut value
 :error
 :test-prelude
 ================================================================================
-effect Wrap { fn wrap[T](x: T) -> Option[T]; }
-fn none[R](body: fn() -> R does Wrap) -> R = match body() {
+effect Fill { fn fill[T](xs: mut [T]); }
+fn ignore[R](body: imm fn() -> R does Fill) -> R = match body() {
   v => v,
-  effect wrap(x), k => resume(k, None),
+  effect fill(xs), k => resume(k, ()),
 };
-none(|| wrap(1));
+ignore(|| fill(mut [1, 2]));
 --------------------------------------------------------------------------------
-error in <file> at `wrap(1)`: an operation's type parameter inside another type isn't supported yet
+error in <file>: an operation's type parameter in a `mut` value isn't supported yet
