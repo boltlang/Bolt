@@ -196,6 +196,7 @@ fn show_value(v: &Value) -> String {
         Value::F64(x) => x.to_string(),
         Value::Obj(id) => format!("#{}", id.0),
         Value::Unset => "unset".to_string(),
+        Value::Host(n) => format!("host {n}"),
     }
 }
 
