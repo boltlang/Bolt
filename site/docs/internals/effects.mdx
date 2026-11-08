@@ -149,13 +149,15 @@ effect Raise[E] {
     fn raise[T](error: E) -> T;
 }
 
-effect Async {
+effect Wait {
     fn suspend[T](start: fn(fn(T) -> ()) -> ()) -> T;
 }
 ```
 
 `raise` can stand where any type is expected, because it never returns, and
-every `suspend` waits for a value of a different type.
+every `suspend` waits for a value of a different type. std's `Async` keeps
+its operations untyped instead, and its tasks' results in a `Task[T]`, for
+reasons its [design](./async.mdx#why-the-operations-arent-generic) gives.
 
 Parameters can be types, effects and mutabilities. Mutability parameters
 work as they do for structs.
@@ -288,6 +290,10 @@ match main() {
     },
 }
 ```
+
+Here each arm runs the next task itself, so the stack gets deeper with
+each switch. std's `block_on` puts the rest of the task on the queue and
+returns to a loop instead (see [Async](./async.mdx#tasks-and-the-executor)).
 
 A continuation can be resumed **once**. Resuming it again stops the program,
 as in Conduit, whose continuations are one-shot because the code they run

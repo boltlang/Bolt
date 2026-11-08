@@ -1,14 +1,17 @@
 ---
 sidebar_position: 3
 title: Async (design)
-description: A design for code that waits, as an Async effect instead of async and await. Nothing of it is implemented.
+description: A design for code that waits, as an Async effect instead of async and await, with tasks and an executor like tokio's.
 ---
 
 # Async (design)
 
 :::warning[Not implemented]
-This page is a design sketch. **Nothing on it is implemented**: there are no
-effects in Bolt yet. The syntax of effect types is that of the
+This page is a design sketch, and **only partly implemented**. `std/async`
+has the effect, tasks and an executor that runs them in one thread:
+[Tasks and the executor](#tasks-and-the-executor) says what it does.
+Waiting for the outside world, like `fetch`, and cancelling aren't
+implemented. The syntax of effect types is that of the
 [effects design](./effects.mdx).
 :::
 
@@ -36,23 +39,49 @@ don't write `async` either. A signature like `is_up`'s says `does Async`, as
 it says its result type, and closures and functions without a written
 result type get `Async` by inference.
 
-The effect itself has two operations:
+The effect itself has three operations, none of them generic:
 
 ```bolt
 effect Async {
-    // Stop until `start` calls its callback with a value, then go on with it.
-    fn suspend[T](start: fn(fn(T) -> ()) -> ()) -> T;
-    // Run `task` next to the code that calls spawn.
-    fn spawn[T](task: fn() -> T does Async) -> Task[T];
+    // Let the other tasks that are ready run first.
+    fn pause();
+    // Run `task` next to the code that calls fork.
+    fn fork(task: mut fn() does Async);
+    // Stop until the waker that `start` is given is called.
+    fn suspend(start: mut fn(mut fn()));
 }
+```
 
+What's typed, the result of a task, is in `Task[T]`, which ordinary
+functions work with:
+
+```bolt
+// Run `f` next to the code that calls spawn.
+fn spawn[T](f: mut fn() -> T does Async) -> mut Task[T] does Async;
 // Wait until a task is done, and get its result.
-fn wait[T](task: Task[T]) -> T does Async;
+fn wait[T](task: mut Task[T]) -> T does Async;
 ```
 
 `suspend` connects Bolt to the outside world: `fetch` calls the `fetch` of
-the browser, and passes the callback of `suspend` to the promise it returns.
-Most code never calls `suspend` or `spawn` itself.
+the browser, and gives the promise it returns a callback that keeps the
+response and calls the waker. Most code never calls `suspend` or `fork`
+itself.
+
+### Why the operations aren't generic
+
+An earlier version of this design had `spawn[T]` and `suspend[T]` as
+operations. Then the `T` of `spawn` and that of `wait` are two type
+parameters, each of its own operation, and a handler can't hand the result
+of a task from one to the other: nothing says they're the same. They're
+also `any` in the compiled operations, so each value of them would be
+converted on its way through (see
+[Conduit](./conduit.mdx)).
+
+Tokio splits it the same way: its scheduler runs untyped tasks, and the
+`JoinHandle<T>` that `spawn` gives back points at the task's typed result.
+In Bolt, `Task[T]` holds the result and the wakers of the tasks waiting for
+it, `spawn` forks a closure that sets it, and `wait` suspends until it's
+set. They're compiled for each `T`, like any generic function.
 
 ## No function colours
 
@@ -95,6 +124,55 @@ let (a, b) = both(|| fetch(x), || fetch(y));
 So the common case reads like code that doesn't wait, and running things at
 the same time is explicit. `Task[T]` is the only kind of future, for the
 places where it's needed.
+
+## Tasks and the executor
+
+`block_on` is the executor: the handler of `Async` that runs a program's
+tasks, one at a time, in one thread.
+
+```bolt
+import "std/async" *;
+
+block_on(|| {
+    let a = spawn(|| { pause(); 40 });
+    let b = spawn(|| 2);
+    print(show(wait(a) + wait(b)));   // 42
+});
+```
+
+Like tokio's, it's a loop over a queue of what's ready to run. Its
+handler's arms don't run the next task themselves: they put the rest of
+the current one on the queue and return to the loop. So switching tasks
+doesn't make the stack deeper, however often it happens. A handler whose
+arms resume the next task directly gets deeper with each switch, since
+nothing returns until the end (#392).
+
+- **`pause`** puts the task at the end of the queue.
+- **`fork`** puts the new task, then the rest of the current one, on the
+  queue.
+- **`suspend`** gives `start` a waker, and puts nothing on the queue. The
+  first call of the waker puts the task back on it; more calls do nothing,
+  since a task can only go on once.
+
+### Tasks don't outlive their scope
+
+`block_on` returns once every task is done, so no task outlives it. Tokio
+lets a task go on when its `JoinHandle` is dropped, which makes it easy to
+lose track of tasks; its `JoinSet`, which cancels its tasks when it's
+dropped, came later to fix that. Bolt can't do the former anyway: values
+are shared, so nothing knows when a `Task` is dropped, as for
+[`use`](#use). A handler is already a scope, so tasks are scoped to the
+handler that runs them. A `scope` for a part of a program, which waits for
+its tasks, or cancels them, needs [cancelling](#cancelling) first.
+
+### Fair turns
+
+A task only gives the others a turn when it waits. Tokio also makes a task
+that's always ready give a turn after a while, with a budget of operations.
+`block_on` doesn't need one so far: `suspend` always puts the task at the
+end of the queue, even when the waker is called right away. A handler that
+lets a task go on at once when the waker is called during `start` would
+need a budget.
 
 ## One effect, many handlers
 
@@ -207,6 +285,10 @@ language server can warn about a value of a `Close` type that's bound with
   `defer`, but with a time limit.
 - **Blocks that can't be cancelled** ([#353](https://github.com/boltlang/bolt/issues/353)), for steps that must finish together
   even though they wait, like a database commit.
+- **Not losing what a task got.** Tokio's `select!` cancels the futures
+  that lose, and one that had taken a value, like a message from a
+  channel, loses it. A task should only be cancelled while it waits, and
+  not between a waker giving it a value and the task taking it.
 - **Conduit** ([#350](https://github.com/boltlang/bolt/issues/350)). Unwinding needs a way to resume a continuation with an
   unwind instead of values, which OCaml 5 calls `discontinue`. Conduit only
   has `resume` so far. Wasm stack switching has `resume_throw`, which does
@@ -244,7 +326,13 @@ a highlight or an inlay hint, like it can mark inferred
 ## Still to design
 
 - What's still open about [cancelling](#still-open).
-- Errors: `Result`, or an effect for failure that the handlers of `Async`
-  know about, so that a failed task can fail the code that waits for it.
+- Errors. A task that fails, with `Fail[E]`, could fail the code that
+  waits for it, as tokio's `JoinHandle` gives a `JoinError`: `wait` with
+  `does Fail[TaskError[E]]`, or a `try_wait` that gives a `Result`.
 - Timeouts and racing, like `first(a, b)`, which need cancelling.
-- Whether threads come later, and what `spawn` means then.
+- Tasks with other effects. `fork` takes a task that only does `Async`;
+  taking one that does `Async + E` needs effects whose parameters are rows
+  (see [Conduit](./conduit.mdx)).
+- Threads. Tokio needs `Send + 'static` for a task that can move to
+  another thread. In Bolt, an `imm fn()` captures only what's `imm` all the
+  way down, so it could run on another thread as it is.
