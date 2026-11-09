@@ -1244,6 +1244,9 @@ impl<'db> Collector<'db> {
                 | Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)) => true,
                 Ty::Array(_, elem) => sized(elem),
                 Ty::Tuple(tys, _) => tys.iter().any(sized),
+                Ty::Record(tys, named, _) => {
+                    tys.iter().chain(named.iter().map(|(_, t)| t)).any(sized)
+                }
                 _ => false,
             }
         }

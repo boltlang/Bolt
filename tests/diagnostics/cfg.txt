@@ -93,6 +93,9 @@ fn gated(x: i32);
 #[link(emu, abi = flat)]
 fn sized(n: usize) -> (u16, isize);
  //^^^^^ error: a function linked to `emu` can't take or give a `usize`, whose width is the machine's: the evaluator is the same host for every machine it imitates
+#[link(emu)]
+fn named(p: (x: i32, n: isize));
+ //^^^^^ error: a function linked to `emu` can't take or give a `(n: isize, x: i32)`, whose width is the machine's: the evaluator is the same host for every machine it imitates
 #[cfg(host = "wasm")]
 #[link(emu)]
 fn only_for_wasm(x: isize);

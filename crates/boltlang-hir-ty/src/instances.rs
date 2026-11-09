@@ -86,12 +86,15 @@ fn bind<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, found: &mut 
             all(found, xs, ys);
             bind(m, n, scheme, found);
         }
-        (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n)) => {
+        // Only the same names say which field is which.
+        (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
+            if xs.len() == ys.len()
+                && xn.len() == yn.len()
+                && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b) =>
+        {
             all(found, xs, ys);
-            for ((a, x), (b, y)) in xn.iter().zip(yn.iter()) {
-                if a == b {
-                    bind(x, y, scheme, found);
-                }
+            for ((_, x), (_, y)) in xn.iter().zip(yn.iter()) {
+                bind(x, y, scheme, found);
             }
             bind(m, n, scheme, found);
         }
