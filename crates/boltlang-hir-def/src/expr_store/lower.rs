@@ -187,6 +187,20 @@ impl ExprCollector {
         }
     }
 
+    /// A part of a tuple literal or of the arguments of a call.
+    fn lower_tuple_item(&mut self, item: ast::TupleExprItem) -> TupleItem<ExprId> {
+        match item {
+            ast::TupleExprItem::Positional(x) => TupleItem::Positional(self.lower_expr(x)),
+            ast::TupleExprItem::Named(f) => {
+                let name = field_name(f.name_ref().map(|n| n.text()));
+                TupleItem::Named(name, self.lower_opt_expr(f.expr()))
+            }
+            ast::TupleExprItem::Spread(s) => {
+                TupleItem::Spread(spread(s.spread()), self.lower_opt_expr(s.expr()))
+            }
+        }
+    }
+
     fn lower_fn_type(&mut self, ty: &ast::FnType) -> TypeRef {
         let mut params = Vec::new();
         let mut is_variadic = false;
@@ -198,25 +212,12 @@ impl ExprCollector {
                     KEYWORD_MARKER => keyword = true,
                     TUPLE_TYPE_REST => {
                         let rest = ast::TupleTypeRest::cast(child).unwrap();
-                        let kind = match rest.spread() {
-                            Some(ast::Spread::Named) => ParamKind::KeywordRest,
-                            _ => {
-                                keyword = true;
-                                ParamKind::Rest
-                            }
-                        };
+                        let kind = rest_kind(rest.spread(), &mut keyword);
                         params.push((None, kind, self.lower_pack_tuple(&rest)));
                     }
                     PARAM => {
                         let param = ast::Param::cast(child).unwrap();
-                        let name = match param.pattern() {
-                            Some(ast::Pattern::Named(p)) => name(p.name()),
-                            Some(ast::Pattern::Mut(p)) => match p.pattern() {
-                                Some(ast::Pattern::Named(p)) => name(p.name()),
-                                _ => None,
-                            },
-                            _ => None,
-                        };
+                        let name = pattern_name(param.pattern());
                         // In a function type, a parameter without a name is
                         // just a type.
                         let type_ref = match (param.type_expr(), param.pattern()) {
@@ -332,21 +333,7 @@ impl ExprCollector {
             }
             E::Call(e) => {
                 let callee = self.lower_opt_expr(e.operator());
-                let args = e
-                    .arg_items()
-                    .map(|item| match item {
-                        ast::TupleExprItem::Positional(x) => {
-                            TupleItem::Positional(self.lower_expr(x))
-                        }
-                        ast::TupleExprItem::Named(f) => {
-                            let name = field_name(f.name_ref().map(|n| n.text()));
-                            TupleItem::Named(name, self.lower_opt_expr(f.expr()))
-                        }
-                        ast::TupleExprItem::Spread(s) => {
-                            TupleItem::Spread(spread(s.spread()), self.lower_opt_expr(s.expr()))
-                        }
-                    })
-                    .collect();
+                let args = e.arg_items().map(|item| self.lower_tuple_item(item)).collect();
                 Expr::CallWith { callee, args }
             }
             E::Field(e) => {
@@ -400,21 +387,7 @@ impl ExprCollector {
                 if plain {
                     Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() }
                 } else {
-                    let items = e
-                        .items()
-                        .map(|item| match item {
-                            ast::TupleExprItem::Positional(x) => {
-                                TupleItem::Positional(self.lower_expr(x))
-                            }
-                            ast::TupleExprItem::Named(f) => {
-                                let name = field_name(f.name_ref().map(|n| n.text()));
-                                TupleItem::Named(name, self.lower_opt_expr(f.expr()))
-                            }
-                            ast::TupleExprItem::Spread(s) => {
-                                TupleItem::Spread(spread(s.spread()), self.lower_opt_expr(s.expr()))
-                            }
-                        })
-                        .collect();
+                    let items = e.items().map(|item| self.lower_tuple_item(item)).collect();
                     Expr::NamedTuple { items }
                 }
             }
@@ -844,6 +817,27 @@ fn spread(spread: Option<ast::Spread>) -> Spread {
     match spread {
         Some(ast::Spread::Named) => Spread::Named,
         Some(ast::Spread::Positional) | None => Spread::Positional,
+    }
+}
+
+/// The name of a parameter's pattern, if it's `x` or `mut x`.
+pub(crate) fn pattern_name(pattern: Option<ast::Pattern>) -> Option<Name> {
+    match pattern? {
+        ast::Pattern::Named(p) => name(p.name()),
+        ast::Pattern::Mut(p) => pattern_name(p.pattern()),
+        _ => None,
+    }
+}
+
+/// How a rest parameter `*args` or `**opts` is passed. After a positional
+/// one, the parameters are `keyword`-only.
+pub(crate) fn rest_kind(spread: Option<ast::Spread>, keyword: &mut bool) -> ParamKind {
+    match spread {
+        Some(ast::Spread::Named) => ParamKind::KeywordRest,
+        _ => {
+            *keyword = true;
+            ParamKind::Rest
+        }
     }
 }
 

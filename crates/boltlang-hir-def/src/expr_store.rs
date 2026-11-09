@@ -9,6 +9,8 @@
 
 mod lower;
 
+pub(crate) use lower::{pattern_name, rest_kind};
+
 use std::collections::HashMap;
 
 use boltlang_syntax::{SyntaxKind, SyntaxNode};

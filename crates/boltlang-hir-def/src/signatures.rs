@@ -15,7 +15,9 @@ use boltlang_syntax::{
 
 use crate::{
     Name,
-    expr_store::{ExprCollector, ExpressionStore, ExpressionStoreSourceMap},
+    expr_store::{
+        ExprCollector, ExpressionStore, ExpressionStoreSourceMap, pattern_name, rest_kind,
+    },
     hir::{ExprId, ParamKind, TypeRefId},
     ids::{ClassId, ConstId, EffectId, EnumId, FunctionId, ImplId, StructId, TypeAliasId},
     item_tree::{AstId, FunctionName, RawVisibility},
@@ -345,13 +347,7 @@ fn lower_function<'db>(
                         params.push(ParamData { name, kind, type_ref, default, nolen });
                     }
                     ast::ParamItem::Rest(rest) => {
-                        let kind = match rest.spread() {
-                            Some(ast::Spread::Named) => ParamKind::KeywordRest,
-                            _ => {
-                                keyword = true;
-                                ParamKind::Rest
-                            }
-                        };
+                        let kind = rest_kind(rest.spread(), &mut keyword);
                         let type_ref = rest.pack().map(|r| c.lower_pack_tuple(&r));
                         let name = pattern_name(rest.pattern());
                         let data = ParamData { name, kind, type_ref, default: None, nolen: false };
@@ -561,15 +557,6 @@ fn lower_type_alias<'db>(
         store,
     };
     (sig, source_map)
-}
-
-/// The name of a parameter's pattern, if it's `x` or `mut x`.
-fn pattern_name(pattern: Option<ast::Pattern>) -> Option<Name> {
-    match pattern? {
-        ast::Pattern::Named(p) => Some(Name::from_ident(&p.name()?.text())),
-        ast::Pattern::Mut(p) => pattern_name(p.pattern()),
-        _ => None,
-    }
 }
 
 fn lower_generic_params(
