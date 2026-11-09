@@ -74,3 +74,25 @@ struct Wrapper(i32);
 fn f() = (Some, Wrapper, None, Some(1));
 --------------------------------------------------------------------------------
 fn f() -> imm (fn(a) -> Option[a], fn(i32) -> imm Wrapper, Option[b], Option[i32]) = (Option.Some, Wrapper, Option.None, Option.Some(1))
+
+================================================================================
+A tuple with named fields or spreads is made of temporaries
+:test-prelude
+================================================================================
+fn f(t: (i32, i32)) {
+  let a = (1, x: 2);
+  let b = (*t, 3);
+}
+--------------------------------------------------------------------------------
+fn f(t: (i32, i32)) -> () = {
+  let a = {
+    let _t0 = 1;
+    let _t1 = 2;
+    (_t0, _t1)
+  };
+  let b = {
+    let _t2 = t;
+    let _t3 = 3;
+    (_t2.0, _t2.1, _t3)
+  };
+}

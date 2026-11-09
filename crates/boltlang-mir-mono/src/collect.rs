@@ -307,7 +307,9 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
         return true;
     }
     match b {
-        MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) => args.iter().any(|t| occurs(a, t)),
+        MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::Record(args, ..) => {
+            args.iter().any(|t| occurs(a, t))
+        }
         MonoTy::Array(_, elem) => occurs(a, elem),
         MonoTy::Fn(params, ret, _, row) => {
             params.iter().any(|t| occurs(a, t))

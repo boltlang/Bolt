@@ -22,6 +22,7 @@
 //! its first constraint: that's the dictionary itself.
 
 use boltlang_hir_def::{
+    Name,
     body::{DefWithBody, DefWithBodyId},
     hir::{ExprId, Mutability},
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
@@ -741,6 +742,12 @@ pub fn dict_entries<'db>(
     Ok(out)
 }
 
+/// Whether the named fields of a checker's tuple type have `names`, in
+/// that order.
+fn same_names(named: &[(Name, Ty<'_>)], names: &[Name]) -> bool {
+    named.len() == names.len() && named.iter().zip(names).all(|((a, _), b)| a == b)
+}
+
 /// Whether `ty`, which can have erased types, fits the impl's `pattern`.
 fn fits<'db>(params: &[GenericParamId<'db>], pattern: &Ty<'db>, ty: &MonoTy<'db>) -> bool {
     let all = |ps: &[Ty<'db>], ts: &[MonoTy<'db>]| {
@@ -752,6 +759,11 @@ fn fits<'db>(params: &[GenericParamId<'db>], pattern: &Ty<'db>, ty: &MonoTy<'db>
         (Ty::Builtin(a), MonoTy::Builtin(b)) => a == b,
         (Ty::Adt(a, xs, ..), MonoTy::Adt(b, ys, ..)) => a == b && all(xs, ys),
         (Ty::Tuple(xs, _), MonoTy::Tuple(ys, _)) => all(xs, ys),
+        (Ty::Record(xs, xn, _), MonoTy::Record(ys, names, _)) => {
+            let fields: Vec<Ty<'db>> =
+                xs.iter().cloned().chain(xn.iter().map(|(_, t)| t.clone())).collect();
+            same_names(xn, names) && all(&fields, ys)
+        }
         (Ty::Array(_, x), MonoTy::Array(_, y)) => fits(params, x, y),
         (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, y, ..)) => all(xs, ys) && fits(params, x, y),
         (Ty::Never, MonoTy::Never) => true,
@@ -811,6 +823,14 @@ pub(crate) fn bind<'db>(
         }
         (Ty::Tuple(xs, m), MonoTy::Tuple(ys, n)) => {
             all(xs, ys, found);
+            bind_mut(m, *n, found);
+        }
+        (Ty::Record(xs, xn, m), MonoTy::Record(ys, names, n))
+            if same_names(xn, names) && xs.len() + xn.len() == ys.len() =>
+        {
+            let fields: Vec<Ty<'db>> =
+                xs.iter().cloned().chain(xn.iter().map(|(_, t)| t.clone())).collect();
+            all(&fields, ys, found);
             bind_mut(m, *n, found);
         }
         (Ty::Array(m, x), MonoTy::Array(n, y)) => {

@@ -167,6 +167,10 @@ impl<'db> Types<'db> {
             MonoTy::Builtin(_) => unreachable!("a scalar"),
             MonoTy::Never => return Ok(None),
             MonoTy::Tuple(elems, _) if elems.is_empty() => return Ok(None),
+            // A tuple with named fields is the tuple of its fields.
+            MonoTy::Record(elems, _, own) => {
+                return self.value(db, root, &MonoTy::Tuple(elems.clone(), *own));
+            }
             MonoTy::Tuple(elems, own) => {
                 let (args, extracted) = abstract_muts(elems, 0);
                 let (args, rows) = abstract_rows(&args);
@@ -403,7 +407,9 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
             }
             // `()` has no values, so no mutability either.
             MonoTy::Tuple(elems, _) if elems.is_empty() => t.clone(),
-            MonoTy::Tuple(elems, own) => {
+            // A tuple with named fields is laid out as the tuple of its
+            // fields, as `Types::value` makes it.
+            MonoTy::Tuple(elems, own) | MonoTy::Record(elems, _, own) => {
                 let elems = elems.iter().map(|a| go(a, next)).collect();
                 MonoTy::Tuple(elems, next(own))
             }

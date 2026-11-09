@@ -1915,7 +1915,7 @@ fn field_ty<'db>(
 ) -> R<MonoTy<'db>> {
     let unknown = |_| ErrorKind::unsupported("a field whose type isn't known");
     let fields = match (ctor, t) {
-        (Ctor::Tuple(_), MonoTy::Tuple(elems, _)) => elems.to_vec(),
+        (Ctor::Tuple(_), MonoTy::Tuple(elems, _) | MonoTy::Record(elems, ..)) => elems.to_vec(),
         (Ctor::Struct(s), MonoTy::Adt(_, args, muts, own)) => {
             field_types(l.cx.db, l.cx.root, VariantDef::Struct(s), args, muts, *own)
                 .map_err(unknown)?

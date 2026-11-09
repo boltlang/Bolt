@@ -21,6 +21,7 @@ use std::fmt;
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_def::{
+    Name,
     builtin_type::BuiltinType,
     hir::Mutability,
     ids::{EffectId, ItemContainerId, TypeAliasId},
@@ -142,6 +143,10 @@ pub enum MonoTy<'db> {
     Adt(AdtId<'db>, Box<[MonoTy<'db>]>, Box<[MonoMut]>, MonoMut),
     /// `(A, B)` and its mutability, and `()` when empty, which is `Imm`.
     Tuple(Box<[MonoTy<'db>]>, MonoMut),
+    /// A tuple with named fields: all its fields, the positional ones and
+    /// then the named ones in the order of their names, as they're laid
+    /// out, the names of the last ones, and its mutability.
+    Record(Box<[MonoTy<'db>]>, Box<[Name]>, MonoMut),
     Array(MonoMut, Box<MonoTy<'db>>),
     /// The parameters, the result, the mutability and the effects of a
     /// closure.
@@ -176,7 +181,7 @@ impl<'db> MonoTy<'db> {
         match self {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => true,
             MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Host(_) => false,
-            MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) => {
+            MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::Record(args, ..) => {
                 args.iter().any(MonoTy::has_erased)
             }
             MonoTy::Array(_, elem) => elem.has_erased(),
@@ -194,9 +199,10 @@ impl<'db> MonoTy<'db> {
         match self {
             MonoTy::Any(_) => true,
             MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) | MonoTy::Host(_) => false,
-            MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::ErasedAssoc(_, args) => {
-                args.iter().any(MonoTy::has_any)
-            }
+            MonoTy::Adt(_, args, ..)
+            | MonoTy::Tuple(args, _)
+            | MonoTy::Record(args, ..)
+            | MonoTy::ErasedAssoc(_, args) => args.iter().any(MonoTy::has_any),
             MonoTy::Array(_, elem) => elem.has_any(),
             MonoTy::Fn(params, ret, _, row) => {
                 params.iter().any(MonoTy::has_any)
@@ -228,6 +234,9 @@ impl<'db> MonoTy<'db> {
                 MonoTy::Adt(*adt, all(args, map, next), ms.clone(), *own)
             }
             MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, map, next), *own),
+            MonoTy::Record(args, names, own) => {
+                MonoTy::Record(all(args, map, next), names.clone(), *own)
+            }
             MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.renumber(map, next))),
             MonoTy::Fn(params, ret, own, row) => {
                 let params = all(params, map, next);
@@ -261,6 +270,10 @@ impl<'db> MonoTy<'db> {
             MonoTy::Tuple(args, own) => {
                 let args = all(args, f);
                 MonoTy::Tuple(args, f(*own))
+            }
+            MonoTy::Record(args, names, own) => {
+                let args = all(args, f);
+                MonoTy::Record(args, names.clone(), f(*own))
             }
             MonoTy::Array(own, elem) => {
                 let own = f(*own);
@@ -297,6 +310,9 @@ impl<'db> MonoTy<'db> {
                 MonoTy::Adt(*adt, all(args, out), muts.clone(), *own)
             }
             MonoTy::Tuple(elems, own) => MonoTy::Tuple(all(elems, out), *own),
+            MonoTy::Record(elems, names, own) => {
+                MonoTy::Record(all(elems, out), names.clone(), *own)
+            }
             MonoTy::Array(m, elem) => MonoTy::Array(*m, Box::new(elem.abstract_rows(first, out))),
             MonoTy::Fn(params, ret, m, row) => {
                 let params = all(params, out);
@@ -327,6 +343,7 @@ impl<'db> MonoTy<'db> {
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
             MonoTy::Adt(adt, args, ms, own) => MonoTy::Adt(*adt, all(args, f), ms.clone(), *own),
             MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, f), *own),
+            MonoTy::Record(args, names, own) => MonoTy::Record(all(args, f), names.clone(), *own),
             MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.map_rows(f))),
             MonoTy::Fn(params, ret, own, row) => {
                 let params = all(params, f);
@@ -351,7 +368,9 @@ impl<'db> MonoTy<'db> {
             MonoTy::Adt(_, args, ms, m) => {
                 param(m) || ms.iter().any(param) || args.iter().any(MonoTy::has_mut_param)
             }
-            MonoTy::Tuple(args, m) => param(m) || args.iter().any(MonoTy::has_mut_param),
+            MonoTy::Tuple(args, m) | MonoTy::Record(args, _, m) => {
+                param(m) || args.iter().any(MonoTy::has_mut_param)
+            }
             MonoTy::Array(m, elem) => param(m) || elem.has_mut_param(),
             MonoTy::Fn(params, ret, m, row) => {
                 param(m)
@@ -406,6 +425,12 @@ impl<'db> MonoTy<'db> {
                 Ty::Adt(*adt, all(args)?, ms.iter().map(m).collect(), Box::new(m(own)))
             }
             MonoTy::Tuple(tys, own) => Ty::tuple(all(tys)?, m(own)),
+            MonoTy::Record(tys, names, own) => {
+                let tys = all(tys)?;
+                let split = tys.len() - names.len();
+                let named = names.iter().cloned().zip(tys[split..].iter().cloned()).collect();
+                Ty::record(tys[..split].into(), named, m(own))
+            }
             MonoTy::Array(own, elem) => {
                 Ty::Array(Box::new(m(own)), Box::new(elem.to_ty_with(param, row)?))
             }
@@ -492,6 +517,23 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 list(f, tys)?;
                 if tys.len() == 1 {
                     write!(f, ",")?;
+                }
+                write!(f, ")")
+            }
+            MonoTy::Record(tys, names, own) => {
+                if *own != MonoMut::Imm {
+                    write!(f, "{own} ")?;
+                }
+                write!(f, "(")?;
+                let split = tys.len() - names.len();
+                for (i, ty) in tys.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    if i >= split {
+                        write!(f, "{}: ", names[i - split])?;
+                    }
+                    write!(f, "{}", DisplayMonoTy { db, ty })?;
                 }
                 write!(f, ")")
             }
@@ -679,7 +721,14 @@ impl<'db> Subst<'_, 'db> {
                 self.mutability(own)?,
             ),
             Ty::Tuple(tys, own) => MonoTy::Tuple(all(tys)?, self.mutability(own)?),
-            Ty::Record(..) => return Err(TyError::Unsupported("a tuple with named fields")),
+            Ty::Record(tys, named, own) => {
+                let mut fields = all(tys)?.into_vec();
+                for (_, t) in named.iter() {
+                    fields.push(self.ty(t)?);
+                }
+                let names = named.iter().map(|(n, _)| n.clone()).collect();
+                MonoTy::Record(fields.into(), names, self.mutability(own)?)
+            }
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
             Ty::Fn(params, ret, own, effects) => MonoTy::Fn(
                 all(params)?,

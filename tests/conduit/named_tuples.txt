@@ -1,0 +1,399 @@
+================================================================================
+Fields of a tuple with named fields
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+let p = (1, x: 20, y: 300);
+log(p.0);
+log(p.x);
+log(p.y);
+--------------------------------------------------------------------------------
+data Tuple_i32_i32_i32 {
+  (i32, i32, i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %p: imm Tuple_i32_i32_i32 = new Tuple_i32_i32_i32.0(1i32, 20i32, 300i32)
+  let %1: i32 = get Tuple_i32_i32_i32.0.0(%p)
+  let = call_extern log(%1)
+  let %2: i32 = get Tuple_i32_i32_i32.0.1(%p)
+  let = call_extern log(%2)
+  let %3: i32 = get Tuple_i32_i32_i32.0.2(%p)
+  let = call_extern log(%3)
+  jump ret()
+}
+--------------------------------------------------------------------------------
+log(1)
+log(20)
+log(300)
+
+================================================================================
+The order of named fields doesn't matter
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn sub(p: (a: i32, b: i32)) -> i32 = p.a - p.b;
+log(sub((b: 1, a: 10)));
+--------------------------------------------------------------------------------
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %0: imm Tuple_i32_i32 = new Tuple_i32_i32.0(10i32, 1i32)
+  let %1: i32 = call sub[imm](%0)
+  let = call_extern log(%1)
+  jump ret()
+}
+
+fn sub['m1](%p: 'm1 Tuple_i32_i32) -> (i32) {
+  let %1: i32 = get Tuple_i32_i32.0.0(%p)
+  let %2: i32 = get Tuple_i32_i32.0.1(%p)
+  let %3: i32 = call minus_i32(%1, %2)
+  jump ret(%3)
+}
+
+fn minus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Sub_i32_sub(%a, %b)
+  jump ret(%2)
+}
+
+fn Sub_i32_sub(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = sub(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(9)
+
+================================================================================
+Parts are evaluated in the order they're written
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+let t = (y: { log(1); 1 }, x: { log(2); 2 });
+log(t.x);
+log(t.y);
+--------------------------------------------------------------------------------
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let = call_extern log(1i32)
+  let = call_extern log(2i32)
+  let %t: imm Tuple_i32_i32 = new Tuple_i32_i32.0(2i32, 1i32)
+  let %1: i32 = get Tuple_i32_i32.0.0(%t)
+  let = call_extern log(%1)
+  let %2: i32 = get Tuple_i32_i32.0.1(%t)
+  let = call_extern log(%2)
+  jump ret()
+}
+--------------------------------------------------------------------------------
+log(1)
+log(2)
+log(2)
+log(1)
+
+================================================================================
+Spreads
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+let t = (10, 20, z: 3);
+let a = (w: 4, ...t);
+log(a.0 + a.1);
+log(a.w);
+log(a.z);
+let b = (*t, 5);
+log(b.2);
+let c = (**t, v: 6);
+log(c.z + c.v);
+--------------------------------------------------------------------------------
+data Tuple_i32_i32_i32 {
+  (i32, i32, i32)
+}
+
+data Tuple_i32_i32_i32_i32 {
+  (i32, i32, i32, i32)
+}
+
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %t: imm Tuple_i32_i32_i32 = new Tuple_i32_i32_i32.0(10i32, 20i32, 3i32)
+  let %1: i32 = get Tuple_i32_i32_i32.0.0(%t)
+  let %2: i32 = get Tuple_i32_i32_i32.0.1(%t)
+  let %3: i32 = get Tuple_i32_i32_i32.0.2(%t)
+  let %a: imm Tuple_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32.0(%1, %2, 4i32, %3)
+  let %5: i32 = get Tuple_i32_i32_i32_i32.0.0(%a)
+  let %6: i32 = get Tuple_i32_i32_i32_i32.0.1(%a)
+  let %7: i32 = call plus_i32(%5, %6)
+  let = call_extern log(%7)
+  let %8: i32 = get Tuple_i32_i32_i32_i32.0.2(%a)
+  let = call_extern log(%8)
+  let %9: i32 = get Tuple_i32_i32_i32_i32.0.3(%a)
+  let = call_extern log(%9)
+  let %10: i32 = get Tuple_i32_i32_i32.0.0(%t)
+  let %11: i32 = get Tuple_i32_i32_i32.0.1(%t)
+  let %b: imm Tuple_i32_i32_i32 = new Tuple_i32_i32_i32.0(%10, %11, 5i32)
+  let %13: i32 = get Tuple_i32_i32_i32.0.2(%b)
+  let = call_extern log(%13)
+  let %14: i32 = get Tuple_i32_i32_i32.0.2(%t)
+  let %c: imm Tuple_i32_i32 = new Tuple_i32_i32.0(6i32, %14)
+  let %16: i32 = get Tuple_i32_i32.0.1(%c)
+  let %17: i32 = get Tuple_i32_i32.0.0(%c)
+  let %18: i32 = call plus_i32(%16, %17)
+  let = call_extern log(%18)
+  jump ret()
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(30)
+log(4)
+log(3)
+log(5)
+log(9)
+
+================================================================================
+Patterns with named fields
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn describe(p: (i32, x: i32, y: i32)) -> i32 = match p {
+  (0, x: 0, y: _) => 1,
+  (_, .., x: n) => n * 10,
+};
+log(describe((0, x: 0, y: 5)));
+log(describe((1, x: 4, y: 5)));
+let (a, .., z, x: n) = (1, 2, 3, x: 4);
+log(a);
+log(z);
+log(n);
+--------------------------------------------------------------------------------
+data Tuple_i32_i32_i32 {
+  (i32, i32, i32)
+}
+
+data Tuple_i32_i32_i32_i32 {
+  (i32, i32, i32, i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %0: imm Tuple_i32_i32_i32 = new Tuple_i32_i32_i32.0(0i32, 0i32, 5i32)
+  let %1: i32 = call describe[imm](%0)
+  let = call_extern log(%1)
+  let %2: imm Tuple_i32_i32_i32 = new Tuple_i32_i32_i32.0(1i32, 4i32, 5i32)
+  let %3: i32 = call describe[imm](%2)
+  let = call_extern log(%3)
+  let %4: imm Tuple_i32_i32_i32_i32 = new Tuple_i32_i32_i32_i32.0(1i32, 2i32, 3i32, 4i32)
+  join j1(%a#5: i32, %z#6: i32, %n#7: i32) =
+    let = call_extern log(%a#5)
+    let = call_extern log(%z#6)
+    let = call_extern log(%n#7)
+    jump ret()
+  in
+  let %a#8: i32 = get Tuple_i32_i32_i32_i32.0.0(%4)
+  let %z#9: i32 = get Tuple_i32_i32_i32_i32.0.2(%4)
+  let %n#10: i32 = get Tuple_i32_i32_i32_i32.0.3(%4)
+  jump j1(%a#8, %z#9, %n#10)
+}
+
+fn describe['m1](%p: 'm1 Tuple_i32_i32_i32) -> (i32) {
+  join j1(%1: i32) = jump ret(%1)
+  in
+  join j2() =
+    let %n: i32 = get Tuple_i32_i32_i32.0.1(%p)
+    let %5: i32 = call star_i32(%n, 10i32)
+    jump j1(%5)
+  in
+  let %2: i32 = get Tuple_i32_i32_i32.0.0(%p)
+  case %2 {
+    0 =>
+      let %3: i32 = get Tuple_i32_i32_i32.0.1(%p)
+      case %3 {
+        0 => jump j1(1i32)
+        _ => jump j2()
+      }
+    _ => jump j2()
+  }
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(1)
+log(40)
+log(1)
+log(3)
+log(4)
+
+================================================================================
+A mut tuple with named fields
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+let m = mut (n: 1, k: 2);
+m.n = m.n + 40;
+log(m.n + m.k);
+--------------------------------------------------------------------------------
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %m: mut Tuple_i32_i32 = new Tuple_i32_i32.0(2i32, 1i32)
+  let %1: i32 = get Tuple_i32_i32.0.1(%m)
+  let %2: i32 = call plus_i32(%1, 40i32)
+  let = set Tuple_i32_i32.0.1(%m, %2)
+  let %3: i32 = get Tuple_i32_i32.0.1(%m)
+  let %4: i32 = get Tuple_i32_i32.0.0(%m)
+  let %5: i32 = call plus_i32(%3, %4)
+  let = call_extern log(%5)
+  jump ret()
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(43)
+
+================================================================================
+Tuples with named fields in other types and generic functions
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn id[T](v: T) -> T = v;
+log(id((x: 2)).x);
+let o = Some((x: 5));
+log(match o { Some(p) => p.x, None => 0 });
+let xs = [(x: 1, y: 2), (x: 3, y: 4)];
+log(xs[1].y);
+let nested = (inner: (a: 6), b: 7);
+log(nested.inner.a + nested.b);
+--------------------------------------------------------------------------------
+data Tuple_i32 {
+  (i32)
+}
+
+data Option_0_i32['m1] {
+  ()
+  ('m1 Tuple_i32)
+}
+
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+data Tuple_i32_0_i32['m1] {
+  (i32, 'm1 Tuple_i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %0: imm Tuple_i32 = new Tuple_i32.0(2i32)
+  let %1: imm Tuple_i32 = call id_x_i32(%0)
+  let %2: i32 = get Tuple_i32.0.0(%1)
+  let = call_extern log(%2)
+  let %3: imm Tuple_i32 = new Tuple_i32.0(5i32)
+  let %o: imm Option_0_i32[imm] = new Option_0_i32.1(%3)
+  join j1(%5: i32) =
+    let = call_extern log(%5)
+    let %8: imm Tuple_i32_i32 = new Tuple_i32_i32.0(1i32, 2i32)
+    let %9: imm Tuple_i32_i32 = new Tuple_i32_i32.0(3i32, 4i32)
+    let %xs#10: imm [imm Tuple_i32_i32] = array_new(%8, %9)
+    let %11: imm Tuple_i32_i32 = call Index_T_index_x_i32_y_i32[imm](%xs#10, 1i32)
+    let %12: i32 = get Tuple_i32_i32.0.1(%11)
+    let = call_extern log(%12)
+    let %13: imm Tuple_i32 = new Tuple_i32.0(6i32)
+    let %nested#14: imm Tuple_i32_0_i32[imm] = new Tuple_i32_0_i32.0(7i32, %13)
+    let %15: imm Tuple_i32 = get Tuple_i32_0_i32.0.1(%nested#14)
+    let %16: i32 = get Tuple_i32.0.0(%15)
+    let %17: i32 = get Tuple_i32_0_i32.0.0(%nested#14)
+    let %18: i32 = call plus_i32(%16, %17)
+    let = call_extern log(%18)
+    jump ret()
+  in
+  case %o {
+    Option_0_i32.1 =>
+      let %p: imm Tuple_i32 = get Option_0_i32.1.0(%o)
+      let %7: i32 = get Tuple_i32.0.0(%p)
+      jump j1(%7)
+    Option_0_i32.0 => jump j1(0i32)
+  }
+}
+
+fn id_x_i32(%v: imm Tuple_i32) -> (imm Tuple_i32) {
+  jump ret(%v)
+}
+
+fn Index_T_index_x_i32_y_i32['m1](%xs: 'm1 [imm Tuple_i32_i32], %i: i32) -> (imm Tuple_i32_i32) {
+  let %2: imm Tuple_i32_i32 = array_get(%xs, %i)
+  jump ret(%2)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(2)
+log(5)
+log(4)
+log(13)

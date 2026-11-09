@@ -13,7 +13,10 @@ use boltlang_hir_def::{
     Name,
     body::{Body as HirBody, DefWithBodyId, body},
     builtin_type::{BuiltinInt, BuiltinType, BuiltinValue},
-    hir::{self, BinaryOp, EffectArm, Expr, MatchArm, Pat, PatId, Path, PathSegment, Statement},
+    hir::{
+        self, BinaryOp, EffectArm, Expr, MatchArm, Pat, PatId, Path, PathSegment, Spread,
+        Statement, TupleItem,
+    },
     ids::{ConstId, FunctionId, ItemContainerId},
     resolver::{GenericDefId, Resolver, TypeNs, ValueNs, ValueResolution},
 };
@@ -394,7 +397,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 }
             }
             Expr::Range { .. } => self.unsupported(e, "a range without a start or an end"),
-            Expr::NamedTuple { .. } => self.unsupported(e, "a tuple with named fields or spreads"),
+            Expr::NamedTuple { items } => self.named_tuple(e, items),
             Expr::Tuple { exprs } => {
                 let fields = self.exprs(exprs);
                 self.literal(
@@ -544,12 +547,79 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         }
     }
 
+    /// A tuple with named fields or spreads, like `(x: 5, ...origin)`. Its
+    /// parts are evaluated in the order they're written, each into a
+    /// temporary, and then the tuple is made of them in the order of its
+    /// fields: the positional ones, then the named ones by name. A spread
+    /// gives the fields of its temporary.
+    fn named_tuple(&mut self, e: hir::ExprId, items: &[TupleItem<hir::ExprId>]) -> ExprId {
+        let mut stmts = Vec::new();
+        let mut positional = Vec::new();
+        let mut named: Vec<(Name, ExprId)> = Vec::new();
+        for item in items {
+            let x = item.value();
+            let ty = self.ty(x);
+            let value = self.expr(x);
+            let temp = self.mir.new_temp(None, ty.clone());
+            stmts.push(Stmt::Let {
+                pat: Pattern::Local(Some(temp)),
+                init: Some(value),
+                else_: None,
+            });
+            let local = |b: &mut Self| b.mir.alloc(ExprKind::Local(temp), ty.clone(), Some(x));
+            match item {
+                TupleItem::Positional(_) => positional.push(local(self)),
+                TupleItem::Named(name, _) => named.push((name.clone(), local(self))),
+                TupleItem::Spread(spread, _) => {
+                    let (tys, fields): (&[Ty<'db>], &[(Name, Ty<'db>)]) = match &ty {
+                        Ty::Tuple(tys, _) => (tys, &[]),
+                        Ty::Record(tys, fields, _) => (tys, fields),
+                        _ => return self.unsupported(e, "a spread of this type"),
+                    };
+                    let ctor = Ctor::Tuple((tys.len() + fields.len()) as u32);
+                    let field = |b: &mut Self, index: usize, t: &Ty<'db>| {
+                        let base = local(b);
+                        let kind = ExprKind::Field { base, ctor, index: index as u32 };
+                        b.mir.alloc(kind, t.clone(), Some(x))
+                    };
+                    if *spread != Spread::Named {
+                        for (i, t) in tys.iter().enumerate() {
+                            positional.push(field(self, i, t));
+                        }
+                    }
+                    if *spread != Spread::Positional {
+                        for (j, (name, t)) in fields.iter().enumerate() {
+                            named.push((name.clone(), field(self, tys.len() + j, t)));
+                        }
+                    }
+                }
+            }
+        }
+        named.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        positional.extend(named.into_iter().map(|(_, v)| v));
+        let ctor = Ctor::Tuple(positional.len() as u32);
+        let tuple = self.literal(e, ExprKind::Construct { ctor, fields: positional.into() });
+        let ty = self.literal_ty(e);
+        let block = ExprKind::Block { stmts: stmts.into(), tail: Some(tuple), label: None };
+        self.mir.alloc(block, ty, Some(e))
+    }
+
     /// The constructor and index of the field `name` of a value of type `t`.
     fn field_index(&self, t: &Ty<'db>, name: &Name) -> Option<(Ctor<'db>, u32)> {
         match t {
             Ty::Tuple(tys, _) => {
                 let i = name.as_str().parse::<u32>().ok()?;
                 Some((Ctor::Tuple(tys.len() as u32), i))
+            }
+            // `t.0` or `t.x`, where the named fields come after the
+            // positional ones, by name.
+            Ty::Record(tys, named, _) => {
+                let i = match name.as_str().parse::<usize>() {
+                    Ok(i) if i < tys.len() => i,
+                    Ok(_) => return None,
+                    Err(_) => tys.len() + named.iter().position(|(n, _)| n == name)?,
+                };
+                Some((Ctor::Tuple((tys.len() + named.len()) as u32), i as u32))
             }
             Ty::Adt(AdtId::Struct(s), ..) => {
                 let (i, _) = field_types(self.db, VariantDef::Struct(*s)).field(name)?;

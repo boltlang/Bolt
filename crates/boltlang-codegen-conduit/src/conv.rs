@@ -105,7 +105,7 @@ impl<'db> ConvCx<'_, 'db> {
                 let v = VariantDef::Struct(*s);
                 vec![field_types(self.db, self.root, v, args, ms, *own).map_err(unknown)?]
             }
-            MonoTy::Tuple(elems, _) => vec![elems.to_vec()],
+            MonoTy::Tuple(elems, _) | MonoTy::Record(elems, ..) => vec![elems.to_vec()],
             _ => return Err(unsupported("converting this type")),
         })
     }
@@ -118,6 +118,7 @@ fn same_shape(from: &MonoTy<'_>, to: &MonoTy<'_>) -> bool {
     match (from, to) {
         (MonoTy::Adt(a, xs, ..), MonoTy::Adt(b, ys, ..)) => a == b && xs.len() == ys.len(),
         (MonoTy::Tuple(xs, _), MonoTy::Tuple(ys, _)) => xs.len() == ys.len(),
+        (MonoTy::Record(xs, a, _), MonoTy::Record(ys, b, _)) => xs.len() == ys.len() && a == b,
         (MonoTy::Array(..), MonoTy::Array(..)) => true,
         (MonoTy::Fn(ps, ..), MonoTy::Fn(qs, ..)) => ps.len() == qs.len(),
         _ => false,
@@ -143,7 +144,9 @@ fn check(t: &MonoTy<'_>) -> Result<(), ErrorKind> {
     }
     let changes = match t {
         MonoTy::Adt(AdtId::Struct(_), .., own) | MonoTy::Array(own, _) => *own != MonoMut::Imm,
-        MonoTy::Tuple(elems, own) => !elems.is_empty() && *own != MonoMut::Imm,
+        MonoTy::Tuple(elems, own) | MonoTy::Record(elems, _, own) => {
+            !elems.is_empty() && *own != MonoMut::Imm
+        }
         _ => false,
     };
     if changes {
