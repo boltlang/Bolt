@@ -142,12 +142,12 @@ Struct update syntax
 ================================================================================
 struct Point { x: i32, y: i32 }
 let p = Point { x: 1, y: 2 };
-Point { x: 3, ..p };
-Point { x: 3, ..(1, 2) };
+Point { x: 3, ...p };
+Point { x: 3, ...(1, 2) };
 --------------------------------------------------------------------------------
 let p: imm Point
-Point { x: 3, ..p }: imm Point
-Point { x: 3, ..(1, 2) }: imm Point
+Point { x: 3, ...p }: imm Point
+Point { x: 3, ...(1, 2) }: imm Point
 --------------------------------------------------------------------------------
 error at `(1, 2)`: expected Point, found imm ({integer}, {integer})
 

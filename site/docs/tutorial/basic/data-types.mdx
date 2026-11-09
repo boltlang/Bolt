@@ -43,13 +43,13 @@ A struct can't be changed, unless it's made with `mut`, like
 `mut Point { x: 0, y: 0 }`. [Mutability](./mutability.mdx#structs) shows
 how that works.
 
-`..` makes a new struct from another one, with some fields changed:
+`...` makes a new struct from another one, with some fields changed:
 
 ```bolt
 struct Config { width: i32, height: i32, fullscreen: Bool }
 
 let default = Config { width: 800, height: 600, fullscreen: False };
-let big = Config { fullscreen: True, ..default };
+let big = Config { fullscreen: True, ...default };
 big;
 ```
 

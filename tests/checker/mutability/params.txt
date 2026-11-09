@@ -182,7 +182,7 @@ Updating a struct keeps its mutability arguments
 :test-prelude
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
-fn advance(it: mut Iter['v]) -> mut Iter['v] = mut Iter { index: it.index + 1, ..it };
+fn advance(it: mut Iter['v]) -> mut Iter['v] = mut Iter { index: it.index + 1, ...it };
 --------------------------------------------------------------------------------
 advance: fn(mut Iter['v]) -> mut Iter['v]
 

@@ -90,8 +90,8 @@ p.y;
 //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
 let q = Point { x: 1, y: 2 };
                        //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
-let r = Point { x: 1, ..p };
-                      //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
+let r = Point { x: 1, ...p };
+                       //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here
 let Point { x, .. } = p;
 let Point { y, .. } = p;
           //^ error: the field `Point.y` is private to the file of its struct; make it `pub` to use it here

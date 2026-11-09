@@ -412,7 +412,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             }
             Expr::Record { path, fields, spread } => {
                 if spread.is_some() {
-                    return self.unsupported(e, "`..` in a struct literal");
+                    return self.unsupported(e, "`...` in a struct literal");
                 }
                 let def = match path.as_ref().and_then(|p| self.resolve(e, p)) {
                     Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
