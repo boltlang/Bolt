@@ -705,14 +705,17 @@ fn describe(
         K::NotAPack => (
             C::NOT_A_PACK,
             format!(
-                "`{source}` isn't a pack of this kind: `*` takes a pack like `*Ts`, `**` one like `**Ks`, and \
-                 `...` any of them, like `...A`"
+                "`{source}` isn't a pack of this kind: `*` takes a pack like `*Ts`, and `**` one like `**Ks`"
             ),
         ),
         K::DuplicateField { name } => (C::DUPLICATE_FIELD, format!("the field `{name}` is given more than once")),
         K::NotSpreadable { ty } => (
             C::NOT_SPREADABLE,
-            format!("only a tuple can be spread, not `{}`", ty.display_with(db, names)),
+            format!(
+                "only a tuple can be spread, with `*` for one with positional fields and `**` for one \
+                 with named fields, not `{}`",
+                ty.display_with(db, names)
+            ),
         ),
         K::RecursiveAlias => (C::RECURSIVE_ALIAS, format!("type alias `{source}` refers to itself")),
         K::CyclicInference => (

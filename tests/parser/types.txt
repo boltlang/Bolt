@@ -263,7 +263,6 @@ fn f(x: 'm) {}
 ================================================================================
 Tuple types with named fields
 ================================================================================
-type A = (i32, x: i32);
 type B = (x: i32, y: String);
 type C = (x: i32);
 
@@ -272,17 +271,22 @@ Tuple types with rests
 ================================================================================
 type A = (T, *Ts);
 type B = (name: String, **Ks);
-type C = (...A);
-type D = (i32, *Ts, x: i32, **Ks);
+type C = (*Ts, i32);
 
 ================================================================================
-A positional field can't come after a named one in a tuple type
+A tuple type has positional or named fields, not both
 :error
 ================================================================================
-type A = (x: i32, i32);
+type A = (i32, x: i32);
 
 ================================================================================
-A positional rest can't come after a named field in a tuple type
+A tuple type can't have a named rest beside positional fields
 :error
 ================================================================================
-type A = (x: i32, *Ts);
+type A = (i32, **Ks);
+
+================================================================================
+A rest of a tuple type isn't written with ...
+:error
+================================================================================
+type A = (...A);

@@ -277,24 +277,30 @@ fn effect_arms_with_several_operations() {
 }
 
 #[test]
-fn tuple_expr_with_named_fields_and_spreads() {
+fn tuple_expr_with_spreads() {
     use boltlang_syntax::ast::{Spread, TupleExprItem};
-    let Expr::Tuple(tuple) = let_expr("let x = (1, *xs, y: 2, **opts, ...rest);") else { panic!() };
+    let Expr::Tuple(tuple) = let_expr("let x = (1, *xs);") else { panic!() };
     let items: Vec<_> = tuple.items().collect();
-    assert_eq!(items.len(), 5);
+    assert_eq!(items.len(), 2);
     assert!(matches!(&items[0], TupleExprItem::Positional(_)));
     let TupleExprItem::Spread(s) = &items[1] else { panic!() };
     assert_eq!(s.spread(), Some(Spread::Positional));
     assert_eq!(text(s.expr()), "xs");
-    let TupleExprItem::Named(f) = &items[2] else { panic!() };
-    assert_eq!(f.name_ref().unwrap().text(), "y");
-    assert_eq!(text(f.expr()), "2");
-    let TupleExprItem::Spread(s) = &items[3] else { panic!() };
-    assert_eq!(s.spread(), Some(Spread::Named));
-    let TupleExprItem::Spread(s) = &items[4] else { panic!() };
-    assert_eq!(s.spread(), Some(Spread::All));
     // Only the positional elements.
     assert_eq!(tuple.elements().count(), 1);
+}
+
+#[test]
+fn tuple_expr_with_named_fields_and_spreads() {
+    use boltlang_syntax::ast::{Spread, TupleExprItem};
+    let Expr::Tuple(tuple) = let_expr("let x = (y: 2, **opts);") else { panic!() };
+    let items: Vec<_> = tuple.items().collect();
+    assert_eq!(items.len(), 2);
+    let TupleExprItem::Named(f) = &items[0] else { panic!() };
+    assert_eq!(f.name_ref().unwrap().text(), "y");
+    assert_eq!(text(f.expr()), "2");
+    let TupleExprItem::Spread(s) = &items[1] else { panic!() };
+    assert_eq!(s.spread(), Some(Spread::Named));
 }
 
 #[test]
@@ -305,48 +311,48 @@ fn a_named_field_alone_is_a_tuple() {
 }
 
 #[test]
-fn tuple_type_with_named_fields_and_rests() {
+fn tuple_types_with_rests() {
     use boltlang_syntax::ast::{Spread, TupleTypeItem};
-    let (green, diags) = parse_file("type A = (i32, *Ts, x: i32, **Ks);");
+    let (green, diags) = parse_file("type A = (i32, *Ts); type B = (x: i32, **Ks);");
     assert!(diags.is_empty(), "{diags:?}");
     let root = SyntaxNode::new_root(green);
-    let tuple = root.descendants().find_map(boltlang_syntax::ast::TupleType::cast).unwrap();
-    let items: Vec<_> = tuple.items().collect();
-    assert_eq!(items.len(), 4);
-    assert!(matches!(&items[0], TupleTypeItem::Positional(_)));
-    let TupleTypeItem::Rest(r) = &items[1] else { panic!() };
+    let tuples: Vec<_> =
+        root.descendants().filter_map(boltlang_syntax::ast::TupleType::cast).collect();
+    let a: Vec<_> = tuples[0].items().collect();
+    assert!(matches!(&a[0], TupleTypeItem::Positional(_)));
+    let TupleTypeItem::Rest(r) = &a[1] else { panic!() };
     assert_eq!(r.spread(), Some(Spread::Positional));
-    let TupleTypeItem::Named(f) = &items[2] else { panic!() };
+    let b: Vec<_> = tuples[1].items().collect();
+    let TupleTypeItem::Named(f) = &b[0] else { panic!() };
     assert_eq!(f.name().unwrap().text(), "x");
-    let TupleTypeItem::Rest(r) = &items[3] else { panic!() };
+    let TupleTypeItem::Rest(r) = &b[1] else { panic!() };
     assert_eq!(r.spread(), Some(Spread::Named));
 }
 
 #[test]
 fn pack_params() {
     use boltlang_syntax::ast::{GenericParam, PackParam, Spread};
-    let (green, diags) = parse_file("fn f[T, *Ts, **Ks, ...A]() = 1;");
+    let (green, diags) = parse_file("fn f[T, *Ts, **Ks]() = 1;");
     assert!(diags.is_empty(), "{diags:?}");
     let root = SyntaxNode::new_root(green);
     let packs: Vec<_> = root.descendants().filter_map(PackParam::cast).collect();
     let spreads: Vec<_> = packs.iter().map(|p| p.spread()).collect();
-    assert_eq!(spreads, [Some(Spread::Positional), Some(Spread::Named), Some(Spread::All)]);
+    assert_eq!(spreads, [Some(Spread::Positional), Some(Spread::Named)]);
     let names: Vec<_> = packs.iter().map(|p| p.name().unwrap().text()).collect();
-    assert_eq!(names, ["Ts", "Ks", "A"]);
+    assert_eq!(names, ["Ts", "Ks"]);
     let list = root.descendants().find_map(boltlang_syntax::ast::GenericParamList::cast).unwrap();
-    assert_eq!(list.params().filter(|p| matches!(p, GenericParam::Pack(_))).count(), 3);
+    assert_eq!(list.params().filter(|p| matches!(p, GenericParam::Pack(_))).count(), 2);
 }
 
 #[test]
 fn tuple_pattern_with_named_fields() {
-    let (green, diags) = parse_file("let (a, x: b, ..) = t;");
+    let (green, diags) = parse_file("let (x: b, ..) = t;");
     assert!(diags.is_empty(), "{diags:?}");
     let root = SyntaxNode::new_root(green);
     let tuple = root.descendants().find_map(boltlang_syntax::ast::TuplePattern::cast).unwrap();
     let items: Vec<_> = tuple.items().collect();
-    assert_eq!(items.len(), 3);
-    assert!(matches!(&items[0], Ok(Pattern::Named(_))));
-    let Err(f) = &items[1] else { panic!() };
+    assert_eq!(items.len(), 2);
+    let Err(f) = &items[0] else { panic!() };
     assert_eq!(f.name_ref().unwrap().text(), "x");
-    assert!(matches!(&items[2], Ok(Pattern::Rest(_))));
+    assert!(matches!(&items[1], Ok(Pattern::Rest(_))));
 }

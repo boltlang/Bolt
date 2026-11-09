@@ -42,17 +42,11 @@ pub struct TypeParamData {
 }
 
 /// What a pack parameter stands for: any number of positional fields,
-/// like `*Ts`, of named ones, like `**Ks`, or both, like `...A`. `...A` is
-/// two parameters, its positional half and then its named half, which has
-/// the same name but is only found through the first.
+/// like `*Ts`, or of named ones, like `**Ks`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum PackKind {
     Positional,
     Named,
-    /// The positional half of `...A`; the next parameter is its named half.
-    All,
-    /// The named half of `...A`.
-    AllNamed,
 }
 
 /// `const N: usize = 3`
@@ -593,12 +587,11 @@ fn lower_generic_params(
                     default: None,
                     pack: Some(pack),
                 };
+                // `...A`, which the parser reports, is positional.
                 match p.spread() {
-                    Some(ast::Spread::Positional) => type_params.push(param(PackKind::Positional)),
                     Some(ast::Spread::Named) => type_params.push(param(PackKind::Named)),
-                    Some(ast::Spread::All) | None => {
-                        type_params.push(param(PackKind::All));
-                        type_params.push(param(PackKind::AllNamed));
+                    Some(ast::Spread::Positional) | None => {
+                        type_params.push(param(PackKind::Positional))
                     }
                 }
             }

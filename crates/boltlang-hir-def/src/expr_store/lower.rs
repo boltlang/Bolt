@@ -795,13 +795,12 @@ fn field_name(text: Option<impl AsRef<str>>) -> Name {
     text.map_or_else(|| Name::new(""), |t| Name::from_ident(t.as_ref()))
 }
 
-/// What a spread or a rest stands for. The parser only makes one that's
-/// written one of the three ways.
+/// What a spread or a rest stands for. One written `...`, which the parser
+/// reports, counts as positional.
 fn spread(spread: Option<ast::Spread>) -> Spread {
     match spread {
-        Some(ast::Spread::Positional) => Spread::Positional,
         Some(ast::Spread::Named) => Spread::Named,
-        Some(ast::Spread::All) | None => Spread::All,
+        Some(ast::Spread::Positional) | None => Spread::Positional,
     }
 }
 

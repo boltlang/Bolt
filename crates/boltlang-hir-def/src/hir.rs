@@ -77,8 +77,6 @@ pub enum Spread {
     Positional,
     /// `**`: named fields.
     Named,
-    /// `...`: both.
-    All,
 }
 
 /// A part of a tuple with named fields or spreads, like the `1`, `x: 2`
@@ -187,8 +185,8 @@ pub enum Expr {
     Tuple {
         exprs: Box<[ExprId]>,
     },
-    /// A tuple with named fields or spreads, like `(1, x: 2)` or
-    /// `(x: 5, ...origin)`. The checker doesn't support it yet.
+    /// A tuple with named fields or spreads, like `(x: 1, y: 2)`,
+    /// `(*xs, 1)` or `(x: 5, **origin)`.
     NamedTuple {
         items: Box<[TupleItem<ExprId>]>,
     },
@@ -357,10 +355,10 @@ pub enum Pat {
         args: Box<[PatId]>,
         rest: Option<u32>,
     },
-    /// A tuple pattern with named fields, like `(a, .., z, x: b)`. `rest`
-    /// is the number of positional fields before its `..`, if it has one,
-    /// which ignores the other fields: those after it are the last ones.
-    /// Its items are never spreads.
+    /// A tuple pattern with named fields, like `(x: a, ..)`. `rest` is the
+    /// number of positional fields before its `..`, if it has one, which
+    /// ignores the other fields. The parser only makes one without
+    /// positional fields, and its items are never spreads.
     NamedTuple {
         items: Box<[TupleItem<PatId>]>,
         rest: Option<u32>,
@@ -583,8 +581,8 @@ pub enum TypeRef {
     Path(Path),
     /// `(A, B)`, or `()` for the unit type.
     Tuple(Box<[TypeRefId]>),
-    /// A tuple type with named fields or rests, like `(A, x: B)` or
-    /// `(T, *Ts)`. The checker doesn't support it yet.
+    /// A tuple type with named fields or rests, like `(x: A, y: B)`,
+    /// `(T, *Ts)` or `(x: A, **Ks)`.
     NamedTuple(Box<[TupleItem<TypeRefId>]>),
     /// `[T]` or `[T; N]`, with the `mut` or `imm` written before it
     Array {

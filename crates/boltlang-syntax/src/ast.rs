@@ -175,8 +175,6 @@ pub enum Spread {
     Positional,
     /// `**`: named fields.
     Named,
-    /// `...`: both.
-    All,
 }
 
 /// The spread that `node` starts with, if any.
@@ -184,7 +182,6 @@ fn spread_of(node: &SyntaxNode) -> Option<Spread> {
     let token = node.children_with_tokens().filter_map(|x| x.into_token()).next()?;
     match token.kind() {
         STAR => Some(Spread::Positional),
-        DOTDOTDOT => Some(Spread::All),
         OPERATOR if token.text() == "**" => Some(Spread::Named),
         _ => None,
     }

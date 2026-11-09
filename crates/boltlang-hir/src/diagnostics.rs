@@ -213,7 +213,8 @@ pub enum DiagnosticKind<'db> {
     DuplicateField {
         name: Name,
     },
-    /// A spread, like `...e`, of something that isn't a tuple.
+    /// A spread, like `*e` or `**e`, of something that isn't a tuple of
+    /// its kind.
     NotSpreadable {
         ty: Ty<'db>,
     },

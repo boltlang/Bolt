@@ -4,29 +4,35 @@ Pack parameters
 fn first[T, *Ts](t: (T, *Ts)) -> T = t.0;
 fn last[*Ts, U](t: (*Ts, U)) -> U = match t { (.., u) => u };
 fn name_of[**R](p: (name: i32, **R)) -> i32 = p.name;
-fn same[...A](a: (...A)) -> (...A) = a;
+fn same[*Ts](a: (*Ts)) -> (*Ts) = a;
+fn same_named[**Ks](a: (**Ks)) -> (**Ks) = a;
 let a = first((1, True, 2u8));
 let b = last((True, 7));
 let c = name_of((name: 3, born: True));
 let d = name_of((name: 4));
-let e = same((1, x: True));
+let e = same((1, True));
 let f = same(());
+let g = same_named((x: True));
+let h = same_named(());
 --------------------------------------------------------------------------------
 first: forall T Ts. fn((T, *Ts)) -> T
 last: forall Ts U. fn((*Ts, U)) -> U
 name_of: forall R. fn((name: i32, **R)) -> i32
-same: forall A. fn((*A, **A)) -> (*A, **A)
+same: forall Ts. fn((*Ts)) -> (*Ts)
+same_named: forall Ks. fn((**Ks)) -> (**Ks)
 let a: i32
 let b: i32
 let c: i32
 let d: i32
-let e: imm (i32, x: Bool)
+let e: imm (i32, Bool)
 let f: ()
+let g: imm (x: Bool)
+let h: ()
 
 ================================================================================
 Two packs in a result
 ================================================================================
-fn join[*As, *Bs](a: (*As), b: (*Bs)) -> (*As, *Bs) = (...a, ...b);
+fn join[*As, *Bs](a: (*As), b: (*Bs)) -> (*As, *Bs) = (*a, *b);
 let c = join((1, True), (2u8,));
 --------------------------------------------------------------------------------
 join: forall As Bs. *As: imm => *Bs: imm => fn((*As), (*Bs)) -> imm (*As, *Bs)
@@ -45,7 +51,7 @@ let c: imm (x: i32, y: Bool)
 A named pack can't give a field the tuple has
 :error
 ================================================================================
-fn with_id[**R](r: (**R), id: i32) -> (id: i32, **R) = (id: id, ...r);
+fn with_id[**R](r: (**R), id: i32) -> (id: i32, **R) = (id: id, **r);
 let w = with_id((name: True), 1);
 let d = with_id((id: True), 1);
 --------------------------------------------------------------------------------

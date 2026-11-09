@@ -152,8 +152,8 @@ pub enum SyntaxKind {
     TUPLE_TYPE,
     /// `x: T` in a tuple type, a named field
     TUPLE_TYPE_FIELD,
-    /// `*Ts`, `**Ks` or `...A` in a tuple type: the other positional
-    /// fields, the other named fields, or both
+    /// `*Ts` or `**Ks` in a tuple type: the other positional fields, or
+    /// the other named fields
     TUPLE_TYPE_REST,
     /// `[T]` or `[T; N]`
     ARRAY_TYPE,
@@ -179,8 +179,8 @@ pub enum SyntaxKind {
     GENERIC_PARAM_LIST,
     /// `T`, `T: Bound` or `T = Default`
     TYPE_PARAM,
-    /// `*Ts`, `**Ks` or `...A`: a parameter for any number of positional
-    /// fields, named fields, or both
+    /// `*Ts` or `**Ks`: a parameter for any number of positional fields,
+    /// or of named fields
     PACK_PARAM,
     /// `const N: usize` or `const N: usize = 3`
     CONST_PARAM,
@@ -274,8 +274,8 @@ pub enum SyntaxKind {
     RECORD_EXPR_FIELD,
     /// `x: e` in a tuple expression, a named field
     TUPLE_EXPR_FIELD,
-    /// `*e`, `**e` or `...e` in a tuple expression: the positional
-    /// fields of `e`, its named fields, or both
+    /// `*e` or `**e` in a tuple expression: the positional fields of `e`,
+    /// or its named fields
     TUPLE_EXPR_SPREAD,
     ARG_LIST,
 

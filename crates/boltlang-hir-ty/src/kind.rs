@@ -105,8 +105,8 @@ pub fn generic_param_kinds<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<
 /// The kind a pack parameter has, as it's declared.
 fn pack_kind(pack: PackKind) -> Kind {
     match pack {
-        PackKind::Positional | PackKind::All => Kind::PositionalPack,
-        PackKind::Named | PackKind::AllNamed => Kind::NamedPack,
+        PackKind::Positional => Kind::PositionalPack,
+        PackKind::Named => Kind::NamedPack,
     }
 }
 
@@ -505,8 +505,7 @@ impl<'db> KindInference<'db> {
             }
             TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),
             TypeRef::NamedTuple(items) => {
-                // A rest must be a pack, which lowering checks: `...A`
-                // names the positional half of `A`.
+                // A rest must be a pack of its kind, which lowering checks.
                 for item in items.iter() {
                     if let TupleItem::Positional(t) | TupleItem::Named(_, t) = item {
                         self.expect_type(resolver, store, *t);

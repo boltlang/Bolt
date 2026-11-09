@@ -88,7 +88,7 @@ pub enum ExprOrPat {
 /// the field is assigned to, like in `p.x = 1`, so a struct must be `mut`:
 /// `forall a. mut a.x: i32 => fn(a) -> ()`.
 /// A part of a tuple being made: a positional field, a named one, or what
-/// a spread like `...e` gives, which has `e`'s type.
+/// a spread like `*e` or `**e` gives, which has `e`'s type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TuplePart<'db> {
     Positional(Ty<'db>),
@@ -97,10 +97,10 @@ pub enum TuplePart<'db> {
 }
 
 /// That `result` is the tuple made of `parts`, with the mutability
-/// `mutability`, like `(x: 5, ...origin)`. It's solved once the type of
-/// each spread is known: a tuple, whose positional fields `*e` gives,
-/// whose named ones `**e` gives, and both `...e`. A name may be given only
-/// once.
+/// `mutability`, like `(x: 5, **origin)`. It's solved once the type of
+/// each spread is known: `*e` gives the fields of a tuple with positional
+/// ones, and `**e` those of a tuple with named ones. A name may be given
+/// only once.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SpreadConstraint<'db> {
     pub parts: Vec<TuplePart<'db>>,
@@ -701,29 +701,30 @@ impl<'db> Solver<'db> {
                 TuplePart::Named(n, t) => add_named(self, &mut named, n.clone(), t.clone()),
                 TuplePart::Spread(..) => {
                     let (kind, t) = spreads.next().expect("one per spread");
-                    let (tys, fields): (Vec<Ty<'db>>, Vec<(Name, Ty<'db>)>) = match t {
-                        Ty::Tuple(tys, _) => (tys.into_vec(), Vec::new()),
-                        Ty::Record(tys, fields, _) => (tys.into_vec(), fields.into_vec()),
-                        // Reported already.
-                        Ty::Error | Ty::Never => {
-                            failed = true;
-                            continue;
+                    // `*e` spreads a tuple with positional fields, and `**e`
+                    // one with named fields; `()` is both.
+                    match (kind, t) {
+                        (Spread::Positional, Ty::Tuple(tys, _)) => {
+                            spread_fields.extend(tys.iter().cloned());
+                            positional.extend(tys.into_vec());
                         }
-                        t => {
+                        (Spread::Named, Ty::Tuple(tys, _)) if tys.is_empty() => {}
+                        // Its positional part only has the spreads of named
+                        // packs.
+                        (Spread::Named, Ty::Record(tys, fields, _)) => {
+                            spread_fields.extend(tys.iter().cloned());
+                            positional.extend(tys.into_vec());
+                            for (n, t) in fields.into_vec() {
+                                spread_fields.push(t.clone());
+                                add_named(self, &mut named, n, t);
+                            }
+                        }
+                        // Reported already.
+                        (_, Ty::Error | Ty::Never) => failed = true,
+                        (_, t) => {
                             let ty = self.unifier.resolve(&t);
                             self.errors.push(TypeError::NotSpreadable { origin, ty });
                             failed = true;
-                            continue;
-                        }
-                    };
-                    if kind != Spread::Named {
-                        spread_fields.extend(tys.iter().cloned());
-                        positional.extend(tys);
-                    }
-                    if kind != Spread::Positional {
-                        for (n, t) in fields {
-                            spread_fields.push(t.clone());
-                            add_named(self, &mut named, n, t);
                         }
                     }
                 }

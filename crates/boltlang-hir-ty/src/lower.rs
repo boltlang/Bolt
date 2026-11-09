@@ -588,40 +588,25 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         out
     }
 
-    /// A rest of a tuple type, like the `*Ts` of `(T, *Ts)`: the spreads of
-    /// the halves of the pack it names that it stands for. `*` takes the
-    /// positional half of `...A`, `**` the named one, and `...` both.
-    fn lower_rest(&mut self, spread: Spread, id: TypeRefId) -> Vec<Ty<'db>> {
+    /// A rest of a tuple type, like the `*Ts` of `(T, *Ts)`: the spread of
+    /// the pack it names, which must be of its kind: `*` for a positional
+    /// pack and `**` for a named one.
+    fn lower_rest(&mut self, spread: Spread, id: TypeRefId) -> Option<Ty<'db>> {
         let (ty, _) = self.lower_ty_kinded(id);
         let pack = match &ty {
             Ty::Param(p) => p.def.generic_params(self.db).type_params[p.index as usize].pack,
-            Ty::Error => return Vec::new(),
+            Ty::Error => return None,
             _ => None,
         };
-        let half = |p: &GenericParamId<'db>, offset: u32, half: PackHalf| {
-            let param = GenericParamId { def: p.def, index: p.index + offset };
-            Ty::Spread(half, Box::new(Ty::Param(param)))
-        };
-        let Ty::Param(p) = &ty else {
-            self.diagnostics.push(LowerDiagnostic::NotAPack(id));
-            return Vec::new();
-        };
-        use PackHalf::{Named, Positional};
-        match (spread, pack) {
-            (Spread::Positional | Spread::All, Some(PackKind::Positional)) => {
-                vec![half(p, 0, Positional)]
-            }
-            (Spread::Named | Spread::All, Some(PackKind::Named)) => vec![half(p, 0, Named)],
-            (Spread::Positional, Some(PackKind::All)) => vec![half(p, 0, Positional)],
-            (Spread::Named, Some(PackKind::All)) => vec![half(p, 1, Named)],
-            (Spread::All, Some(PackKind::All)) => {
-                vec![half(p, 0, Positional), half(p, 1, Named)]
-            }
+        let half = match (spread, pack) {
+            (Spread::Positional, Some(PackKind::Positional)) => PackHalf::Positional,
+            (Spread::Named, Some(PackKind::Named)) => PackHalf::Named,
             _ => {
                 self.diagnostics.push(LowerDiagnostic::NotAPack(id));
-                Vec::new()
+                return None;
             }
-        }
+        };
+        Some(Ty::Spread(half, Box::new(ty)))
     }
 
     /// A type alias, which must be given all its arguments.

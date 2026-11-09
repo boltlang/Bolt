@@ -232,12 +232,6 @@ impl<'db> Scheme<'db> {
             .params
             .iter()
             .filter(|p| !is_hidden_param(db, **p))
-            // `...A` is shown once, by its positional half.
-            .filter(|p| {
-                let params = &p.def.generic_params(db).type_params;
-                params.get(p.index as usize).and_then(|t| t.pack)
-                    != Some(boltlang_hir_def::signatures::PackKind::AllNamed)
-            })
             .map(|p| show(&Ty::Param(*p)))
             .collect();
         forall.extend(names.bound_names().map(str::to_string));

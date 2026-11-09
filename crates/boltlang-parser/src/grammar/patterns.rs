@@ -4,7 +4,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        LITERAL_FIRST, PATH_SEGMENT_FIRST, TupleOrder, TupleSide, at_macro_call, at_named_field,
+        LITERAL_FIRST, PATH_SEGMENT_FIRST, TupleKind, TupleSide, at_macro_call, at_named_field,
         delimited, dotted_path, macro_call, name, name_ref, parse_block_expr,
     },
     parser::{CompletedMarker, Parser},
@@ -177,7 +177,7 @@ fn path_or_struct_pattern(p: &mut Parser) -> CompletedMarker {
 /// `(a, b)`. Like in the grammar, `(a)` is a tuple pattern too.
 fn tuple_pattern(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    let mut order = TupleOrder::default();
+    let mut kind = TupleKind::default();
     delimited(
         p,
         T!['('],
@@ -188,7 +188,7 @@ fn tuple_pattern(p: &mut Parser) -> CompletedMarker {
         |p| {
             // `x: pattern`, a named field.
             if at_named_field(p) {
-                order.next(p, TupleSide::Named);
+                kind.next(p, TupleSide::Named);
                 let field = p.start();
                 name_ref(p);
                 p.bump(T![:]);
@@ -200,8 +200,8 @@ fn tuple_pattern(p: &mut Parser) -> CompletedMarker {
                 return false;
             }
             // `..` ignores the other fields, positional and named.
-            let side = if p.at(T![..]) { TupleSide::Both } else { TupleSide::Positional };
-            order.next(p, side);
+            let side = if p.at(T![..]) { TupleSide::Either } else { TupleSide::Positional };
+            kind.next(p, side);
             parse_pattern(p);
             true
         },

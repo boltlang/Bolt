@@ -33,31 +33,39 @@ use boltlang_syntax::{
     T,
 };
 
-/// Which part of a tuple an element goes in: its positional fields, its
-/// named fields, or both, as `...e` does.
+/// Which kind of tuple an element is for: one with positional fields, or
+/// one with named fields. A rest pattern, `..`, is for either.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TupleSide {
     Positional,
     Named,
-    Both,
+    Either,
 }
 
-/// Whether a spread or a rest starts here: `*`, `**` or `...`.
+/// Whether a spread or a rest starts here: `*` or `**`, or `...`, which is
+/// read to report it.
 pub(crate) fn at_spread(p: &Parser) -> bool {
     p.at(T![*]) || p.at_op("**") || p.at(T![...])
 }
 
-/// Consume `*`, `**` or `...`, and give the part of a tuple it's in.
-pub(crate) fn spread(p: &mut Parser) -> TupleSide {
-    let side = if p.at(T![*]) {
+/// The kind of tuple the spread here is for. `...`, an error, counts as
+/// either.
+pub(crate) fn spread_side(p: &Parser) -> TupleSide {
+    if p.at(T![*]) {
         TupleSide::Positional
     } else if p.at(T![...]) {
-        TupleSide::Both
+        TupleSide::Either
     } else {
         TupleSide::Named
-    };
+    }
+}
+
+/// Consume `*` or `**`, or `...`, which is an error.
+pub(crate) fn spread(p: &mut Parser) {
+    if p.at(T![...]) {
+        p.error("`...` isn't a spread: write `*` for positional fields or `**` for named ones");
+    }
     p.bump_any();
-    side
 }
 
 /// Whether a named field like `x: ..` starts here.
@@ -65,20 +73,22 @@ pub(crate) fn at_named_field(p: &Parser) -> bool {
     p.at(IDENT) && p.nth_at(1, T![:])
 }
 
-/// The rule that a tuple's positional fields come before its named ones.
+/// The rule that a tuple has positional fields or named ones, not both:
+/// `(1, 2)` and `(x: 1, y: 2)`, but not `(1, x: 2)`.
 #[derive(Default)]
-pub(crate) struct TupleOrder {
-    named: bool,
+pub(crate) struct TupleKind {
+    side: Option<TupleSide>,
 }
 
-impl TupleOrder {
-    /// Note an element of `side`, which starts here, reporting it if it's
-    /// positional after a named one.
+impl TupleKind {
+    /// Note an element for `side`, which starts here, reporting it if the
+    /// tuple is of the other kind.
     pub(crate) fn next(&mut self, p: &mut Parser, side: TupleSide) {
-        match side {
-            TupleSide::Named => self.named = true,
-            TupleSide::Positional if self.named => {
-                p.error("a positional field can't come after a named one");
+        match (self.side, side) {
+            (_, TupleSide::Either) => {}
+            (None, side) => self.side = Some(side),
+            (Some(had), side) if had != side => {
+                p.error("a tuple has positional fields or named fields, not both");
             }
             _ => {}
         }

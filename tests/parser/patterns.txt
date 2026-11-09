@@ -200,13 +200,13 @@ let mut mut x = 1;
 ================================================================================
 Tuple patterns with named fields
 ================================================================================
-let (a, x: b) = t;
+let (x: a, y: b) = t;
 let (x: (a, b), y: _) = t;
-let (a, x: b, ..) = t;
+let (x: b, ..) = t;
 let (x: 1, ..) = t;
 
 ================================================================================
-A positional field can't come after a named one in a tuple pattern
+A tuple pattern has positional or named fields, not both
 :error
 ================================================================================
-let (x: a, b) = t;
+let (a, x: b) = t;

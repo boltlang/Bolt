@@ -547,7 +547,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         }
     }
 
-    /// A tuple with named fields or spreads, like `(x: 5, ...origin)`. Its
+    /// A tuple with named fields or spreads, like `(x: 5, **origin)`. Its
     /// parts are evaluated in the order they're written, each into a
     /// temporary, and then the tuple is made of them in the order of its
     /// fields: the positional ones, then the named ones by name. A spread

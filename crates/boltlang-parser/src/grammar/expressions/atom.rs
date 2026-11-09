@@ -9,10 +9,10 @@ use super::{
 };
 use crate::{
     grammar::{
-        TupleOrder, TupleSide, at_inner_attr, at_macro_call, at_named_field, at_outer_attr,
+        TupleKind, TupleSide, at_inner_attr, at_macro_call, at_named_field, at_outer_attr,
         at_spread, attr, dotted_path, expr_path, is_path_start, macro_call, name_ref,
         opt_effect_row, opt_ret_type, outer_attrs, param_list, parse_pattern, pattern_single,
-        spread, type_,
+        spread, spread_side, type_,
     },
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
@@ -213,9 +213,9 @@ fn record_expr_field_list(p: &mut Parser) {
 }
 
 /// `(a)`, `(a,)`, `(a, b)` or `()`, and tuples with named fields and
-/// spreads, like `(1, x: 2)` or `(*xs, **opts, ...rest)`. Positional
-/// fields come first. `(a)` is a parenthesized expression, but `(x: a)`
-/// and `(*a)` are tuples.
+/// spreads, like `(x: 1, y: 2)`, `(*xs, 1)` or `(x: 1, **opts)`. A tuple
+/// has positional fields or named ones, not both. `(a)` is a parenthesized
+/// expression, but `(x: a)` and `(*a)` are tuples.
 fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(T!['(']);
@@ -223,11 +223,11 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     let mut saw_expr = false;
     // A named field or a spread, which only a tuple has.
     let mut saw_part = false;
-    let mut order = TupleOrder::default();
+    let mut kind = TupleKind::default();
     while !p.at(EOF) && !p.at(T![')']) {
         saw_expr = true;
         if at_named_field(p) {
-            order.next(p, TupleSide::Named);
+            kind.next(p, TupleSide::Named);
             saw_part = true;
             let field = p.start();
             name_ref(p);
@@ -241,8 +241,8 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
         } else if at_spread(p) {
             saw_part = true;
             let s = p.start();
-            let side = spread(p);
-            order.next(p, side);
+            kind.next(p, spread_side(p));
+            spread(p);
             if at_expr_start(p) {
                 expr(p);
             } else {
@@ -250,7 +250,7 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
             }
             s.complete(p, TUPLE_EXPR_SPREAD);
         } else if at_expr_start(p) {
-            order.next(p, TupleSide::Positional);
+            kind.next(p, TupleSide::Positional);
             expr(p);
         } else {
             p.error("expected an expression");

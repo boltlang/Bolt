@@ -77,16 +77,18 @@ struct S[*Ts] { x: i32 }
 Only a pack can be a rest of a tuple type
 ================================================================================
 fn f(x: (*i32)) = x;
-        //^^^ error: `i32` isn't a pack of this kind: `*` takes a pack like `*Ts`, `**` one like `**Ks`, and `...` any of them, like `...A`
+        //^^^ error: `i32` isn't a pack of this kind: `*` takes a pack like `*Ts`, and `**` one like `**Ks`
 
 ================================================================================
 Fields of tuples
 ================================================================================
 let p = (x: 1, x: 2);
       //^^^^^^^^^^^^ error: the field `x` is given more than once
-let q = (y: 1, ...p);
-let r = (...1);
-      //^^^^^^ error: only a tuple can be spread, not `i32`
+let q = (y: 1, **p);
+let t = (*p);
+      //^^^^ error: only a tuple can be spread, with `*` for one with positional fields and `**` for one with named fields, not `imm (x: i32)`
+let r = (*1);
+      //^^^^ error: only a tuple can be spread, with `*` for one with positional fields and `**` for one with named fields, not `i32`
 fn f(t: (x: i32, x: Bool)) = t;
       //^^^^^^^^^^^^^^^^^ error: the field `x` is given more than once
 let (z: n, ..) = (x: 1);

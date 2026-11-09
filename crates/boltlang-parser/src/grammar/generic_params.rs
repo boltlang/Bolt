@@ -65,8 +65,7 @@ fn type_param(p: &mut Parser) {
     m.complete(p, TYPE_PARAM);
 }
 
-/// `*Ts`, `**Ks` or `...A`: any number of positional fields, of named
-/// fields, or of both.
+/// `*Ts` or `**Ks`: any number of positional fields, or of named fields.
 fn pack_param(p: &mut Parser) {
     let m = p.start();
     spread(p);

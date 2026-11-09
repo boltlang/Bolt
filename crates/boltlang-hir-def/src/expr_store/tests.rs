@@ -47,7 +47,6 @@ impl Printer<'_> {
                 let s = match spread {
                     Spread::Positional => "*",
                     Spread::Named => "**",
-                    Spread::All => "...",
                 };
                 format!("{s}{}", f(self, *v))
             }
@@ -500,15 +499,14 @@ fn compound_expressions() {
 fn tuples_with_named_fields_and_spreads() {
     assert_eq!(
         render(
-            "(1, x: 2);\n(x: a);\n(*xs, 1, **opts);\n(x: 5, ...origin);\n\
-             let (a, x: b, ..) = t;\nlet (a, .., z, x: b) = t;\nlet (x: (c, _)) = t;\nlet t: (i32, *Ts, x: i32, **Ks);\nlet u: (...A);"
+            "(x: 2, y: 1);\n(x: a);\n(*xs, 1);\n(x: 5, **origin);\n\
+             let (x: b, ..) = t;\nlet (x: (c, _)) = t;\nlet t: (i32, *Ts);\nlet u: (x: i32, **Ks);"
         ),
-        "(tuple 1, x: 2);\n(tuple x: a);\n(tuple *xs, 1, **opts);\n(tuple x: 5, ...origin);\n\
-         (let (a, x: b, ..) = t)\n\
-         (let (a, .., z, x: b) = t)\n\
+        "(tuple x: 2, y: 1);\n(tuple x: a);\n(tuple *xs, 1);\n(tuple x: 5, **origin);\n\
+         (let (x: b, ..) = t)\n\
          (let (x: (c, _)) = t)\n\
-         (let t : (i32, *Ts, x: i32, **Ks))\n\
-         (let u : (...A))"
+         (let t : (i32, *Ts))\n\
+         (let u : (x: i32, **Ks))"
     );
 }
 
