@@ -17,7 +17,7 @@ use std::fmt;
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
     expr_store::ExpressionStore,
-    hir::{GenericArg, TypeRef, TypeRefId},
+    hir::{GenericArg, TupleItem, TypeRef, TypeRefId},
     ids::{ConstId, FunctionId, ItemContainerId, TypeAliasId},
     item_tree::AssocItem,
     resolver::{GenericDefId, Resolver, TypeNs},
@@ -472,8 +472,16 @@ impl<'db> KindInference<'db> {
                 K::Type
             }
             TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),
-            // Reported as unsupported where it's lowered.
-            TypeRef::Never | TypeRef::NamedTuple(_) => K::Type,
+            TypeRef::NamedTuple(items) => {
+                // A rest is reported as unsupported where it's lowered.
+                for item in items.iter() {
+                    if let TupleItem::Positional(t) | TupleItem::Named(_, t) = item {
+                        self.expect_type(resolver, store, *t);
+                    }
+                }
+                K::Type
+            }
+            TypeRef::Never => K::Type,
             TypeRef::Error
             | TypeRef::ImplTrait { .. }
             | TypeRef::Bounded(_)

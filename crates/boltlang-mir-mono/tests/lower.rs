@@ -249,6 +249,7 @@ impl Program {
             };
             let error = match e {
                 UseError::UnknownType => "a type isn't known".to_string(),
+                UseError::Unsupported(what) => format!("{what} isn't supported yet"),
                 UseError::Cycle => "its type depends on itself across files".to_string(),
                 UseError::NoImpl(c) => format!("nothing gives `{c}`"),
             };

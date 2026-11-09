@@ -256,6 +256,19 @@ impl<'db> Unifier<'db> {
                 self.unify(m, n)?;
                 self.unify_all(xs, ys)
             }
+            // The same names, which are in the same order in both.
+            (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
+                if xs.len() == ys.len()
+                    && xn.len() == yn.len()
+                    && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b) =>
+            {
+                self.unify(m, n)?;
+                self.unify_all(xs, ys)?;
+                for ((_, x), (_, y)) in xn.iter().zip(yn.iter()) {
+                    self.unify(x, y)?;
+                }
+                Ok(())
+            }
             (Ty::Array(m, x), Ty::Array(n, y)) => {
                 self.unify(x, y)?;
                 self.unify(m, n)

@@ -630,6 +630,8 @@ pub enum Slot<'db> {
 pub enum TyError {
     /// A type the checker didn't decide, which happens after a type error.
     Unknown,
+    /// A type that can't be compiled yet, like a tuple with named fields.
+    Unsupported(&'static str),
 }
 
 /// Turns the checker's types in a body into an instance's: each parameter
@@ -677,6 +679,7 @@ impl<'db> Subst<'_, 'db> {
                 self.mutability(own)?,
             ),
             Ty::Tuple(tys, own) => MonoTy::Tuple(all(tys)?, self.mutability(own)?),
+            Ty::Record(..) => return Err(TyError::Unsupported("a tuple with named fields")),
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
             Ty::Fn(params, ret, own, effects) => MonoTy::Fn(
                 all(params)?,

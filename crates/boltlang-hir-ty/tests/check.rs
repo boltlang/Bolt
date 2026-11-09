@@ -421,6 +421,16 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::Type(TypeError::TypeNeeded { origin }) => {
                         format!("error at `{}`: type needed", at(origin.node))
                     }
+                    InferenceDiagnostic::Type(TypeError::DuplicateField { origin, name }) => {
+                        format!("error at `{}`: {name} is given twice", at(origin.node))
+                    }
+                    InferenceDiagnostic::Type(TypeError::NotSpreadable { origin, ty }) => {
+                        format!(
+                            "error at `{}`: {} can't be spread",
+                            at(origin.node),
+                            show(&[ty])[0]
+                        )
+                    }
                     InferenceDiagnostic::Type(TypeError::NoOverload { origin, ty, .. }) => {
                         format!(
                             "error at `{}`: no overload fits {}",
@@ -588,6 +598,9 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
             format!("error at `{}`: `{}` isn't visible", at(*type_ref), hidden.name)
         }
         LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at(*id)),
+        LowerDiagnostic::DuplicateField { type_ref, name } => {
+            format!("error at `{}`: {name} is given twice", at(*type_ref))
+        }
         LowerDiagnostic::NotAClass(id) => format!("error at `{}`: not a class", at(*id)),
         LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
             format!(

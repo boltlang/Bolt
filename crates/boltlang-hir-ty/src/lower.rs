@@ -5,7 +5,7 @@ use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
-    hir::{GenericArg, MutabilityRef, Path, TypeRef, TypeRefId},
+    hir::{GenericArg, MutabilityRef, Path, TupleItem, TypeRef, TypeRefId},
     ids::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         StructId, TypeAliasId,
@@ -94,6 +94,11 @@ pub enum LowerDiagnostic {
     RecursiveAlias(TypeRefId),
     /// Something the checker doesn't support yet, like `impl Trait`.
     Unsupported(TypeRefId),
+    /// A field given twice in a tuple type, like `x` in `(x: i32, x: i64)`.
+    DuplicateField {
+        type_ref: TypeRefId,
+        name: Name,
+    },
     /// An effect in a row twice, with different arguments, like the second
     /// `State` of `does State[i32] + State[String]`.
     EffectTwice {
@@ -350,10 +355,38 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let effects = effects.as_ref().map_or_else(Ty::nothing, |ts| self.lower_row(ts));
                 Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten), Box::new(effects))
             }
-            TypeRef::ImplTrait { .. }
-            | TypeRef::Bounded(_)
-            | TypeRef::MacroCall { .. }
-            | TypeRef::NamedTuple(_) => {
+            // A rest like the `*Ts` of `(T, *Ts)` needs packs, which the
+            // checker doesn't have yet.
+            TypeRef::NamedTuple(items)
+                if items.iter().any(|i| matches!(i, TupleItem::Spread(..))) =>
+            {
+                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                return (Ty::Error, None);
+            }
+            // Like a tuple, its mutability is decided by where it's written.
+            TypeRef::NamedTuple(items) => {
+                let mut positional = Vec::new();
+                let mut named: Vec<(Name, Ty<'db>)> = Vec::new();
+                for item in items.iter() {
+                    match item {
+                        TupleItem::Positional(t) => positional.push(self.lower_ty(*t)),
+                        TupleItem::Named(name, t) => {
+                            let ty = self.lower_ty(*t);
+                            if named.iter().any(|(n, _)| n == name) {
+                                self.diagnostics.push(LowerDiagnostic::DuplicateField {
+                                    type_ref: id,
+                                    name: name.clone(),
+                                });
+                            } else {
+                                named.push((name.clone(), ty));
+                            }
+                        }
+                        TupleItem::Spread(..) => unreachable!("handled above"),
+                    }
+                }
+                Ty::record(positional.into(), named, Ty::Unwritten)
+            }
+            TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
                 self.diagnostics.push(LowerDiagnostic::Unsupported(id));
                 return (Ty::Error, None);
             }
@@ -371,6 +404,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
             Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
             Ty::Tuple(tys, old) if !tys.is_empty() && fits(&old) => Ty::tuple(tys, written),
+            Ty::Record(tys, named, old) if fits(&old) => Ty::Record(tys, named, Box::new(written)),
             Ty::Fn(params, ret, old, effects) if fits(&old) => {
                 Ty::Fn(params, ret, Box::new(written), effects)
             }
@@ -1527,6 +1561,13 @@ fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
             let m = fill_field(m, fill, own);
             let tys = tys.iter().map(|t| fill_field(t, &inner(&m), own)).collect();
             Some(Ty::tuple(tys, m))
+        }
+        Ty::Record(tys, named, m) => {
+            let m = fill_field(m, fill, own);
+            let tys = tys.iter().map(|t| fill_field(t, &inner(&m), own)).collect();
+            let named =
+                named.iter().map(|(n, t)| (n.clone(), fill_field(t, &inner(&m), own))).collect();
+            Some(Ty::Record(tys, named, Box::new(m)))
         }
         Ty::Fn(params, ret, m, effects) => {
             let params = params.iter().map(|p| fill_field(p, own, own)).collect();

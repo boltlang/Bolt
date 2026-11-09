@@ -207,6 +207,14 @@ pub enum DiagnosticKind<'db> {
     },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
+    /// A field given twice in a tuple, like `x` in `(x: 1, x: 2)`.
+    DuplicateField {
+        name: Name,
+    },
+    /// A spread, like `...e`, of something that isn't a tuple.
+    NotSpreadable {
+        ty: Ty<'db>,
+    },
     /// `Iterator[Itme = T]`, where the class has no associated type `name`.
     NotAnAssocTypeOf {
         class: Name,
@@ -709,16 +717,12 @@ impl<'db> Collector<'db> {
         }
     }
 
-    /// Each pack parameter, like the `*Ts` of `fn f[*Ts]`, and each tuple
-    /// pattern with named fields, like `(a, x: b)`, which the checker
-    /// doesn't support yet.
+    /// Each pack parameter, like the `*Ts` of `fn f[*Ts]`, which the
+    /// checker doesn't support yet.
     fn unsupported_syntax(&mut self) {
-        use boltlang_syntax::ast::{Node as _, PackParam, TuplePattern};
+        use boltlang_syntax::ast::{Node as _, PackParam};
         let packs = self.root.descendants().filter_map(PackParam::cast);
-        let mut ranges: Vec<TextRange> = packs.map(|p| p.syntax().text_range()).collect();
-        let pats = self.root.descendants().filter_map(TuplePattern::cast);
-        let named = pats.filter(|p| p.items().any(|item| item.is_err()));
-        ranges.extend(named.map(|p| p.syntax().text_range()));
+        let ranges: Vec<TextRange> = packs.map(|p| p.syntax().text_range()).collect();
         for range in ranges {
             self.push(Some(range), DiagnosticKind::Unsupported);
         }
@@ -1470,6 +1474,9 @@ impl<'db> Collector<'db> {
                     },
                 ),
                 LowerDiagnostic::NotAType(id) => (*id, DiagnosticKind::NotAType),
+                LowerDiagnostic::DuplicateField { type_ref, name } => {
+                    (*type_ref, DiagnosticKind::DuplicateField { name: name.clone() })
+                }
                 LowerDiagnostic::NotAClass(id) => (*id, DiagnosticKind::NotAClass),
                 LowerDiagnostic::WrongArgCount { type_ref, expected, found } => (
                     *type_ref,
@@ -1601,6 +1608,15 @@ impl<'db> Collector<'db> {
                             continue;
                         }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
+                        TypeError::DuplicateField { origin, name } => {
+                            (origin, DiagnosticKind::DuplicateField { name })
+                        }
+                        TypeError::NotSpreadable { origin, ty } => {
+                            if has_error(&ty) {
+                                continue;
+                            }
+                            (origin, DiagnosticKind::NotSpreadable { ty })
+                        }
                         TypeError::CannotChange { origin, ty } => {
                             (origin, DiagnosticKind::CannotChange { ty })
                         }

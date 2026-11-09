@@ -131,11 +131,16 @@ pub enum UseError {
     Cycle,
     /// No impl, or no dictionary, gives the class constraint, written out.
     NoImpl(String),
+    /// A type that can't be compiled yet.
+    Unsupported(&'static str),
 }
 
 impl From<TyError> for UseError {
-    fn from(_: TyError) -> Self {
-        UseError::UnknownType
+    fn from(e: TyError) -> Self {
+        match e {
+            TyError::Unknown => UseError::UnknownType,
+            TyError::Unsupported(what) => UseError::Unsupported(what),
+        }
     }
 }
 

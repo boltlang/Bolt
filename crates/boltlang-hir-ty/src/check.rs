@@ -400,6 +400,9 @@ fn infer_group<'db>(
         solver.settle_rows(&candidates, &keep_rows);
     }
     solver.default_free_rows(&keep_rows);
+    // A function's type can't say what a spread gives, so what's spread must
+    // be known in its body.
+    solver.report_pending_spreads();
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
     let mut errors: Vec<_> = std::mem::take(&mut solver.errors)

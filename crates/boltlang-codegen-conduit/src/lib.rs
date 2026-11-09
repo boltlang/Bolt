@@ -145,6 +145,9 @@ impl fmt::Display for Error {
                 write!(f, ": its type depends on itself across files")
             }
             ErrorKind::Use(UseError::NoImpl(c)) => write!(f, ": nothing gives `{c}`"),
+            ErrorKind::Use(UseError::Unsupported(what)) => {
+                write!(f, ": {what} isn't supported yet")
+            }
             ErrorKind::Unsupported(what) => write!(f, ": {what} isn't supported yet"),
             ErrorKind::MissingInConduit(what) => {
                 write!(f, ": needs what Conduit doesn't have yet: {what}")

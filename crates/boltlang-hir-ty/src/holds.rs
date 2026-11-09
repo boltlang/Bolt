@@ -108,6 +108,12 @@ pub fn split<'db>(
                 split(db, t, m, out);
             }
         }
+        Ty::Record(tys, named, m) => {
+            push(out, Held::Mutability((**m).clone()), bound);
+            for t in tys.iter().chain(named.iter().map(|(_, t)| t)) {
+                split(db, t, m, out);
+            }
+        }
         Ty::Adt(AdtId::Enum(_), args, ..) => {
             for arg in args.iter() {
                 split(db, arg, bound, out);

@@ -24,7 +24,7 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{
     body::{Body, DefWithBodyId, body},
     builtin_type::BuiltinValue,
-    hir::{BindingId, Expr, ExprId, Literal, Pat, PatId, Path, Statement},
+    hir::{BindingId, Expr, ExprId, Literal, Pat, PatId, Path, Statement, TupleItem},
     ids::{ConstId, EnumVariantId, FunctionId, StructId},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
 };
@@ -375,6 +375,37 @@ impl<'db> Builder<'_, 'db> {
                         row.cols.insert(i + k, (field, sub));
                     }
                 }
+                // Its fields are where the type has them: the positional
+                // ones first, then the named ones in the order of their
+                // names.
+                Pat::NamedTuple { items, .. } => {
+                    let Ty::Record(tys, named, _) = infer_body(self.db, self.def).pat_ty(pat)
+                    else {
+                        return Err(DecisionError::Unknown(pat));
+                    };
+                    let arity = (tys.len() + named.len()) as u32;
+                    let mut position = 0;
+                    for (k, item) in items.iter().enumerate() {
+                        let (index, sub) = match item {
+                            TupleItem::Positional(sub) => {
+                                position += 1;
+                                (position - 1, *sub)
+                            }
+                            TupleItem::Named(name, sub) => {
+                                let at = named.iter().position(|(n, _)| n == name);
+                                let at = at.ok_or(DecisionError::Unknown(pat))?;
+                                (tys.len() + at, *sub)
+                            }
+                            TupleItem::Spread(..) => return Err(DecisionError::Unknown(pat)),
+                        };
+                        let field = self.place(Place::Field {
+                            of: place,
+                            ctor: Ctor::Tuple(arity),
+                            index: index as u32,
+                        });
+                        row.cols.insert(i + k, (field, sub));
+                    }
+                }
                 Pat::TupleStruct { path, args, rest } => {
                     let VariantDef::Struct(s) = self.variant(pat, path)? else { unreachable!() };
                     let count = field_types(self.db, VariantDef::Struct(s)).fields.len();
@@ -411,7 +442,12 @@ impl<'db> Builder<'_, 'db> {
     /// only splitting a tuple or struct into its fields.
     fn is_test(&self, pat: PatId) -> bool {
         match &self.body[pat] {
-            Pat::Wild | Pat::Missing | Pat::Bind { .. } | Pat::Or(_) | Pat::Tuple { .. } => false,
+            Pat::Wild
+            | Pat::Missing
+            | Pat::Bind { .. }
+            | Pat::Or(_)
+            | Pat::Tuple { .. }
+            | Pat::NamedTuple { .. } => false,
             Pat::TupleStruct { path, .. } | Pat::Record { path, .. } => {
                 matches!(self.variant(pat, path), Ok(VariantDef::Variant(_)))
             }
@@ -421,10 +457,7 @@ impl<'db> Builder<'_, 'db> {
             ),
             Pat::Lit { .. } | Pat::Range { .. } => true,
             // Reported when tested.
-            Pat::Slice { .. }
-            | Pat::ConstBlock(_)
-            | Pat::MacroCall { .. }
-            | Pat::NamedTuple { .. } => true,
+            Pat::Slice { .. } | Pat::ConstBlock(_) | Pat::MacroCall { .. } => true,
         }
     }
 

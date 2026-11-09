@@ -15,7 +15,7 @@ use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::{
         BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path,
-        PathSegment, RecordField, Statement, TypeRefId,
+        PathSegment, RecordField, Statement, TupleItem, TypeRefId,
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId, StructId},
     resolver::{
@@ -39,7 +39,8 @@ use crate::{
     scheme::{Scheme, generic_param_ids},
     solve::{
         AtMostConstraint, AtMostSource, Constraint, ConstraintSource, ExprOrPat, FieldConstraint,
-        Held, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError,
+        Held, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, SpreadConstraint,
+        TuplePart, TypeError,
     },
     ty::{AdtId, Mutability, Ty, VarKind},
 };
@@ -419,6 +420,9 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
         match ty {
             Ty::Array(m, elem) if **m == imm => find_mut(elem),
             Ty::Tuple(tys, m) if **m == imm => tys.iter().find_map(find_mut),
+            Ty::Record(tys, named, m) if **m == imm => {
+                tys.iter().chain(named.iter().map(|(_, t)| t)).find_map(find_mut)
+            }
             Ty::Adt(AdtId::Struct(s), args, ms, m) => struct_atoms_of(db, *s, args, ms, m)
                 .into_iter()
                 .filter(|a| a.bound == imm)
@@ -956,7 +960,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     Expr::Array { .. }
                     | Expr::ArrayRepeat { .. }
                     | Expr::Record { .. }
-                    | Expr::Tuple { .. } => true,
+                    | Expr::Tuple { .. }
+                    | Expr::NamedTuple { .. } => true,
                     Expr::Call { callee, .. } => self.constructs_struct(*callee),
                     _ => false,
                 };
@@ -984,17 +989,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
                 Ty::Error
             }
-            Expr::NamedTuple { items } => {
-                for item in items.iter() {
-                    self.infer_expr(item.value());
-                }
-                self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
-                Ty::Error
-            }
             Expr::Array { .. }
             | Expr::ArrayRepeat { .. }
             | Expr::Record { .. }
-            | Expr::Tuple { .. } => self.infer_literal(expr, expr, expected, false),
+            | Expr::Tuple { .. }
+            | Expr::NamedTuple { .. } => self.infer_literal(expr, expr, expected, false),
             Expr::If { condition, then_branch, else_branch } => {
                 self.check_expr(*condition, &Ty::bool());
                 match else_branch {
@@ -1583,6 +1582,45 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.infer_record(expr, path.as_ref(), fields, *spread, is_mut)
             }
             Expr::Call { callee, args } => self.infer_call(expr, *callee, args, is_mut),
+            // A tuple with named fields or spreads, which the solver makes
+            // once it knows what's spread.
+            Expr::NamedTuple { items } => {
+                let hint = expected.map(|e| self.solver.unifier.shallow_resolve(e.ty));
+                let (hint_pos, hint_named) = match hint {
+                    Some(Ty::Record(tys, named, _)) => (tys.into_vec(), named.into_vec()),
+                    _ => (Vec::new(), Vec::new()),
+                };
+                // After a spread, a position isn't known.
+                let mut position = Some(0);
+                let mut parts = Vec::new();
+                for item in items.iter() {
+                    match item {
+                        TupleItem::Positional(e) => {
+                            let hint = position.and_then(|i| hint_pos.get(i));
+                            position = position.map(|i| i + 1);
+                            let ty = self
+                                .infer_expr_expect(*e, hint.map(|ty| Expectation { ty, reason }));
+                            self.holds(&ty, &mutability, expr);
+                            parts.push(TuplePart::Positional(ty));
+                        }
+                        TupleItem::Named(name, e) => {
+                            let hint = hint_named.iter().find(|(n, _)| n == name).map(|(_, t)| t);
+                            let ty = self
+                                .infer_expr_expect(*e, hint.map(|ty| Expectation { ty, reason }));
+                            self.holds(&ty, &mutability, expr);
+                            parts.push(TuplePart::Named(name.clone(), ty));
+                        }
+                        TupleItem::Spread(spread, e) => {
+                            position = None;
+                            parts.push(TuplePart::Spread(*spread, self.infer_expr(*e)));
+                        }
+                    }
+                }
+                let result = self.new_var();
+                let constraint = SpreadConstraint { parts, mutability, result: result.clone() };
+                self.solver.add(Constraint::Spread { constraint, origin: self.origin(expr) });
+                result
+            }
             Expr::Tuple { exprs } => {
                 let hints: Option<Vec<Ty<'db>>> =
                     match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
@@ -1964,7 +2002,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     };
                     match self.solver.unifier.resolve(base_ty) {
                         // A struct or tuple is shared, like an array.
-                        ty @ (Ty::Adt(AdtId::Struct(_), ..) | Ty::Tuple(..)) => {
+                        ty @ (Ty::Adt(AdtId::Struct(_), ..) | Ty::Tuple(..) | Ty::Record(..)) => {
                             let mutability = ty.mutability().unwrap().clone();
                             return self.solver.require_mut(&ty, &mutability, self.origin(base));
                         }

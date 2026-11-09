@@ -87,6 +87,27 @@ pub enum ExprOrPat {
 /// -> i32`, so that it works on any struct with that field. With `assign`,
 /// the field is assigned to, like in `p.x = 1`, so a struct must be `mut`:
 /// `forall a. mut a.x: i32 => fn(a) -> ()`.
+/// A part of a tuple being made: a positional field, a named one, or what
+/// a spread like `...e` gives, which has `e`'s type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TuplePart<'db> {
+    Positional(Ty<'db>),
+    Named(Name, Ty<'db>),
+    Spread(boltlang_hir_def::hir::Spread, Ty<'db>),
+}
+
+/// That `result` is the tuple made of `parts`, with the mutability
+/// `mutability`, like `(x: 5, ...origin)`. It's solved once the type of
+/// each spread is known: a tuple, whose positional fields `*e` gives,
+/// whose named ones `**e` gives, and both `...e`. A name may be given only
+/// once.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SpreadConstraint<'db> {
+    pub parts: Vec<TuplePart<'db>>,
+    pub mutability: Ty<'db>,
+    pub result: Ty<'db>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub struct FieldConstraint<'db> {
     pub ty: Ty<'db>,
@@ -230,6 +251,8 @@ pub enum Constraint<'db> {
     Class { constraint: ClassConstraint<'db>, origin: Origin<'db> },
     /// The type must have the field.
     Field { constraint: FieldConstraint<'db>, origin: Origin<'db> },
+    /// The type is a tuple made of parts, some of them spread.
+    Spread { constraint: SpreadConstraint<'db>, origin: Origin<'db> },
     /// The type is an associated type of a class.
     Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
     /// Something is at most a mutability.
@@ -270,6 +293,17 @@ pub enum TypeError<'db> {
         origin: Origin<'db>,
         constraint: AtMostConstraint<'db>,
     },
+    /// A field given twice in a tuple, like `x` in `(x: 1, x: 2)`, or in
+    /// `(x: 1, ...p)` when `p` has an `x` too.
+    DuplicateField {
+        origin: Origin<'db>,
+        name: Name,
+    },
+    /// A spread of something that isn't a tuple, of type `ty`.
+    NotSpreadable {
+        origin: Origin<'db>,
+        ty: Ty<'db>,
+    },
     /// The type has no field with this name.
     NoSuchField {
         origin: Origin<'db>,
@@ -282,7 +316,8 @@ pub enum TypeError<'db> {
         strukt: StructId<'db>,
         name: Name,
     },
-    /// The type of a value whose field is used was never found.
+    /// The type of a value whose field is used, or that's spread in a
+    /// tuple, was never found.
     TypeNeeded {
         origin: Origin<'db>,
     },
@@ -322,6 +357,8 @@ impl<'db> TypeError<'db> {
             | TypeError::NoInstance { origin, .. }
             | TypeError::Ambiguous { origin, .. }
             | TypeError::NoSuchField { origin, .. }
+            | TypeError::DuplicateField { origin, .. }
+            | TypeError::NotSpreadable { origin, .. }
             | TypeError::PrivateField { origin, .. }
             | TypeError::CannotChange { origin, .. }
             | TypeError::NotAtMost { origin, .. }
@@ -341,6 +378,7 @@ impl<'db> TypeError<'db> {
             }
             TypeError::InfiniteType { ty, .. }
             | TypeError::NoSuchField { ty, .. }
+            | TypeError::NotSpreadable { ty, .. }
             | TypeError::CannotChange { ty, .. }
             | TypeError::NoOverload { ty, .. }
             | TypeError::AmbiguousOverload { ty, .. } => *ty = f(ty),
@@ -352,7 +390,9 @@ impl<'db> TypeError<'db> {
                 *found = f(found);
                 *allowed = f(allowed);
             }
-            TypeError::TypeNeeded { .. } | TypeError::PrivateField { .. } => {}
+            TypeError::TypeNeeded { .. }
+            | TypeError::PrivateField { .. }
+            | TypeError::DuplicateField { .. } => {}
         }
     }
 }
@@ -375,6 +415,7 @@ pub struct Solver<'db> {
     file: File,
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
+    pending_spreads: Vec<(SpreadConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
@@ -412,6 +453,7 @@ impl<'db> Solver<'db> {
             file,
             pending: Vec::new(),
             pending_fields: Vec::new(),
+            pending_spreads: Vec::new(),
             pending_assoc: Vec::new(),
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
@@ -545,6 +587,13 @@ impl<'db> Solver<'db> {
                     self.pending_fields.push((constraint, origin));
                 }
             }
+            // Solved right away when possible, so that the tuple's type is
+            // known for what follows.
+            Constraint::Spread { constraint, origin } => {
+                if !self.solve_spread(&constraint, origin) {
+                    self.pending_spreads.push((constraint, origin));
+                }
+            }
             // Solved right away when possible too.
             Constraint::Assoc { constraint, origin } => {
                 if !self.solve_assoc(&constraint, origin) {
@@ -573,6 +622,80 @@ impl<'db> Solver<'db> {
         }
     }
 
+    /// Make the tuple of a [`SpreadConstraint`] once the type of each spread
+    /// is known. Returns `false` if it has to wait. What a spread gives is
+    /// at most the tuple's mutability, like the fields written out.
+    fn solve_spread(&mut self, c: &SpreadConstraint<'db>, origin: Origin<'db>) -> bool {
+        use boltlang_hir_def::hir::Spread;
+        let mut spreads = Vec::new();
+        for part in &c.parts {
+            if let TuplePart::Spread(kind, ty) = part {
+                match self.unifier.shallow_resolve(ty) {
+                    Ty::Var(_) => return false,
+                    t => spreads.push((*kind, t)),
+                }
+            }
+        }
+        let mut spreads = spreads.into_iter();
+        let mut positional = Vec::new();
+        let mut named: Vec<(Name, Ty<'db>)> = Vec::new();
+        let mut spread_fields = Vec::new();
+        let mut failed = false;
+        let add_named = |solver: &mut Self, named: &mut Vec<(Name, Ty<'db>)>, n: Name, t| {
+            if named.iter().any(|(m, _)| *m == n) {
+                solver.errors.push(TypeError::DuplicateField { origin, name: n });
+            } else {
+                named.push((n, t));
+            }
+        };
+        for part in &c.parts {
+            match part {
+                TuplePart::Positional(t) => positional.push(t.clone()),
+                TuplePart::Named(n, t) => add_named(self, &mut named, n.clone(), t.clone()),
+                TuplePart::Spread(..) => {
+                    let (kind, t) = spreads.next().expect("one per spread");
+                    let (tys, fields): (Vec<Ty<'db>>, Vec<(Name, Ty<'db>)>) = match t {
+                        Ty::Tuple(tys, _) => (tys.into_vec(), Vec::new()),
+                        Ty::Record(tys, fields, _) => (tys.into_vec(), fields.into_vec()),
+                        // Reported already.
+                        Ty::Error | Ty::Never => {
+                            failed = true;
+                            continue;
+                        }
+                        t => {
+                            let ty = self.unifier.resolve(&t);
+                            self.errors.push(TypeError::NotSpreadable { origin, ty });
+                            failed = true;
+                            continue;
+                        }
+                    };
+                    if kind != Spread::Named {
+                        spread_fields.extend(tys.iter().cloned());
+                        positional.extend(tys);
+                    }
+                    if kind != Spread::Positional {
+                        for (n, t) in fields {
+                            spread_fields.push(t.clone());
+                            add_named(self, &mut named, n, t);
+                        }
+                    }
+                }
+            }
+        }
+        if failed {
+            self.equal(&c.result, &Ty::Error, origin);
+            return true;
+        }
+        for t in spread_fields {
+            let constraint = AtMostConstraint { held: Held::Type(t), bound: c.mutability.clone() };
+            let source = AtMostSource::Object(constraint.clone());
+            self.add(Constraint::AtMost { constraint, source, origin });
+        }
+        let ty = Ty::record(positional.into(), named, c.mutability.clone());
+        self.equal(&c.result, &ty, origin);
+        true
+    }
+
     /// Split an `imm` constraint once the type of `e` is known well enough.
     /// Returns `false` if it has to wait.
     fn solve_imm(&mut self, c: &ImmConstraint<'db>, origin: Origin<'db>) -> bool {
@@ -595,6 +718,23 @@ impl<'db> Solver<'db> {
                 self.equal(&c.to, &Ty::tuple(tos.clone().into(), imm), origin);
                 for (from, to) in tys.into_iter().zip(tos) {
                     sub(self, from, to);
+                }
+                true
+            }
+            Ty::Record(tys, named, _) => {
+                let tos: Vec<Ty<'db>> =
+                    tys.iter().map(|_| self.new_var(VarKind::General)).collect();
+                let named_tos: Vec<(Name, Ty<'db>)> = named
+                    .iter()
+                    .map(|(n, _)| (n.clone(), self.new_var(VarKind::General)))
+                    .collect();
+                let to = Ty::record(tos.clone().into(), named_tos.clone(), imm);
+                self.equal(&c.to, &to, origin);
+                for (from, to) in tys.into_iter().zip(tos) {
+                    sub(self, from, to);
+                }
+                for ((_, from), (_, to)) in named.iter().zip(named_tos) {
+                    sub(self, from.clone(), to);
                 }
                 true
             }
@@ -805,6 +945,13 @@ impl<'db> Solver<'db> {
                 Ty::Tuple(tys, m) => {
                     sub(self, Held::Mutability(*m.clone()), &bound);
                     for t in tys {
+                        sub(self, Held::Type(t), &m);
+                    }
+                    true
+                }
+                Ty::Record(tys, named, m) => {
+                    sub(self, Held::Mutability(*m.clone()), &bound);
+                    for t in tys.into_iter().chain(named.into_iter().map(|(_, t)| t)) {
                         sub(self, Held::Type(t), &m);
                     }
                     true
@@ -1154,6 +1301,18 @@ impl<'db> Solver<'db> {
                 }
                 constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned())
             }
+            // `t.0` is a positional field, and `t.x` a named one.
+            Ty::Record(tys, named, mutability) => {
+                if constraint.assign {
+                    self.require_mut(&ty, mutability, origin);
+                }
+                match constraint.name.as_str().parse::<usize>() {
+                    Ok(i) => tys.get(i).cloned(),
+                    Err(_) => {
+                        named.iter().find(|(n, _)| *n == constraint.name).map(|(_, t)| t.clone())
+                    }
+                }
+            }
             _ => None,
         };
         match field {
@@ -1310,6 +1469,13 @@ impl<'db> Solver<'db> {
                     self.pending_fields.push((constraint, origin));
                 }
             }
+            for (constraint, origin) in std::mem::take(&mut self.pending_spreads) {
+                if self.solve_spread(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_spreads.push((constraint, origin));
+                }
+            }
             for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {
                 if self.solve_assoc(&constraint, origin) {
                     progress = true;
@@ -1396,6 +1562,14 @@ impl<'db> Solver<'db> {
     }
 
     /// The field constraints that couldn't be solved yet, resolved.
+    /// Report each spread whose type is still unknown: the type of what's
+    /// spread must be known.
+    pub fn report_pending_spreads(&mut self) {
+        for (_, origin) in std::mem::take(&mut self.pending_spreads) {
+            self.errors.push(TypeError::TypeNeeded { origin });
+        }
+    }
+
     pub fn take_pending_fields(&mut self) -> Vec<(FieldConstraint<'db>, Origin<'db>)> {
         std::mem::take(&mut self.pending_fields)
             .into_iter()
@@ -1433,6 +1607,7 @@ impl<'db> Solver<'db> {
         for (_, origin) in self.take_pending_fields() {
             self.errors.push(TypeError::TypeNeeded { origin });
         }
+        self.report_pending_spreads();
         let errors = std::mem::take(&mut self.errors);
         self.errors = errors.into_iter().map(|e| resolve_error(&self.unifier, e)).collect();
         prune_implied_errors(self.db, &mut self.errors);
@@ -1595,6 +1770,17 @@ fn match_ty<'db>(
         }
         (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) if xs.len() == ys.len() => {
             match_all(xs, ys, subst).and(|| match_ty(m, n, subst))
+        }
+        (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
+            if xs.len() == ys.len()
+                && xn.len() == yn.len()
+                && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b) =>
+        {
+            let xt: Vec<_> = xn.iter().map(|(_, t)| t.clone()).collect();
+            let yt: Vec<_> = yn.iter().map(|(_, t)| t.clone()).collect();
+            match_all(xs, ys, subst)
+                .and(|| match_all(&xt, &yt, subst))
+                .and(|| match_ty(m, n, subst))
         }
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
         (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => match_all(xs, ys, subst)

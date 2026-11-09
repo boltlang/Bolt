@@ -130,6 +130,8 @@ impl DiagnosticCode {
     pub const BAD_CFG: Self = Self("E0253");
     pub const BAD_TRY: Self = Self("E0254");
     pub const MISSING_TYPE: Self = Self("E0255");
+    pub const DUPLICATE_FIELD: Self = Self("E0256");
+    pub const NOT_SPREADABLE: Self = Self("E0257");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -447,6 +449,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NotAFunction { ty }
         | DiagnosticKind::CannotChange { ty }
         | DiagnosticKind::NoSuchField { ty: Some(ty), .. }
+        | DiagnosticKind::NotSpreadable { ty }
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
@@ -698,6 +701,11 @@ fn describe(
             (C::MISSING_FIELDS, format!("missing {noun} {list}"))
         }
         K::TypeNeeded => (C::TYPE_NEEDED, "the type of this must be known here; add a type annotation".into()),
+        K::DuplicateField { name } => (C::DUPLICATE_FIELD, format!("the field `{name}` is given more than once")),
+        K::NotSpreadable { ty } => (
+            C::NOT_SPREADABLE,
+            format!("only a tuple can be spread, not `{}`", ty.display_with(db, names)),
+        ),
         K::RecursiveAlias => (C::RECURSIVE_ALIAS, format!("type alias `{source}` refers to itself")),
         K::CyclicInference => (
             C::CYCLIC_INFERENCE,

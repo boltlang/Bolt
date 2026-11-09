@@ -5,6 +5,7 @@ use std::fmt;
 
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
+    Name,
     builtin_type::BuiltinType,
     ids::{EffectId, EnumId, ItemContainerId, StructId, TypeAliasId},
     resolver::GenericDefId,
@@ -96,6 +97,11 @@ pub enum Ty<'db> {
     /// `mut` tuple's fields can be assigned, and an `imm` one holds nothing
     /// `mut`. The unit type is the empty tuple, which is always `Imm`.
     Tuple(Box<[Ty<'db>]>, Box<Ty<'db>>),
+    /// A tuple with named fields, like `(i32, x: i32)`: its positional
+    /// fields, its named fields in the order of their names, and its
+    /// mutability, as for a tuple. There's always a named field: a tuple
+    /// without one is a [`Ty::Tuple`], so that each type has one form.
+    Record(Box<[Ty<'db>]>, Box<[(Name, Ty<'db>)]>, Box<Ty<'db>>),
     /// An array: its mutability, then the type of its elements. The
     /// mutability is [`Ty::Mutability`], a variable, a parameter, or the
     /// error type. Lengths aren't checked yet.
@@ -282,6 +288,21 @@ impl<'db> Ty<'db> {
         Ty::Tuple(tys, Box::new(mutability))
     }
 
+    /// A tuple with the positional fields `tys` and the named fields
+    /// `named`, which have different names. Without named fields, it's a
+    /// tuple.
+    pub fn record(
+        tys: Box<[Ty<'db>]>,
+        mut named: Vec<(Name, Ty<'db>)>,
+        mutability: Ty<'db>,
+    ) -> Self {
+        if named.is_empty() {
+            return Ty::tuple(tys, mutability);
+        }
+        named.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        Ty::Record(tys, named.into(), Box::new(mutability))
+    }
+
     pub fn array(mutability: Ty<'db>, element: Ty<'db>) -> Self {
         Ty::Array(Box::new(mutability), Box::new(element))
     }
@@ -306,7 +327,8 @@ impl<'db> Ty<'db> {
         match self {
             Ty::Array(mutability, _)
             | Ty::Adt(AdtId::Struct(_), _, _, mutability)
-            | Ty::Tuple(_, mutability) => Some(mutability),
+            | Ty::Tuple(_, mutability)
+            | Ty::Record(_, _, mutability) => Some(mutability),
             _ => None,
         }
     }
@@ -366,6 +388,11 @@ impl<'db> Ty<'db> {
                 args.iter().for_each(&mut f);
                 f(mutability);
             }
+            Ty::Record(args, named, mutability) => {
+                args.iter().for_each(&mut f);
+                named.iter().for_each(|(_, t)| f(t));
+                f(mutability);
+            }
             Ty::App(head, args) => {
                 f(head);
                 args.iter().for_each(f);
@@ -417,6 +444,11 @@ impl<'db> Ty<'db> {
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
             Ty::Tuple(tys, mutability) => Ty::tuple(fold_all(tys, f), mutability.fold(f)),
+            Ty::Record(tys, named, mutability) => Ty::Record(
+                fold_all(tys, f),
+                named.iter().map(|(n, t)| (n.clone(), t.fold(f))).collect(),
+                Box::new(mutability.fold(f)),
+            ),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret, mutability, effects) => Ty::Fn(
                 fold_all(params, f),
@@ -766,6 +798,18 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 list(f, tys)?;
                 if tys.len() == 1 {
                     f.write_str(",")?;
+                }
+                f.write_str(")")
+            }
+            Ty::Record(tys, named, mutability) => {
+                self.write_mutability(f, mutability)?;
+                f.write_str("(")?;
+                list(f, tys)?;
+                for (i, (name, ty)) in named.iter().enumerate() {
+                    if i > 0 || !tys.is_empty() {
+                        f.write_str(", ")?;
+                    }
+                    write!(f, "{name}: {}", show(ty))?;
                 }
                 f.write_str(")")
             }

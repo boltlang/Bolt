@@ -1,14 +1,15 @@
 //! Checking patterns against the type of the value they match.
 
 use boltlang_hir_def::{
-    hir::{Pat, PatId, Path, RecordFieldPat},
+    Name,
+    hir::{Pat, PatId, Path, RecordFieldPat, TupleItem},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
 };
 
 use super::{InferenceContext, InferenceDiagnostic};
 use crate::{
     lower::{FieldsKind, VariantDef, const_ty, field_types, subst_params},
-    solve::{ExprOrPat, Origin},
+    solve::{ExprOrPat, Origin, TypeError},
     ty::{Ty, VarKind},
 };
 
@@ -137,11 +138,8 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
             }
             Pat::ConstBlock(expr) => self.check_expr(*expr, expected),
-            // The match is reported as unsupported where it's compiled.
-            Pat::NamedTuple { items, .. } => {
-                for item in items.iter() {
-                    self.check_pat(item.value(), &Ty::Error);
-                }
+            Pat::NamedTuple { items, rest } => {
+                self.check_named_tuple_pat(pat, items, *rest, expected)
             }
         }
     }
@@ -157,6 +155,92 @@ impl<'db> InferenceContext<'_, 'db> {
             for part in parts {
                 self.solver.unifier.met_error(part);
             }
+        }
+    }
+
+    /// A tuple pattern with named fields, like `(a, x: b)`. Without `..`,
+    /// it says the whole type, so it's matched like a tuple pattern. With
+    /// `..`, the type must be known, to find the fields it names.
+    fn check_named_tuple_pat(
+        &mut self,
+        pat: PatId,
+        items: &[TupleItem<PatId>],
+        rest: bool,
+        expected: &Ty<'db>,
+    ) {
+        let origin = self.pat_origin(pat);
+        // Each name once; a field given twice is matched against nothing.
+        let mut names: Vec<&Name> = Vec::new();
+        let mut parts = Vec::new();
+        for item in items {
+            match item {
+                TupleItem::Named(name, p) if names.contains(&name) => {
+                    let name = name.clone();
+                    self.solver.errors.push(TypeError::DuplicateField { origin, name });
+                    self.check_pat(*p, &Ty::Error);
+                }
+                TupleItem::Named(name, p) => {
+                    names.push(name);
+                    parts.push((Some(name.clone()), *p));
+                }
+                TupleItem::Positional(p) => parts.push((None, *p)),
+                TupleItem::Spread(_, p) => self.check_pat(*p, &Ty::Error),
+            }
+        }
+        // The type the fields say, with a variable for each.
+        let vars: Vec<Ty<'db>> =
+            parts.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
+        let positional = parts
+            .iter()
+            .zip(&vars)
+            .filter(|((name, _), _)| name.is_none())
+            .map(|(_, v)| v.clone())
+            .collect();
+        let named = parts
+            .iter()
+            .zip(&vars)
+            .filter_map(|((name, _), v)| Some((name.clone()?, v.clone())))
+            .collect();
+        let m = self.solver.new_var(VarKind::Mutability);
+        let shape = Ty::record(positional, named, m);
+        let resolved = self.solver.unifier.shallow_resolve(expected);
+        let is_tuple = matches!(resolved, Ty::Record(..) | Ty::Tuple(..) | Ty::Error | Ty::Never);
+        // Without `..`, or for what isn't a tuple, which is then reported.
+        if !rest || !is_tuple && !matches!(resolved, Ty::Var(_)) {
+            self.expect_shape(pat, expected, &shape, &vars);
+            for ((_, p), ty) in parts.iter().zip(vars) {
+                self.check_pat(*p, &ty);
+            }
+            return;
+        }
+        let (tys, fields) = match self.solver.unifier.shallow_resolve(expected) {
+            Ty::Record(tys, fields, _) => (tys.into_vec(), fields.into_vec()),
+            Ty::Tuple(tys, _) => (tys.into_vec(), Vec::new()),
+            Ty::Error | Ty::Never => (Vec::new(), Vec::new()),
+            _ => {
+                self.solver.errors.push(TypeError::TypeNeeded { origin });
+                for (_, p) in parts {
+                    self.check_pat(p, &Ty::Error);
+                }
+                return;
+            }
+        };
+        let mut position = 0;
+        for (name, p) in parts {
+            let field = match &name {
+                None => {
+                    position += 1;
+                    tys.get(position - 1).cloned()
+                }
+                Some(name) => fields.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone()),
+            };
+            let field = field.unwrap_or_else(|| {
+                let name = name.unwrap_or_else(|| Name::new((position - 1).to_string()));
+                let ty = self.solver.unifier.resolve(expected);
+                self.solver.errors.push(TypeError::NoSuchField { origin, ty, name });
+                Ty::Error
+            });
+            self.check_pat(p, &field);
         }
     }
 

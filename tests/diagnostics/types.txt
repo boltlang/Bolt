@@ -68,12 +68,21 @@ type A = A;
    //^ error: type alias `A` refers to itself
 
 ================================================================================
-Tuples with named fields, spreads and packs aren't supported yet
+Pack parameters and rests aren't supported yet
 ================================================================================
-fn first[T, *Ts](t: (T, *Ts)) = t;
+fn first[T, *Ts](t: (T, *Ts)) -> T = t.0;
           //^^^ warning: the type checker doesn't support this yet
                   //^^^^^^^^ warning: the type checker doesn't support this yet
-let p = (x: 1, y: 2);
-      //^^^^^^^^^^^^ warning: the type checker doesn't support this yet
-let n = match (1, 2) { (a, x: b) => 1, _ => 2 };
-                     //^^^^^^^^^ warning: the type checker doesn't support this yet
+
+================================================================================
+Fields of tuples
+================================================================================
+let p = (x: 1, x: 2);
+      //^^^^^^^^^^^^ error: the field `x` is given more than once
+let q = (y: 1, ...p);
+let r = (...1);
+      //^^^^^^ error: only a tuple can be spread, not `i32`
+fn f(t: (x: i32, x: Bool)) = t;
+      //^^^^^^^^^^^^^^^^^ error: the field `x` is given more than once
+let (z: n, ..) = (x: 1);
+  //^^^^^^^^^^ error: `imm (x: i32)` has no field `z`
