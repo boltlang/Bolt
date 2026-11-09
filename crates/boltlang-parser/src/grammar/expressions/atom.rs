@@ -9,9 +9,10 @@ use super::{
 };
 use crate::{
     grammar::{
-        at_inner_attr, at_macro_call, at_outer_attr, attr, dotted_path, expr_path, is_path_start,
-        macro_call, opt_effect_row, opt_ret_type, outer_attrs, param_list, parse_pattern,
-        pattern_single, type_,
+        TupleOrder, TupleSide, at_inner_attr, at_macro_call, at_named_field, at_outer_attr,
+        at_spread, attr, dotted_path, expr_path, is_path_start, macro_call, name_ref,
+        opt_effect_row, opt_ret_type, outer_attrs, param_list, parse_pattern, pattern_single,
+        spread, type_,
     },
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
@@ -211,22 +212,53 @@ fn record_expr_field_list(p: &mut Parser) {
     m.complete(p, RECORD_EXPR_FIELD_LIST);
 }
 
-/// `(a)`, `(a,)`, `(a, b)` or `()`
+/// `(a)`, `(a,)`, `(a, b)` or `()`, and tuples with named fields and
+/// spreads, like `(1, x: 2)` or `(*xs, **opts, ...rest)`. Positional
+/// fields come first. `(a)` is a parenthesized expression, but `(x: a)`
+/// and `(*a)` are tuples.
 fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(T!['(']);
     let mut saw_comma = false;
     let mut saw_expr = false;
+    // A named field or a spread, which only a tuple has.
+    let mut saw_part = false;
+    let mut order = TupleOrder::default();
     while !p.at(EOF) && !p.at(T![')']) {
         saw_expr = true;
-        if !at_expr_start(p) {
+        if at_named_field(p) {
+            order.next(p, TupleSide::Named);
+            saw_part = true;
+            let field = p.start();
+            name_ref(p);
+            p.bump(T![:]);
+            if at_expr_start(p) {
+                expr(p);
+            } else {
+                p.error("expected an expression");
+            }
+            field.complete(p, TUPLE_EXPR_FIELD);
+        } else if at_spread(p) {
+            saw_part = true;
+            let s = p.start();
+            let side = spread(p);
+            order.next(p, side);
+            if at_expr_start(p) {
+                expr(p);
+            } else {
+                p.error("expected an expression");
+            }
+            s.complete(p, TUPLE_EXPR_SPREAD);
+        } else if at_expr_start(p) {
+            order.next(p, TupleSide::Positional);
+            expr(p);
+        } else {
             p.error("expected an expression");
             break;
         }
-        expr(p);
         if p.eat(T![,]) {
             saw_comma = true;
-        } else if at_expr_start(p) {
+        } else if at_expr_start(p) || at_spread(p) {
             // `(a b)`: assume a comma is missing.
             p.error("expected ','");
             saw_comma = true;
@@ -235,7 +267,8 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
         }
     }
     p.expect(T![')']);
-    m.complete(p, if saw_expr && !saw_comma { NEST_EXPR } else { TUPLE_EXPR })
+    let nest = saw_expr && !saw_comma && !saw_part;
+    m.complete(p, if nest { NEST_EXPR } else { TUPLE_EXPR })
 }
 
 /// `[a, b, c]`, `[]` or `[x; n]`.

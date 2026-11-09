@@ -119,6 +119,8 @@ pub enum SyntaxKind {
     PATH_PATT,
     /// `(a, b)`
     TUPLE_PATT,
+    /// `x: pattern` in a tuple pattern, a named field
+    TUPLE_PATT_FIELD,
     /// `Some(x)`
     TUPLE_STRUCT_PATT,
     /// `Point { x, y: 0, .. }`
@@ -148,6 +150,11 @@ pub enum SyntaxKind {
     PATH_TYPE,
     /// `(A, B)`, or `()` for the unit type
     TUPLE_TYPE,
+    /// `x: T` in a tuple type, a named field
+    TUPLE_TYPE_FIELD,
+    /// `*Ts`, `**Ks` or `...A` in a tuple type: the other positional
+    /// fields, the other named fields, or both
+    TUPLE_TYPE_REST,
     /// `[T]` or `[T; N]`
     ARRAY_TYPE,
     /// `mut T` or `imm T` for a type other than an array, like `mut Point`,
@@ -172,6 +179,9 @@ pub enum SyntaxKind {
     GENERIC_PARAM_LIST,
     /// `T`, `T: Bound` or `T = Default`
     TYPE_PARAM,
+    /// `*Ts`, `**Ks` or `...A`: a parameter for any number of positional
+    /// fields, named fields, or both
+    PACK_PARAM,
     /// `const N: usize` or `const N: usize = 3`
     CONST_PARAM,
     /// A named mutability like the `'v` of `struct VecIter[T, 'v]`, or
@@ -262,6 +272,11 @@ pub enum SyntaxKind {
 
     // Expression helpers
     RECORD_EXPR_FIELD,
+    /// `x: e` in a tuple expression, a named field
+    TUPLE_EXPR_FIELD,
+    /// `*e`, `**e` or `...e` in a tuple expression: the positional
+    /// fields of `e`, its named fields, or both
+    TUPLE_EXPR_SPREAD,
     ARG_LIST,
 
     /// An expression followed by `;`, or one ending in a block, used as a
@@ -474,6 +489,7 @@ impl SyntaxKind {
             IMPL_TRAIT_TYPE => "an impl trait type",
             GENERIC_PARAM_LIST => "a list of generic parameters",
             TYPE_PARAM => "a type parameter",
+            PACK_PARAM => "a pack parameter",
             CONST_PARAM => "a const parameter",
             MUTABILITY_PARAM => "a mutability parameter",
             FN_TYPE => "a function type",
@@ -482,6 +498,8 @@ impl SyntaxKind {
             VARIADIC_PARAM => "a variadic parameter",
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",
+            TUPLE_TYPE_FIELD => "a named field of a tuple type",
+            TUPLE_TYPE_REST => "the rest of a tuple type",
             ARRAY_TYPE => "an array type",
             MUT_TYPE => "a type with a mutability",
             NEVER_TYPE => "the never type",
@@ -601,7 +619,10 @@ impl SyntaxKind {
             TOKEN_TREE => "a token tree",
             TRY_EXPR => "a try-expression",
             TUPLE_EXPR => "a tuple expression",
+            TUPLE_EXPR_FIELD => "a named field of a tuple expression",
+            TUPLE_EXPR_SPREAD => "a spread in a tuple expression",
             TUPLE_PATT => "a tuple pattern",
+            TUPLE_PATT_FIELD => "a named field of a tuple pattern",
             TYPE_ALIAS => "a type alias",
             UNDERSCORE => "'_'",
             VBAR => "'|'",

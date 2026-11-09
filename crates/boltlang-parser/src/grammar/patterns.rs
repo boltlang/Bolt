@@ -4,8 +4,8 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        LITERAL_FIRST, PATH_SEGMENT_FIRST, at_macro_call, delimited, dotted_path, macro_call, name,
-        name_ref, parse_block_expr,
+        LITERAL_FIRST, PATH_SEGMENT_FIRST, TupleOrder, TupleSide, at_macro_call, at_named_field,
+        delimited, dotted_path, macro_call, name, name_ref, parse_block_expr,
     },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
@@ -177,7 +177,35 @@ fn path_or_struct_pattern(p: &mut Parser) -> CompletedMarker {
 /// `(a, b)`. Like in the grammar, `(a)` is a tuple pattern too.
 fn tuple_pattern(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    pattern_list(p, T!['('], T![')']);
+    let mut order = TupleOrder::default();
+    delimited(
+        p,
+        T!['('],
+        T![')'],
+        T![,],
+        || "expected a pattern".into(),
+        PATTERN_FIRST,
+        |p| {
+            // `x: pattern`, a named field.
+            if at_named_field(p) {
+                order.next(p, TupleSide::Named);
+                let field = p.start();
+                name_ref(p);
+                p.bump(T![:]);
+                parse_pattern(p);
+                field.complete(p, TUPLE_PATT_FIELD);
+                return true;
+            }
+            if !p.at_ts(PATTERN_FIRST) {
+                return false;
+            }
+            // `..` ignores the other fields, positional and named.
+            let side = if p.at(T![..]) { TupleSide::Both } else { TupleSide::Positional };
+            order.next(p, side);
+            parse_pattern(p);
+            true
+        },
+    );
     m.complete(p, TUPLE_PATT)
 }
 

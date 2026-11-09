@@ -556,6 +556,8 @@ fn lower_generic_params(
                     mutability_params.push(MutabilityParamData { name, type_ref, bounds });
                 }
             }
+            // Not supported yet.
+            ast::GenericParam::Pack(_) => {}
         }
     }
     let mut where_predicates = Vec::new();

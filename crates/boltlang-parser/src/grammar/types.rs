@@ -4,8 +4,9 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        at_macro_call, delimited, generic_param_list, is_path_start, macro_call, outer_attrs,
-        parse_expr, pattern_single, type_path,
+        TupleOrder, TupleSide, at_macro_call, at_named_field, at_spread, delimited,
+        generic_param_list, is_path_start, macro_call, name, outer_attrs, parse_expr,
+        pattern_single, spread, type_path,
     },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
@@ -228,15 +229,33 @@ fn fn_type_param(p: &mut Parser) {
 }
 
 /// `()`, `(A,)` or `(A, B)`. Like the grammar, `(A)` is a tuple type too.
+/// Named fields and rests come after the positional types, as in
+/// `(A, x: B)`, `(A, *Ts)`, `(x: A, **Ks)` or `(...A)`.
 fn tuple_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(T!['(']);
+    let mut order = TupleOrder::default();
     while !p.at(T![')']) && !p.at(EOF) {
-        if !p.at_ts(TYPE_FIRST) {
+        if at_named_field(p) {
+            order.next(p, TupleSide::Named);
+            let field = p.start();
+            name(p);
+            p.bump(T![:]);
+            type_(p);
+            field.complete(p, TUPLE_TYPE_FIELD);
+        } else if at_spread(p) {
+            let rest = p.start();
+            let side = spread(p);
+            order.next(p, side);
+            type_(p);
+            rest.complete(p, TUPLE_TYPE_REST);
+        } else if p.at_ts(TYPE_FIRST) {
+            order.next(p, TupleSide::Positional);
+            type_(p);
+        } else {
             p.err_recover("expected a type", TYPE_RECOVERY_SET);
             break;
         }
-        type_(p);
         if !p.at(T![')']) {
             p.expect(T![,]);
         }

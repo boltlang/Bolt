@@ -5,17 +5,17 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        LITERAL_FIRST, delimited, name, outer_attrs, parse_block_expr, parse_literal_expr,
-        trait_bounds, type_,
+        LITERAL_FIRST, at_spread, delimited, name, outer_attrs, parse_block_expr,
+        parse_literal_expr, spread, trait_bounds, type_,
     },
     parser::Parser,
     token_set::TokenSet,
 };
 
 const GENERIC_PARAM_FIRST: TokenSet =
-    TokenSet::new(&[IDENT, METAVARIABLE, LABEL_IDENT, T![const], T![#]]);
+    TokenSet::new(&[IDENT, METAVARIABLE, LABEL_IDENT, T![const], T![#], T![*], T![...]]);
 
-/// `[T, U: Bound = Default, const N: usize = 3, 'v: imm]`
+/// `[T, U: Bound = Default, const N: usize = 3, 'v: imm, *Ts]`
 pub(crate) fn generic_param_list(p: &mut Parser) {
     let m = p.start();
     delimited(
@@ -34,6 +34,10 @@ fn generic_param(p: &mut Parser) -> bool {
     // Attributes go before the parameter, outside its node, like siblings in
     // the grammar's `type_parameters`.
     outer_attrs(p);
+    if at_spread(p) {
+        pack_param(p);
+        return true;
+    }
     match p.current() {
         METAVARIABLE => {
             let m = p.start();
@@ -59,6 +63,15 @@ fn type_param(p: &mut Parser) {
         type_(p);
     }
     m.complete(p, TYPE_PARAM);
+}
+
+/// `*Ts`, `**Ks` or `...A`: any number of positional fields, of named
+/// fields, or of both.
+fn pack_param(p: &mut Parser) {
+    let m = p.start();
+    spread(p);
+    name(p);
+    m.complete(p, PACK_PARAM);
 }
 
 /// `'v` or `'v: imm`: a named mutability that a struct takes, like the `'v`

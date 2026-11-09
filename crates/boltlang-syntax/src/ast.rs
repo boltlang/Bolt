@@ -168,6 +168,78 @@ impl TupleType {
     }
 }
 
+/// What a spread or a rest in a tuple stands for, by how it's written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Spread {
+    /// `*`: positional fields.
+    Positional,
+    /// `**`: named fields.
+    Named,
+    /// `...`: both.
+    All,
+}
+
+/// The spread that `node` starts with, if any.
+fn spread_of(node: &SyntaxNode) -> Option<Spread> {
+    let token = node.children_with_tokens().filter_map(|x| x.into_token()).next()?;
+    match token.kind() {
+        STAR => Some(Spread::Positional),
+        DOTDOTDOT => Some(Spread::All),
+        OPERATOR if token.text() == "**" => Some(Spread::Named),
+        _ => None,
+    }
+}
+
+/// A part of a tuple type: a type, a named field or a rest.
+pub enum TupleTypeItem {
+    Positional(Type),
+    Named(TupleTypeField),
+    Rest(TupleTypeRest),
+}
+
+impl TupleType {
+    /// The positional types, named fields and rests, in order.
+    pub fn items(&self) -> impl Iterator<Item = TupleTypeItem> {
+        self.0.children().filter_map(|n| {
+            if let Some(f) = TupleTypeField::cast(n.clone()) {
+                Some(TupleTypeItem::Named(f))
+            } else if let Some(r) = TupleTypeRest::cast(n.clone()) {
+                Some(TupleTypeItem::Rest(r))
+            } else {
+                Type::cast(n).map(TupleTypeItem::Positional)
+            }
+        })
+    }
+}
+
+/// `x: T` in a tuple type
+pub struct TupleTypeField(SyntaxNode);
+
+simple_node!(TupleTypeField, TUPLE_TYPE_FIELD);
+
+impl TupleTypeField {
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// `*Ts`, `**Ks` or `...A` in a tuple type
+pub struct TupleTypeRest(SyntaxNode);
+
+simple_node!(TupleTypeRest, TUPLE_TYPE_REST);
+
+impl TupleTypeRest {
+    pub fn spread(&self) -> Option<Spread> {
+        spread_of(&self.0)
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
 /// `[T]` or `[T; N]`, maybe after `mut` or `imm`
 pub struct ArrayType(SyntaxNode);
 
@@ -256,7 +328,22 @@ ast_enum!(GenericParam {
     Type(TypeParam) = TYPE_PARAM,
     Const(ConstParam) = CONST_PARAM,
     Mutability(MutabilityParam) = MUTABILITY_PARAM,
+    Pack(PackParam) = PACK_PARAM,
 });
+
+/// `*Ts`, `**Ks` or `...A`
+pub struct PackParam(SyntaxNode);
+
+simple_node!(PackParam, PACK_PARAM);
+
+impl PackParam {
+    pub fn spread(&self) -> Option<Spread> {
+        spread_of(&self.0)
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+}
 
 /// `T`, `T: Bound` or `T = Default`. Can also be a metavariable in a macro.
 pub struct TypeParam(SyntaxNode);
@@ -474,8 +561,30 @@ pub struct TuplePattern(SyntaxNode);
 simple_node!(TuplePattern, TUPLE_PATT);
 
 impl TuplePattern {
+    /// The positional patterns, leaving out named fields.
     pub fn fields(&self) -> ChildrenIter<Pattern> {
         ChildrenIter::new(&self.0)
+    }
+    /// The positional patterns and named fields, in order.
+    pub fn items(&self) -> impl Iterator<Item = Result<Pattern, TuplePatternField>> {
+        self.0.children().filter_map(|n| match TuplePatternField::cast(n.clone()) {
+            Some(f) => Some(Err(f)),
+            None => Pattern::cast(n).map(Ok),
+        })
+    }
+}
+
+/// `x: pattern` in a tuple pattern
+pub struct TuplePatternField(SyntaxNode);
+
+simple_node!(TuplePatternField, TUPLE_PATT_FIELD);
+
+impl TuplePatternField {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
     }
 }
 
@@ -1210,8 +1319,56 @@ pub struct TupleExpr(SyntaxNode);
 simple_node!(TupleExpr, TUPLE_EXPR);
 
 impl TupleExpr {
+    /// The positional elements, leaving out named fields and spreads.
     pub fn elements(&self) -> ChildrenIter<Expr> {
         ChildrenIter::new(&self.0)
+    }
+    /// The positional elements, named fields and spreads, in order.
+    pub fn items(&self) -> impl Iterator<Item = TupleExprItem> {
+        self.0.children().filter_map(|n| {
+            if let Some(f) = TupleExprField::cast(n.clone()) {
+                Some(TupleExprItem::Named(f))
+            } else if let Some(s) = TupleExprSpread::cast(n.clone()) {
+                Some(TupleExprItem::Spread(s))
+            } else {
+                Expr::cast(n).map(TupleExprItem::Positional)
+            }
+        })
+    }
+}
+
+/// A part of a tuple expression: an element, a named field or a spread.
+pub enum TupleExprItem {
+    Positional(Expr),
+    Named(TupleExprField),
+    Spread(TupleExprSpread),
+}
+
+/// `x: e` in a tuple expression
+pub struct TupleExprField(SyntaxNode);
+
+simple_node!(TupleExprField, TUPLE_EXPR_FIELD);
+
+impl TupleExprField {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `*e`, `**e` or `...e` in a tuple expression
+pub struct TupleExprSpread(SyntaxNode);
+
+simple_node!(TupleExprSpread, TUPLE_EXPR_SPREAD);
+
+impl TupleExprSpread {
+    pub fn spread(&self) -> Option<Spread> {
+        spread_of(&self.0)
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
     }
 }
 

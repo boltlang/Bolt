@@ -28,7 +28,62 @@ pub use items::parse_item;
 pub use patterns::parse_pattern;
 
 use crate::{parser::Parser, token_set::TokenSet};
-use boltlang_syntax::SyntaxKind::{self, *};
+use boltlang_syntax::{
+    SyntaxKind::{self, *},
+    T,
+};
+
+/// Which part of a tuple an element goes in: its positional fields, its
+/// named fields, or both, as `...e` does.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TupleSide {
+    Positional,
+    Named,
+    Both,
+}
+
+/// Whether a spread or a rest starts here: `*`, `**` or `...`.
+pub(crate) fn at_spread(p: &Parser) -> bool {
+    p.at(T![*]) || p.at_op("**") || p.at(T![...])
+}
+
+/// Consume `*`, `**` or `...`, and give the part of a tuple it's in.
+pub(crate) fn spread(p: &mut Parser) -> TupleSide {
+    let side = if p.at(T![*]) {
+        TupleSide::Positional
+    } else if p.at(T![...]) {
+        TupleSide::Both
+    } else {
+        TupleSide::Named
+    };
+    p.bump_any();
+    side
+}
+
+/// Whether a named field like `x: ..` starts here.
+pub(crate) fn at_named_field(p: &Parser) -> bool {
+    p.at(IDENT) && p.nth_at(1, T![:])
+}
+
+/// The rule that a tuple's positional fields come before its named ones.
+#[derive(Default)]
+pub(crate) struct TupleOrder {
+    named: bool,
+}
+
+impl TupleOrder {
+    /// Note an element of `side`, which starts here, reporting it if it's
+    /// positional after a named one.
+    pub(crate) fn next(&mut self, p: &mut Parser, side: TupleSide) {
+        match side {
+            TupleSide::Named => self.named = true,
+            TupleSide::Positional if self.named => {
+                p.error("a positional field can't come after a named one");
+            }
+            _ => {}
+        }
+    }
+}
 
 /// The name of something being declared, like the `f` in `fn f()`.
 pub(crate) fn name(p: &mut Parser) {

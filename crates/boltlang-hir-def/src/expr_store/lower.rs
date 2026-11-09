@@ -126,18 +126,19 @@ impl ExprCollector {
             }
             ast::Type::Fn(ty) => self.lower_fn_type(&ty),
             ast::Type::ImplTrait(ty) => {
-                let generic_params = ty
-                    .generic_param_list()
-                    .map(|list| {
-                        list.params()
-                            .filter_map(|param| match param {
-                                ast::GenericParam::Type(p) => name(p.name()),
-                                ast::GenericParam::Const(p) => name(p.name()),
-                                ast::GenericParam::Mutability(_) => None,
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let generic_params =
+                    ty.generic_param_list()
+                        .map(|list| {
+                            list.params()
+                                .filter_map(|param| match param {
+                                    ast::GenericParam::Type(p) => name(p.name()),
+                                    ast::GenericParam::Const(p) => name(p.name()),
+                                    ast::GenericParam::Mutability(_)
+                                    | ast::GenericParam::Pack(_) => None,
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
                 let mut bounds = Vec::new();
                 if let Some(inner) = ty.ty() {
                     self.collect_bounds(inner, &mut bounds);
