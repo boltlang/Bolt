@@ -16,7 +16,7 @@ use boltlang_syntax::{
 use crate::{
     Name,
     expr_store::{ExprCollector, ExpressionStore, ExpressionStoreSourceMap},
-    hir::{ExprId, TypeRefId},
+    hir::{ExprId, ParamKind, TypeRefId},
     ids::{ClassId, ConstId, EffectId, EnumId, FunctionId, ImplId, StructId, TypeAliasId},
     item_tree::{AstId, FunctionName, RawVisibility},
 };
@@ -93,6 +93,13 @@ pub struct FunctionSignature {
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ParamData {
+    /// The name it's passed by, for a keyword-only parameter or
+    /// `**opts`: that of its pattern, if it's a name.
+    pub name: Option<Name>,
+    /// How it's passed.
+    pub kind: ParamKind,
+    /// Its type: for `*args: *Ts` or `**opts: **Ks`, the tuple `(*Ts)` or
+    /// `(**Ks)` that the body sees.
     pub type_ref: Option<TypeRefId>,
     pub default: Option<ExprId>,
     /// Whether it has `#[nolen]`: an array that a function linked with
@@ -325,11 +332,35 @@ fn lower_function<'db>(
         );
         if let Some(list) = decl.param_list() {
             is_variadic = list.variadic_param().is_some();
-            for param in list.params() {
-                let type_ref = param.type_expr().map(|t| c.lower_type(t));
-                let default = param.default().map(|e| c.lower_expr(e));
-                let nolen = crate::item_tree::has_attr(&param, "nolen");
-                params.push(ParamData { type_ref, default, nolen });
+            // After a `*` or `*args`, the parameters are keyword-only.
+            let mut keyword = false;
+            for item in list.items() {
+                match item {
+                    ast::ParamItem::Param(param) => {
+                        let type_ref = param.type_expr().map(|t| c.lower_type(t));
+                        let default = param.default().map(|e| c.lower_expr(e));
+                        let nolen = crate::item_tree::has_attr(&param, "nolen");
+                        let kind = if keyword { ParamKind::Keyword } else { ParamKind::Positional };
+                        let name = pattern_name(param.pattern());
+                        params.push(ParamData { name, kind, type_ref, default, nolen });
+                    }
+                    ast::ParamItem::Rest(rest) => {
+                        let kind = match rest.spread() {
+                            Some(ast::Spread::Named) => ParamKind::KeywordRest,
+                            _ => {
+                                keyword = true;
+                                ParamKind::Rest
+                            }
+                        };
+                        let type_ref = rest.pack().map(|r| c.lower_pack_tuple(&r));
+                        let name = pattern_name(rest.pattern());
+                        let data = ParamData { name, kind, type_ref, default: None, nolen: false };
+                        params.push(data);
+                    }
+                    ast::ParamItem::Marker => keyword = true,
+                    // Only in a function type.
+                    ast::ParamItem::Pack(_) => {}
+                }
             }
         }
         ret_type = decl.ret_type().map(|r| c.lower_opt_type(r.ty()));
@@ -530,6 +561,15 @@ fn lower_type_alias<'db>(
         store,
     };
     (sig, source_map)
+}
+
+/// The name of a parameter's pattern, if it's `x` or `mut x`.
+fn pattern_name(pattern: Option<ast::Pattern>) -> Option<Name> {
+    match pattern? {
+        ast::Pattern::Named(p) => Some(Name::from_ident(&p.name()?.text())),
+        ast::Pattern::Mut(p) => pattern_name(p.pattern()),
+        _ => None,
+    }
 }
 
 fn lower_generic_params(

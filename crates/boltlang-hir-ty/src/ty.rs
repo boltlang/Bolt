@@ -36,6 +36,101 @@ pub enum VarKind {
     NamedPack,
 }
 
+/// The parameters of a function type: `(i32, *Ts, sep: String, **Ks)`.
+/// The positional ones come first, then a pack for the other positional
+/// arguments, then the keyword-only ones in the order of their names, then
+/// a pack for the other keyword arguments. A pack that's solved is spliced
+/// in, as in a tuple: a function type has one form.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct Params<'db> {
+    pub positional: Box<[Ty<'db>]>,
+    /// `*Ts`: a positional pack.
+    pub rest: Option<Box<Ty<'db>>>,
+    pub keyword: Box<[(Name, Ty<'db>)]>,
+    /// `**Ks`: a named pack.
+    pub keyword_rest: Option<Box<Ty<'db>>>,
+}
+
+impl<'db> Params<'db> {
+    /// Positional parameters, and nothing else.
+    pub fn positional(tys: impl Into<Box<[Ty<'db>]>>) -> Self {
+        Params { positional: tys.into(), rest: None, keyword: Box::new([]), keyword_rest: None }
+    }
+
+    /// The parameters, with the packs that are solved spliced in.
+    pub fn new(
+        positional: Vec<Ty<'db>>,
+        rest: Option<Ty<'db>>,
+        keyword: Vec<(Name, Ty<'db>)>,
+        keyword_rest: Option<Ty<'db>>,
+    ) -> Self {
+        let mut tys = positional;
+        tys.extend(rest.map(|r| Ty::Spread(PackHalf::Positional, Box::new(r))));
+        tys.extend(keyword_rest.map(|r| Ty::Spread(PackHalf::Named, Box::new(r))));
+        Params::from_tuple(&Ty::record(tys.into(), keyword, Ty::Mutability(Mutability::Imm)))
+    }
+
+    /// The parameters as a tuple type, which unifies like the arguments of
+    /// a call: `(i32, *Ts, sep: String, **Ks)`. It isn't a value, so its
+    /// mutability is [`Ty::Unwritten`], which isn't shown.
+    pub fn as_tuple(&self) -> Ty<'db> {
+        let mut tys = self.positional.to_vec();
+        tys.extend(self.rest.iter().map(|r| Ty::Spread(PackHalf::Positional, r.clone())));
+        tys.extend(self.keyword_rest.iter().map(|r| Ty::Spread(PackHalf::Named, r.clone())));
+        Ty::record(tys.into(), self.keyword.to_vec(), Ty::Unwritten)
+    }
+
+    /// The parameters of a tuple type made by [`Params::as_tuple`], or by
+    /// unifying one: its first positional pack is the rest, and so is its
+    /// first named one.
+    pub fn from_tuple(ty: &Ty<'db>) -> Self {
+        let Some(parts) = ty.tuple_parts() else { return Params::positional([]) };
+        let mut positional = Vec::new();
+        let mut rest = None;
+        for t in parts.positional {
+            match t {
+                Ty::Spread(_, pack) if rest.is_none() => rest = Some(pack),
+                t => positional.push(t),
+            }
+        }
+        Params {
+            positional: positional.into(),
+            rest,
+            keyword: parts.named.into(),
+            keyword_rest: parts.rests.into_iter().next().map(Box::new),
+        }
+    }
+
+    /// Whether it only has positional parameters, like most functions.
+    pub fn is_positional(&self) -> bool {
+        self.rest.is_none() && self.keyword.is_empty() && self.keyword_rest.is_none()
+    }
+
+    /// Every type in it: the positional ones, the rest, the keyword ones
+    /// and the rest of them.
+    pub fn tys(&self) -> impl Iterator<Item = &Ty<'db>> {
+        self.positional
+            .iter()
+            .chain(self.rest.as_deref())
+            .chain(self.keyword.iter().map(|(_, t)| t))
+            .chain(self.keyword_rest.as_deref())
+    }
+
+    /// The parameters with each type replaced by what `f` gives, and the
+    /// packs that become what they stand for spliced in.
+    pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
+        if self.is_positional() {
+            return Params::positional(self.positional.iter().map(&mut f).collect::<Box<[_]>>());
+        }
+        Params::new(
+            self.positional.iter().map(&mut f).collect(),
+            self.rest.as_deref().map(&mut f),
+            self.keyword.iter().map(|(n, t)| (n.clone(), f(t))).collect(),
+            self.keyword_rest.as_deref().map(&mut f),
+        )
+    }
+}
+
 /// Which fields of a tuple a [`Ty::Spread`] stands for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum PackHalf {
@@ -156,7 +251,7 @@ pub enum Ty<'db> {
     /// `imm` value can't hold a `mut fn`. The mutability doesn't restrict
     /// calling it. The effects are a row: [`Ty::Row`], a variable or a
     /// parameter.
-    Fn(Box<[Ty<'db>]>, Box<Ty<'db>>, Box<Ty<'db>>, Box<Ty<'db>>),
+    Fn(Box<Params<'db>>, Box<Ty<'db>>, Box<Ty<'db>>, Box<Ty<'db>>),
     /// A row of effects, which is a type of kind `Effect`: the effects that
     /// are known, like `Log + State[i32]`, and the rows it's made of that
     /// stand for any row, like the `E` of `Log + E`, which are parameters or
@@ -219,7 +314,18 @@ impl<'db> Ty<'db> {
     /// like a named function.
     pub fn func_does(params: impl Into<Box<[Ty<'db>]>>, ret: Ty<'db>, effects: Ty<'db>) -> Self {
         Ty::Fn(
-            params.into(),
+            Box::new(Params::positional(params)),
+            Box::new(ret),
+            Box::new(Ty::Mutability(Mutability::Imm)),
+            Box::new(effects),
+        )
+    }
+
+    /// An `imm` function with the parameters `params`, from them to `ret`
+    /// with the effects `effects`.
+    pub fn func_with(params: Params<'db>, ret: Ty<'db>, effects: Ty<'db>) -> Self {
+        Ty::Fn(
+            Box::new(params),
             Box::new(ret),
             Box::new(Ty::Mutability(Mutability::Imm)),
             Box::new(effects),
@@ -512,7 +618,7 @@ impl<'db> Ty<'db> {
                 f(elem);
             }
             Ty::Fn(params, ret, mutability, effects) => {
-                params.iter().for_each(&mut f);
+                params.tys().for_each(&mut f);
                 f(ret);
                 f(mutability);
                 f(effects);
@@ -563,7 +669,7 @@ impl<'db> Ty<'db> {
             Ty::Spread(half, pack) => Ty::Spread(*half, Box::new(pack.fold(f))),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret, mutability, effects) => Ty::Fn(
-                fold_all(params, f),
+                Box::new(params.map(|t| t.fold(f))),
                 Box::new(ret.fold(f)),
                 Box::new(mutability.fold(f)),
                 Box::new(effects.fold(f)),
@@ -714,7 +820,7 @@ impl<'db> TyNames<'db> {
                 }
                 Ty::Fn(params, ret, m, e) => {
                     mutability(db, m, found);
-                    params.iter().for_each(|t| collect(db, t, found));
+                    params.tys().for_each(|t| collect(db, t, found));
                     collect(db, ret, found);
                     effects(db, e, found);
                 }
@@ -944,9 +1050,20 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 if explicit || *mutability.as_ref() != Ty::Mutability(Mutability::Imm) {
                     self.write_mutability(f, mutability)?;
                 }
-                f.write_str("fn(")?;
-                list(f, params)?;
-                write!(f, ") -> {}", show(ret))?;
+                // `fn(i32, *Ts, sep: String, **Ks)`
+                let parts: Vec<String> = params
+                    .positional
+                    .iter()
+                    .map(|t| show(t).to_string())
+                    .chain(params.rest.iter().map(|r| format!("*{}", show(r))))
+                    .chain(params.keyword.iter().enumerate().map(|(i, (name, t))| {
+                        // A `*` when there's no positional pack before them.
+                        let star = i == 0 && params.rest.is_none();
+                        format!("{}{name}: {}", if star { "*, " } else { "" }, show(t))
+                    }))
+                    .chain(params.keyword_rest.iter().map(|r| format!("**{}", show(r))))
+                    .collect();
+                write!(f, "fn({}) -> {}", parts.join(", "), show(ret))?;
                 // No effects, or effects that are unknown and not shared, are
                 // shown as nothing.
                 match self.shown_effects(effects) {

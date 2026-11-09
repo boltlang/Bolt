@@ -223,7 +223,7 @@ impl<'db> Types<'db> {
                 let elem = self.value(db, root, elem)?.unwrap_or(PLACEHOLDER);
                 Ty::Array(Box::new(elem), m)
             }
-            MonoTy::Fn(params, ret, m, row) => {
+            MonoTy::Fn(params, _, ret, m, row) => {
                 let mut sig = Sig::new(Vec::new(), Vec::new());
                 for p in params {
                     sig.params.extend(self.value(db, root, p)?);
@@ -417,10 +417,10 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
                 let m = next(m);
                 MonoTy::Array(m, Box::new(go(elem, next)))
             }
-            MonoTy::Fn(params, ret, m, row) => {
+            MonoTy::Fn(params, names, ret, m, row) => {
                 let params = params.iter().map(|a| go(a, next)).collect();
                 let ret = Box::new(go(ret, next));
-                MonoTy::Fn(params, ret, next(m), row.clone())
+                MonoTy::Fn(params, names.clone(), ret, next(m), row.clone())
             }
             MonoTy::ErasedAssoc(alias, args) => {
                 MonoTy::ErasedAssoc(*alias, args.iter().map(|a| go(a, next)).collect())

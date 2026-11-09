@@ -185,6 +185,47 @@ spread from the end (`Ctor::TupleEnd`) and a named one by its name
 such a value, like `(**p, y: 1)` in a generic body, type-checks but isn't
 lowered yet (#405).
 
+## Parameters of functions
+
+A function's parameters are positional, keyword-only, or rests:
+
+```bolt
+fn split(s: String, *, at: Char)                 // `at` only by name
+fn print[*Ts](*args: *Ts, sep: String)           // the other positional arguments
+fn call[*Ts, **Ks](f: F, *args: *Ts, **opts: **Ks)
+```
+
+After a `*` or `*args`, parameters can only be passed by name, and
+`**opts` comes last, so a positional pack is never followed by positional
+parameters. In the body, `args` is the tuple `(*Ts)` and `opts` the tuple
+`(**Ks)`.
+
+`Ty::Fn` holds a `Params`: the positional parameters, a positional pack,
+the keyword-only ones in the order of their names, and a named pack, shown
+as `fn(String, *, at: Char)` or `fn(*Ts, sep: String, **Ks)`. A pack that's
+solved is spliced in, so a function type has one form. Two functions with
+only positional parameters unify parameter by parameter. Otherwise the
+parameters unify as tuples (`Params::as_tuple`), so positions, names and
+packs work as they do for tuples.
+
+A call `f(1, *xs, sep: ",", **opts)` is checked the same way: its arguments
+make a tuple, through the spread constraint when there are spreads, which
+must be the parameters as a tuple. A name given twice is E0259. Neither
+tuple is a value, so neither has a mutability (`Ty::Unwritten`), and what's
+spread in the arguments isn't required to be at most anything.
+
+Monomorphization lays the parameters out flat (`MonoTy::Fn`): the
+positional ones, then those of the positional pack, then the keyword ones
+together with those of the named pack, in the order of their names, whose
+names it keeps. MIR passes a call's arguments in that order, after
+evaluating them into temporaries in the order they're written. A function
+with keyword parameters or rests binds its parameters from the flat ones
+(`bind_params` in the code generator), building `args` and `opts`.
+
+What's left: naming a positional parameter in a call, `/`, default values,
+lambdas with keyword parameters, and passing a pack on, like
+`f(*args)` in a generic body (#405).
+
 ## References
 
 - M. P. Jones. *Qualified Types: Theory and

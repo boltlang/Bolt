@@ -494,7 +494,8 @@ impl<'db> KindInference<'db> {
                 K::Type
             }
             TypeRef::Fn { params, ret_type, effects, .. } => {
-                for &(_, ty) in params.iter() {
+                // A rest is a tuple like `(*Ts)`, of kind `Type` too.
+                for &(_, _, ty) in params.iter() {
                     self.expect_type(resolver, store, ty);
                 }
                 if let Some(ret) = ret_type {

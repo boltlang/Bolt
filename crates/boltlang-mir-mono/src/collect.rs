@@ -311,7 +311,7 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
             args.iter().any(|t| occurs(a, t))
         }
         MonoTy::Array(_, elem) => occurs(a, elem),
-        MonoTy::Fn(params, ret, _, row) => {
+        MonoTy::Fn(params, _, ret, _, row) => {
             params.iter().any(|t| occurs(a, t))
                 || occurs(a, ret)
                 || row.effects.iter().flat_map(|e| e.args.iter()).any(|t| occurs(a, t))

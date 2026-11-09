@@ -93,3 +93,12 @@ fn f(t: (x: i32, x: Bool)) = t;
       //^^^^^^^^^^^^^^^^^ error: the field `x` is given more than once
 let (z: n, ..) = (x: 1);
   //^^^^^^^^^^ error: `imm (x: i32)` has no field `z`
+
+================================================================================
+Arguments of a call
+================================================================================
+fn split(s: i32, *, at: i32) -> i32 = s;
+let a = split(1, at: 1, at: 2);
+      //^^^^^^^^^^^^^^^^^^^^^^ error: the argument `at` is given more than once
+let b = split(1, at: True);
+      //^^^^^^^^^^^^^^^^^^ error: expected `(i32, at: i32)`, found `(i32, at: Bool)`

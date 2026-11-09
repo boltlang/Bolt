@@ -103,7 +103,10 @@ fn bind<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, found: &mut 
             bind(x, y, scheme, found);
         }
         (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => {
-            all(found, xs, ys);
+            match xs.is_positional() && ys.is_positional() {
+                true => all(found, &xs.positional, &ys.positional),
+                false => bind(&xs.as_tuple(), &ys.as_tuple(), scheme, found),
+            }
             bind(x, y, scheme, found);
             bind(m, n, scheme, found);
             bind(e, f, scheme, found);

@@ -421,6 +421,9 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::Type(TypeError::TypeNeeded { origin }) => {
                         format!("error at `{}`: type needed", at(origin.node))
                     }
+                    InferenceDiagnostic::Type(TypeError::DuplicateArgument { origin, name }) => {
+                        format!("error at `{}`: argument {name} is given twice", at(origin.node))
+                    }
                     InferenceDiagnostic::Type(TypeError::DuplicateField { origin, name }) => {
                         format!("error at `{}`: {name} is given twice", at(origin.node))
                     }
@@ -505,7 +508,7 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::Type(TypeError::NotAtMost { origin, constraint }) => {
                         fn as_mutability<'db>(m: &Ty<'db>) -> Ty<'db> {
                             Ty::Fn(
-                                Box::new([]),
+                                Box::new(boltlang_hir_ty::ty::Params::positional([])),
                                 Box::new(Ty::unit()),
                                 Box::new(m.clone()),
                                 Box::new(Ty::nothing()),

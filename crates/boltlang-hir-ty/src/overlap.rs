@@ -114,8 +114,16 @@ pub fn functions_overlap<'db>(db: &'db dyn Db, a: FunctionId<'db>, b: FunctionId
     let y = y.probe_with(&mut || unifier.new_var(VarKind::General));
     let (Ty::Fn(xs, _, _, _), Ty::Fn(ys, _, _, _)) = (&x, &y) else { return false };
     // A type with an error is reported on its own, and would fit anything.
-    if xs.len() != ys.len() || xs.iter().chain(ys.iter()).any(|t| t.any(&mut |t| *t == Ty::Error)) {
+    if xs.tys().chain(ys.tys()).any(|t| t.any(&mut |t| *t == Ty::Error)) {
         return false;
     }
-    xs.iter().zip(ys.iter()).all(|(s, t)| unifier.unify(s, t).is_ok())
+    // A call fits both when their parameters unify, by position and by
+    // name.
+    if !xs.is_positional() || !ys.is_positional() {
+        return unifier.unify(&xs.as_tuple(), &ys.as_tuple()).is_ok();
+    }
+    if xs.positional.len() != ys.positional.len() {
+        return false;
+    }
+    xs.positional.iter().zip(ys.positional.iter()).all(|(s, t)| unifier.unify(s, t).is_ok())
 }

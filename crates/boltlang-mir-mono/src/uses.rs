@@ -230,7 +230,13 @@ impl<'a, 'db> Cx<'a, 'db> {
             .ok_or(UseError::UnknownType)?;
         let root = self.instance.root(self.db);
         boltlang_mir_transform::check_imm_deep(self.db, root, &key).map_err(UseError::NoImpl)?;
-        let use_ty = MonoTy::Fn(Box::new([from]), Box::new(to), MonoMut::Imm, MonoRow::nothing());
+        let use_ty = MonoTy::Fn(
+            Box::new([from]),
+            Box::new([]),
+            Box::new(to),
+            MonoMut::Imm,
+            MonoRow::nothing(),
+        );
         self.instance_use(InstanceDef::Shim(Shim::ImmDeep(key)), &use_ty, &[]).map(Some)
     }
 
@@ -743,6 +749,15 @@ pub fn dict_entries<'db>(
     Ok(out)
 }
 
+/// The parameters of a function type laid out flat, with the names of the
+/// keyword ones at the end, as a tuple, to match [`Params::as_tuple`].
+fn params_tuple<'db>(params: &[MonoTy<'db>], names: &[Name]) -> MonoTy<'db> {
+    match names.is_empty() {
+        true => MonoTy::Tuple(params.into(), MonoMut::Imm),
+        false => MonoTy::Record(params.into(), names.into(), MonoMut::Imm),
+    }
+}
+
 /// Whether the named fields of a checker's tuple type have `names`, in
 /// that order.
 fn same_names(named: &[(Name, Ty<'_>)], names: &[Name]) -> bool {
@@ -766,7 +781,13 @@ fn fits<'db>(params: &[GenericParamId<'db>], pattern: &Ty<'db>, ty: &MonoTy<'db>
             same_names(xn, names) && all(&fields, ys)
         }
         (Ty::Array(_, x), MonoTy::Array(_, y)) => fits(params, x, y),
-        (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, y, ..)) => all(xs, ys) && fits(params, x, y),
+        (Ty::Fn(xs, x, ..), MonoTy::Fn(ys, names, y, ..)) => {
+            let given = match xs.is_positional() && names.is_empty() {
+                true => all(&xs.positional, ys),
+                false => fits(params, &xs.as_tuple(), &params_tuple(ys, names)),
+            };
+            given && fits(params, x, y)
+        }
         (Ty::Never, MonoTy::Never) => true,
         _ => false,
     }
@@ -844,8 +865,12 @@ pub(crate) fn bind<'db>(
             bind_mut(m, *n, found);
             bind(params, x, y, found);
         }
-        (Ty::Fn(xs, x, m, e), MonoTy::Fn(ys, y, n, r)) => {
-            all(xs, ys, found);
+        (Ty::Fn(xs, x, m, e), MonoTy::Fn(ys, names, y, n, r)) => {
+            // With packs or keyword parameters, as tuples.
+            match xs.is_positional() && names.is_empty() {
+                true => all(&xs.positional, ys, found),
+                false => bind(params, &xs.as_tuple(), &params_tuple(ys, names), found),
+            }
             bind(params, x, y, found);
             bind_mut(m, *n, found);
             bind_row(params, e, r, found);

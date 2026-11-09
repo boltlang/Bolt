@@ -42,8 +42,25 @@ use crate::{
         Held, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, SpreadConstraint,
         TuplePart, TypeError,
     },
-    ty::{AdtId, Mutability, Ty, VarKind},
+    ty::{AdtId, Mutability, Params, Ty, VarKind},
 };
+
+/// The arguments of a call: only positional ones, or with named ones and
+/// spreads, like `f(1, sep: ",")` or `f(*xs)`.
+#[derive(Clone, Copy)]
+enum CallArgs<'a> {
+    Positional(&'a [ExprId]),
+    Items(&'a [TupleItem<ExprId>]),
+}
+
+impl CallArgs<'_> {
+    fn items(&self) -> Vec<TupleItem<ExprId>> {
+        match self {
+            CallArgs::Positional(args) => args.iter().map(|&e| TupleItem::Positional(e)).collect(),
+            CallArgs::Items(items) => items.to_vec(),
+        }
+    }
+}
 
 /// The types found in a body, and what went wrong.
 #[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -904,7 +921,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     self.infer_block(statements, *tail, expected)
                 }
             }
-            Expr::Call { callee, args } => self.infer_call(expr, *callee, args, false),
+            Expr::Call { callee, args } => {
+                self.infer_call(expr, *callee, CallArgs::Positional(args), false)
+            }
+            Expr::CallWith { callee, args } => {
+                self.infer_call(expr, *callee, CallArgs::Items(args), false)
+            }
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
             Expr::Try { expr: inner, value, error } => self.infer_try(expr, *inner, *value, *error),
             Expr::Cast { expr: inner, type_ref } => {
@@ -1127,12 +1149,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Never
             }
             Expr::Lambda { params, param_types, ret_type, effects, body: lambda_body, .. } => {
-                let (hint_params, hint_ret) = match expected
-                    .map(|e| self.solver.unifier.shallow_resolve(e.ty))
-                {
-                    Some(Ty::Fn(ps, r, _, _)) if ps.len() == params.len() => (Some(ps), Some(*r)),
-                    _ => (None, None),
-                };
+                let (hint_params, hint_ret) =
+                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
+                        // A lambda only has positional parameters for now.
+                        Some(Ty::Fn(ps, r, _, _))
+                            if ps.is_positional() && ps.positional.len() == params.len() =>
+                        {
+                            (Some(ps.positional), Some(*r))
+                        }
+                        _ => (None, None),
+                    };
                 self.closures.push(ClosureFrame::default());
                 let mut param_tys = Vec::new();
                 for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
@@ -1169,7 +1195,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let frame = self.closures.pop().unwrap();
                 let body = self.body;
                 let closure = Ty::Fn(
-                    param_tys.into(),
+                    Box::new(Params::positional(param_tys)),
                     Box::new(ret),
                     Box::new(self.new_mutability()),
                     Box::new(effects),
@@ -1581,7 +1607,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Expr::Record { path, fields, spread } => {
                 self.infer_record(expr, path.as_ref(), fields, *spread, is_mut)
             }
-            Expr::Call { callee, args } => self.infer_call(expr, *callee, args, is_mut),
+            Expr::Call { callee, args } => {
+                self.infer_call(expr, *callee, CallArgs::Positional(args), is_mut)
+            }
             // A tuple with named fields or spreads, which the solver makes
             // once it knows what's spread.
             Expr::NamedTuple { items } => {
@@ -1617,7 +1645,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     }
                 }
                 let result = self.new_var();
-                let constraint = SpreadConstraint { parts, mutability, result: result.clone() };
+                let constraint =
+                    SpreadConstraint { parts, mutability, result: result.clone(), value: true };
                 self.solver.add(Constraint::Spread { constraint, origin: self.origin(expr) });
                 result
             }
@@ -1667,7 +1696,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         &mut self,
         expr: ExprId,
         callee: ExprId,
-        args: &[ExprId],
+        args: CallArgs<'_>,
         is_mut: bool,
     ) -> Ty<'db> {
         // `x.f(y)`: a field holding a function, a longer path, or `f(x, y)`.
@@ -1729,7 +1758,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         receiver: ExprId,
         receiver_ty: &Ty<'db>,
         name: &Name,
-        args: &[ExprId],
+        args: CallArgs<'_>,
     ) -> Ty<'db> {
         let path = Path::from_name(name.clone());
         let mut function = None;
@@ -1772,14 +1801,23 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         callee: ExprId,
         callee_ty: &Ty<'db>,
         function: Option<FunctionId<'db>>,
-        args: &[ExprId],
+        args: CallArgs<'_>,
         // The receiver of `x.f(y)` or the left operand of `a + b`, and
         // whether the other arguments must have its type, as for `+`.
         receiver: Option<(ExprId, &Ty<'db>, bool)>,
     ) -> Ty<'db> {
+        // Named arguments, spreads, or a function with more than positional
+        // parameters: the arguments are checked as a tuple.
+        let resolved = self.solver.unifier.shallow_resolve(callee_ty);
+        let args = match args {
+            CallArgs::Positional(args) if !matches!(&resolved, Ty::Fn(params, ..) if !params.is_positional()) => {
+                args
+            }
+            args => return self.apply_general(expr, callee, callee_ty, &args.items(), receiver),
+        };
         let count = args.len() + receiver.is_some() as usize;
-        let (params, ret, effects) = match self.solver.unifier.shallow_resolve(callee_ty) {
-            Ty::Fn(params, ret, _, effects) => (params, *ret, *effects),
+        let (params, ret, effects) = match resolved {
+            Ty::Fn(params, ret, _, effects) => (params.positional, *ret, *effects),
             // A number literal's type isn't known yet, but it's no function.
             Ty::Var(v) if self.solver.unifier.var_kind(v) == Some(VarKind::General) => {
                 let params: Box<[Ty<'db>]> = (0..count).map(|_| self.new_var()).collect();
@@ -1788,7 +1826,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let mutability = self.new_mutability();
                 let effects = self.solver.new_var(VarKind::Effect);
                 let fn_ty = Ty::Fn(
-                    params.clone(),
+                    Box::new(Params::positional(params.clone())),
                     Box::new(ret.clone()),
                     Box::new(mutability),
                     Box::new(effects.clone()),
@@ -1862,6 +1900,114 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         ret
     }
 
+    /// A call with named arguments or spreads, or of a function with
+    /// keyword-only parameters or packs: the arguments, as a tuple, must be
+    /// what the parameters are, as a tuple, like `(i32, *Ts, sep: String)`:
+    /// by position, by name, and with the packs taking the rest.
+    fn apply_general(
+        &mut self,
+        expr: ExprId,
+        callee: ExprId,
+        callee_ty: &Ty<'db>,
+        items: &[TupleItem<ExprId>],
+        receiver: Option<(ExprId, &Ty<'db>, bool)>,
+    ) -> Ty<'db> {
+        let infer_all = |this: &mut Self| {
+            for item in items {
+                this.infer_expr(item.value());
+            }
+        };
+        let (params, ret, effects) = match self.solver.unifier.shallow_resolve(callee_ty) {
+            Ty::Fn(params, ret, _, effects) => (*params, *ret, *effects),
+            // What isn't known yet takes the arguments as they're given. Its
+            // positional ones are unknown with a spread.
+            Ty::Var(v) if self.solver.unifier.var_kind(v) == Some(VarKind::General) => {
+                if items.iter().any(|i| matches!(i, TupleItem::Spread(..))) {
+                    infer_all(self);
+                    let origin = self.origin(expr);
+                    self.solver.errors.push(TypeError::TypeNeeded { origin });
+                    return Ty::Error;
+                }
+                let positional = items.iter().filter(|i| matches!(i, TupleItem::Positional(_)));
+                let count = positional.count() + receiver.is_some() as usize;
+                let positional = (0..count).map(|_| self.new_var()).collect();
+                let keyword = items
+                    .iter()
+                    .filter_map(|i| match i {
+                        TupleItem::Named(n, _) => Some((n.clone(), self.new_var())),
+                        _ => None,
+                    })
+                    .collect();
+                let params = Params::new(positional, None, keyword, None);
+                let ret = self.new_var();
+                let effects = self.solver.new_var(VarKind::Effect);
+                let fn_ty = Ty::Fn(
+                    Box::new(params.clone()),
+                    Box::new(ret.clone()),
+                    Box::new(self.new_mutability()),
+                    Box::new(effects.clone()),
+                );
+                self.solver.equal(&fn_ty, callee_ty, self.origin(callee));
+                (params, ret, effects)
+            }
+            Ty::Error | Ty::Never => {
+                infer_all(self);
+                return Ty::Error;
+            }
+            other => {
+                self.result
+                    .diagnostics
+                    .push(InferenceDiagnostic::NotAFunction { expr: callee, ty: other });
+                infer_all(self);
+                return Ty::Error;
+            }
+        };
+        // The call does what the function does.
+        let constraint = RowConstraint::contains(effects, self.effects.clone());
+        self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
+        // The arguments, as a tuple: a positional one is checked against its
+        // parameter while its place is known, before a spread.
+        let mut parts = Vec::new();
+        let mut position: Option<usize> = Some(0);
+        if let Some((_, receiver_ty, _)) = receiver {
+            parts.push(TuplePart::Positional(receiver_ty.clone()));
+            position = Some(1);
+        }
+        for item in items {
+            match item {
+                TupleItem::Positional(e) => {
+                    let hint = position.and_then(|i| params.positional.get(i)).cloned();
+                    position = position.map(|i| i + 1);
+                    let hint = hint.as_ref().map(|ty| Expectation { ty, reason: Reason::None });
+                    let ty = self.infer_expr_expect(*e, hint);
+                    parts.push(TuplePart::Positional(ty));
+                }
+                TupleItem::Named(name, e) => {
+                    let hint = params.keyword.iter().find(|(n, _)| n == name).map(|(_, t)| t);
+                    let hint = hint.cloned();
+                    let hint = hint.as_ref().map(|ty| Expectation { ty, reason: Reason::None });
+                    let ty = self.infer_expr_expect(*e, hint);
+                    parts.push(TuplePart::Named(name.clone(), ty));
+                }
+                TupleItem::Spread(spread, e) => {
+                    position = None;
+                    parts.push(TuplePart::Spread(*spread, self.infer_expr(*e)));
+                }
+            }
+        }
+        let args = self.new_var();
+        let constraint = SpreadConstraint {
+            parts,
+            mutability: Ty::Unwritten,
+            result: args.clone(),
+            value: false,
+        };
+        self.solver.add(Constraint::Spread { constraint, origin: self.origin(expr) });
+        self.solver.equal(&params.as_tuple(), &args, self.origin(expr));
+        self.solver.solve_pending_assoc();
+        ret
+    }
+
     fn infer_binary(&mut self, expr: ExprId, op: &BinaryOp, lhs: ExprId, rhs: ExprId) -> Ty<'db> {
         match op {
             // `a + b`, `a < b` and `a <$> b` call the functions `+`, `<` and
@@ -1919,11 +2065,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 },
             };
             let Ty::Fn(params, ret, _, _) = &scheme.ty else { return false };
-            if params.len() != arity {
+            if !params.is_positional() || params.positional.len() != arity {
                 continue;
             }
             match &**ret {
-                Ty::Assoc(_, args) if args.first() == params.first() => found = true,
+                Ty::Assoc(_, args) if args.first() == params.positional.first() => found = true,
                 _ => return false,
             }
         }
@@ -1961,10 +2107,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         // An operator whose operands have one type, like `fn(T, T)` for `+`,
         // says that the right one must be what the left one is.
         let same = match self.solver.unifier.shallow_resolve(&callee_ty) {
-            Ty::Fn(params, ..) => params.len() == 2 && params[0] == params[1],
+            Ty::Fn(params, ..) => {
+                let ps = &params.positional;
+                params.is_positional() && ps.len() == 2 && ps[0] == ps[1]
+            }
             _ => false,
         };
-        let ty = self.apply(expr, expr, &callee_ty, function, rest, Some((lhs, &lhs_ty, same)));
+        let args = CallArgs::Positional(rest);
+        let ty = self.apply(expr, expr, &callee_ty, function, args, Some((lhs, &lhs_ty, same)));
         self.solve_overloads();
         // While `lhs` is a number literal whose type isn't known, like the `1`
         // of `let x: i64 = 1 << 40`, an operator that gives an associated type
@@ -2268,11 +2418,13 @@ pub(crate) fn solve_overloads<'db>(db: &'db dyn Db, solver: &mut Solver<'db>, en
             let call = solver.unifier.shallow_resolve(&constraint.ty);
             match (&call, &ty) {
                 (Ty::Fn(args, ret, m, e), Ty::Fn(params, own_ret, own_m, own_e))
-                    if args.len() == params.len() && constraint.args.len() == args.len() =>
+                    if args.is_positional()
+                        && params.is_positional()
+                        && args.positional.len() == params.positional.len()
+                        && constraint.args.len() == args.positional.len() =>
                 {
-                    for (index, ((arg, param), at)) in
-                        args.iter().zip(params.iter()).zip(&constraint.args).enumerate()
-                    {
+                    let pairs = args.positional.iter().zip(params.positional.iter());
+                    for (index, ((arg, param), at)) in pairs.zip(&constraint.args).enumerate() {
                         let reason = Reason::Argument { function: f, index: index as u32 };
                         solver.equal(param, arg, Origin { reason, ..*at });
                     }

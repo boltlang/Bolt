@@ -1,0 +1,323 @@
+================================================================================
+Keyword-only parameters
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn split(s: i32, *, at: i32) -> i32 = s * 10 + at;
+fn order(*, z: i32, a: i32) -> i32 = z * 10 + a;
+log(split(1, at: 2));
+log(order(a: 1, z: 2));
+--------------------------------------------------------------------------------
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %0: i32 = call split(1i32, 2i32)
+  let = call_extern log(%0)
+  let %1: i32 = call order(1i32, 2i32)
+  let = call_extern log(%1)
+  jump ret()
+}
+
+fn split(%s: i32, %at: i32) -> (i32) {
+  let %2: i32 = call star_i32(%s, 10i32)
+  let %3: i32 = call plus_i32(%2, %at)
+  jump ret(%3)
+}
+
+fn order(%a: i32, %z: i32) -> (i32) {
+  let %2: i32 = call star_i32(%z, 10i32)
+  let %3: i32 = call plus_i32(%2, %a)
+  jump ret(%3)
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(12)
+log(21)
+
+================================================================================
+Arguments are evaluated in the order they're written
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn order(*, z: i32, a: i32) -> i32 = z * 10 + a;
+log(order(z: { log(1); 1 }, a: { log(2); 2 }));
+--------------------------------------------------------------------------------
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let = call_extern log(1i32)
+  let = call_extern log(2i32)
+  let %0: i32 = call order(2i32, 1i32)
+  let = call_extern log(%0)
+  jump ret()
+}
+
+fn order(%a: i32, %z: i32) -> (i32) {
+  let %2: i32 = call star_i32(%z, 10i32)
+  let %3: i32 = call plus_i32(%2, %a)
+  jump ret(%3)
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(1)
+log(2)
+log(12)
+
+================================================================================
+Rest parameters
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn count[*Ts](*args: *Ts) -> (*Ts) = args;
+fn opts[**Ks](x: i32, **o: **Ks) -> (**Ks) = o;
+fn both[*Ts, **Ks](*args: *Ts, sep: i32, **o: **Ks) -> i32 = sep;
+let c = count(1, True, 7);
+log(c.0 + c.2);
+let o = opts(1, y: 5, a: 3);
+log(o.y * 10 + o.a);
+log(both(1, 2, sep: 3, w: True));
+--------------------------------------------------------------------------------
+data Tuple_i32_Bool_i32 {
+  (i32, i32, i32)
+}
+
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+data Tuple_Bool {
+  (i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %c: imm Tuple_i32_Bool_i32 = call count_i32_Bool_i32[imm](1i32, 1i32, 7i32)
+  let %1: i32 = get Tuple_i32_Bool_i32.0.0(%c)
+  let %2: i32 = get Tuple_i32_Bool_i32.0.2(%c)
+  let %3: i32 = call plus_i32(%1, %2)
+  let = call_extern log(%3)
+  let %o: imm Tuple_i32_i32 = call opts_a_i32_y_i32[imm](1i32, 3i32, 5i32)
+  let %5: i32 = get Tuple_i32_i32.0.1(%o)
+  let %6: i32 = call star_i32(%5, 10i32)
+  let %7: i32 = get Tuple_i32_i32.0.0(%o)
+  let %8: i32 = call plus_i32(%6, %7)
+  let = call_extern log(%8)
+  let %9: i32 = call both_i32_i32_w_Bool[imm, imm](1i32, 2i32, 3i32, 1i32)
+  let = call_extern log(%9)
+  jump ret()
+}
+
+fn count_i32_Bool_i32['m1](%0: i32, %1: i32, %2: i32) -> ('m1 Tuple_i32_Bool_i32) {
+  let %args: 'm1 Tuple_i32_Bool_i32 = new Tuple_i32_Bool_i32.0(%0, %1, %2)
+  jump ret(%args)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn opts_a_i32_y_i32['m1](%x: i32, %1: i32, %2: i32) -> ('m1 Tuple_i32_i32) {
+  let %o: 'm1 Tuple_i32_i32 = new Tuple_i32_i32.0(%1, %2)
+  jump ret(%o)
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn both_i32_i32_w_Bool['m1, 'm2](%0: i32, %1: i32, %sep: i32, %3: i32) -> (i32) {
+  let %args: imm Tuple_i32_i32 = new Tuple_i32_i32.0(%0, %1)
+  let %o: imm Tuple_Bool = new Tuple_Bool.0(%3)
+  jump ret(%sep)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(8)
+log(53)
+log(3)
+
+================================================================================
+Spreads in calls
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn count[*Ts](*args: *Ts) -> (*Ts) = args;
+fn opts[**Ks](x: i32, **o: **Ks) -> (**Ks) = o;
+let t = (4, 5);
+let d = count(*t, 6);
+log(d.0 + d.1 + d.2);
+let r = (k: 9);
+log(opts(0, **r).k);
+--------------------------------------------------------------------------------
+data Tuple_i32_i32 {
+  (i32, i32)
+}
+
+data Tuple_i32_i32_i32 {
+  (i32, i32, i32)
+}
+
+data Tuple_i32 {
+  (i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %t: imm Tuple_i32_i32 = new Tuple_i32_i32.0(4i32, 5i32)
+  let %1: i32 = get Tuple_i32_i32.0.0(%t)
+  let %2: i32 = get Tuple_i32_i32.0.1(%t)
+  let %d: imm Tuple_i32_i32_i32 = call count_i32_i32_i32[imm](%1, %2, 6i32)
+  let %4: i32 = get Tuple_i32_i32_i32.0.0(%d)
+  let %5: i32 = get Tuple_i32_i32_i32.0.1(%d)
+  let %6: i32 = call plus_i32(%4, %5)
+  let %7: i32 = get Tuple_i32_i32_i32.0.2(%d)
+  let %8: i32 = call plus_i32(%6, %7)
+  let = call_extern log(%8)
+  let %r: imm Tuple_i32 = new Tuple_i32.0(9i32)
+  let %10: i32 = get Tuple_i32.0.0(%r)
+  let %11: imm Tuple_i32 = call opts_k_i32[imm](0i32, %10)
+  let %12: i32 = get Tuple_i32.0.0(%11)
+  let = call_extern log(%12)
+  jump ret()
+}
+
+fn count_i32_i32_i32['m1](%0: i32, %1: i32, %2: i32) -> ('m1 Tuple_i32_i32_i32) {
+  let %args: 'm1 Tuple_i32_i32_i32 = new Tuple_i32_i32_i32.0(%0, %1, %2)
+  jump ret(%args)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn opts_k_i32['m1](%x: i32, %1: i32) -> ('m1 Tuple_i32) {
+  let %o: 'm1 Tuple_i32 = new Tuple_i32.0(%1)
+  jump ret(%o)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(15)
+log(9)
+
+================================================================================
+Calls through function values
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+fn split(s: i32, *, at: i32) -> i32 = s * 10 + at;
+fn apply(f: fn(i32, *, at: i32) -> i32) -> i32 = f(4, at: 2);
+let j: fn(i32, *, at: i32) -> i32 = split;
+log(j(1, at: 3));
+log(apply(split));
+--------------------------------------------------------------------------------
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %j: imm fn(i32, i32) -> (i32) = closure split()
+  let %1: i32 = apply(%j, 1i32, 3i32)
+  let = call_extern log(%1)
+  let %2: imm fn(i32, i32) -> (i32) = closure split()
+  let %3: i32 = call apply[imm](%2)
+  let = call_extern log(%3)
+  jump ret()
+}
+
+fn split(%s: i32, %at: i32) -> (i32) {
+  let %2: i32 = call star_i32(%s, 10i32)
+  let %3: i32 = call plus_i32(%2, %at)
+  jump ret(%3)
+}
+
+fn apply['m1](%f: 'm1 fn(i32, i32) -> (i32)) -> (i32) {
+  let %1: i32 = apply(%f, 4i32, 2i32)
+  jump ret(%1)
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn plus_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Add_i32_add(%a, %b)
+  jump ret(%2)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Add_i32_add(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = add(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(13)
+log(42)

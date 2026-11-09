@@ -454,7 +454,7 @@ fn bound_mutabilities(ty: &Ty<'_>, bound: u32) -> Vec<bool> {
             }
             Ty::Fn(params, ret, own, _) => {
                 mark(own, out);
-                params.iter().for_each(|t| walk(t, out));
+                params.tys().for_each(|t| walk(t, out));
                 walk(ret, out);
             }
             _ => ty.walk_children(|t| walk(t, out)),

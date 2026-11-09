@@ -67,7 +67,7 @@ pub fn shim_body<'db>(db: &'db dyn Db, shim: &Shim<'db>, root: File) -> Body<'db
                 return body;
             };
             let mut values = Vec::new();
-            for ty in fields.iter() {
+            for ty in fields.positional.iter() {
                 let local = body.new_temp(None, ty.clone());
                 body.params.push(local);
                 values.push(body.alloc(ExprKind::Local(local), ty.clone(), None));

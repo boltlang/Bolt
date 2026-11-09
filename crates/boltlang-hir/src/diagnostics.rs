@@ -213,6 +213,10 @@ pub enum DiagnosticKind<'db> {
     DuplicateField {
         name: Name,
     },
+    /// A keyword argument given twice, like `sep` in `f(sep: 1, sep: 2)`.
+    DuplicateArgument {
+        name: Name,
+    },
     /// A spread, like `*e` or `**e`, of something that isn't a tuple of
     /// its kind.
     NotSpreadable {
@@ -1622,6 +1626,9 @@ impl<'db> Collector<'db> {
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
                         TypeError::DuplicateField { origin, name } => {
                             (origin, DiagnosticKind::DuplicateField { name })
+                        }
+                        TypeError::DuplicateArgument { origin, name } => {
+                            (origin, DiagnosticKind::DuplicateArgument { name })
                         }
                         TypeError::NotSpreadable { origin, ty } => {
                             if has_error(&ty) {

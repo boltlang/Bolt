@@ -15,8 +15,9 @@ use crate::{
     arena::{Arena, ArenaMap, Idx},
     hir::{
         BinaryOp, Binding, BindingId, BlockKind, EffectArm, Expr, ExprId, GenericArg, Label,
-        LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
-        PathSegment, RecordField, RecordFieldPat, Spread, Statement, TupleItem, TypeRef, TypeRefId,
+        LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, ParamKind, Pat, PatId,
+        Path, PathSegment, RecordField, RecordFieldPat, Spread, Statement, TupleItem, TypeRef,
+        TypeRefId,
     },
 };
 
@@ -189,9 +190,23 @@ impl ExprCollector {
     fn lower_fn_type(&mut self, ty: &ast::FnType) -> TypeRef {
         let mut params = Vec::new();
         let mut is_variadic = false;
+        // After a `*` or `*Ts`, the parameters are keyword-only.
+        let mut keyword = false;
         if let Some(list) = ty.param_list() {
             for child in list.syntax().children() {
                 match child.kind() {
+                    KEYWORD_MARKER => keyword = true,
+                    TUPLE_TYPE_REST => {
+                        let rest = ast::TupleTypeRest::cast(child).unwrap();
+                        let kind = match rest.spread() {
+                            Some(ast::Spread::Named) => ParamKind::KeywordRest,
+                            _ => {
+                                keyword = true;
+                                ParamKind::Rest
+                            }
+                        };
+                        params.push((None, kind, self.lower_pack_tuple(&rest)));
+                    }
                     PARAM => {
                         let param = ast::Param::cast(child).unwrap();
                         let name = match param.pattern() {
@@ -212,7 +227,8 @@ impl ExprCollector {
                             }
                             (None, Some(_)) => self.alloc_type(TypeRef::Error, None),
                         };
-                        params.push((name, type_ref));
+                        let kind = if keyword { ParamKind::Keyword } else { ParamKind::Positional };
+                        params.push((name, kind, type_ref));
                     }
                     VARIADIC_PARAM => is_variadic = true,
                     _ => {}
@@ -229,6 +245,14 @@ impl ExprCollector {
             effects,
             is_const: has_token(CONST_KEYWORD),
         }
+    }
+
+    /// The type of what a rest like `*Ts` or `**Ks` gives: the tuple
+    /// `(*Ts)` or `(**Ks)`.
+    pub fn lower_pack_tuple(&mut self, rest: &ast::TupleTypeRest) -> TypeRefId {
+        let pack = self.lower_opt_type(rest.ty());
+        let item = TupleItem::Spread(spread(rest.spread()), pack);
+        self.alloc_type(TypeRef::NamedTuple(Box::new([item])), Some(rest.syntax()))
     }
 
     /// The effects after `does`: one type for each, like `Log` and
@@ -301,10 +325,29 @@ impl ExprCollector {
                 None => Expr::Missing,
             },
             E::Block(e) => return self.lower_block(&e),
-            E::Call(e) => {
+            E::Call(e) if e.arg_items().all(|a| matches!(a, ast::TupleExprItem::Positional(_))) => {
                 let callee = self.lower_opt_expr(e.operator());
                 let args = e.args().map(|a| self.lower_expr(a)).collect();
                 Expr::Call { callee, args }
+            }
+            E::Call(e) => {
+                let callee = self.lower_opt_expr(e.operator());
+                let args = e
+                    .arg_items()
+                    .map(|item| match item {
+                        ast::TupleExprItem::Positional(x) => {
+                            TupleItem::Positional(self.lower_expr(x))
+                        }
+                        ast::TupleExprItem::Named(f) => {
+                            let name = field_name(f.name_ref().map(|n| n.text()));
+                            TupleItem::Named(name, self.lower_opt_expr(f.expr()))
+                        }
+                        ast::TupleExprItem::Spread(s) => {
+                            TupleItem::Spread(spread(s.spread()), self.lower_opt_expr(s.expr()))
+                        }
+                    })
+                    .collect();
+                Expr::CallWith { callee, args }
             }
             E::Field(e) => {
                 let expr = self.lower_opt_expr(e.expr());

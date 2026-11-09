@@ -89,6 +89,9 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     let Ty::Fn(params, ret, _, effects) = &declared_scheme(db, f).ty else {
                         unreachable!()
                     };
+                    // The type of each declared parameter, in order: that of
+                    // `*args` is a tuple of its pack.
+                    let params = &crate::lower::declared_param_tys(db, f, params);
                     for assumption in implied_assumptions(db, f, params) {
                         ctx.solver.assume_at_most(assumption);
                     }
@@ -352,7 +355,8 @@ fn infer_group<'db>(
             Some(effects) => effects.clone(),
             None => solver.new_var(VarKind::Effect),
         };
-        env.mono.insert(f, Ty::func_does(params.clone(), ret.clone(), effects.clone()));
+        let fn_params = crate::lower::fn_params(db, f, params.to_vec());
+        env.mono.insert(f, Ty::func_with(fn_params, ret.clone(), effects.clone()));
         signatures.push((params, ret, effects));
     }
     let mut results = Vec::new();

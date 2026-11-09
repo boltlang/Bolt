@@ -78,6 +78,12 @@ pub fn mir_bodies<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> MirBodies<'d
     };
     let mut body = b.finish();
     body.root = root;
+    if let boltlang_hir_def::body::DefWithBody::Function(f) = def.def(db) {
+        let params = &boltlang_hir_def::signatures::function_signature(db, f).params;
+        if params.iter().any(|p| p.kind != hir::ParamKind::Positional) {
+            body.param_kinds = params.iter().map(|p| (p.kind, p.name.clone())).collect();
+        }
+    }
     MirBodies { body, lambdas }
 }
 
@@ -398,6 +404,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             }
             Expr::Range { .. } => self.unsupported(e, "a range without a start or an end"),
             Expr::NamedTuple { items } => self.named_tuple(e, items),
+            Expr::CallWith { callee, args } => self.call_with(e, *callee, args),
             Expr::Tuple { exprs } => {
                 let fields = self.exprs(exprs);
                 self.literal(
@@ -554,11 +561,37 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     /// gives the fields of its temporary.
     fn named_tuple(&mut self, e: hir::ExprId, items: &[TupleItem<hir::ExprId>]) -> ExprId {
         let mut stmts = Vec::new();
+        let Some((mut positional, named)) = self.parts_in_temps(items, &mut stmts) else {
+            return self.unsupported(e, "a spread of a tuple with a pack in it");
+        };
+        positional.extend(named.into_iter().map(|(_, v)| v));
+        let ctor = Ctor::Tuple(positional.len() as u32);
+        let tuple = self.literal(e, ExprKind::Construct { ctor, fields: positional.into() });
+        let ty = self.literal_ty(e);
+        let block = ExprKind::Block { stmts: stmts.into(), tail: Some(tuple), label: None };
+        self.mir.alloc(block, ty, Some(e))
+    }
+
+    /// The parts of a tuple or of the arguments of a call, each evaluated
+    /// into a temporary in the order they're written, with a `let` for it
+    /// in `stmts`: the positional values, and the named ones in the order
+    /// of their names. A spread gives the fields of its temporary. `None`
+    /// for a spread of a tuple with a pack in it, whose fields aren't known
+    /// before monomorphization.
+    #[allow(clippy::type_complexity)]
+    fn parts_in_temps(
+        &mut self,
+        items: &[TupleItem<hir::ExprId>],
+        stmts: &mut Vec<Stmt<'db>>,
+    ) -> Option<(Vec<ExprId>, Vec<(Name, ExprId)>)> {
         let mut positional = Vec::new();
         let mut named: Vec<(Name, ExprId)> = Vec::new();
         for item in items {
             let x = item.value();
             let ty = self.ty(x);
+            if matches!(item, TupleItem::Spread(..)) && ty.has_spread() {
+                return None;
+            }
             let value = self.expr(x);
             let temp = self.mir.new_temp(None, ty.clone());
             stmts.push(Stmt::Let {
@@ -570,16 +603,11 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             match item {
                 TupleItem::Positional(_) => positional.push(local(self)),
                 TupleItem::Named(name, _) => named.push((name.clone(), local(self))),
-                // Where the fields of a pack are isn't known before
-                // monomorphization.
-                TupleItem::Spread(..) if ty.has_spread() => {
-                    return self.unsupported(e, "a spread of a tuple with a pack in it");
-                }
                 TupleItem::Spread(spread, _) => {
                     let (tys, fields): (&[Ty<'db>], &[(Name, Ty<'db>)]) = match &ty {
                         Ty::Tuple(tys, _) => (tys, &[]),
                         Ty::Record(tys, fields, _) => (tys, fields),
-                        _ => return self.unsupported(e, "a spread of this type"),
+                        _ => (&[], &[]),
                     };
                     let ctor = Ctor::Tuple((tys.len() + fields.len()) as u32);
                     let field = |b: &mut Self, index: usize, t: &Ty<'db>| {
@@ -587,25 +615,78 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                         let kind = ExprKind::Field { base, ctor, index: index as u32 };
                         b.mir.alloc(kind, t.clone(), Some(x))
                     };
-                    if *spread != Spread::Named {
-                        for (i, t) in tys.iter().enumerate() {
-                            positional.push(field(self, i, t));
+                    match spread {
+                        Spread::Positional => {
+                            for (i, t) in tys.iter().enumerate() {
+                                positional.push(field(self, i, t));
+                            }
                         }
-                    }
-                    if *spread != Spread::Positional {
-                        for (j, (name, t)) in fields.iter().enumerate() {
-                            named.push((name.clone(), field(self, tys.len() + j, t)));
+                        Spread::Named => {
+                            for (j, (name, t)) in fields.iter().enumerate() {
+                                named.push((name.clone(), field(self, tys.len() + j, t)));
+                            }
                         }
                     }
                 }
             }
         }
         named.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
-        positional.extend(named.into_iter().map(|(_, v)| v));
-        let ctor = Ctor::Tuple(positional.len() as u32);
-        let tuple = self.literal(e, ExprKind::Construct { ctor, fields: positional.into() });
-        let ty = self.literal_ty(e);
-        let block = ExprKind::Block { stmts: stmts.into(), tail: Some(tuple), label: None };
+        Some((positional, named))
+    }
+
+    /// A call with named arguments or spreads, like `f(1, sep: ",")`: its
+    /// arguments are evaluated in the order they're written, and passed as
+    /// the function's type lays them out: the positional ones, then the
+    /// keyword ones in the order of their names. The function's packs must
+    /// be known here.
+    fn call_with(
+        &mut self,
+        e: hir::ExprId,
+        callee: hir::ExprId,
+        items: &[TupleItem<hir::ExprId>],
+    ) -> ExprId {
+        let hir = self.cx.hir;
+        let Ty::Fn(params, ..) = self.ty(callee) else {
+            return self.unsupported(e, "a call of this");
+        };
+        if params.rest.is_some() || params.keyword_rest.is_some() {
+            return self.unsupported(e, "a call that passes on a pack");
+        }
+        let method = self.cx.infer.method_calls.get(e).copied();
+        let mut stmts = Vec::new();
+        // `x.f(y)`: `x` first.
+        let mut values = Vec::new();
+        if method.is_some() {
+            let Expr::Field { expr: receiver, .. } = &hir[callee] else {
+                return self.unsupported(e, "this method call");
+            };
+            let ty = self.ty(*receiver);
+            let value = self.expr(*receiver);
+            let temp = self.mir.new_temp(None, ty.clone());
+            stmts.push(Stmt::Let {
+                pat: Pattern::Local(Some(temp)),
+                init: Some(value),
+                else_: None,
+            });
+            values.push(self.mir.alloc(ExprKind::Local(temp), ty, Some(*receiver)));
+        }
+        let Some((positional, named)) = self.parts_in_temps(items, &mut stmts) else {
+            return self.unsupported(e, "a spread of a tuple with a pack in it");
+        };
+        values.extend(positional);
+        values.extend(named.into_iter().map(|(_, v)| v));
+        let call = match method {
+            Some(f) => {
+                let item = self.fn_ref(callee, f);
+                self.call(e, callee, item, values)
+            }
+            None => {
+                let callee = self.expr(callee);
+                self.node(e, ExprKind::Call { callee, args: values.into() })
+            }
+        };
+        let block = ExprKind::Block { stmts: stmts.into(), tail: Some(call), label: None };
+        let ty = self.ty(e);
         self.mir.alloc(block, ty, Some(e))
     }
 

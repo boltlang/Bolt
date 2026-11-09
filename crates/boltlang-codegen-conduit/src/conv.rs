@@ -195,7 +195,7 @@ impl<'db> Convs<'db> {
         let none = || MutParams { count: 0, assumes: Vec::new() };
         sigs.push((id, (Sig::new(vec![ft.clone()], vec![tt]), none(), 0)));
         match (from, to) {
-            (MonoTy::Fn(ps, r, _, _), MonoTy::Fn(qs, s, _, row)) => {
+            (MonoTy::Fn(ps, _, r, _, _), MonoTy::Fn(qs, _, s, _, row)) => {
                 let wrapper = fresh(format!("{name}::closure"));
                 self.wrappers.insert(key, wrapper);
                 let mut sig = Sig::new(vec![ft], Vec::new());
@@ -274,7 +274,7 @@ impl<'db> Convs<'db> {
             let mut b = builder(module, id);
             let x = Atom::Var(b.param(0));
             match (from, to) {
-                (MonoTy::Fn(ps, r, ..), MonoTy::Fn(qs, s, ..)) => {
+                (MonoTy::Fn(ps, _, r, ..), MonoTy::Fn(qs, _, s, ..)) => {
                     let Some(Ty::Fn(_, m)) = cx.value(to)? else {
                         return Err(unsupported("converting this closure"));
                     };

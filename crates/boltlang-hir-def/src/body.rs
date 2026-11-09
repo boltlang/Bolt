@@ -79,8 +79,16 @@ pub fn body_with_source_map<'db>(
             match decl {
                 Some(decl) => {
                     if let Some(list) = decl.param_list() {
-                        params =
-                            list.params().map(|p| collector.lower_opt_pat(p.pattern())).collect();
+                        // In the order of the signature's parameters.
+                        params = list
+                            .items()
+                            .filter_map(|item| match item {
+                                ast::ParamItem::Param(p) => Some(p.pattern()),
+                                ast::ParamItem::Rest(r) => Some(r.pattern()),
+                                ast::ParamItem::Marker | ast::ParamItem::Pack(_) => None,
+                            })
+                            .map(|p| collector.lower_opt_pat(p))
+                            .collect();
                     }
                     collector.lower_opt_expr(decl.body())
                 }

@@ -21,7 +21,7 @@ use crate::{
         AssocConstraint, AtMostConstraint, AtMostSource, Constraint, ConstraintSource,
         FieldConstraint, Held, Origin, Reason, Solver, normalize_assoc,
     },
-    ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
+    ty::{GenericParamId, Params, Ty, TyNames, VarKind, is_hidden_param},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -206,7 +206,12 @@ impl<'db> Scheme<'db> {
         // A mutability in a bound counts as a use of it, so that it gets a
         // name like `'m`.
         let as_mutability = |m: &Ty<'db>| {
-            Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()), Box::new(Ty::nothing()))
+            Ty::Fn(
+                Box::new(Params::positional([])),
+                Box::new(Ty::unit()),
+                Box::new(m.clone()),
+                Box::new(Ty::nothing()),
+            )
         };
         let bound_tys: Vec<Ty<'db>> = self
             .bounds
@@ -511,7 +516,11 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         bounds: bounds.into(),
         rows: Box::new([]),
         effect_vars: Box::new([]),
-        ty: Ty::func_does(params, ret, sig.effects.clone().unwrap_or_else(Ty::nothing)),
+        ty: Ty::func_with(
+            crate::lower::fn_params(db, f, params.into_vec()),
+            ret,
+            sig.effects.clone().unwrap_or_else(Ty::nothing),
+        ),
         sources: SchemeSources {
             predicates: sources.into(),
             assoc: assoc_sources.into(),

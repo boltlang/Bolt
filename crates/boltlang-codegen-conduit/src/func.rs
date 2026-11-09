@@ -294,15 +294,19 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
         }
         // The parameters: each of a type with values is one of Conduit's.
-        for local in self.mir.params.clone() {
-            let value = match self.cty(&self.local_ty(local)?)? {
-                Some(_) => {
-                    next += 1;
-                    Some(Atom::Var(self.b.param(next - 1)))
-                }
-                None => None,
-            };
-            self.bind(local, value)?;
+        if !self.mir.param_kinds.is_empty() {
+            self.bind_params(next)?;
+        } else {
+            for local in self.mir.params.clone() {
+                let value = match self.cty(&self.local_ty(local)?)? {
+                    Some(_) => {
+                        next += 1;
+                        Some(Atom::Var(self.b.param(next - 1)))
+                    }
+                    None => None,
+                };
+                self.bind(local, value)?;
+            }
         }
         let result = self.expr(self.mir.root)?;
         if !self.ended() {
@@ -314,6 +318,78 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
         }
         Ok(())
+    }
+
+    /// Bind the parameters of a function with keyword-only parameters,
+    /// `*args` or `**opts` to what it's given, laid out flat as its function
+    /// type is: the positional ones, then the arguments `*args` takes, then
+    /// the keyword ones in the order of their names, of which `**opts`
+    /// takes those that aren't parameters of their own. `first` is the
+    /// first of Conduit's parameters.
+    fn bind_params(&mut self, first: usize) -> R<()> {
+        use boltlang_hir_def::hir::ParamKind;
+        let MonoTy::Fn(flat, names, ..) = self.lcx.instance_ty()? else {
+            return Err(ErrorKind::unsupported("a function whose type isn't a function"));
+        };
+        let mut next = first;
+        let mut given = Vec::new();
+        for t in flat.iter() {
+            given.push(match self.cty(t)? {
+                Some(_) => {
+                    next += 1;
+                    Some(Atom::Var(self.b.param(next - 1)))
+                }
+                None => None,
+            });
+        }
+        let split = flat.len() - names.len();
+        let kinds = self.mir.param_kinds.clone();
+        let positional = kinds.iter().filter(|(k, _)| *k == ParamKind::Positional).count();
+        let keyword: Vec<&boltlang_hir_def::Name> = kinds
+            .iter()
+            .filter(|(k, _)| *k == ParamKind::Keyword)
+            .filter_map(|(_, n)| n.as_ref())
+            .collect();
+        let named =
+            |n: &boltlang_hir_def::Name| names.iter().position(|m| m == n).map(|i| split + i);
+        let mut next_positional = 0;
+        for (local, (kind, name)) in self.mir.params.clone().into_iter().zip(kinds.iter()) {
+            let value = match kind {
+                ParamKind::Positional => {
+                    next_positional += 1;
+                    given.get(next_positional - 1).cloned().flatten()
+                }
+                ParamKind::Keyword => name.as_ref().and_then(named).and_then(|i| given[i].clone()),
+                // A tuple of what it takes.
+                ParamKind::Rest => {
+                    let fields = given[positional..split].iter().flatten().cloned().collect();
+                    self.tuple_of(&self.local_ty(local)?, fields)?
+                }
+                ParamKind::KeywordRest => {
+                    let fields = names
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, n)| !keyword.contains(n))
+                        .filter_map(|(i, _)| given[split + i].clone())
+                        .collect();
+                    self.tuple_of(&self.local_ty(local)?, fields)?
+                }
+            };
+            self.bind(local, value)?;
+        }
+        Ok(())
+    }
+
+    /// A new tuple of type `t` with the fields `fields`, or none for `()`.
+    fn tuple_of(&mut self, t: &MonoTy<'db>, fields: Vec<Atom>) -> R<Val> {
+        match self.cty(t)? {
+            Some(Ty::Data(id, m, margs, rows)) => {
+                let ctor = CtorId { data: id, index: 0 };
+                Ok(Some(Atom::Var(self.b.new_object_full(ctor, m, margs, rows, fields))))
+            }
+            None => Ok(None),
+            Some(_) => Err(ErrorKind::unsupported("this tuple")),
+        }
     }
 
     /// Bind the locals that a function of a handler is given first, each
@@ -442,7 +518,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 None => return Err(ErrorKind::unsupported("a capture that isn't in scope")),
             }
         }
-        let MonoTy::Fn(_, _, m, _) = self.mono(e)? else {
+        let MonoTy::Fn(_, _, _, m, _) = self.mono(e)? else {
             return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
         };
         let (margs, rows) = (self.own_margs(), self.own_rows());
@@ -803,7 +879,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             let results = self.b.call_with(f, margs, rows, Vec::<Atom>::new());
             return Ok(results.first().map(|&v| Atom::Var(v)));
         }
-        let MonoTy::Fn(_, _, m, _) = self.mono(e)? else {
+        let MonoTy::Fn(_, _, _, m, _) = self.mono(e)? else {
             return Err(ErrorKind::unsupported("a function whose type isn't a function"));
         };
         let none = Vec::<Atom>::new();
@@ -894,7 +970,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             return Err(ErrorKind::unsupported("dictionaries"));
         }
         let callee = Cx::new(self.cx.db, instance, &self.cx.erased)?;
-        let MonoTy::Fn(_, ret, ..) = callee.instance_ty()? else {
+        let MonoTy::Fn(_, _, ret, ..) = callee.instance_ty()? else {
             return Err(ErrorKind::unsupported("this `for` loop"));
         };
         // The callee's own mutability and row parameters are the ones this
@@ -1111,7 +1187,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
 
     /// Call what a [`Callee`] calls, with these arguments.
     fn call_use(&mut self, callee: &Callee<'db>, args: Vec<Val>) -> R<Val> {
-        let MonoTy::Fn(_, ret, ..) = self.mono_of(&callee.ty)? else {
+        let MonoTy::Fn(_, _, ret, ..) = self.mono_of(&callee.ty)? else {
             return Err(ErrorKind::unsupported("a call whose type isn't a function"));
         };
         self.call_item(&callee.item, &callee.ty, args, &ret)

@@ -5,7 +5,7 @@ use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
-    hir::{GenericArg, MutabilityRef, Path, Spread, TupleItem, TypeRef, TypeRefId},
+    hir::{GenericArg, MutabilityRef, ParamKind, Path, Spread, TupleItem, TypeRef, TypeRefId},
     ids::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         StructId, TypeAliasId,
@@ -23,7 +23,7 @@ use boltlang_hir_def::{
 use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
     solve::{AssocConstraint, AtMostConstraint, Held},
-    ty::{AdtId, EffectTy, GenericParamId, Mutability, PackHalf, Ty},
+    ty::{AdtId, EffectTy, GenericParamId, Mutability, PackHalf, Params, Ty},
 };
 
 pub(crate) fn imm<'db>() -> Ty<'db> {
@@ -353,11 +353,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 return (Ty::Error, None);
             }
             TypeRef::Fn { params, ret_type, effects, .. } => {
-                let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
+                let params = self.lower_fn_params(params);
                 let ret = ret_type.map_or_else(Ty::unit, |t| self.lower_ty(t));
                 // A function type without `does` has no effects.
                 let effects = effects.as_ref().map_or_else(Ty::nothing, |ts| self.lower_row(ts));
-                Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten), Box::new(effects))
+                Ty::Fn(Box::new(params), Box::new(ret), Box::new(Ty::Unwritten), Box::new(effects))
             }
             // Like a tuple, its mutability is decided by where it's written.
             TypeRef::NamedTuple(items) => {
@@ -586,6 +586,42 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             .collect();
         out.resize(expected, Ty::Unwritten);
         out
+    }
+
+    /// The parameters of a function type, like `fn(i32, *Ts, sep: String,
+    /// **Ks)`. A rest is written as the tuple `(*Ts)` or `(**Ks)`, whose pack
+    /// it is.
+    fn lower_fn_params(&mut self, params: &[(Option<Name>, ParamKind, TypeRefId)]) -> Params<'db> {
+        let mut positional = Vec::new();
+        let mut rest = None;
+        let mut keyword = Vec::new();
+        let mut keyword_rest = None;
+        let pack = |t: Ty<'db>| {
+            let parts = t.tuple_parts()?;
+            parts
+                .positional
+                .into_iter()
+                .chain(parts.rests.into_iter().map(|r| Ty::Spread(PackHalf::Named, Box::new(r))))
+                .find_map(|t| match t {
+                    Ty::Spread(_, pack) => Some(*pack),
+                    _ => None,
+                })
+        };
+        for (name, kind, t) in params.iter() {
+            let ty = self.lower_ty(*t);
+            match kind {
+                ParamKind::Positional => positional.push(ty),
+                ParamKind::Keyword => {
+                    keyword.push((name.clone().unwrap_or_else(|| Name::new("_")), ty))
+                }
+                ParamKind::Rest => rest = pack(ty),
+                ParamKind::KeywordRest => keyword_rest = pack(ty),
+            }
+        }
+        if rest.is_none() && keyword.is_empty() && keyword_rest.is_none() {
+            return Params::positional(positional);
+        }
+        Params::new(positional, rest, keyword, keyword_rest)
     }
 
     /// A rest of a tuple type, like the `*Ts` of `(T, *Ts)`: the spread of
@@ -1383,6 +1419,77 @@ impl FnSig<'_> {
     }
 }
 
+/// The parameters of the function type of `f`, from the types of its
+/// declared parameters, in order, as [`FnSig`] has them: the type of
+/// `*args` or `**opts` is the tuple `(*Ts)` or `(**Ks)`, whose pack is the
+/// rest.
+pub fn fn_params<'db>(db: &'db dyn Db, f: FunctionId<'db>, tys: Vec<Ty<'db>>) -> Params<'db> {
+    let decl = &function_signature(db, f).params;
+    if decl.iter().all(|p| p.kind == ParamKind::Positional) {
+        return Params::positional(tys);
+    }
+    let pack = |t: &Ty<'db>| match t.tuple_parts() {
+        Some(parts) => parts.positional.into_iter().chain(parts.rests).find_map(|t| match t {
+            Ty::Spread(_, pack) => Some(*pack),
+            _ => None,
+        }),
+        None => Some(t.clone()),
+    };
+    let mut positional = Vec::new();
+    let mut rest = None;
+    let mut keyword = Vec::new();
+    let mut keyword_rest = None;
+    for (p, t) in decl.iter().zip(tys) {
+        match p.kind {
+            ParamKind::Positional => positional.push(t),
+            ParamKind::Keyword => {
+                keyword.push((p.name.clone().unwrap_or_else(|| Name::new("_")), t))
+            }
+            ParamKind::Rest => rest = pack(&t),
+            ParamKind::KeywordRest => {
+                // Its own rest, like the `R` of `(**R)`, is the pack.
+                keyword_rest = t.tuple_parts().and_then(|p| p.rests.into_iter().next())
+            }
+        }
+    }
+    Params::new(positional, rest, keyword, keyword_rest)
+}
+
+/// The types of the declared parameters of `f`, in order, from the
+/// parameters of its function type: the inverse of [`fn_params`]. `*args`
+/// gets the tuple `(*Ts)` of its pack, and `**opts` the tuple `(**Ks)`.
+pub fn declared_param_tys<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+    params: &Params<'db>,
+) -> Vec<Ty<'db>> {
+    let decl = &function_signature(db, f).params;
+    let imm = || Ty::Mutability(Mutability::Imm);
+    let mut positional = params.positional.iter();
+    decl.iter()
+        .map(|p| match p.kind {
+            ParamKind::Positional => positional.next().cloned().unwrap_or(Ty::Error),
+            ParamKind::Keyword => {
+                let name = p.name.as_ref();
+                let found = params.keyword.iter().find(|(n, _)| Some(n) == name);
+                found.map_or(Ty::Error, |(_, t)| t.clone())
+            }
+            ParamKind::Rest => {
+                // What the rest gets, with the positional parameters that
+                // its pack became, if it's solved.
+                let mut tys: Vec<Ty<'db>> = positional.by_ref().cloned().collect();
+                tys.extend(params.rest.iter().map(|r| Ty::Spread(PackHalf::Positional, r.clone())));
+                Ty::tuple(tys.into(), imm())
+            }
+            ParamKind::KeywordRest => {
+                let tys = params.keyword_rest.iter();
+                let tys = tys.map(|r| Ty::Spread(PackHalf::Named, r.clone())).collect();
+                Ty::record(tys, Vec::new(), imm())
+            }
+        })
+        .collect()
+}
+
 #[salsa::tracked(returns(ref))]
 pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let sig = function_signature(db, id);
@@ -1589,9 +1696,9 @@ fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
             Some(Ty::Record(tys, named, Box::new(m)))
         }
         Ty::Fn(params, ret, m, effects) => {
-            let params = params.iter().map(|p| fill_field(p, own, own)).collect();
+            let params = params.map(|p| fill_field(p, own, own));
             Some(Ty::Fn(
-                params,
+                Box::new(params),
                 Box::new(fill_field(ret, own, own)),
                 Box::new(fill_field(m, fill, own)),
                 effects.clone(),

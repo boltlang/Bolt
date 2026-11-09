@@ -30,7 +30,7 @@ use boltlang_hir_ty::{
     AdtId, GenericParamId, Ty,
     lower::VariantDef,
     solve::{imm_of, normalize_assoc},
-    ty::{EffectTy, PackHalf},
+    ty::{EffectTy, PackHalf, Params},
 };
 
 /// A mutability in an instance.
@@ -148,9 +148,12 @@ pub enum MonoTy<'db> {
     /// out, the names of the last ones, and its mutability.
     Record(Box<[MonoTy<'db>]>, Box<[Name]>, MonoMut),
     Array(MonoMut, Box<MonoTy<'db>>),
-    /// The parameters, the result, the mutability and the effects of a
-    /// closure.
-    Fn(Box<[MonoTy<'db>]>, Box<MonoTy<'db>>, MonoMut, MonoRow<'db>),
+    /// The parameters, the names of the last ones, the keyword ones in the
+    /// order of their names, the result, the mutability and the effects of a
+    /// function or closure. The parameters are laid out flat: the positional
+    /// ones, then those a positional pack stands for, then the keyword ones,
+    /// with those of a named pack.
+    Fn(Box<[MonoTy<'db>]>, Box<[Name]>, Box<MonoTy<'db>>, MonoMut, MonoRow<'db>),
     /// A row of effects where a type goes, like the `R` of `Cont[B, U, R]`.
     Row(MonoRow<'db>),
     /// The type of an expression that never gives a value, like `return`.
@@ -185,7 +188,7 @@ impl<'db> MonoTy<'db> {
                 args.iter().any(MonoTy::has_erased)
             }
             MonoTy::Array(_, elem) => elem.has_erased(),
-            MonoTy::Fn(params, ret, _, row) => {
+            MonoTy::Fn(params, _, ret, _, row) => {
                 params.iter().any(MonoTy::has_erased)
                     || ret.has_erased()
                     || row.any_ty(&mut MonoTy::has_erased)
@@ -204,7 +207,7 @@ impl<'db> MonoTy<'db> {
             | MonoTy::Record(args, ..)
             | MonoTy::ErasedAssoc(_, args) => args.iter().any(MonoTy::has_any),
             MonoTy::Array(_, elem) => elem.has_any(),
-            MonoTy::Fn(params, ret, _, row) => {
+            MonoTy::Fn(params, _, ret, _, row) => {
                 params.iter().any(MonoTy::has_any)
                     || ret.has_any()
                     || row.any_ty(&mut MonoTy::has_any)
@@ -238,11 +241,11 @@ impl<'db> MonoTy<'db> {
                 MonoTy::Record(all(args, map, next), names.clone(), *own)
             }
             MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.renumber(map, next))),
-            MonoTy::Fn(params, ret, own, row) => {
+            MonoTy::Fn(params, names, ret, own, row) => {
                 let params = all(params, map, next);
                 let ret = Box::new(ret.renumber(map, next));
                 let row = row.map(&mut MonoRow::param, &mut |t| t.renumber(map, next));
-                MonoTy::Fn(params, ret, *own, row)
+                MonoTy::Fn(params, names.clone(), ret, *own, row)
             }
             MonoTy::Row(row) => {
                 MonoTy::Row(row.map(&mut MonoRow::param, &mut |t| t.renumber(map, next)))
@@ -279,12 +282,12 @@ impl<'db> MonoTy<'db> {
                 let own = f(*own);
                 MonoTy::Array(own, Box::new(elem.map_muts(f)))
             }
-            MonoTy::Fn(params, ret, own, row) => {
+            MonoTy::Fn(params, names, ret, own, row) => {
                 let params = all(params, f);
                 let ret = Box::new(ret.map_muts(f));
                 let own = f(*own);
                 let row = row.map(&mut MonoRow::param, &mut |t| t.map_muts(f));
-                MonoTy::Fn(params, ret, own, row)
+                MonoTy::Fn(params, names.clone(), ret, own, row)
             }
             MonoTy::Row(row) => MonoTy::Row(row.map(&mut MonoRow::param, &mut |t| t.map_muts(f))),
         }
@@ -314,10 +317,10 @@ impl<'db> MonoTy<'db> {
                 MonoTy::Record(all(elems, out), names.clone(), *own)
             }
             MonoTy::Array(m, elem) => MonoTy::Array(*m, Box::new(elem.abstract_rows(first, out))),
-            MonoTy::Fn(params, ret, m, row) => {
+            MonoTy::Fn(params, names, ret, m, row) => {
                 let params = all(params, out);
                 let ret = Box::new(ret.abstract_rows(first, out));
-                MonoTy::Fn(params, ret, *m, param(row, out))
+                MonoTy::Fn(params, names.clone(), ret, *m, param(row, out))
             }
             MonoTy::Row(row) => MonoTy::Row(param(row, out)),
             MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
@@ -345,11 +348,11 @@ impl<'db> MonoTy<'db> {
             MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, f), *own),
             MonoTy::Record(args, names, own) => MonoTy::Record(all(args, f), names.clone(), *own),
             MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.map_rows(f))),
-            MonoTy::Fn(params, ret, own, row) => {
+            MonoTy::Fn(params, names, ret, own, row) => {
                 let params = all(params, f);
                 let ret = Box::new(ret.map_rows(f));
                 let row = map_row(row, f);
-                MonoTy::Fn(params, ret, *own, row)
+                MonoTy::Fn(params, names.clone(), ret, *own, row)
             }
             MonoTy::Row(row) => MonoTy::Row(map_row(row, f)),
         }
@@ -372,7 +375,7 @@ impl<'db> MonoTy<'db> {
                 param(m) || args.iter().any(MonoTy::has_mut_param)
             }
             MonoTy::Array(m, elem) => param(m) || elem.has_mut_param(),
-            MonoTy::Fn(params, ret, m, row) => {
+            MonoTy::Fn(params, _, ret, m, row) => {
                 param(m)
                     || params.iter().any(MonoTy::has_mut_param)
                     || ret.has_mut_param()
@@ -434,8 +437,13 @@ impl<'db> MonoTy<'db> {
             MonoTy::Array(own, elem) => {
                 Ty::Array(Box::new(m(own)), Box::new(elem.to_ty_with(param, row)?))
             }
-            MonoTy::Fn(ps, ret, own, r) => Ty::Fn(
-                all(ps)?,
+            MonoTy::Fn(ps, names, ret, own, r) => Ty::Fn(
+                {
+                    let ps = all(ps)?;
+                    let split = ps.len() - names.len();
+                    let keyword = names.iter().cloned().zip(ps[split..].iter().cloned()).collect();
+                    Box::new(Params::new(ps[..split].to_vec(), None, keyword, None))
+                },
                 Box::new(ret.to_ty_with(param, row)?),
                 Box::new(m(own)),
                 Box::new(row_ty(r)?),
@@ -538,13 +546,22 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 write!(f, ")")
             }
             MonoTy::Array(own, elem) => write!(f, "{own} [{}]", DisplayMonoTy { db, ty: elem }),
-            MonoTy::Fn(params, ret, own, row) => {
+            MonoTy::Fn(params, names, ret, own, row) => {
                 if *own != MonoMut::Imm {
                     write!(f, "{own} ")?;
                 }
-                write!(f, "fn(")?;
-                list(f, params)?;
-                write!(f, ") -> {}", DisplayMonoTy { db, ty: ret })?;
+                // The keyword parameters with their names.
+                let split = params.len() - names.len();
+                let parts: Vec<String> = params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, ty)| match i.checked_sub(split) {
+                        Some(k) => format!("{}: {}", names[k], DisplayMonoTy { db, ty }),
+                        None => DisplayMonoTy { db, ty }.to_string(),
+                    })
+                    .collect();
+                write!(f, "fn({})", parts.join(", "))?;
+                write!(f, " -> {}", DisplayMonoTy { db, ty: ret })?;
                 if !row.is_nothing() {
                     write!(f, " does {}", row.display(db))?;
                 }
@@ -667,6 +684,10 @@ pub enum Slot<'db> {
     Row(MonoRow<'db>),
 }
 
+/// The parameters of a function type laid out flat, with the names of the
+/// keyword ones at the end, as [`MonoTy::Fn`] has them.
+type FlatParams<'db> = (Box<[MonoTy<'db>]>, Box<[Name]>);
+
 /// Why a type couldn't be made closed.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum TyError {
@@ -736,6 +757,40 @@ impl<'db> Subst<'_, 'db> {
         Ok(MonoTy::Record(positional.into(), names, self.mutability(own)?))
     }
 
+    /// The parameters of a function type, laid out flat, and the names of
+    /// the keyword ones at the end: the positional ones, those of the
+    /// positional pack, then the keyword ones and those of the named pack,
+    /// in the order of their names.
+    fn params(&self, params: &Params<'db>) -> Result<FlatParams<'db>, TyError> {
+        let mut flat = Vec::new();
+        for t in params.positional.iter() {
+            flat.push(self.ty(t)?);
+        }
+        if let Some(rest) = &params.rest {
+            match self.ty(rest)? {
+                MonoTy::Tuple(tys, _) => flat.extend(tys.into_vec()),
+                _ => return Err(TyError::Unknown),
+            }
+        }
+        let mut keyword = Vec::new();
+        for (name, t) in params.keyword.iter() {
+            keyword.push((name.clone(), self.ty(t)?));
+        }
+        if let Some(rest) = &params.keyword_rest {
+            match self.ty(rest)? {
+                MonoTy::Tuple(tys, _) if tys.is_empty() => {}
+                MonoTy::Record(tys, names, _) if tys.len() == names.len() => {
+                    keyword.extend(names.iter().cloned().zip(tys.into_vec()));
+                }
+                _ => return Err(TyError::Unknown),
+            }
+        }
+        keyword.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        let names = keyword.iter().map(|(n, _)| n.clone()).collect();
+        flat.extend(keyword.into_iter().map(|(_, t)| t));
+        Ok((flat.into(), names))
+    }
+
     pub fn ty(&self, ty: &Ty<'db>) -> Result<MonoTy<'db>, TyError> {
         let all = |tys: &[Ty<'db>]| -> Result<Box<[MonoTy<'db>]>, TyError> {
             tys.iter().map(|t| self.ty(t)).collect()
@@ -765,12 +820,16 @@ impl<'db> Subst<'_, 'db> {
             // Only inside a tuple, which splices it.
             Ty::Spread(..) => return Err(TyError::Unknown),
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
-            Ty::Fn(params, ret, own, effects) => MonoTy::Fn(
-                all(params)?,
-                Box::new(self.ty(ret)?),
-                self.mutability(own)?,
-                self.row(effects)?,
-            ),
+            Ty::Fn(params, ret, own, effects) => {
+                let (params, names) = self.params(params)?;
+                MonoTy::Fn(
+                    params,
+                    names,
+                    Box::new(self.ty(ret)?),
+                    self.mutability(own)?,
+                    self.row(effects)?,
+                )
+            }
             // `F[A]` with `F` a type constructor, like `Option`.
             Ty::App(head, args) => match self.ty(head)? {
                 MonoTy::Adt(adt, given, ms, own) => {

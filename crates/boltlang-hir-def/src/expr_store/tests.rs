@@ -134,6 +134,9 @@ impl Printer<'_> {
             Expr::Call { callee, args } => {
                 format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr))
             }
+            Expr::CallWith { callee, args } => {
+                format!("(call {} {})", self.expr(*callee), self.items(args, Self::expr))
+            }
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
             Expr::Try { expr, .. } => format!("(? {})", self.expr(*expr)),
             Expr::Imm { expr } => format!("(imm {})", self.expr(*expr)),
@@ -379,9 +382,11 @@ impl Printer<'_> {
                 "fn({}{}){}",
                 params
                     .iter()
-                    .map(|(n, t)| match n {
-                        Some(n) => format!("{n}: {}", self.ty(*t)),
-                        None => self.ty(*t),
+                    .map(|(n, kind, t)| match (n, kind) {
+                        (_, ParamKind::Rest | ParamKind::KeywordRest) => self.ty(*t),
+                        (Some(n), ParamKind::Keyword) => format!("{n} (keyword): {}", self.ty(*t)),
+                        (Some(n), _) => format!("{n}: {}", self.ty(*t)),
+                        (None, _) => self.ty(*t),
                     })
                     .collect::<Vec<_>>()
                     .join(", "),

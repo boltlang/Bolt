@@ -558,7 +558,7 @@ pub(crate) fn positive_rows(ty: &Ty<'_>, is_row: impl Fn(TyVar) -> bool) -> Vec<
         match ty {
             Ty::Var(v) => out.push((*v, polarity)),
             Ty::Fn(params, ret, _, effects) => {
-                for p in params.iter() {
+                for p in params.tys() {
                     walk(p, -polarity, out);
                 }
                 walk(ret, polarity, out);

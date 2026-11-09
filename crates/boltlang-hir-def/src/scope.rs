@@ -277,6 +277,10 @@ fn children(expr: &Expr) -> Vec<ExprId> {
             out.push(*callee);
             out.extend(args.iter().copied());
         }
+        Expr::CallWith { callee, args } => {
+            out.push(*callee);
+            out.extend(args.iter().map(TupleItem::value));
+        }
         Expr::Field { expr, .. }
         | Expr::Try { expr, .. }
         | Expr::Imm { expr }

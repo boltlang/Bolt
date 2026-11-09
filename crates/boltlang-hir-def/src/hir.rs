@@ -70,6 +70,19 @@ pub enum LambdaKind {
     Function,
 }
 
+/// How a parameter of a function is passed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum ParamKind {
+    /// By position.
+    Positional,
+    /// Only by its name: one after a `*` or `*args`.
+    Keyword,
+    /// `*args: *Ts`: the other positional arguments, as a tuple.
+    Rest,
+    /// `**opts: **Ks`: the other keyword arguments, as a tuple of fields.
+    KeywordRest,
+}
+
 /// What a spread or a rest in a tuple stands for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Spread {
@@ -130,6 +143,12 @@ pub enum Expr {
     Call {
         callee: ExprId,
         args: Box<[ExprId]>,
+    },
+    /// A call with named arguments or spreads, like `f(1, sep: ",")` or
+    /// `f(*xs, **opts)`, with its arguments in the order they're written.
+    CallWith {
+        callee: ExprId,
+        args: Box<[TupleItem<ExprId>]>,
     },
     /// `x.name` or `t.0`; a tuple index is a name like `0`.
     Field {
@@ -421,6 +440,10 @@ impl Expr {
                 out.push(*callee);
                 out.extend(args.iter());
             }
+            Expr::CallWith { callee, args } => {
+                out.push(*callee);
+                out.extend(args.iter().map(TupleItem::value));
+            }
             Expr::Field { expr, .. }
             | Expr::Try { expr, .. }
             | Expr::Cast { expr, .. }
@@ -602,8 +625,11 @@ pub enum TypeRef {
     /// `!`
     Never,
     /// `fn(A, B) -> C`
+    /// Each parameter has a name if it's written with one, which only a
+    /// keyword-only parameter needs, how it's passed, and its type: for
+    /// `*Ts` and `**Ks`, the tuple `(*Ts)` or `(**Ks)`.
     Fn {
-        params: Box<[(Option<Name>, TypeRefId)]>,
+        params: Box<[(Option<Name>, ParamKind, TypeRefId)]>,
         is_variadic: bool,
         ret_type: Option<TypeRefId>,
         /// The effects after `does`, if it's written.

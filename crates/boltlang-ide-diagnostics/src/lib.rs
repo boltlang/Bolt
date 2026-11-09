@@ -133,6 +133,7 @@ impl DiagnosticCode {
     pub const DUPLICATE_FIELD: Self = Self("E0256");
     pub const NOT_SPREADABLE: Self = Self("E0257");
     pub const NOT_A_PACK: Self = Self("E0258");
+    pub const DUPLICATE_ARGUMENT: Self = Self("E0259");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -432,7 +433,12 @@ pub fn syntax_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
 /// A function type with the mutability `m`, so that naming the unknowns of
 /// types names `m` as a mutability.
 fn as_mutability<'db>(m: Ty<'db>) -> Ty<'db> {
-    Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m), Box::new(Ty::nothing()))
+    Ty::Fn(
+        Box::new(boltlang_hir_ty::ty::Params::positional([])),
+        Box::new(Ty::unit()),
+        Box::new(m),
+        Box::new(Ty::nothing()),
+    )
 }
 
 /// The types in a diagnostic, in the order they're shown: in the message,
@@ -708,6 +714,9 @@ fn describe(
                 "`{source}` isn't a pack of this kind: `*` takes a pack like `*Ts`, and `**` one like `**Ks`"
             ),
         ),
+        K::DuplicateArgument { name } => {
+            (C::DUPLICATE_ARGUMENT, format!("the argument `{name}` is given more than once"))
+        }
         K::DuplicateField { name } => (C::DUPLICATE_FIELD, format!("the field `{name}` is given more than once")),
         K::NotSpreadable { ty } => (
             C::NOT_SPREADABLE,

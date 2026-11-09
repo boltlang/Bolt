@@ -59,6 +59,10 @@ pub struct Body<'db> {
     pub temps: Vec<LocalDecl<'db>>,
     pub labels: Vec<Label>,
     pub params: Vec<Local>,
+    /// How each parameter is passed, with the name it's passed by, for a
+    /// function that has keyword-only parameters, `*args` or `**opts`.
+    /// Empty when they're all positional.
+    pub param_kinds: Vec<(hir::ParamKind, Option<Name>)>,
     /// What a lambda captures, which its closure gives it, before its
     /// parameters. Other bodies capture nothing.
     pub captures: Vec<Capture>,
@@ -372,6 +376,7 @@ impl<'db> Body<'db> {
             temps: Vec::new(),
             labels: Vec::new(),
             params: Vec::new(),
+            param_kinds: Vec::new(),
             captures: Vec::new(),
             root: ExprId(0),
         }

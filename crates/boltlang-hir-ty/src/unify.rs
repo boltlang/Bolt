@@ -285,8 +285,26 @@ impl<'db> Unifier<'db> {
                 self.unify(m, n)
             }
             (Ty::Mutability(x), Ty::Mutability(y)) if x == y => Ok(()),
-            (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) if xs.len() == ys.len() => {
-                self.unify_all(xs, ys)?;
+            // That of the parameters and the arguments of a call, as tuples.
+            (Ty::Unwritten, Ty::Unwritten) => Ok(()),
+            (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f))
+                if xs.is_positional()
+                    && ys.is_positional()
+                    && xs.positional.len() == ys.positional.len() =>
+            {
+                self.unify_all(&xs.positional, &ys.positional)?;
+                self.unify(x, y)?;
+                self.unify(m, n)?;
+                self.unify(e, f)
+            }
+            // With packs or keyword parameters, the parameters unify as
+            // tuples do: by position, by name, and with the packs taking
+            // what's left.
+            (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f))
+                if !xs.is_positional() || !ys.is_positional() =>
+            {
+                self.unify(&xs.as_tuple(), &ys.as_tuple())
+                    .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))?;
                 self.unify(x, y)?;
                 self.unify(m, n)?;
                 self.unify(e, f)
@@ -332,7 +350,11 @@ impl<'db> Unifier<'db> {
         b: &Ty<'db>,
     ) -> Result<(), UnifyError<'db>> {
         let mismatch = || UnifyError::Mismatch(a.clone(), b.clone());
-        self.unify(&x.mutability, &y.mutability)?;
+        // The parameters and the arguments of a call aren't values, so they
+        // have no mutability, which `()` has.
+        if x.mutability != Ty::Unwritten && y.mutability != Ty::Unwritten {
+            self.unify(&x.mutability, &y.mutability)?;
+        }
         // Positional fields.
         let is_spread = |t: &Ty<'db>| matches!(t, Ty::Spread(..));
         let (mut xs, mut ys) = (&x.positional[..], &y.positional[..]);

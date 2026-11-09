@@ -301,7 +301,7 @@ fn plan_perform<'db>(
 ) -> Result<(), ErrorKind> {
     let db = lcx.db;
     let Ok(mono) = lcx.ty(use_ty) else { return Ok(()) };
-    let MonoTy::Fn(given, ret, ..) = &mono else { return Ok(()) };
+    let MonoTy::Fn(given, _, ret, ..) = &mono else { return Ok(()) };
     let Ok(Use::Op { effect_args, .. }) = lcx.item_use(&boltlang_mir::ItemRef::Op(op), &mono)
     else {
         return Ok(());
@@ -715,7 +715,7 @@ fn instance_sig<'db>(
     match def {
         // A shim is a function too.
         Some(DefWithBody::Function(_)) | None => {
-            let MonoTy::Fn(params, ret, _, row) = lcx.instance_ty()? else {
+            let MonoTy::Fn(params, _, ret, _, row) = lcx.instance_ty()? else {
                 return Err(ErrorKind::unsupported("a function whose type isn't a function"));
             };
             for t in params.iter() {
@@ -772,7 +772,7 @@ fn lambda_sig<'db>(
             sig.params.push(if c.by_ref { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
         }
     }
-    let MonoTy::Fn(params, ret, _, row) = lcx.expr_ty(lambda.expr)? else {
+    let MonoTy::Fn(params, _, ret, _, row) = lcx.expr_ty(lambda.expr)? else {
         return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
     };
     for t in params.iter() {
@@ -986,7 +986,7 @@ fn declare_extern<'db>(
     if cx.externs.contains_key(&key) {
         return Ok(());
     }
-    let MonoTy::Fn(params, ret, ..) = use_ty(site)? else {
+    let MonoTy::Fn(params, _, ret, ..) = use_ty(site)? else {
         return Err(ErrorKind::unsupported("a host function whose type isn't a function"));
     };
     // With `abi = flat`, each `#[nolen]` array is passed without its

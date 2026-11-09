@@ -106,6 +106,9 @@ pub struct SpreadConstraint<'db> {
     pub parts: Vec<TuplePart<'db>>,
     pub mutability: Ty<'db>,
     pub result: Ty<'db>,
+    /// Whether the tuple is a value, which holds what's spread in it, or the
+    /// arguments of a call, which aren't one.
+    pub value: bool,
 }
 
 /// That the named pack `pack` doesn't give a field with any of `names`,
@@ -332,6 +335,12 @@ pub enum TypeError<'db> {
         origin: Origin<'db>,
         name: Name,
     },
+    /// A keyword argument given twice, like `sep` in `f(sep: 1, sep: 2)`,
+    /// or in `f(sep: 1, **opts)` when `opts` has a `sep` too.
+    DuplicateArgument {
+        origin: Origin<'db>,
+        name: Name,
+    },
     /// A spread of something that isn't a tuple, of type `ty`.
     NotSpreadable {
         origin: Origin<'db>,
@@ -391,6 +400,7 @@ impl<'db> TypeError<'db> {
             | TypeError::Ambiguous { origin, .. }
             | TypeError::NoSuchField { origin, .. }
             | TypeError::DuplicateField { origin, .. }
+            | TypeError::DuplicateArgument { origin, .. }
             | TypeError::NotSpreadable { origin, .. }
             | TypeError::PrivateField { origin, .. }
             | TypeError::CannotChange { origin, .. }
@@ -425,7 +435,8 @@ impl<'db> TypeError<'db> {
             }
             TypeError::TypeNeeded { .. }
             | TypeError::PrivateField { .. }
-            | TypeError::DuplicateField { .. } => {}
+            | TypeError::DuplicateField { .. }
+            | TypeError::DuplicateArgument { .. } => {}
         }
     }
 }
@@ -688,8 +699,11 @@ impl<'db> Solver<'db> {
         let mut named: Vec<(Name, Ty<'db>)> = Vec::new();
         let mut spread_fields = Vec::new();
         let mut failed = false;
+        let value = c.value;
         let add_named = |solver: &mut Self, named: &mut Vec<(Name, Ty<'db>)>, n: Name, t| {
-            if named.iter().any(|(m, _)| *m == n) {
+            if named.iter().any(|(m, _)| *m == n) && !value {
+                solver.errors.push(TypeError::DuplicateArgument { origin, name: n });
+            } else if named.iter().any(|(m, _)| *m == n) {
                 solver.errors.push(TypeError::DuplicateField { origin, name: n });
             } else {
                 named.push((n, t));
@@ -734,7 +748,7 @@ impl<'db> Solver<'db> {
             self.equal(&c.result, &Ty::Error, origin);
             return true;
         }
-        for t in spread_fields {
+        for t in spread_fields.into_iter().filter(|_| c.value) {
             let constraint = AtMostConstraint { held: Held::Type(t), bound: c.mutability.clone() };
             let source = AtMostSource::Object(constraint.clone());
             self.add(Constraint::AtMost { constraint, source, origin });
@@ -1615,8 +1629,8 @@ impl<'db> Solver<'db> {
             .all
             .iter()
             .filter_map(|(f, probe)| match probe {
-                Ty::Fn(own, _, _, _) if own.len() == params.len() => {
-                    let pairs = || own.iter().zip(params.iter());
+                Ty::Fn(own, _, _, _) if own.positional.len() == params.positional.len() => {
+                    let pairs = || own.tys().zip(params.tys());
                     let strict = pairs().filter(|(a, b)| self.fits(a, b)).count();
                     let loose = pairs()
                         .filter(|(a, b)| self.fits(&loose(a), &loose(&self.unifier.resolve(b))))
@@ -2009,10 +2023,16 @@ fn match_ty<'db>(
                 .and(|| match_ty(m, n, subst))
         }
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
-        (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => match_all(xs, ys, subst)
-            .and(|| match_ty(x, y, subst))
-            .and(|| match_ty(m, n, subst))
-            .and(|| match_ty(e, f, subst)),
+        (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f)) => {
+            let params = match xs.is_positional() && ys.is_positional() {
+                true => match_all(&xs.positional, &ys.positional, subst),
+                false => match_ty(&xs.as_tuple(), &ys.as_tuple(), subst),
+            };
+            params
+                .and(|| match_ty(x, y, subst))
+                .and(|| match_ty(m, n, subst))
+                .and(|| match_ty(e, f, subst))
+        }
         (Ty::Row(xs, xr), Ty::Row(ys, yr))
             if xs.len() == ys.len()
                 && xs.iter().zip(ys).all(|(x, y)| x.effect == y.effect)
