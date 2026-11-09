@@ -201,7 +201,7 @@ pub enum Expr {
         value: ExprId,
         count: ExprId,
     },
-    /// `Point { x, y: 1, ...base }`
+    /// `Point { x, y: 1, ..base }`
     Record {
         path: Option<Path>,
         fields: Box<[RecordField]>,

@@ -159,7 +159,7 @@ let xs = mut [1, 2];
 let ys: imm [i32] = xs;   // error: expected `imm [i32]`, found `mut [i32]`
 ```
 
-`S { ...base }` copies the fields it doesn't give from `base`, so it can
+`S { ..base }` copies the fields it doesn't give from `base`, so it can
 make a struct of another mutability from it, like a `mut Point` from an
 `imm` one. But the copy is shallow: an array, struct or function in a field
 is shared with `base`, which would make it an alias with another
@@ -167,10 +167,10 @@ mutability. So when a field that's copied holds one with the struct's own
 mutability, `base` must have the same mutability as the struct:
 
 ```bolt
-let q = mut Point { ...p };   // fine, whatever `p` is: the fields are numbers
+let q = mut Point { ..p };   // fine, whatever `p` is: the fields are numbers
 let l = mut Line { a: mut Point { x: 1, y: 2 }, b: mut Point { x: 3, y: 4 } };
-Line { ...l }                 // error: expected `imm Line`, found `mut Line`
-Line { a: Point { x: 0, y: 0 }, b: Point { x: 0, y: 0 }, ...l }   // fine: nothing is copied
+Line { ..l }                 // error: expected `imm Line`, found `mut Line`
+Line { a: Point { x: 0, y: 0 }, b: Point { x: 0, y: 0 }, ..l }   // fine: nothing is copied
 ```
 
 ## Deep `imm`
@@ -378,7 +378,7 @@ The last one needs `'v: imm`, or `'v` could be `mut`. It doesn't need
 `v` exists. A struct can bound its names, like its type parameters, which
 is checked where a value is made: `struct Frozen['v: imm] { data: 'v [i32] }`.
 
-A struct update, `VecIter { index: 1, ...it }`, keeps the names of `it`,
+A struct update, `VecIter { index: 1, ..it }`, keeps the names of `it`,
 since the fields it doesn't give are shared. Types show a name that's
 known, like `VecIter[i32, imm]`, and leave one out that's generic and
 appears once, like the mutability before a type: `VecIter[T]`. One that's

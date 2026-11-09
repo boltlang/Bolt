@@ -2166,7 +2166,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // The fields not given are copied from `base`. The copy is
             // shallow: an array, struct or function in a field is shared,
             // not copied. So `base` can have another mutability only if no
-            // such field has the struct's own, or `Line { ...l }` with a
+            // such field has the struct's own, or `Line { ..l }` with a
             // `mut` `l` would be an `imm Line` holding `l`'s `mut Point`.
             Some(spread) => {
                 // The fields not given are copied, so they must be visible.

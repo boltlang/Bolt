@@ -187,7 +187,7 @@ impl Printer<'_> {
                     .map(|f| format!("{}: {}", f.name, self.expr(f.expr)))
                     .collect::<Vec<_>>()
                     .join(", "),
-                spread.map_or(String::new(), |s| format!(" ...{}", self.expr(s))),
+                spread.map_or(String::new(), |s| format!(" ..{}", self.expr(s))),
             ),
             Expr::If { condition, then_branch, else_branch } => format!(
                 "(if {} {}{})",
@@ -487,11 +487,11 @@ fn control_flow() {
 fn compound_expressions() {
     assert_eq!(
         render(
-            "(a, b);\n();\n[1, 2];\n[0; n + 1];\nPoint { x, y: 1, ...base };\nShape.Circle { radius: r };\n\
+            "(a, b);\n();\n[1, 2];\n[0; n + 1];\nPoint { x, y: 1, ..base };\nShape.Circle { radius: r };\n\
              a..b; ..=c; d..; ..;"
         ),
         "(tuple a b);\n(tuple );\n[1 2];\n[0; (+ n 1)];\n\
-         (record Point x: x, y: 1 ...base);\n(record Shape.Circle radius: r);\n\
+         (record Point x: x, y: 1 ..base);\n(record Shape.Circle radius: r);\n\
          (.. a b);\n(..= _ c);\n(.. d _);\n(.. _ _);"
     );
 }

@@ -1035,7 +1035,7 @@ impl ArrayExpr {
     }
 }
 
-/// A struct literal: `Point { x, y: 1, ...base }`
+/// A struct literal: `Point { x, y: 1, ..base }`
 pub struct RecordExpr(SyntaxNode);
 
 simple_node!(RecordExpr, RECORD_EXPR);
@@ -1049,7 +1049,7 @@ impl RecordExpr {
     }
 }
 
-/// The `{ x, y: 1, ...base }` of a struct literal
+/// The `{ x, y: 1, ..base }` of a struct literal
 pub struct RecordExprFieldList(SyntaxNode);
 
 simple_node!(RecordExprFieldList, RECORD_EXPR_FIELD_LIST);
@@ -1058,7 +1058,7 @@ impl RecordExprFieldList {
     pub fn fields(&self) -> ChildrenIter<RecordExprField> {
         ChildrenIter::new(&self.0)
     }
-    /// The `base` of `...base`.
+    /// The `base` of `..base`.
     pub fn spread(&self) -> Option<Expr> {
         self.find_node()
     }

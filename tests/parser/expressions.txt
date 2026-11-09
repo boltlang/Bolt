@@ -121,7 +121,7 @@ let i = Instant { 0: Duration.from_millis(0) };
 ================================================================================
 Struct expressions with update initializers
 ================================================================================
-let u = User{name, ...current_user()};
+let u = User{name, ..current_user()};
 
 ================================================================================
 If expressions
@@ -531,7 +531,7 @@ Parenthesized
 Struct literals
 ================================================================================
 let a = Point { x, y: 1 };
-let b = Point { x: 1, ...base };
+let b = Point { x: 1, ..base };
 let c = Shape.Circle { radius: 1.0 };
 let d = Pair { 0: a, 1: b, };
 let e = Empty {};
@@ -917,7 +917,7 @@ Mutable struct literals
 ================================================================================
 let p = mut Point { x: 1, y: 2 };
 let q = mut Shape.Circle { radius: 1.0 };
-let r = mut Point { x: 3, ...p };
+let r = mut Point { x: 3, ..p };
 f(mut Point { x: 1, y: 2 });
 
 ================================================================================
@@ -976,9 +976,3 @@ A named field needs a value
 :error
 ================================================================================
 (x: );
-
-================================================================================
-A struct update is written with three dots
-:error
-================================================================================
-let q = Point { y: 20, ..p };

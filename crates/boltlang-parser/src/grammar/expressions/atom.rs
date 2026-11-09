@@ -153,7 +153,7 @@ fn at_struct_literal(p: &Parser) -> bool {
     p.nth_at(n + 1, T!['{'])
 }
 
-/// `Point { x, y: 1, ...base }`
+/// `Point { x, y: 1, ..base }`
 fn record_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     dotted_path(p);
@@ -166,13 +166,9 @@ fn record_expr_field_list(p: &mut Parser) {
     p.bump(T!['{']);
     while !p.at(EOF) && !p.at(T!['}']) {
         match p.current() {
-            // `...base` must come last. `..base` is read the same way, but
-            // it's an error: `..` is for ranges.
-            T![...] | T![..] => {
-                if p.at(T![..]) {
-                    p.error("a struct update is written `...base`, with three dots");
-                }
-                p.bump_any();
+            // `..base` must come last.
+            T![..] => {
+                p.bump(T![..]);
                 expr(p);
                 if p.at(T![,]) {
                     p.error("expected '}' after the base of a struct literal");
