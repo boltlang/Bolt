@@ -655,25 +655,17 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         let method = self.cx.infer.method_calls.get(e).copied();
         let mut stmts = Vec::new();
         // `x.f(y)`: `x` first.
-        let mut values = Vec::new();
+        let mut all = Vec::with_capacity(items.len() + 1);
         if method.is_some() {
             let Expr::Field { expr: receiver, .. } = &hir[callee] else {
                 return self.unsupported(e, "this method call");
             };
-            let ty = self.ty(*receiver);
-            let value = self.expr(*receiver);
-            let temp = self.mir.new_temp(None, ty.clone());
-            stmts.push(Stmt::Let {
-                pat: Pattern::Local(Some(temp)),
-                init: Some(value),
-                else_: None,
-            });
-            values.push(self.mir.alloc(ExprKind::Local(temp), ty, Some(*receiver)));
+            all.push(TupleItem::Positional(*receiver));
         }
-        let Some((positional, named)) = self.parts_in_temps(items, &mut stmts) else {
+        all.extend_from_slice(items);
+        let Some((mut values, named)) = self.parts_in_temps(&all, &mut stmts) else {
             return self.unsupported(e, "a spread of a tuple with a pack in it");
         };
-        values.extend(positional);
         values.extend(named.into_iter().map(|(_, v)| v));
         let call = match method {
             Some(f) => {

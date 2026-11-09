@@ -53,15 +53,6 @@ enum CallArgs<'a> {
     Items(&'a [TupleItem<ExprId>]),
 }
 
-impl CallArgs<'_> {
-    fn items(&self) -> Vec<TupleItem<ExprId>> {
-        match self {
-            CallArgs::Positional(args) => args.iter().map(|&e| TupleItem::Positional(e)).collect(),
-            CallArgs::Items(items) => items.to_vec(),
-        }
-    }
-}
-
 /// The types found in a body, and what went wrong.
 #[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct InferenceResult<'db> {
@@ -1809,11 +1800,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         // Named arguments, spreads, or a function with more than positional
         // parameters: the arguments are checked as a tuple.
         let resolved = self.solver.unifier.shallow_resolve(callee_ty);
+        let takes_more = matches!(&resolved, Ty::Fn(params, ..) if !params.is_positional());
         let args = match args {
-            CallArgs::Positional(args) if !matches!(&resolved, Ty::Fn(params, ..) if !params.is_positional()) => {
-                args
+            CallArgs::Positional(args) if !takes_more => args,
+            CallArgs::Items(items) => {
+                return self.apply_general(expr, callee, callee_ty, items, receiver);
             }
-            args => return self.apply_general(expr, callee, callee_ty, &args.items(), receiver),
+            CallArgs::Positional(args) => {
+                let items: Vec<_> = args.iter().map(|&e| TupleItem::Positional(e)).collect();
+                return self.apply_general(expr, callee, callee_ty, &items, receiver);
+            }
         };
         let count = args.len() + receiver.is_some() as usize;
         let (params, ret, effects) = match resolved {
@@ -1976,16 +1972,15 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         for item in items {
             match item {
                 TupleItem::Positional(e) => {
-                    let hint = position.and_then(|i| params.positional.get(i)).cloned();
+                    let hint = position.and_then(|i| params.positional.get(i));
                     position = position.map(|i| i + 1);
-                    let hint = hint.as_ref().map(|ty| Expectation { ty, reason: Reason::None });
+                    let hint = hint.map(|ty| Expectation { ty, reason: Reason::None });
                     let ty = self.infer_expr_expect(*e, hint);
                     parts.push(TuplePart::Positional(ty));
                 }
                 TupleItem::Named(name, e) => {
                     let hint = params.keyword.iter().find(|(n, _)| n == name).map(|(_, t)| t);
-                    let hint = hint.cloned();
-                    let hint = hint.as_ref().map(|ty| Expectation { ty, reason: Reason::None });
+                    let hint = hint.map(|ty| Expectation { ty, reason: Reason::None });
                     let ty = self.infer_expr_expect(*e, hint);
                     parts.push(TuplePart::Named(name.clone(), ty));
                 }

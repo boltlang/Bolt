@@ -439,10 +439,10 @@ impl<'db> MonoTy<'db> {
             }
             MonoTy::Fn(ps, names, ret, own, r) => Ty::Fn(
                 {
-                    let ps = all(ps)?;
-                    let split = ps.len() - names.len();
-                    let keyword = names.iter().cloned().zip(ps[split..].iter().cloned()).collect();
-                    Box::new(Params::new(ps[..split].to_vec(), None, keyword, None))
+                    let mut ps = all(ps)?.into_vec();
+                    let keyword = ps.split_off(ps.len() - names.len());
+                    let keyword = names.iter().cloned().zip(keyword).collect();
+                    Box::new(Params::new(ps, None, keyword, None))
                 },
                 Box::new(ret.to_ty_with(param, row)?),
                 Box::new(m(own)),
@@ -762,33 +762,18 @@ impl<'db> Subst<'_, 'db> {
     /// positional pack, then the keyword ones and those of the named pack,
     /// in the order of their names.
     fn params(&self, params: &Params<'db>) -> Result<FlatParams<'db>, TyError> {
-        let mut flat = Vec::new();
-        for t in params.positional.iter() {
-            flat.push(self.ty(t)?);
-        }
-        if let Some(rest) = &params.rest {
-            match self.ty(rest)? {
-                MonoTy::Tuple(tys, _) => flat.extend(tys.into_vec()),
-                _ => return Err(TyError::Unknown),
-            }
-        }
-        let mut keyword = Vec::new();
-        for (name, t) in params.keyword.iter() {
-            keyword.push((name.clone(), self.ty(t)?));
-        }
-        if let Some(rest) = &params.keyword_rest {
-            match self.ty(rest)? {
-                MonoTy::Tuple(tys, _) if tys.is_empty() => {}
-                MonoTy::Record(tys, names, _) if tys.len() == names.len() => {
-                    keyword.extend(names.iter().cloned().zip(tys.into_vec()));
-                }
-                _ => return Err(TyError::Unknown),
-            }
-        }
-        keyword.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
-        let names = keyword.iter().map(|(n, _)| n.clone()).collect();
-        flat.extend(keyword.into_iter().map(|(_, t)| t));
-        Ok((flat.into(), names))
+        // As a tuple, which is laid out the same way.
+        let imm = Ty::Mutability(Mutability::Imm);
+        let tuple = match params.as_tuple() {
+            Ty::Tuple(tys, _) => self.tuple(&tys, &[], &imm)?,
+            Ty::Record(tys, named, _) => self.tuple(&tys, &named, &imm)?,
+            _ => return Err(TyError::Unknown),
+        };
+        Ok(match tuple {
+            MonoTy::Record(flat, names, _) => (flat, names),
+            MonoTy::Tuple(flat, _) => (flat, Box::new([])),
+            _ => return Err(TyError::Unknown),
+        })
     }
 
     pub fn ty(&self, ty: &Ty<'db>) -> Result<MonoTy<'db>, TyError> {

@@ -64,6 +64,20 @@ impl<'db> Params<'db> {
         keyword: Vec<(Name, Ty<'db>)>,
         keyword_rest: Option<Ty<'db>>,
     ) -> Self {
+        // A pack that stands for what it's solved to is spliced in, through
+        // a tuple; otherwise the parameters are what's given.
+        let solved =
+            |t: &Option<Ty<'db>>| matches!(t, Some(Ty::Tuple(..) | Ty::Record(..) | Ty::Error));
+        if !solved(&rest) && !solved(&keyword_rest) {
+            let mut keyword = keyword;
+            keyword.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+            return Params {
+                positional: positional.into(),
+                rest: rest.map(Box::new),
+                keyword: keyword.into(),
+                keyword_rest: keyword_rest.map(Box::new),
+            };
+        }
         let mut tys = positional;
         tys.extend(rest.map(|r| Ty::Spread(PackHalf::Positional, Box::new(r))));
         tys.extend(keyword_rest.map(|r| Ty::Spread(PackHalf::Named, Box::new(r))));

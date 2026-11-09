@@ -226,7 +226,10 @@ impl<'db> Unifier<'db> {
             (Ty::Var(var), ty) | (ty, Ty::Var(var)) => self.bind(*var, ty),
             // A tuple with a pack spread in it: its fields are matched with
             // the other's, and the packs take what's left.
-            (x, y) if (x.has_spread() || y.has_spread()) && x.tuple_parts().is_some() => {
+            (x, y)
+                if (x.has_spread() || y.has_spread())
+                    && matches!(x, Ty::Tuple(..) | Ty::Record(..)) =>
+            {
                 match (self.resolve(x).tuple_parts(), self.resolve(y).tuple_parts()) {
                     (Some(xp), Some(yp)) => self.unify_tuples(xp, yp, &a, &b),
                     _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),
@@ -287,24 +290,19 @@ impl<'db> Unifier<'db> {
             (Ty::Mutability(x), Ty::Mutability(y)) if x == y => Ok(()),
             // That of the parameters and the arguments of a call, as tuples.
             (Ty::Unwritten, Ty::Unwritten) => Ok(()),
+            // Positional parameters one by one. With packs or keyword
+            // parameters, the parameters unify as tuples do: by position, by
+            // name, and with the packs taking what's left.
             (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f))
-                if xs.is_positional()
-                    && ys.is_positional()
-                    && xs.positional.len() == ys.positional.len() =>
+                if !(xs.is_positional() && ys.is_positional())
+                    || xs.positional.len() == ys.positional.len() =>
             {
-                self.unify_all(&xs.positional, &ys.positional)?;
-                self.unify(x, y)?;
-                self.unify(m, n)?;
-                self.unify(e, f)
-            }
-            // With packs or keyword parameters, the parameters unify as
-            // tuples do: by position, by name, and with the packs taking
-            // what's left.
-            (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f))
-                if !xs.is_positional() || !ys.is_positional() =>
-            {
-                self.unify(&xs.as_tuple(), &ys.as_tuple())
-                    .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))?;
+                if xs.is_positional() && ys.is_positional() {
+                    self.unify_all(&xs.positional, &ys.positional)?;
+                } else {
+                    self.unify(&xs.as_tuple(), &ys.as_tuple())
+                        .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))?;
+                }
                 self.unify(x, y)?;
                 self.unify(m, n)?;
                 self.unify(e, f)

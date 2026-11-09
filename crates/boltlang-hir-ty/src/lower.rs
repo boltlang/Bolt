@@ -592,36 +592,9 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// **Ks)`. A rest is written as the tuple `(*Ts)` or `(**Ks)`, whose pack
     /// it is.
     fn lower_fn_params(&mut self, params: &[(Option<Name>, ParamKind, TypeRefId)]) -> Params<'db> {
-        let mut positional = Vec::new();
-        let mut rest = None;
-        let mut keyword = Vec::new();
-        let mut keyword_rest = None;
-        let pack = |t: Ty<'db>| {
-            let parts = t.tuple_parts()?;
-            parts
-                .positional
-                .into_iter()
-                .chain(parts.rests.into_iter().map(|r| Ty::Spread(PackHalf::Named, Box::new(r))))
-                .find_map(|t| match t {
-                    Ty::Spread(_, pack) => Some(*pack),
-                    _ => None,
-                })
-        };
-        for (name, kind, t) in params.iter() {
-            let ty = self.lower_ty(*t);
-            match kind {
-                ParamKind::Positional => positional.push(ty),
-                ParamKind::Keyword => {
-                    keyword.push((name.clone().unwrap_or_else(|| Name::new("_")), ty))
-                }
-                ParamKind::Rest => rest = pack(ty),
-                ParamKind::KeywordRest => keyword_rest = pack(ty),
-            }
-        }
-        if rest.is_none() && keyword.is_empty() && keyword_rest.is_none() {
-            return Params::positional(positional);
-        }
-        Params::new(positional, rest, keyword, keyword_rest)
+        let tys: Vec<_> =
+            params.iter().map(|(name, kind, t)| (*kind, name.clone(), self.lower_ty(*t))).collect();
+        params_from(tys)
     }
 
     /// A rest of a tuple type, like the `*Ts` of `(T, *Ts)`: the spread of
@@ -1428,28 +1401,31 @@ pub fn fn_params<'db>(db: &'db dyn Db, f: FunctionId<'db>, tys: Vec<Ty<'db>>) ->
     if decl.iter().all(|p| p.kind == ParamKind::Positional) {
         return Params::positional(tys);
     }
-    let pack = |t: &Ty<'db>| match t.tuple_parts() {
-        Some(parts) => parts.positional.into_iter().chain(parts.rests).find_map(|t| match t {
-            Ty::Spread(_, pack) => Some(*pack),
-            _ => None,
-        }),
-        None => Some(t.clone()),
-    };
+    params_from(decl.iter().zip(tys).map(|(p, t)| (p.kind, p.name.clone(), t)))
+}
+
+/// The parameters of a function type from its declared parameters, in
+/// order: how each is passed, the name of a keyword-only one, and its type,
+/// which for `*args` or `**opts` is the tuple `(*Ts)` or `(**Ks)` whose
+/// pack is the rest.
+fn params_from<'db>(
+    params: impl IntoIterator<Item = (ParamKind, Option<Name>, Ty<'db>)>,
+) -> Params<'db> {
     let mut positional = Vec::new();
     let mut rest = None;
     let mut keyword = Vec::new();
     let mut keyword_rest = None;
-    for (p, t) in decl.iter().zip(tys) {
-        match p.kind {
+    // The pack of `(*Ts)` or `(**Ks)`.
+    let pack = |t: &Ty<'db>| {
+        let params = Params::from_tuple(t);
+        params.rest.or(params.keyword_rest).map(|p| *p)
+    };
+    for (kind, name, t) in params {
+        match kind {
             ParamKind::Positional => positional.push(t),
-            ParamKind::Keyword => {
-                keyword.push((p.name.clone().unwrap_or_else(|| Name::new("_")), t))
-            }
+            ParamKind::Keyword => keyword.push((name.unwrap_or_else(|| Name::new("_")), t)),
             ParamKind::Rest => rest = pack(&t),
-            ParamKind::KeywordRest => {
-                // Its own rest, like the `R` of `(**R)`, is the pack.
-                keyword_rest = t.tuple_parts().and_then(|p| p.rests.into_iter().next())
-            }
+            ParamKind::KeywordRest => keyword_rest = pack(&t),
         }
     }
     Params::new(positional, rest, keyword, keyword_rest)

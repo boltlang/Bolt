@@ -701,12 +701,12 @@ impl<'db> Solver<'db> {
         let mut failed = false;
         let value = c.value;
         let add_named = |solver: &mut Self, named: &mut Vec<(Name, Ty<'db>)>, n: Name, t| {
-            if named.iter().any(|(m, _)| *m == n) && !value {
-                solver.errors.push(TypeError::DuplicateArgument { origin, name: n });
-            } else if named.iter().any(|(m, _)| *m == n) {
+            if !named.iter().any(|(m, _)| *m == n) {
+                named.push((n, t));
+            } else if value {
                 solver.errors.push(TypeError::DuplicateField { origin, name: n });
             } else {
-                named.push((n, t));
+                solver.errors.push(TypeError::DuplicateArgument { origin, name: n });
             }
         };
         for part in &c.parts {
