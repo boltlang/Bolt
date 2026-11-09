@@ -22,6 +22,7 @@ use std::collections::HashMap;
 
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
+    Name,
     body::{Body, DefWithBodyId, body},
     builtin_type::BuiltinValue,
     hir::{
@@ -54,8 +55,22 @@ pub enum Place<'db> {
 pub enum Ctor<'db> {
     /// A tuple with this many elements.
     Tuple(u32),
+    /// A tuple whose positional fields aren't all known, because a pack is
+    /// spread in them: its field is the `index`th from the end of them.
+    TupleEnd,
+    /// A tuple whose named fields aren't all known, because a named pack
+    /// is spread in it: its field is the one with this name. The index is
+    /// 0.
+    TupleNamed(FieldName<'db>),
     Struct(StructId<'db>),
     Variant(EnumVariantId<'db>),
+}
+
+/// The name of a field of a tuple, interned so that a [`Ctor`] can hold it.
+#[salsa::interned(debug)]
+pub struct FieldName<'db> {
+    #[returns(ref)]
+    pub name: Name,
 }
 
 /// What a [`Node::Switch`] branches on.
@@ -365,6 +380,20 @@ impl<'db> Builder<'_, 'db> {
                     }
                     continue;
                 }
+                // With a pack spread in the tuple, how many fields it has
+                // isn't known before monomorphization, so the fields after
+                // `..` are counted from the end.
+                Pat::Tuple { args, rest } if self.pat_has_spread(pat) => {
+                    let split = rest.map_or(args.len(), |r| r as usize);
+                    for (k, &sub) in args.iter().enumerate() {
+                        let (ctor, index) = match k < split {
+                            true => (Ctor::Tuple(0), k as u32),
+                            false => (Ctor::TupleEnd, (args.len() - 1 - k) as u32),
+                        };
+                        let field = self.place(Place::Field { of: place, ctor, index });
+                        row.cols.insert(i + k, (field, sub));
+                    }
+                }
                 Pat::Tuple { args, rest } => {
                     let arity = self.tuple_arity(pat, args.len(), *rest)?;
                     let fields = positional(args, *rest, arity);
@@ -382,6 +411,33 @@ impl<'db> Builder<'_, 'db> {
                 // names.
                 // `..` ignores the fields it stands for, so the positional
                 // ones after it are the last ones.
+                // With a pack spread in the tuple, the positional fields
+                // after `..` are counted from the end, and the named ones are
+                // found by name.
+                Pat::NamedTuple { items, rest } if self.pat_has_spread(pat) => {
+                    let given =
+                        items.iter().filter(|i| matches!(i, TupleItem::Positional(_))).count();
+                    let split = rest.map_or(given, |r| r as usize);
+                    let mut position = 0;
+                    for (k, item) in items.iter().enumerate() {
+                        let (ctor, index, sub) = match item {
+                            TupleItem::Positional(sub) if position < split => {
+                                position += 1;
+                                (Ctor::Tuple(0), position as u32 - 1, *sub)
+                            }
+                            TupleItem::Positional(sub) => {
+                                position += 1;
+                                (Ctor::TupleEnd, (given - position) as u32, *sub)
+                            }
+                            TupleItem::Named(name, sub) => {
+                                (Ctor::TupleNamed(FieldName::new(self.db, name.clone())), 0, *sub)
+                            }
+                            TupleItem::Spread(..) => return Err(DecisionError::Unknown(pat)),
+                        };
+                        let field = self.place(Place::Field { of: place, ctor, index });
+                        row.cols.insert(i + k, (field, sub));
+                    }
+                }
                 Pat::NamedTuple { items, rest } => {
                     let Ty::Record(tys, named, _) = infer_body(self.db, self.def).pat_ty(pat)
                     else {
@@ -492,6 +548,11 @@ impl<'db> Builder<'_, 'db> {
 
     /// How many elements the tuple that a tuple pattern matches has: those
     /// it gives, or, with `..`, what its type says.
+    /// Whether the type of `pat` is a tuple with a pack spread in it.
+    fn pat_has_spread(&self, pat: PatId) -> bool {
+        infer_body(self.db, self.def).pat_ty(pat).has_spread()
+    }
+
     fn tuple_arity(
         &self,
         pat: PatId,
@@ -1012,6 +1073,11 @@ impl<'db> Decision<'db> {
             if let Place::Field { of, ctor, index } = place {
                 let ctor = match ctor {
                     Ctor::Tuple(_) => String::new(),
+                    Ctor::TupleEnd => "end-".to_string(),
+                    Ctor::TupleNamed(n) => {
+                        out.push_str(&format!("${i} = ${of}.{}\n", n.name(db)));
+                        continue;
+                    }
                     Ctor::Struct(s) => {
                         format!("{}.", s.item(db).name.as_ref().map_or("?", |n| n.as_str()))
                     }

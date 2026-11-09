@@ -48,8 +48,30 @@ impl<'db> InferenceContext<'_, 'db> {
                 self.solver.equal(expected, &ty, self.pat_origin(pat));
             }
             Pat::Tuple { args, rest } => {
-                let elems = match (self.solver.unifier.shallow_resolve(expected), rest) {
-                    (Ty::Tuple(tys, _), Some(_)) if tys.len() >= args.len() => tys.into_vec(),
+                let resolved = self.solver.unifier.shallow_resolve(expected);
+                let resolved = match resolved.has_spread() {
+                    true => self.solver.unifier.resolve(&resolved),
+                    false => resolved,
+                };
+                let elems = match (resolved.tuple_parts(), rest) {
+                    // With a pack spread in it, only the fields before the
+                    // first spread and after the last one are known.
+                    (Some(parts), Some(r)) if parts.positional.len() >= args.len() => {
+                        let split = *r as usize;
+                        let spread = |t: &Ty<'db>| matches!(t, Ty::Spread(..));
+                        let tys = &parts.positional;
+                        let before = tys.iter().take_while(|t| !spread(t)).count();
+                        let after = tys.iter().rev().take_while(|t| !spread(t)).count();
+                        if split > before || args.len() - split > after {
+                            let origin = self.pat_origin(pat);
+                            self.solver.errors.push(TypeError::TypeNeeded { origin });
+                            for &arg in args.iter() {
+                                self.check_pat(arg, &Ty::Error);
+                            }
+                            return;
+                        }
+                        tys.clone()
+                    }
                     (_, Some(_)) => {
                         // The length isn't known, so neither is what `..` covers.
                         for &arg in args.iter() {

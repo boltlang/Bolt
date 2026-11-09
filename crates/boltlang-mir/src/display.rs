@@ -461,7 +461,7 @@ fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
 /// What made a value, as a constructor: `Point`, or `Option.Some`.
 fn ctor_name(db: &dyn Db, ctor: Ctor<'_>) -> String {
     match ctor {
-        Ctor::Tuple(_) => String::new(),
+        Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) => String::new(),
         Ctor::Struct(s) => name_or(s.item(db).name.as_ref()),
         Ctor::Variant(v) => format!("{}.{}", name_or(v.parent.item(db).name.as_ref()), v.name(db)),
     }
@@ -472,6 +472,9 @@ fn ctor_name(db: &dyn Db, ctor: Ctor<'_>) -> String {
 fn field(db: &dyn Db, ctor: Ctor<'_>, index: u32) -> String {
     match ctor {
         Ctor::Tuple(_) => index.to_string(),
+        // The `index`th positional field from the end, and a named field.
+        Ctor::TupleEnd => format!("end-{index}"),
+        Ctor::TupleNamed(n) => n.name(db).to_string(),
         Ctor::Struct(s) => format!("{}.{index}", name_or(s.item(db).name.as_ref())),
         Ctor::Variant(v) => format!("{}.{index}", v.name(db)),
     }

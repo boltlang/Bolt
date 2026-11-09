@@ -22,6 +22,9 @@ pub struct TyVar(pub u32);
 /// variable stands for the mutability of an array, and defaults to `Imm`.
 /// An `Effect` variable stands for a row of effects, and defaults to the
 /// empty row: a function that nothing says does something does nothing.
+/// A pack variable stands for the positional or the named fields that a
+/// pack spread in a tuple gives: it becomes a [`Ty::Tuple`] of their types,
+/// or a [`Ty::Record`] of the named ones.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum VarKind {
     General,
@@ -29,6 +32,27 @@ pub enum VarKind {
     Float,
     Mutability,
     Effect,
+    PositionalPack,
+    NamedPack,
+}
+
+/// Which fields of a tuple a [`Ty::Spread`] stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum PackHalf {
+    Positional,
+    Named,
+}
+
+/// The parts of a tuple type, as [`Ty::tuple_parts`] gives them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TupleParts<'db> {
+    /// The positional fields, with spreads of positional packs among them.
+    pub positional: Vec<Ty<'db>>,
+    /// The named fields, in the order of their names.
+    pub named: Vec<(Name, Ty<'db>)>,
+    /// The named packs spread in it.
+    pub rests: Vec<Ty<'db>>,
+    pub mutability: Ty<'db>,
 }
 
 /// An effect in a row, with its arguments, like `State[i32]`.
@@ -99,9 +123,18 @@ pub enum Ty<'db> {
     Tuple(Box<[Ty<'db>]>, Box<Ty<'db>>),
     /// A tuple with named fields, like `(i32, x: i32)`: its positional
     /// fields, its named fields in the order of their names, and its
-    /// mutability, as for a tuple. There's always a named field: a tuple
-    /// without one is a [`Ty::Tuple`], so that each type has one form.
+    /// mutability, as for a tuple. It has a named field, or a pack of them
+    /// among its positional ones, like `(**R)`: a tuple without either is
+    /// a [`Ty::Tuple`], so that each type has one form.
     Record(Box<[Ty<'db>]>, Box<[(Name, Ty<'db>)]>, Box<Ty<'db>>),
+    /// Among the positional fields of a tuple, any number of fields that a
+    /// pack stands for: positional ones, like the `*Ts` of `(T, *Ts)`, or
+    /// named ones, like the `**R` of `(x: i32, **R)`, which come after the
+    /// positional fields. The pack is a parameter, a variable or a bound
+    /// variable: one that's solved is spliced in, since a solved
+    /// positional pack is a [`Ty::Tuple`] of its types, and a solved named
+    /// one a [`Ty::Record`] of its fields.
+    Spread(PackHalf, Box<Ty<'db>>),
     /// An array: its mutability, then the type of its elements. The
     /// mutability is [`Ty::Mutability`], a variable, a parameter, or the
     /// error type. Lengths aren't checked yet.
@@ -284,23 +317,100 @@ impl<'db> Ty<'db> {
     /// A tuple of `tys`. The unit type is always `Imm`, so that it has
     /// one form.
     pub fn tuple(tys: Box<[Ty<'db>]>, mutability: Ty<'db>) -> Self {
+        if tys.iter().any(|t| matches!(t, Ty::Spread(..))) {
+            return Ty::record(tys, Vec::new(), mutability);
+        }
         let mutability = if tys.is_empty() { Ty::Mutability(Mutability::Imm) } else { mutability };
         Ty::Tuple(tys, Box::new(mutability))
     }
 
     /// A tuple with the positional fields `tys` and the named fields
-    /// `named`, which have different names. Without named fields, it's a
-    /// tuple.
+    /// `named`. Without named fields, or spreads of named packs, it's a
+    /// tuple. A spread of a pack that's solved is spliced in, and a field
+    /// given twice that way is kept twice, for unification to reject.
     pub fn record(
         tys: Box<[Ty<'db>]>,
         mut named: Vec<(Name, Ty<'db>)>,
         mutability: Ty<'db>,
     ) -> Self {
-        if named.is_empty() {
-            return Ty::tuple(tys, mutability);
+        let mut positional = Vec::new();
+        let mut rests = Vec::new();
+        let mut todo: Vec<Ty<'db>> = tys.into_vec();
+        todo.reverse();
+        while let Some(t) = todo.pop() {
+            match t {
+                Ty::Spread(PackHalf::Positional, pack) => match *pack {
+                    Ty::Tuple(tys, _) => todo.extend(tys.into_vec().into_iter().rev()),
+                    // What's unknown because of an error.
+                    Ty::Error => {}
+                    pack => positional.push(Ty::Spread(PackHalf::Positional, Box::new(pack))),
+                },
+                Ty::Spread(PackHalf::Named, pack) => match *pack {
+                    Ty::Tuple(tys, _) if tys.is_empty() => {}
+                    Ty::Record(tys, fields, _) => {
+                        named.extend(fields.into_vec());
+                        todo.extend(tys.into_vec().into_iter().rev());
+                    }
+                    Ty::Error => {}
+                    pack => rests.push(Ty::Spread(PackHalf::Named, Box::new(pack))),
+                },
+                t => positional.push(t),
+            }
+        }
+        if named.is_empty() && rests.is_empty() {
+            let mutability =
+                if positional.is_empty() { Ty::Mutability(Mutability::Imm) } else { mutability };
+            return Ty::Tuple(positional.into(), Box::new(mutability));
         }
         named.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
-        Ty::Record(tys, named.into(), Box::new(mutability))
+        positional.extend(rests);
+        Ty::Record(positional.into(), named.into(), Box::new(mutability))
+    }
+
+    /// The parts of a tuple type: its positional fields, with the spreads
+    /// of positional packs among them, its named fields, the named packs
+    /// spread in it, and its mutability. `None` for other types.
+    pub fn tuple_parts(&self) -> Option<TupleParts<'db>> {
+        let (tys, named, mutability): (&[Ty<'db>], &[(Name, Ty<'db>)], _) = match self {
+            Ty::Tuple(tys, m) => (tys, &[], m),
+            Ty::Record(tys, named, m) => (tys, named, m),
+            _ => return None,
+        };
+        let mut parts = TupleParts {
+            positional: Vec::new(),
+            named: named.to_vec(),
+            rests: Vec::new(),
+            mutability: (**mutability).clone(),
+        };
+        for t in tys {
+            match t {
+                Ty::Spread(PackHalf::Named, pack) => parts.rests.push((**pack).clone()),
+                t => parts.positional.push(t.clone()),
+            }
+        }
+        Some(parts)
+    }
+
+    /// The tuple of `parts`.
+    pub fn from_parts(parts: TupleParts<'db>) -> Self {
+        let mut tys = parts.positional;
+        tys.extend(parts.rests.into_iter().map(|r| Ty::Spread(PackHalf::Named, Box::new(r))));
+        Ty::record(tys.into(), parts.named, parts.mutability)
+    }
+
+    /// Whether this is the spread of a pack, as a field of a tuple.
+    pub fn is_spread(&self) -> bool {
+        matches!(self, Ty::Spread(..))
+    }
+
+    /// Whether this is a tuple with a pack spread in it, like `(T, *Ts)`.
+    pub fn has_spread(&self) -> bool {
+        match self {
+            Ty::Tuple(tys, _) | Ty::Record(tys, ..) => {
+                tys.iter().any(|t| matches!(t, Ty::Spread(..)))
+            }
+            _ => false,
+        }
     }
 
     pub fn array(mutability: Ty<'db>, element: Ty<'db>) -> Self {
@@ -412,7 +522,7 @@ impl<'db> Ty<'db> {
                 rest.iter().for_each(f);
             }
             Ty::Assoc(_, args) => args.iter().for_each(f),
-            Ty::Imm(ty) => f(ty),
+            Ty::Imm(ty) | Ty::Spread(_, ty) => f(ty),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Host(_)
@@ -444,11 +554,13 @@ impl<'db> Ty<'db> {
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
             Ty::Tuple(tys, mutability) => Ty::tuple(fold_all(tys, f), mutability.fold(f)),
-            Ty::Record(tys, named, mutability) => Ty::Record(
+            // A pack can become what it stands for, which is spliced in.
+            Ty::Record(tys, named, mutability) => Ty::record(
                 fold_all(tys, f),
                 named.iter().map(|(n, t)| (n.clone(), t.fold(f))).collect(),
-                Box::new(mutability.fold(f)),
+                mutability.fold(f),
             ),
+            Ty::Spread(half, pack) => Ty::Spread(*half, Box::new(pack.fold(f))),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret, mutability, effects) => Ty::Fn(
                 fold_all(params, f),
@@ -796,23 +908,27 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 }
                 f.write_str("(")?;
                 list(f, tys)?;
-                if tys.len() == 1 {
+                // `(A,)`, but `(*Ts)`, which isn't one field.
+                if tys.len() == 1 && !matches!(tys[0], Ty::Spread(..)) {
                     f.write_str(",")?;
                 }
                 f.write_str(")")
             }
+            // The spreads of named packs after the named fields.
             Ty::Record(tys, named, mutability) => {
                 self.write_mutability(f, mutability)?;
-                f.write_str("(")?;
-                list(f, tys)?;
-                for (i, (name, ty)) in named.iter().enumerate() {
-                    if i > 0 || !tys.is_empty() {
-                        f.write_str(", ")?;
-                    }
-                    write!(f, "{name}: {}", show(ty))?;
-                }
-                f.write_str(")")
+                let is_rest = |t: &&Ty<'_>| matches!(t, Ty::Spread(PackHalf::Named, _));
+                let parts: Vec<String> = tys
+                    .iter()
+                    .filter(|t| !is_rest(t))
+                    .map(|t| show(t).to_string())
+                    .chain(named.iter().map(|(name, ty)| format!("{name}: {}", show(ty))))
+                    .chain(tys.iter().filter(is_rest).map(|t| show(t).to_string()))
+                    .collect();
+                write!(f, "({})", parts.join(", "))
             }
+            Ty::Spread(PackHalf::Positional, pack) => write!(f, "*{}", show(pack)),
+            Ty::Spread(PackHalf::Named, pack) => write!(f, "**{}", show(pack)),
             Ty::Array(mutability, elem) => {
                 self.write_mutability(f, mutability)?;
                 write!(f, "[{}]", show(elem))

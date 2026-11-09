@@ -552,6 +552,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     Ctor::Tuple(0) => Ok(None),
                     Ctor::Tuple(_) | Ctor::Struct(_) => self.construct(e, 0, values),
                     Ctor::Variant(v) => self.variant(e, *v, values),
+                    Ctor::TupleEnd | Ctor::TupleNamed(_) => {
+                        Err(ErrorKind::unsupported("this tuple"))
+                    }
                 }
             }
             ExprKind::Array { elems } => {
@@ -574,6 +577,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             }
             ExprKind::Field { base, ctor, index } => {
                 let t = self.mono(*base)?;
+                let (ctor, index) = &tuple_field(self.cx.db, &t, *ctor, *index)?;
                 let obj = val!(self.expr(*base));
                 // The `x` of a `Some(x)` that's a `nullable host`.
                 if self.nullable_host(&t) {
@@ -1238,8 +1242,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 Some(LocalVal::Value(None)) => return self.expr(value).map(|_| ()),
                 _ => return Err(ErrorKind::unsupported("assigning to this local")),
             },
-            MirPlace::Field { base, index, .. } => {
+            MirPlace::Field { base, ctor, index } => {
                 let t = self.mono(*base)?;
+                let (_, index) = &tuple_field(self.cx.db, &t, *ctor, *index)?;
                 let obj = self.expr(*base)?;
                 if self.ended() {
                     return Ok(());
@@ -1630,6 +1635,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             Place::Field { of, ctor, index } => {
                 let obj = self.place(l, of, env)?;
                 let of_ty = self.place_tys[of as usize].clone();
+                let (ctor, index) = tuple_field(l.cx.db, &of_ty, ctor, index)?;
                 // The `x` of a `Some(x)` that's a `nullable host`.
                 if l.nullable_host(&of_ty) {
                     let obj = obj.ok_or_else(|| ErrorKind::unsupported("this host value"))?;
@@ -1642,7 +1648,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                 };
                 let c = match ctor {
                     Ctor::Variant(v) => v.index,
-                    Ctor::Tuple(_) | Ctor::Struct(_) => 0,
+                    Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) | Ctor::Struct(_) => 0,
                 };
                 // A field of a type with no values is none.
                 match (obj, l.cty(&self.place_tys[p as usize].clone())?) {
@@ -1906,6 +1912,36 @@ fn successors(node: &Node<'_>) -> Vec<NodeId> {
     }
 }
 
+/// The field that `ctor` and `index` name in a value of type `t`, as a
+/// field at an index: one of a tuple named by its name, or by where it is
+/// from the end of the positional fields, which only monomorphization
+/// knows, is at the place the tuple has it.
+fn tuple_field<'db>(
+    db: &'db dyn boltlang_base_db::Db,
+    t: &MonoTy<'db>,
+    ctor: Ctor<'db>,
+    index: u32,
+) -> R<(Ctor<'db>, u32)> {
+    if !matches!(ctor, Ctor::TupleEnd | Ctor::TupleNamed(_)) {
+        return Ok((ctor, index));
+    }
+    let (elems, names): (&[MonoTy<'db>], &[boltlang_hir_def::Name]) = match t {
+        MonoTy::Tuple(elems, _) => (elems, &[]),
+        MonoTy::Record(elems, names, _) => (elems, names),
+        _ => return Err(ErrorKind::unsupported("a field of this type")),
+    };
+    let positional = elems.len() - names.len();
+    let missing = || ErrorKind::unsupported("a field the tuple doesn't have");
+    let at = match ctor {
+        Ctor::TupleEnd => positional.checked_sub(1 + index as usize).ok_or_else(missing)?,
+        Ctor::TupleNamed(name) => {
+            positional + names.iter().position(|n| n == name.name(db)).ok_or_else(missing)?
+        }
+        _ => unreachable!(),
+    };
+    Ok((Ctor::Tuple(elems.len() as u32), at as u32))
+}
+
 /// The type of field `index` of a value of type `t` made by `ctor`.
 fn field_ty<'db>(
     l: &Lower<'_, '_, 'db>,
@@ -1914,6 +1950,7 @@ fn field_ty<'db>(
     index: u32,
 ) -> R<MonoTy<'db>> {
     let unknown = |_| ErrorKind::unsupported("a field whose type isn't known");
+    let (ctor, index) = tuple_field(l.cx.db, t, ctor, index)?;
     let fields = match (ctor, t) {
         (Ctor::Tuple(_), MonoTy::Tuple(elems, _) | MonoTy::Record(elems, ..)) => elems.to_vec(),
         (Ctor::Struct(s), MonoTy::Adt(_, args, muts, own)) => {

@@ -7,7 +7,9 @@
 
 use boltlang_hir_def::builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType};
 
-use crate::ty::{Mutability, NumberKind, Ty, TyVar, VarKind};
+use boltlang_hir_def::Name;
+
+use crate::ty::{Mutability, NumberKind, PackHalf, TupleParts, Ty, TyVar, VarKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnifyError<'db> {
@@ -222,6 +224,15 @@ impl<'db> Unifier<'db> {
                 Ok(())
             }
             (Ty::Var(var), ty) | (ty, Ty::Var(var)) => self.bind(*var, ty),
+            // A tuple with a pack spread in it: its fields are matched with
+            // the other's, and the packs take what's left.
+            (x, y) if (x.has_spread() || y.has_spread()) && x.tuple_parts().is_some() => {
+                match (self.resolve(x).tuple_parts(), self.resolve(y).tuple_parts()) {
+                    (Some(xp), Some(yp)) => self.unify_tuples(xp, yp, &a, &b),
+                    _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),
+                }
+            }
+            (Ty::Spread(h1, x), Ty::Spread(h2, y)) if h1 == h2 => self.unify(x, y),
             (Ty::Adt(x, xs, ms, m), Ty::Adt(y, ys, ns, n)) if x == y && xs.len() == ys.len() => {
                 self.unify_all(xs, ys)?;
                 self.unify_all(ms, ns)?;
@@ -305,6 +316,110 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// Unify two tuples with packs spread in them. Their positional fields
+    /// are matched from the start and from the end, until a spread; what's
+    /// left on one side is what a single pack variable on the other stands
+    /// for. Their named fields are matched by name: a named pack variable
+    /// on one side takes the fields only the other has, and when both have
+    /// one, each takes the other's fields and a new variable for the rest.
+    /// What can be matched in more than one way, like `(*A, *B)` with
+    /// `(i32, Bool)`, is a mismatch.
+    fn unify_tuples(
+        &mut self,
+        x: TupleParts<'db>,
+        y: TupleParts<'db>,
+        a: &Ty<'db>,
+        b: &Ty<'db>,
+    ) -> Result<(), UnifyError<'db>> {
+        let mismatch = || UnifyError::Mismatch(a.clone(), b.clone());
+        self.unify(&x.mutability, &y.mutability)?;
+        // Positional fields.
+        let is_spread = |t: &Ty<'db>| matches!(t, Ty::Spread(..));
+        let (mut xs, mut ys) = (&x.positional[..], &y.positional[..]);
+        while let (Some(p), Some(q)) = (xs.first(), ys.first()) {
+            if is_spread(p) || is_spread(q) {
+                break;
+            }
+            self.unify(p, q)?;
+            (xs, ys) = (&xs[1..], &ys[1..]);
+        }
+        while let (Some(p), Some(q)) = (xs.last(), ys.last()) {
+            if is_spread(p) || is_spread(q) {
+                break;
+            }
+            self.unify(p, q)?;
+            (xs, ys) = (&xs[..xs.len() - 1], &ys[..ys.len() - 1]);
+        }
+        match (xs, ys) {
+            ([], []) => {}
+            ([Ty::Spread(_, p)], [Ty::Spread(_, q)]) => self.unify(p, q)?,
+            ([Ty::Spread(_, p)], rest) | (rest, [Ty::Spread(_, p)])
+                if matches!(self.shallow_resolve(p), Ty::Var(_)) =>
+            {
+                let pack = Ty::tuple(rest.into(), Ty::Mutability(Mutability::Imm));
+                self.unify(p, &pack)?;
+            }
+            // The same layout, like `(*As, *Bs)` on both sides.
+            (xs, ys)
+                if xs.len() == ys.len()
+                    && xs.iter().zip(ys).all(|(p, q)| is_spread(p) == is_spread(q)) =>
+            {
+                self.unify_all(xs, ys)?;
+            }
+            _ => return Err(mismatch()),
+        }
+        // Named fields, each name once.
+        let twice = |named: &[(Name, Ty<'db>)]| named.windows(2).any(|w| w[0].0 == w[1].0);
+        if twice(&x.named) || twice(&y.named) {
+            return Err(mismatch());
+        }
+        let mut only_x = Vec::new();
+        for (name, t) in &x.named {
+            match y.named.iter().find(|(n, _)| n == name) {
+                Some((_, u)) => self.unify(t, u)?,
+                None => only_x.push((name.clone(), t.clone())),
+            }
+        }
+        let only_y: Vec<_> =
+            y.named.iter().filter(|(n, _)| !x.named.iter().any(|(m, _)| m == n)).cloned().collect();
+        let fields = |solver: &Self, fields: Vec<(Name, Ty<'db>)>, rests: &[Ty<'db>]| {
+            let _ = solver;
+            let rests = rests.iter().map(|r| Ty::Spread(PackHalf::Named, Box::new(r.clone())));
+            Ty::record(rests.collect(), fields, Ty::Mutability(Mutability::Imm))
+        };
+        let is_var = |s: &Self, t: &Ty<'db>| matches!(s.shallow_resolve(t), Ty::Var(_));
+        match (&x.rests[..], &y.rests[..]) {
+            ([], []) if only_x.is_empty() && only_y.is_empty() => Ok(()),
+            ([r], []) if is_var(self, r) && only_x.is_empty() => {
+                let pack = fields(self, only_y, &[]);
+                self.unify(r, &pack)
+            }
+            ([], [r]) if is_var(self, r) && only_y.is_empty() => {
+                let pack = fields(self, only_x, &[]);
+                self.unify(r, &pack)
+            }
+            ([r], [s]) if self.shallow_resolve(r) == self.shallow_resolve(s) => {
+                if only_x.is_empty() && only_y.is_empty() { Ok(()) } else { Err(mismatch()) }
+            }
+            ([r], [s]) if is_var(self, r) && is_var(self, s) => {
+                let rest = self.new_var(VarKind::NamedPack);
+                let to_r = fields(self, only_y, std::slice::from_ref(&rest));
+                let to_s = fields(self, only_x, std::slice::from_ref(&rest));
+                self.unify(r, &to_r)?;
+                self.unify(s, &to_s)
+            }
+            ([r], [s]) if is_var(self, r) && only_x.is_empty() => {
+                let pack = fields(self, only_y, std::slice::from_ref(s));
+                self.unify(r, &pack)
+            }
+            ([r], [s]) if is_var(self, s) && only_y.is_empty() => {
+                let pack = fields(self, only_x, std::slice::from_ref(r));
+                self.unify(s, &pack)
+            }
+            _ => Err(mismatch()),
+        }
+    }
+
     fn unify_all(&mut self, xs: &[Ty<'db>], ys: &[Ty<'db>]) -> Result<(), UnifyError<'db>> {
         xs.iter().zip(ys).try_for_each(|(x, y)| self.unify(x, y))
     }
@@ -320,6 +435,11 @@ impl<'db> Unifier<'db> {
             VarKind::Mutability => matches!(ty, Ty::Mutability(_) | Ty::Param(_) | Ty::Bound(_)),
             // The same for a row, which can also be the error type.
             VarKind::Effect => matches!(ty, Ty::Row(..) | Ty::Param(_) | Ty::Bound(_) | Ty::Error),
+            // A pack is the tuple of what it stands for.
+            VarKind::PositionalPack | VarKind::NamedPack => matches!(
+                ty,
+                Ty::Tuple(..) | Ty::Record(..) | Ty::Param(_) | Ty::Bound(_) | Ty::Error
+            ),
         };
         if !fits {
             return Err(UnifyError::Mismatch(Ty::Var(var), ty.clone()));

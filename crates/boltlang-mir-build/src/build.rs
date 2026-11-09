@@ -34,7 +34,7 @@ use boltlang_mir::{
     LocalDecl, OpArms, Pattern, Place, Stmt,
 };
 use boltlang_pattern::decision::{
-    BodyDecisions, Ctor, Decision, OperationDecision, body_decisions,
+    BodyDecisions, Ctor, Decision, FieldName, OperationDecision, body_decisions,
 };
 
 use crate::lambda::body_lambdas;
@@ -570,6 +570,11 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             match item {
                 TupleItem::Positional(_) => positional.push(local(self)),
                 TupleItem::Named(name, _) => named.push((name.clone(), local(self))),
+                // Where the fields of a pack are isn't known before
+                // monomorphization.
+                TupleItem::Spread(..) if ty.has_spread() => {
+                    return self.unsupported(e, "a spread of a tuple with a pack in it");
+                }
                 TupleItem::Spread(spread, _) => {
                     let (tys, fields): (&[Ty<'db>], &[(Name, Ty<'db>)]) = match &ty {
                         Ty::Tuple(tys, _) => (tys, &[]),
@@ -610,6 +615,24 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             Ty::Tuple(tys, _) => {
                 let i = name.as_str().parse::<u32>().ok()?;
                 Some((Ctor::Tuple(tys.len() as u32), i))
+            }
+            // With a pack spread in it, a positional field is only known
+            // before the first spread, and a named one is found by its name
+            // once monomorphization knows the pack.
+            t if t.has_spread() => {
+                let parts = t.tuple_parts()?;
+                match name.as_str().parse::<usize>() {
+                    Ok(i) => {
+                        let fixed = parts.positional.iter().take_while(|t| !t.is_spread());
+                        (i < fixed.count()).then_some((Ctor::Tuple(0), i as u32))
+                    }
+                    // After the positional fields, whose number isn't known,
+                    // or among those of a named pack.
+                    Err(_) => {
+                        let field = FieldName::new(self.db, name.clone());
+                        Some((Ctor::TupleNamed(field), 0))
+                    }
+                }
             }
             // `t.0` or `t.x`, where the named fields come after the
             // positional ones, by name.

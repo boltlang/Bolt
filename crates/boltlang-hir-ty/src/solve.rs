@@ -23,7 +23,7 @@ use crate::{
         struct_args, subst_params, with_superclasses,
     },
     rows::RowConstraint,
-    ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
+    ty::{AdtId, GenericParamId, Mutability, PackHalf, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
 
@@ -106,6 +106,15 @@ pub struct SpreadConstraint<'db> {
     pub parts: Vec<TuplePart<'db>>,
     pub mutability: Ty<'db>,
     pub result: Ty<'db>,
+}
+
+/// That the named pack `pack` doesn't give a field with any of `names`,
+/// like the `R` of `(id: i32, **R)`: once it's known, a field it gives
+/// with one of them would be there twice.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LacksConstraint<'db> {
+    pub pack: Ty<'db>,
+    pub names: Vec<Name>,
 }
 
 /// A field that a tuple pattern names: the `i`th of its positional ones,
@@ -275,6 +284,8 @@ pub enum Constraint<'db> {
     Spread { constraint: SpreadConstraint<'db>, origin: Origin<'db> },
     /// The type is a tuple with the fields a pattern names.
     TuplePat { constraint: TuplePatConstraint<'db>, origin: Origin<'db> },
+    /// A named pack doesn't give fields with these names.
+    Lacks { constraint: LacksConstraint<'db>, origin: Origin<'db> },
     /// The type is an associated type of a class.
     Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
     /// Something is at most a mutability.
@@ -439,6 +450,7 @@ pub struct Solver<'db> {
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_spreads: Vec<(SpreadConstraint<'db>, Origin<'db>)>,
     pending_tuple_pats: Vec<(TuplePatConstraint<'db>, Origin<'db>)>,
+    pending_lacks: Vec<(LacksConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
@@ -478,6 +490,7 @@ impl<'db> Solver<'db> {
             pending_fields: Vec::new(),
             pending_spreads: Vec::new(),
             pending_tuple_pats: Vec::new(),
+            pending_lacks: Vec::new(),
             pending_assoc: Vec::new(),
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
@@ -623,6 +636,11 @@ impl<'db> Solver<'db> {
                     self.pending_tuple_pats.push((constraint, origin));
                 }
             }
+            Constraint::Lacks { constraint, origin } => {
+                if !self.solve_lacks(&constraint, origin) {
+                    self.pending_lacks.push((constraint, origin));
+                }
+            }
             // Solved right away when possible too.
             Constraint::Assoc { constraint, origin } => {
                 if !self.solve_assoc(&constraint, origin) {
@@ -725,23 +743,92 @@ impl<'db> Solver<'db> {
         true
     }
 
+    /// Add a [`LacksConstraint`] for each named pack spread in a tuple in
+    /// `ty` with named fields, like the `R` of `(id: i32, **R)`.
+    pub fn require_lacks(&mut self, ty: &Ty<'db>, origin: Origin<'db>) {
+        let mut found = Vec::new();
+        fn walk<'db>(ty: &Ty<'db>, found: &mut Vec<LacksConstraint<'db>>) {
+            if let Some(parts) = ty.tuple_parts()
+                && !parts.named.is_empty()
+            {
+                let names: Vec<Name> = parts.named.iter().map(|(n, _)| n.clone()).collect();
+                for pack in parts.rests {
+                    found.push(LacksConstraint { pack, names: names.clone() });
+                }
+            }
+            ty.walk_children(|t| walk(t, found));
+        }
+        walk(ty, &mut found);
+        for constraint in found {
+            self.add(Constraint::Lacks { constraint, origin });
+        }
+    }
+
+    /// Check a [`LacksConstraint`] once its pack is known. A pack that's a
+    /// parameter is assumed to lack the names, as its function says.
+    fn solve_lacks(&mut self, c: &LacksConstraint<'db>, origin: Origin<'db>) -> bool {
+        let pack = self.unifier.resolve(&c.pack);
+        if matches!(pack, Ty::Var(_)) {
+            return false;
+        }
+        if let Some(parts) = pack.tuple_parts() {
+            for (name, _) in &parts.named {
+                if c.names.contains(name) {
+                    self.errors.push(TypeError::DuplicateField { origin, name: name.clone() });
+                }
+            }
+            for rest in parts.rests {
+                let constraint = LacksConstraint { pack: rest, names: c.names.clone() };
+                self.add(Constraint::Lacks { constraint, origin });
+            }
+        }
+        true
+    }
+
     /// Match the fields a tuple pattern with `..` names against its type,
     /// once that's known. Returns `false` if it has to wait.
     fn solve_tuple_pat(&mut self, c: &TuplePatConstraint<'db>, origin: Origin<'db>) -> bool {
-        let (tys, named) = match self.unifier.shallow_resolve(&c.ty) {
-            Ty::Var(_) => return false,
-            Ty::Record(tys, named, _) => (tys.into_vec(), named.into_vec()),
-            Ty::Tuple(tys, _) => (tys.into_vec(), Vec::new()),
+        let resolved = self.unifier.shallow_resolve(&c.ty);
+        let (tys, named) = match self.unifier.resolve(&resolved).tuple_parts() {
+            _ if matches!(resolved, Ty::Var(_)) => return false,
+            Some(parts) => {
+                // A name that isn't there could still come from a named
+                // pack that's a variable.
+                let waits = parts.rests.iter().any(|r| matches!(r, Ty::Var(_)))
+                    && c.fields.iter().any(|(part, _)| {
+                        matches!(part, TuplePatPart::Named(n)
+                            if !parts.named.iter().any(|(m, _)| m == n))
+                    });
+                if waits {
+                    return false;
+                }
+                // Only the positional fields before the first spread and
+                // after the last one are known.
+                let spread = |t: &Ty<'db>| matches!(t, Ty::Spread(..));
+                let before = parts.positional.iter().take_while(|t| !spread(t)).count();
+                let after = parts.positional.iter().rev().take_while(|t| !spread(t)).count();
+                let rest = c.rest.map_or(c.positional, |r| r as usize);
+                if parts.positional.iter().any(spread)
+                    && (rest > before || c.positional - rest > after)
+                {
+                    self.errors.push(TypeError::TypeNeeded { origin });
+                    for (_, ty) in &c.fields {
+                        self.unifier.met_error(ty);
+                    }
+                    return true;
+                }
+                (parts.positional, parts.named)
+            }
             // Reported already.
-            Ty::Error | Ty::Never => {
+            None if matches!(resolved, Ty::Error | Ty::Never) => {
                 for (_, ty) in &c.fields {
                     self.unifier.met_error(ty);
                 }
                 return true;
             }
             // Not a tuple: shown as the tuple the pattern says.
-            ty => {
-                let expected = self.unifier.resolve(&ty);
+            None => {
+                let expected = self.unifier.resolve(&resolved);
                 let mut positional = Vec::new();
                 let mut named = Vec::new();
                 for (part, ty) in &c.fields {
@@ -1070,6 +1157,26 @@ impl<'db> Solver<'db> {
                 // a type parameter.
                 Ty::Var(_) => false,
                 t @ (Ty::Param(_) | Ty::Bound(_)) => self.type_assumed(&t, &bound),
+                // Each field a pack stands for, once it's known, is at most
+                // the bound; until then, the pack is like a type parameter.
+                Ty::Spread(_, pack) => match self.unifier.shallow_resolve(&pack) {
+                    Ty::Var(_) => false,
+                    p @ (Ty::Param(_) | Ty::Bound(_)) => self.type_assumed(&p, &bound),
+                    p => {
+                        if let Some(parts) = p.tuple_parts() {
+                            let fields = parts.positional.into_iter();
+                            let fields = fields.chain(parts.named.into_iter().map(|(_, t)| t));
+                            for t in fields {
+                                sub(self, Held::Type(t), &bound);
+                            }
+                            for r in parts.rests {
+                                let held = Ty::Spread(PackHalf::Named, Box::new(r));
+                                sub(self, Held::Type(held), &bound);
+                            }
+                        }
+                        true
+                    }
+                },
                 _ => true,
             },
             Held::Mutability(m) => match (self.unifier.shallow_resolve(m), &bound) {
@@ -1383,22 +1490,30 @@ impl<'db> Solver<'db> {
                     .field(&constraint.name)
                     .map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))
             }
-            Ty::Tuple(tys, mutability) => {
+            // `t.0` is a positional field, and `t.x` a named one. A
+            // positional field is only known before the first pack spread
+            // in the tuple. A named field that isn't there could still come
+            // from a named pack that's a variable.
+            Ty::Tuple(..) | Ty::Record(..) => {
+                let ty = self.unifier.resolve(&ty);
+                let parts = ty.tuple_parts().expect("a tuple");
                 if constraint.assign {
-                    self.require_mut(&ty, mutability, origin);
-                }
-                constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned())
-            }
-            // `t.0` is a positional field, and `t.x` a named one.
-            Ty::Record(tys, named, mutability) => {
-                if constraint.assign {
-                    self.require_mut(&ty, mutability, origin);
+                    self.require_mut(&ty, &parts.mutability, origin);
                 }
                 match constraint.name.as_str().parse::<usize>() {
-                    Ok(i) => tys.get(i).cloned(),
-                    Err(_) => {
-                        named.iter().find(|(n, _)| *n == constraint.name).map(|(_, t)| t.clone())
-                    }
+                    Ok(i) => parts
+                        .positional
+                        .iter()
+                        .take_while(|t| !matches!(t, Ty::Spread(..)))
+                        .nth(i)
+                        .cloned(),
+                    Err(_) => match parts.named.iter().find(|(n, _)| *n == constraint.name) {
+                        Some((_, t)) => Some(t.clone()),
+                        None if parts.rests.iter().any(|r| matches!(r, Ty::Var(_))) => {
+                            return false;
+                        }
+                        None => None,
+                    },
                 }
             }
             _ => None,
@@ -1569,6 +1684,13 @@ impl<'db> Solver<'db> {
                     progress = true;
                 } else {
                     self.pending_tuple_pats.push((constraint, origin));
+                }
+            }
+            for (constraint, origin) in std::mem::take(&mut self.pending_lacks) {
+                if self.solve_lacks(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_lacks.push((constraint, origin));
                 }
             }
             for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {

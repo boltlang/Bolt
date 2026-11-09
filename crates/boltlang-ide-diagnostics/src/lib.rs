@@ -132,6 +132,7 @@ impl DiagnosticCode {
     pub const MISSING_TYPE: Self = Self("E0255");
     pub const DUPLICATE_FIELD: Self = Self("E0256");
     pub const NOT_SPREADABLE: Self = Self("E0257");
+    pub const NOT_A_PACK: Self = Self("E0258");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -701,6 +702,13 @@ fn describe(
             (C::MISSING_FIELDS, format!("missing {noun} {list}"))
         }
         K::TypeNeeded => (C::TYPE_NEEDED, "the type of this must be known here; add a type annotation".into()),
+        K::NotAPack => (
+            C::NOT_A_PACK,
+            format!(
+                "`{source}` isn't a pack of this kind: `*` takes a pack like `*Ts`, `**` one like `**Ks`, and \
+                 `...` any of them, like `...A`"
+            ),
+        ),
         K::DuplicateField { name } => (C::DUPLICATE_FIELD, format!("the field `{name}` is given more than once")),
         K::NotSpreadable { ty } => (
             C::NOT_SPREADABLE,

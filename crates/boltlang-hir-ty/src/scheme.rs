@@ -122,6 +122,8 @@ impl<'db> Scheme<'db> {
         let kind_of =
             |p: &GenericParamId<'db>| match generic_param_kinds(db, p.def).get(p.index as usize) {
                 Some(Kind::Effect) => VarKind::Effect,
+                Some(Kind::PositionalPack) => VarKind::PositionalPack,
+                Some(Kind::NamedPack) => VarKind::NamedPack,
                 _ => VarKind::General,
             };
         let args: Vec<Ty<'db>> = self.params.iter().map(|p| solver.new_var(kind_of(p))).collect();
@@ -180,6 +182,8 @@ impl<'db> Scheme<'db> {
         // `fn retry[T, E](f: fn() -> T does E) -> T does Log + E`, becomes a
         // variable that a combination decides.
         let ty = solver.open_rows(&subst(&self.ty), origin);
+        // `(id: i32, **R)` can't get another `id` from `R`.
+        solver.require_lacks(&ty, origin);
         solver.flatten_assoc(&ty, origin)
     }
 
@@ -228,6 +232,12 @@ impl<'db> Scheme<'db> {
             .params
             .iter()
             .filter(|p| !is_hidden_param(db, **p))
+            // `...A` is shown once, by its positional half.
+            .filter(|p| {
+                let params = &p.def.generic_params(db).type_params;
+                params.get(p.index as usize).and_then(|t| t.pack)
+                    != Some(boltlang_hir_def::signatures::PackKind::AllNamed)
+            })
             .map(|p| show(&Ty::Param(*p)))
             .collect();
         forall.extend(names.bound_names().map(str::to_string));

@@ -68,11 +68,16 @@ type A = A;
    //^ error: type alias `A` refers to itself
 
 ================================================================================
-Pack parameters and rests aren't supported yet
+Pack parameters of structs aren't supported yet
 ================================================================================
-fn first[T, *Ts](t: (T, *Ts)) -> T = t.0;
-          //^^^ warning: the type checker doesn't support this yet
-                  //^^^^^^^^ warning: the type checker doesn't support this yet
+struct S[*Ts] { x: i32 }
+       //^^^ warning: the type checker doesn't support this yet
+
+================================================================================
+Only a pack can be a rest of a tuple type
+================================================================================
+fn f(x: (*i32)) = x;
+        //^^^ error: `i32` isn't a pack of this kind: `*` takes a pack like `*Ts`, `**` one like `**Ks`, and `...` any of them, like `...A`
 
 ================================================================================
 Fields of tuples

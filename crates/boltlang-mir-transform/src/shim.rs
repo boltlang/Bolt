@@ -31,7 +31,7 @@ pub fn ctor_sig<'db>(db: &'db dyn Db, ctor: Ctor<'db>) -> Option<CtorSig<'db>> {
     let def = match ctor {
         Ctor::Struct(s) => VariantDef::Struct(s),
         Ctor::Variant(v) => VariantDef::Variant(v),
-        Ctor::Tuple(_) => return None,
+        Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) => return None,
     };
     let (adt, generic) = def.adt();
     let type_params = generic.generic_params(db).type_params.len();

@@ -141,6 +141,49 @@ $$
 This is the only way polymorphism enters a body. Each use of `id` gets its
 own copy of its type, so `id(1)` and `id(True)` don't interfere.
 
+## Tuples with names and packs
+
+A tuple can have named fields after its positional ones, like
+`(i32, x: Bool)`: that's `Ty::Record`, with the named fields in the order
+of their names, so that `(x: 1, y: 2)` and `(y: 2, x: 1)` have one type. A
+tuple without named fields is a `Ty::Tuple`.
+
+A function can take any number of fields with a pack parameter: `[*Ts]`
+stands for positional fields, `[**R]` for named ones, and `[...A]` for
+both. `...A` is two parameters, its positional half and its named half, so
+the checker only has two kinds of pack, `*Pack` and `**Pack`. In a tuple
+type, a pack is a `Ty::Spread` among the positional fields, like
+`(T, *Ts)` or `(name: String, **R)`, the named ones last. At a use, a
+pack parameter becomes a pack variable, which becomes a `Ty::Tuple` of the
+types it stands for, or a `Ty::Record` of the named fields: a tuple whose
+spread is solved has them spliced in when it's rebuilt.
+
+Unifying two tuples with spreads (`Unifier::unify_tuples`):
+
+- **Positional fields** are matched from the start and from the end, until
+  a spread. What's left on one side is what a single pack variable on the
+  other stands for: `(T, *Ts)` with `(i32, Bool, u8)` makes `Ts` the
+  `(Bool, u8)`. Two spreads in the same places, like `(*As, *Bs)` on both
+  sides, are matched pairwise. Anything else, like `(*As, *Bs)` with
+  `(i32, Bool)`, could be split in more than one way, and is a mismatch, so
+  a pack must be alone where it's solved.
+- **Named fields** are matched by name. A named pack variable on one side
+  takes the fields only the other side has. When both sides have one, each
+  gets the other side's fields and a new variable for the rest, as in
+  row rewriting (Rémy, Leijen).
+
+A tuple with named fields and a named pack, like `(id: i32, **R)`, needs
+`R` not to give an `id`: instantiating a scheme adds a `Lacks` constraint
+for that, which is checked once `R` is known.
+
+What a body can do with a value whose type has a pack: pass it on, read a
+positional field before the first spread or a named field, and match it
+with `..`. Monomorphization knows each pack, so MIR reads a field after a
+spread from the end (`Ctor::TupleEnd`) and a named one by its name
+(`Ctor::TupleNamed`), which the code generator turns into indices. Spreading
+such a value, like `(...p, y: 1)` in a generic body, type-checks but isn't
+lowered yet.
+
 ## References
 
 - M. P. Jones. *Qualified Types: Theory and

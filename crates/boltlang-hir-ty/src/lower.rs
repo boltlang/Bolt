@@ -5,7 +5,7 @@ use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
-    hir::{GenericArg, MutabilityRef, Path, TupleItem, TypeRef, TypeRefId},
+    hir::{GenericArg, MutabilityRef, Path, Spread, TupleItem, TypeRef, TypeRefId},
     ids::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         StructId, TypeAliasId,
@@ -14,15 +14,16 @@ use boltlang_hir_def::{
     nameres::is_visible_from,
     resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution},
     signatures::{
-        self, FieldList, GenericParams, class_signature, const_signature, effect_signature,
-        enum_signature, function_signature, impl_signature, struct_signature, type_alias_signature,
+        self, FieldList, GenericParams, PackKind, class_signature, const_signature,
+        effect_signature, enum_signature, function_signature, impl_signature, struct_signature,
+        type_alias_signature,
     },
 };
 
 use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
     solve::{AssocConstraint, AtMostConstraint, Held},
-    ty::{AdtId, EffectTy, GenericParamId, Mutability, Ty},
+    ty::{AdtId, EffectTy, GenericParamId, Mutability, PackHalf, Ty},
 };
 
 pub(crate) fn imm<'db>() -> Ty<'db> {
@@ -94,6 +95,9 @@ pub enum LowerDiagnostic {
     RecursiveAlias(TypeRefId),
     /// Something the checker doesn't support yet, like `impl Trait`.
     Unsupported(TypeRefId),
+    /// A rest of a tuple type that isn't a pack of its kind, like the
+    /// `*i32` of `(*i32)` or the `**Ts` of `(**Ts)` for a positional `*Ts`.
+    NotAPack(TypeRefId),
     /// A field given twice in a tuple type, like `x` in `(x: i32, x: i64)`.
     DuplicateField {
         type_ref: TypeRefId,
@@ -355,14 +359,6 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let effects = effects.as_ref().map_or_else(Ty::nothing, |ts| self.lower_row(ts));
                 Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten), Box::new(effects))
             }
-            // A rest like the `*Ts` of `(T, *Ts)` needs packs, which the
-            // checker doesn't have yet.
-            TypeRef::NamedTuple(items)
-                if items.iter().any(|i| matches!(i, TupleItem::Spread(..))) =>
-            {
-                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                return (Ty::Error, None);
-            }
             // Like a tuple, its mutability is decided by where it's written.
             TypeRef::NamedTuple(items) => {
                 let mut positional = Vec::new();
@@ -381,7 +377,9 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                                 named.push((name.clone(), ty));
                             }
                         }
-                        TupleItem::Spread(..) => unreachable!("handled above"),
+                        TupleItem::Spread(spread, t) => {
+                            positional.extend(self.lower_rest(*spread, *t))
+                        }
                     }
                 }
                 Ty::record(positional.into(), named, Ty::Unwritten)
@@ -588,6 +586,42 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             .collect();
         out.resize(expected, Ty::Unwritten);
         out
+    }
+
+    /// A rest of a tuple type, like the `*Ts` of `(T, *Ts)`: the spreads of
+    /// the halves of the pack it names that it stands for. `*` takes the
+    /// positional half of `...A`, `**` the named one, and `...` both.
+    fn lower_rest(&mut self, spread: Spread, id: TypeRefId) -> Vec<Ty<'db>> {
+        let (ty, _) = self.lower_ty_kinded(id);
+        let pack = match &ty {
+            Ty::Param(p) => p.def.generic_params(self.db).type_params[p.index as usize].pack,
+            Ty::Error => return Vec::new(),
+            _ => None,
+        };
+        let half = |p: &GenericParamId<'db>, offset: u32, half: PackHalf| {
+            let param = GenericParamId { def: p.def, index: p.index + offset };
+            Ty::Spread(half, Box::new(Ty::Param(param)))
+        };
+        let Ty::Param(p) = &ty else {
+            self.diagnostics.push(LowerDiagnostic::NotAPack(id));
+            return Vec::new();
+        };
+        use PackHalf::{Named, Positional};
+        match (spread, pack) {
+            (Spread::Positional | Spread::All, Some(PackKind::Positional)) => {
+                vec![half(p, 0, Positional)]
+            }
+            (Spread::Named | Spread::All, Some(PackKind::Named)) => vec![half(p, 0, Named)],
+            (Spread::Positional, Some(PackKind::All)) => vec![half(p, 0, Positional)],
+            (Spread::Named, Some(PackKind::All)) => vec![half(p, 1, Named)],
+            (Spread::All, Some(PackKind::All)) => {
+                vec![half(p, 0, Positional), half(p, 1, Named)]
+            }
+            _ => {
+                self.diagnostics.push(LowerDiagnostic::NotAPack(id));
+                Vec::new()
+            }
+        }
     }
 
     /// A type alias, which must be given all its arguments.

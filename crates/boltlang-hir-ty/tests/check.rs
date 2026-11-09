@@ -598,6 +598,7 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
             format!("error at `{}`: `{}` isn't visible", at(*type_ref), hidden.name)
         }
         LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at(*id)),
+        LowerDiagnostic::NotAPack(id) => format!("error at `{}`: not a pack", at(*id)),
         LowerDiagnostic::DuplicateField { type_ref, name } => {
             format!("error at `{}`: {name} is given twice", at(*type_ref))
         }

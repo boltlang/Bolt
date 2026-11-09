@@ -30,7 +30,7 @@ use boltlang_hir_ty::{
     AdtId, GenericParamId, Ty,
     lower::VariantDef,
     solve::{imm_of, normalize_assoc},
-    ty::EffectTy,
+    ty::{EffectTy, PackHalf},
 };
 
 /// A mutability in an instance.
@@ -696,6 +696,46 @@ impl<'db> Subst<'_, 'db> {
         }
     }
 
+    /// A tuple type, with the packs spread in it spliced in: a positional
+    /// pack's slot is a tuple of its types, and a named pack's a tuple of
+    /// its named fields.
+    fn tuple(
+        &self,
+        tys: &[Ty<'db>],
+        named: &[(Name, Ty<'db>)],
+        own: &Ty<'db>,
+    ) -> Result<MonoTy<'db>, TyError> {
+        let mut positional = Vec::new();
+        let mut fields = Vec::new();
+        for (name, t) in named {
+            fields.push((name.clone(), self.ty(t)?));
+        }
+        for t in tys {
+            match t {
+                Ty::Spread(PackHalf::Positional, pack) => match self.ty(pack)? {
+                    MonoTy::Tuple(tys, _) => positional.extend(tys.into_vec()),
+                    _ => return Err(TyError::Unknown),
+                },
+                Ty::Spread(PackHalf::Named, pack) => match self.ty(pack)? {
+                    MonoTy::Tuple(tys, _) if tys.is_empty() => {}
+                    MonoTy::Record(tys, names, _) if tys.len() == names.len() => {
+                        fields.extend(names.iter().cloned().zip(tys.into_vec()));
+                    }
+                    _ => return Err(TyError::Unknown),
+                },
+                t => positional.push(self.ty(t)?),
+            }
+        }
+        if fields.is_empty() {
+            let own = if positional.is_empty() { MonoMut::Imm } else { self.mutability(own)? };
+            return Ok(MonoTy::Tuple(positional.into(), own));
+        }
+        fields.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        let names = fields.iter().map(|(n, _)| n.clone()).collect();
+        positional.extend(fields.into_iter().map(|(_, t)| t));
+        Ok(MonoTy::Record(positional.into(), names, self.mutability(own)?))
+    }
+
     pub fn ty(&self, ty: &Ty<'db>) -> Result<MonoTy<'db>, TyError> {
         let all = |tys: &[Ty<'db>]| -> Result<Box<[MonoTy<'db>]>, TyError> {
             tys.iter().map(|t| self.ty(t)).collect()
@@ -720,15 +760,10 @@ impl<'db> Subst<'_, 'db> {
                 ms.iter().map(|m| self.mutability(m)).collect::<Result<_, _>>()?,
                 self.mutability(own)?,
             ),
-            Ty::Tuple(tys, own) => MonoTy::Tuple(all(tys)?, self.mutability(own)?),
-            Ty::Record(tys, named, own) => {
-                let mut fields = all(tys)?.into_vec();
-                for (_, t) in named.iter() {
-                    fields.push(self.ty(t)?);
-                }
-                let names = named.iter().map(|(n, _)| n.clone()).collect();
-                MonoTy::Record(fields.into(), names, self.mutability(own)?)
-            }
+            Ty::Tuple(tys, own) => self.tuple(tys, &[], own)?,
+            Ty::Record(tys, named, own) => self.tuple(tys, named, own)?,
+            // Only inside a tuple, which splices it.
+            Ty::Spread(..) => return Err(TyError::Unknown),
             Ty::Array(own, elem) => MonoTy::Array(self.mutability(own)?, Box::new(self.ty(elem)?)),
             Ty::Fn(params, ret, own, effects) => MonoTy::Fn(
                 all(params)?,

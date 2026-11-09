@@ -188,7 +188,7 @@ impl fmt::Display for DisplayInstance<'_> {
                         let parent = v.parent.item(db).name.as_ref().map_or("?", |n| n.as_str());
                         Some(boltlang_hir_def::Name::new(format!("{parent}.{}", v.name(db))))
                     }
-                    Ctor::Tuple(_) => None,
+                    Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) => None,
                 };
                 write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
                 return self.args(f);

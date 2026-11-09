@@ -207,6 +207,8 @@ pub enum DiagnosticKind<'db> {
     },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
+    /// A rest of a tuple type that isn't a pack of its kind, like `*i32`.
+    NotAPack,
     /// A field given twice in a tuple, like `x` in `(x: 1, x: 2)`.
     DuplicateField {
         name: Name,
@@ -717,11 +719,16 @@ impl<'db> Collector<'db> {
         }
     }
 
-    /// Each pack parameter, like the `*Ts` of `fn f[*Ts]`, which the
-    /// checker doesn't support yet.
+    /// Each pack parameter, like the `*Ts` of `struct S[*Ts]`, of
+    /// something other than a function, which the checker doesn't support
+    /// yet.
     fn unsupported_syntax(&mut self) {
         use boltlang_syntax::ast::{Node as _, PackParam};
-        let packs = self.root.descendants().filter_map(PackParam::cast);
+        let on_function = |p: &PackParam| {
+            let item = p.syntax().parent().and_then(|list| list.parent());
+            item.is_some_and(|i| i.kind() == SyntaxKind::FUNC_DECL)
+        };
+        let packs = self.root.descendants().filter_map(PackParam::cast).filter(|p| !on_function(p));
         let ranges: Vec<TextRange> = packs.map(|p| p.syntax().text_range()).collect();
         for range in ranges {
             self.push(Some(range), DiagnosticKind::Unsupported);
@@ -1477,6 +1484,7 @@ impl<'db> Collector<'db> {
                     },
                 ),
                 LowerDiagnostic::NotAType(id) => (*id, DiagnosticKind::NotAType),
+                LowerDiagnostic::NotAPack(id) => (*id, DiagnosticKind::NotAPack),
                 LowerDiagnostic::DuplicateField { type_ref, name } => {
                     (*type_ref, DiagnosticKind::DuplicateField { name: name.clone() })
                 }

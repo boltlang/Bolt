@@ -36,6 +36,7 @@ use boltlang_hir_ty::{
     lower::{ClassConstraint, generic_predicates, impl_header},
     scheme::generic_param_ids,
     solve::visible_impls,
+    ty::TupleParts,
 };
 
 pub use boltlang_mir::ClassItem;
@@ -806,6 +807,12 @@ pub(crate) fn bind<'db>(
         }
         return;
     }
+    if pattern.has_spread()
+        && let Some(parts) = pattern.tuple_parts()
+    {
+        bind_tuple(params, &parts, ty, found);
+        return;
+    }
     match (pattern, ty) {
         (Ty::Adt(a, xs, ms, own), MonoTy::Adt(b, ys, ns, n)) if a == b => {
             all(xs, ys, found);
@@ -852,6 +859,78 @@ pub(crate) fn bind<'db>(
 /// effects `pattern` names. With several, like `E + F`, each gets all of
 /// it, which is more than it needs, and still fits. A row that's matched
 /// more than once gets all of what it's matched with.
+/// Match a tuple type with packs spread in it, like `(T, *Ts, x: i32,
+/// **R)`, with a use's tuple: the positional fields from both ends, then
+/// the positional pack, if there's one, gets the ones in between, as a
+/// tuple, and the named pack, if there's one, the named fields the type
+/// doesn't name.
+fn bind_tuple<'db>(
+    params: &[GenericParamId<'db>],
+    parts: &TupleParts<'db>,
+    ty: &MonoTy<'db>,
+    found: &mut [Option<Slot<'db>>],
+) {
+    let (elems, names, own): (&[MonoTy<'db>], &[Name], MonoMut) = match ty {
+        MonoTy::Tuple(elems, own) => (elems, &[], *own),
+        MonoTy::Record(elems, names, own) => (elems, names, *own),
+        _ => return,
+    };
+    let set = |pack: &Ty<'db>, value: MonoTy<'db>, found: &mut [Option<Slot<'db>>]| {
+        let i = match pack {
+            Ty::Param(p) => params.iter().position(|q| q == p),
+            Ty::Bound(i) => Some(params.len() + *i as usize),
+            _ => None,
+        };
+        if let Some(slot) = i.and_then(|i| found.get_mut(i)) {
+            slot.get_or_insert(Slot::Ty(value));
+        }
+    };
+    let split = elems.len() - names.len();
+    let (mut tys, named) = (&elems[..split], &elems[split..]);
+    let mut pats = &parts.positional[..];
+    while let (Some(p), Some(t)) = (pats.first(), tys.first()) {
+        if p.is_spread() {
+            break;
+        }
+        bind(params, p, t, found);
+        (pats, tys) = (&pats[1..], &tys[1..]);
+    }
+    while let (Some(p), Some(t)) = (pats.last(), tys.last()) {
+        if p.is_spread() {
+            break;
+        }
+        bind(params, p, t, found);
+        (pats, tys) = (&pats[..pats.len() - 1], &tys[..tys.len() - 1]);
+    }
+    if let [Ty::Spread(_, pack)] = pats {
+        set(pack, MonoTy::Tuple(tys.into(), MonoMut::Imm), found);
+    }
+    let mut rest = Vec::new();
+    for (name, t) in names.iter().zip(named) {
+        match parts.named.iter().find(|(n, _)| n == name) {
+            Some((_, p)) => bind(params, p, t, found),
+            None => rest.push((name.clone(), t.clone())),
+        }
+    }
+    if let [pack] = &parts.rests[..] {
+        let value = if rest.is_empty() {
+            MonoTy::unit()
+        } else {
+            let names = rest.iter().map(|(n, _)| n.clone()).collect();
+            MonoTy::Record(rest.into_iter().map(|(_, t)| t).collect(), names, MonoMut::Imm)
+        };
+        set(pack, value, found);
+    }
+    if let Some(i) = match &parts.mutability {
+        Ty::Param(p) => params.iter().position(|q| q == p),
+        Ty::Bound(i) => Some(params.len() + *i as usize),
+        _ => None,
+    } && let Some(slot) = found.get_mut(i)
+    {
+        slot.get_or_insert(Slot::Mut(own));
+    }
+}
+
 fn bind_row<'db>(
     params: &[GenericParamId<'db>],
     pattern: &Ty<'db>,

@@ -131,7 +131,7 @@ pub fn split<'db>(
         | Ty::Number(_)
         | Ty::Never
         | Ty::Error => {}
-        Ty::Param(_) | Ty::Var(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => {
+        Ty::Param(_) | Ty::Var(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Spread(..) => {
             push(out, Held::Type(ty.clone()), bound)
         }
     }

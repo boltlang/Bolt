@@ -22,7 +22,7 @@ use boltlang_hir_def::{
     item_tree::AssocItem,
     resolver::{GenericDefId, Resolver, TypeNs},
     signatures::{
-        FieldList, GenericParams, class_signature, const_signature, effect_signature,
+        FieldList, GenericParams, PackKind, class_signature, const_signature, effect_signature,
         enum_signature, function_signature, impl_signature, struct_signature, type_alias_signature,
     },
 };
@@ -36,6 +36,10 @@ pub enum Kind {
     /// A type constructor, which gives a type of the second kind when it's
     /// applied to a type of the first: `Option` is `Type -> Type`.
     Arrow(Box<Kind>, Box<Kind>),
+    /// Any number of positional fields of a tuple, like `*Ts`.
+    PositionalPack,
+    /// Any number of named fields of a tuple, like `**Ks`.
+    NamedPack,
 }
 
 impl Kind {
@@ -78,6 +82,8 @@ impl fmt::Display for Kind {
         match self {
             Kind::Type => f.write_str("Type"),
             Kind::Effect => f.write_str("Effect"),
+            Kind::PositionalPack => f.write_str("*Pack"),
+            Kind::NamedPack => f.write_str("**Pack"),
             Kind::Arrow(param, result) if matches!(**param, Kind::Arrow(..)) => {
                 write!(f, "({param}) -> {result}")
             }
@@ -93,7 +99,22 @@ pub fn generic_param_kinds<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<
         .iter()
         .find(|(d, _)| *d == def)
         .map(|(_, k)| k.clone());
-    kinds.filter(|k| k.len() == count).unwrap_or_else(|| vec![Kind::Type; count].into())
+    kinds.filter(|k| k.len() == count).unwrap_or_else(|| declared_kinds(db, def))
+}
+
+/// The kind a pack parameter has, as it's declared.
+fn pack_kind(pack: PackKind) -> Kind {
+    match pack {
+        PackKind::Positional | PackKind::All => Kind::PositionalPack,
+        PackKind::Named | PackKind::AllNamed => Kind::NamedPack,
+    }
+}
+
+/// The kinds of the parameters of `def` without inference: a pack's, and
+/// `Type` for the others.
+fn declared_kinds<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[Kind]> {
+    let params = &def.generic_params(db).type_params;
+    params.iter().map(|p| p.pack.map_or(Kind::Type, pack_kind)).collect()
 }
 
 /// The kind of a struct, enum, class, effect or type alias: that of a
@@ -160,8 +181,16 @@ fn group_kinds<'db>(
 ) -> Vec<(GenericDefId<'db>, Box<[Kind]>)> {
     let mut inference = KindInference { db, vars: Vec::new(), members: Vec::new() };
     for def in group_members(db, root) {
-        let count = def.generic_params(db).type_params.len();
-        let vars = (0..count).map(|_| inference.new_var()).collect();
+        // A pack's kind is said where it's declared.
+        let vars = def
+            .generic_params(db)
+            .type_params
+            .iter()
+            .map(|p| match p.pack {
+                Some(pack) => K::from_kind(&pack_kind(pack)),
+                None => inference.new_var(),
+            })
+            .collect();
         inference.members.push((def, vars));
     }
     for def in group_members(db, root) {
@@ -187,10 +216,7 @@ fn group_kinds_cycle<'db>(
     _id: salsa::Id,
     root: GenericDefId<'db>,
 ) -> Vec<(GenericDefId<'db>, Box<[Kind]>)> {
-    group_members(db, root)
-        .into_iter()
-        .map(|def| (def, vec![Kind::Type; def.generic_params(db).type_params.len()].into()))
-        .collect()
+    group_members(db, root).into_iter().map(|def| (def, declared_kinds(db, def))).collect()
 }
 
 /// A kind during inference.
@@ -198,6 +224,8 @@ fn group_kinds_cycle<'db>(
 enum K {
     Type,
     Effect,
+    PositionalPack,
+    NamedPack,
     Arrow(Box<K>, Box<K>),
     Var(u32),
 }
@@ -212,6 +240,8 @@ impl K {
         match kind {
             Kind::Type => K::Type,
             Kind::Effect => K::Effect,
+            Kind::PositionalPack => K::PositionalPack,
+            Kind::NamedPack => K::NamedPack,
             Kind::Arrow(a, b) => K::Arrow(Box::new(K::from_kind(a)), Box::new(K::from_kind(b))),
         }
     }
@@ -246,7 +276,7 @@ impl<'db> KindInference<'db> {
         match self.shallow(k) {
             K::Var(w) => v == w,
             K::Arrow(a, b) => self.occurs(v, &a) || self.occurs(v, &b),
-            K::Type | K::Effect => false,
+            K::Type | K::Effect | K::PositionalPack | K::NamedPack => false,
         }
     }
 
@@ -273,6 +303,8 @@ impl<'db> KindInference<'db> {
         match self.shallow(k) {
             K::Type | K::Var(_) => Kind::Type,
             K::Effect => Kind::Effect,
+            K::PositionalPack => Kind::PositionalPack,
+            K::NamedPack => Kind::NamedPack,
             K::Arrow(a, b) => Kind::Arrow(Box::new(self.finish(&a)), Box::new(self.finish(&b))),
         }
     }
@@ -473,7 +505,8 @@ impl<'db> KindInference<'db> {
             }
             TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),
             TypeRef::NamedTuple(items) => {
-                // A rest is reported as unsupported where it's lowered.
+                // A rest must be a pack, which lowering checks: `...A`
+                // names the positional half of `A`.
                 for item in items.iter() {
                     if let TupleItem::Positional(t) | TupleItem::Named(_, t) = item {
                         self.expect_type(resolver, store, *t);

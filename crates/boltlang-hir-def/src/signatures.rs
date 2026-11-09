@@ -37,6 +37,22 @@ pub struct TypeParamData {
     pub name: Name,
     pub bounds: Box<[TypeRefId]>,
     pub default: Option<TypeRefId>,
+    /// What it stands for, if it's a pack parameter like `*Ts`.
+    pub pack: Option<PackKind>,
+}
+
+/// What a pack parameter stands for: any number of positional fields,
+/// like `*Ts`, of named ones, like `**Ks`, or both, like `...A`. `...A` is
+/// two parameters, its positional half and then its named half, which has
+/// the same name but is only found through the first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum PackKind {
+    Positional,
+    Named,
+    /// The positional half of `...A`; the next parameter is its named half.
+    All,
+    /// The named half of `...A`.
+    AllNamed,
 }
 
 /// `const N: usize = 3`
@@ -309,6 +325,7 @@ fn lower_function<'db>(
     if let Some(decl) = &decl {
         generic_params = lower_generic_params(
             &mut c,
+            true,
             decl.generic_param_list(),
             decl.where_clause().into_iter(),
         );
@@ -350,6 +367,7 @@ fn lower_struct<'db>(
         Some(node) => (
             lower_generic_params(
                 &mut c,
+                false,
                 node.generic_param_list(),
                 node.where_clause().into_iter(),
             ),
@@ -379,6 +397,7 @@ fn lower_enum<'db>(db: &'db dyn Db, id: EnumId<'db>) -> (EnumSignature, Expressi
     if let Some(node) = &node {
         generic_params = lower_generic_params(
             &mut c,
+            false,
             node.generic_param_list(),
             node.where_clause().into_iter(),
         );
@@ -408,9 +427,12 @@ fn lower_class<'db>(
     let node = item_node::<ast::Class>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
     let generic_params = match &node {
-        Some(node) => {
-            lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter())
-        }
+        Some(node) => lower_generic_params(
+            &mut c,
+            false,
+            node.generic_param_list(),
+            node.where_clause().into_iter(),
+        ),
         None => GenericParams::default(),
     };
     let (store, source_map) = c.finish();
@@ -433,7 +455,9 @@ fn lower_effect<'db>(
     let node = item_node::<ast::Effect>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
     let generic_params = match &node {
-        Some(node) => lower_generic_params(&mut c, node.generic_param_list(), std::iter::empty()),
+        Some(node) => {
+            lower_generic_params(&mut c, false, node.generic_param_list(), std::iter::empty())
+        }
         None => GenericParams::default(),
     };
     let (store, source_map) = c.finish();
@@ -456,6 +480,7 @@ fn lower_impl<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, Expressi
         Some(node) => (
             lower_generic_params(
                 &mut c,
+                false,
                 node.generic_param_list(),
                 node.where_clause().into_iter(),
             ),
@@ -494,7 +519,7 @@ fn lower_type_alias<'db>(
     let mut type_ref = None;
     if let Some(node) = &node {
         generic_params =
-            lower_generic_params(&mut c, node.generic_param_list(), node.where_clauses());
+            lower_generic_params(&mut c, false, node.generic_param_list(), node.where_clauses());
         bounds = node
             .bounds()
             .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
@@ -515,6 +540,7 @@ fn lower_type_alias<'db>(
 
 fn lower_generic_params(
     c: &mut ExprCollector,
+    packs: bool,
     list: Option<ast::GenericParamList>,
     where_clauses: impl Iterator<Item = ast::WhereClause>,
 ) -> GenericParams {
@@ -539,7 +565,7 @@ fn lower_generic_params(
                     .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
                     .unwrap_or_default();
                 let default = p.default_type().map(|t| c.lower_type(t));
-                type_params.push(TypeParamData { name, bounds, default });
+                type_params.push(TypeParamData { name, bounds, default, pack: None });
             }
             ast::GenericParam::Const(p) => {
                 let Some(name) = p.name() else { continue };
@@ -556,7 +582,26 @@ fn lower_generic_params(
                     mutability_params.push(MutabilityParamData { name, type_ref, bounds });
                 }
             }
-            // Not supported yet.
+            // Only a function has them for now; elsewhere, they're reported
+            // as unsupported.
+            ast::GenericParam::Pack(p) if packs => {
+                let Some(name) = p.name() else { continue };
+                let name = Name::from_ident(&name.text());
+                let param = |pack| TypeParamData {
+                    name: name.clone(),
+                    bounds: Box::new([]),
+                    default: None,
+                    pack: Some(pack),
+                };
+                match p.spread() {
+                    Some(ast::Spread::Positional) => type_params.push(param(PackKind::Positional)),
+                    Some(ast::Spread::Named) => type_params.push(param(PackKind::Named)),
+                    Some(ast::Spread::All) | None => {
+                        type_params.push(param(PackKind::All));
+                        type_params.push(param(PackKind::AllNamed));
+                    }
+                }
+            }
             ast::GenericParam::Pack(_) => {}
         }
     }
