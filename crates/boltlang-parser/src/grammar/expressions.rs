@@ -340,8 +340,29 @@ fn call_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
 
 /// `(a, b)`, with named arguments like `sep: ","` and spreads like `*xs`
 /// and `**opts`. The positional ones and `*e` come first.
+/// A named field of a tuple or a named argument, like `x: 1`.
+fn tuple_expr_field(p: &mut Parser) {
+    let field = p.start();
+    crate::grammar::name_ref(p);
+    p.bump(T![:]);
+    if expr(p).is_none() {
+        p.error("expected an expression");
+    }
+    field.complete(p, TUPLE_EXPR_FIELD);
+}
+
+/// A spread in a tuple or among arguments, like `*xs` or `**opts`.
+fn tuple_expr_spread(p: &mut Parser) {
+    let s = p.start();
+    crate::grammar::spread(p);
+    if expr(p).is_none() {
+        p.error("expected an expression");
+    }
+    s.complete(p, TUPLE_EXPR_SPREAD);
+}
+
 pub(super) fn arg_list(p: &mut Parser) {
-    use crate::grammar::{at_named_field, at_spread, name_ref, spread, spread_side};
+    use crate::grammar::{at_named_field, at_spread, spread_side};
     let m = p.start();
     let mut named = false;
     crate::grammar::delimited(
@@ -352,33 +373,17 @@ pub(super) fn arg_list(p: &mut Parser) {
         || "expected an expression".into(),
         EXPR_FIRST,
         |p| {
-            let positional = if at_named_field(p) {
-                false
-            } else if at_spread(p) {
-                spread_side(p) != crate::grammar::TupleSide::Named
-            } else {
-                true
-            };
+            let positional = !at_named_field(p)
+                && !(at_spread(p) && spread_side(p) == crate::grammar::TupleSide::Named);
             if positional && named {
                 p.error("a positional argument can't come after a named one");
             }
             named |= !positional;
             if at_named_field(p) {
-                let field = p.start();
-                name_ref(p);
-                p.bump(T![:]);
-                if expr(p).is_none() {
-                    p.error("expected an expression");
-                }
-                field.complete(p, TUPLE_EXPR_FIELD);
+                tuple_expr_field(p);
                 true
             } else if at_spread(p) {
-                let s = p.start();
-                spread(p);
-                if expr(p).is_none() {
-                    p.error("expected an expression");
-                }
-                s.complete(p, TUPLE_EXPR_SPREAD);
+                tuple_expr_spread(p);
                 true
             } else {
                 expr(p).is_some()

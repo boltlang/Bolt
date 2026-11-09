@@ -10,9 +10,8 @@ use super::{
 use crate::{
     grammar::{
         TupleKind, TupleSide, at_inner_attr, at_macro_call, at_named_field, at_outer_attr,
-        at_spread, attr, dotted_path, expr_path, is_path_start, macro_call, name_ref,
-        opt_effect_row, opt_ret_type, outer_attrs, param_list, parse_pattern, pattern_single,
-        spread, spread_side, type_,
+        at_spread, attr, dotted_path, expr_path, is_path_start, macro_call, opt_effect_row,
+        opt_ret_type, outer_attrs, param_list, parse_pattern, pattern_single, spread_side, type_,
     },
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
@@ -229,26 +228,11 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
         if at_named_field(p) {
             kind.next(p, TupleSide::Named);
             saw_part = true;
-            let field = p.start();
-            name_ref(p);
-            p.bump(T![:]);
-            if at_expr_start(p) {
-                expr(p);
-            } else {
-                p.error("expected an expression");
-            }
-            field.complete(p, TUPLE_EXPR_FIELD);
+            super::tuple_expr_field(p);
         } else if at_spread(p) {
             saw_part = true;
-            let s = p.start();
             kind.next(p, spread_side(p));
-            spread(p);
-            if at_expr_start(p) {
-                expr(p);
-            } else {
-                p.error("expected an expression");
-            }
-            s.complete(p, TUPLE_EXPR_SPREAD);
+            super::tuple_expr_spread(p);
         } else if at_expr_start(p) {
             kind.next(p, TupleSide::Positional);
             expr(p);

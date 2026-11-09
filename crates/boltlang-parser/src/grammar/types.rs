@@ -4,9 +4,9 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        TupleKind, TupleSide, at_macro_call, at_named_field, at_spread, delimited,
-        generic_param_list, is_path_start, macro_call, name, outer_attrs, parse_expr,
-        pattern_single, spread, spread_side, type_path,
+        ParamOrder, TupleKind, TupleSide, at_keyword_marker, at_macro_call, at_named_field,
+        at_spread, delimited, generic_param_list, is_path_start, macro_call, name, outer_attrs,
+        parse_expr, pattern_single, spread, spread_side, type_path,
     },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
@@ -188,8 +188,7 @@ const FN_TYPE_PARAM_FIRST: TokenSet =
 /// named pack like `**Ks` comes last: `fn(i32, *Ts, sep: String, **Ks)`.
 fn fn_type_param_list(p: &mut Parser) {
     let m = p.start();
-    let mut keyword = false;
-    let mut done = false;
+    let mut order = ParamOrder::default();
     delimited(
         p,
         T!['('],
@@ -201,34 +200,24 @@ fn fn_type_param_list(p: &mut Parser) {
             if !p.at_ts(FN_TYPE_PARAM_FIRST) && !p.at_op("**") {
                 return false;
             }
-            if done {
-                p.error("`**` takes the other keyword arguments, so it comes last");
-            }
-            // `*` alone, before keyword-only parameters.
-            if p.at(T![*]) && (p.nth_at(1, T![,]) || p.nth_at(1, T![')'])) {
-                if keyword {
-                    p.error("there's already a `*` before this");
-                }
-                keyword = true;
+            let marker = at_keyword_marker(p);
+            // `...` is the old variadic parameter, not a pack.
+            let rest = p.at(T![*]) || p.at_op("**");
+            order.check(p);
+            if marker {
                 let m = p.start();
                 p.bump(T![*]);
                 m.complete(p, KEYWORD_MARKER);
                 return true;
             }
-            // `...` is the old variadic parameter, not a pack.
-            if p.at(T![*]) || p.at_op("**") {
-                match spread_side(p) {
-                    TupleSide::Named => done = true,
-                    _ if keyword => p.error("there's already a `*` before this"),
-                    _ => keyword = true,
-                }
+            if rest {
                 let rest = p.start();
                 spread(p);
                 type_(p);
                 rest.complete(p, TUPLE_TYPE_REST);
                 return true;
             }
-            fn_type_param(p, keyword);
+            fn_type_param(p, order.keyword);
             true
         },
     );

@@ -68,6 +68,39 @@ pub(crate) fn spread(p: &mut Parser) {
     p.bump_any();
 }
 
+/// Whether a `*` alone starts here, before keyword-only parameters.
+pub(crate) fn at_keyword_marker(p: &Parser) -> bool {
+    p.at(T![*]) && (p.nth_at(1, T![,]) || p.nth_at(1, T![')']))
+}
+
+/// Where a parameter list is, for the rules on what comes after what: after
+/// a `*` or a positional rest, the parameters are keyword-only, and a named
+/// rest comes last.
+#[derive(Default)]
+pub(crate) struct ParamOrder {
+    /// After a `*` or `*args`: the parameters are keyword-only.
+    pub(crate) keyword: bool,
+    /// After `**opts`, which comes last.
+    done: bool,
+}
+
+impl ParamOrder {
+    /// Report a parameter here that's out of order, and move past it.
+    pub(crate) fn check(&mut self, p: &mut Parser) {
+        if self.done {
+            p.error("`**` takes the other keyword arguments, so it comes last");
+        }
+        if p.at(T![*]) {
+            if self.keyword {
+                p.error("there's already a `*` or `*args` before this");
+            }
+            self.keyword = true;
+        } else if p.at_op("**") {
+            self.done = true;
+        }
+    }
+}
+
 /// Whether a named field like `x: ..` starts here.
 pub(crate) fn at_named_field(p: &Parser) -> bool {
     p.at(IDENT) && p.nth_at(1, T![:])

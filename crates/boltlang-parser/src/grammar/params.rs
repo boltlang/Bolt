@@ -2,7 +2,8 @@
 
 use crate::{
     grammar::{
-        PATTERN_FIRST, at_spread, delimited, outer_attrs, parse_expr, pattern_single, spread, type_,
+        PATTERN_FIRST, ParamOrder, at_keyword_marker, at_spread, delimited, outer_attrs,
+        parse_expr, pattern_single, spread, type_,
     },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
@@ -10,15 +11,6 @@ use crate::{
 use boltlang_syntax::{SyntaxKind::*, T};
 
 const PARAM_FIRST: TokenSet = PATTERN_FIRST.union(TokenSet::new(&[T![...], T![#], T![*]]));
-
-/// Where a parameter list is, for the rules on what comes after what.
-#[derive(Default)]
-struct ParamOrder {
-    /// After a `*` or `*args`: the parameters are keyword-only.
-    keyword: bool,
-    /// After `**opts`, which comes last.
-    done: bool,
-}
 
 /// `(a, b: T = 1, ...)`, and `(a, *, sep: T)`, `(a, *args: *Ts)` or
 /// `(a, **opts: **Ks)`. After a `*` or `*args`, the parameters can only be
@@ -41,18 +33,7 @@ pub(crate) fn param_list(p: &mut Parser) {
             if !p.at_ts(PARAM_FIRST) && !p.at_op("**") {
                 return false;
             }
-            if order.done {
-                p.error("`**` takes the other keyword arguments, so it comes last");
-            }
-            let star = p.at(T![*]) || p.at_op("**");
-            if star && p.at(T![*]) && order.keyword {
-                p.error("there's already a `*` or `*args` before this");
-            }
-            match star {
-                true if p.at(T![*]) => order.keyword = true,
-                true => order.done = true,
-                false => {}
-            }
+            order.check(p);
             param(p);
             true
         },
@@ -71,7 +52,7 @@ pub(crate) fn param(p: &mut Parser) -> CompletedMarker {
         return m.complete(p, VARIADIC_PARAM);
     }
     // `*` alone, before keyword-only parameters.
-    if p.at(T![*]) && (p.nth_at(1, T![,]) || p.nth_at(1, T![')'])) {
+    if at_keyword_marker(p) {
         p.bump(T![*]);
         return m.complete(p, KEYWORD_MARKER);
     }

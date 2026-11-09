@@ -297,13 +297,13 @@ pub enum SyntaxKind {
     /// `(a, b: T)`
     PARAM_LIST,
     PARAM,
-    /// `...` or `args: ...`
     /// `*args: *Ts` or `**opts: **Ks`: the other positional or keyword
     /// arguments of a call
     REST_PARAM,
     /// A `*` alone in a parameter list, after which the parameters can only
     /// be passed by name
     KEYWORD_MARKER,
+    /// `...` or `args: ...`
     VARIADIC_PARAM,
     /// `pub`, `pub(super)` or `pub(package)`
     VISIBILITY,
