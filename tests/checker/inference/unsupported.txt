@@ -36,3 +36,21 @@ error at `"a" + "b"`: no instance Add[String]
 error at `True * False`: no instance Mul[Bool]
 error at `-"a"`: no instance Neg[String]
 error at `-x`: no instance Neg[u8]
+
+================================================================================
+Tuples with named fields or spreads have the error type
+================================================================================
+let a = (1, x: 2);
+let b = (x: 1, ...a);
+fn f(t: (i32, x: i32)) = t;
+fn g[*Ts](t: (i32, *Ts)) = t;
+--------------------------------------------------------------------------------
+f: fn({error}) -> {error}
+g: fn({error}) -> {error}
+let a: {error}
+let b: {error}
+--------------------------------------------------------------------------------
+warning at `(i32, x: i32)`: unsupported
+warning at `(i32, *Ts)`: unsupported
+warning at `(1, x: 2)`: unsupported
+warning at `(x: 1, ...a)`: unsupported

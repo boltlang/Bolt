@@ -11,7 +11,7 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     body::{Body, DefWithBodyId, body},
-    hir::{BinaryOp, BindingId, Expr, ExprId, LabelId, LogicOp, Pat, PatId, Statement},
+    hir::{BinaryOp, BindingId, Expr, ExprId, LabelId, LogicOp, Pat, PatId, Statement, TupleItem},
 };
 
 pub type ScopeId = Idx<ScopeData>;
@@ -287,6 +287,7 @@ fn children(expr: &Expr) -> Vec<ExprId> {
         Expr::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
         Expr::Range { lhs, rhs, .. } => out.extend(lhs.iter().chain(rhs.iter()).copied()),
         Expr::Tuple { exprs } | Expr::Array { exprs, .. } => out.extend(exprs.iter().copied()),
+        Expr::NamedTuple { items } => out.extend(items.iter().map(TupleItem::value)),
         Expr::ArrayRepeat { value, count, .. } => out.extend([*value, *count]),
         Expr::Record { fields, spread, .. } => {
             out.extend(fields.iter().map(|f| f.expr));

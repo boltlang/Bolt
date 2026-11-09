@@ -984,6 +984,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
                 Ty::Error
             }
+            Expr::NamedTuple { items } => {
+                for item in items.iter() {
+                    self.infer_expr(item.value());
+                }
+                self.result.diagnostics.push(InferenceDiagnostic::Unsupported { expr });
+                Ty::Error
+            }
             Expr::Array { .. }
             | Expr::ArrayRepeat { .. }
             | Expr::Record { .. }

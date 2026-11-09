@@ -18,3 +18,17 @@ fn f(xs: mut [i32], p: P) -> () = {
   unsupported("`e?`");
 }
 fn g() -> i32 = unsupported("patterns in parameters")
+
+================================================================================
+Tuples with named fields or spreads aren't supported yet
+:test-prelude
+================================================================================
+fn f(t: (i32, i32)) {
+  let a = (1, x: 2);
+  let b = (*t, 3);
+}
+--------------------------------------------------------------------------------
+fn f(t: (i32, i32)) -> () = {
+  let a = unsupported("a tuple with named fields or spreads");
+  let b = unsupported("a tuple with named fields or spreads");
+}

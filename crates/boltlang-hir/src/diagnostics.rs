@@ -613,6 +613,7 @@ pub fn file_diagnostics<'db>(db: &'db dyn Db, file: File) -> Vec<Diagnostic<'db>
     collector.syntax_errors();
     collector.cfgs();
     collector.links();
+    collector.unsupported_syntax();
     collector.manifest();
     collector.name_resolution();
     collector.items();
@@ -705,6 +706,21 @@ impl<'db> Collector<'db> {
                     DiagnosticKind::BadLink { reason: BadLink::NotFunctionOrType },
                 );
             }
+        }
+    }
+
+    /// Each pack parameter, like the `*Ts` of `fn f[*Ts]`, and each tuple
+    /// pattern with named fields, like `(a, x: b)`, which the checker
+    /// doesn't support yet.
+    fn unsupported_syntax(&mut self) {
+        use boltlang_syntax::ast::{Node as _, PackParam, TuplePattern};
+        let packs = self.root.descendants().filter_map(PackParam::cast);
+        let mut ranges: Vec<TextRange> = packs.map(|p| p.syntax().text_range()).collect();
+        let pats = self.root.descendants().filter_map(TuplePattern::cast);
+        let named = pats.filter(|p| p.items().any(|item| item.is_err()));
+        ranges.extend(named.map(|p| p.syntax().text_range()));
+        for range in ranges {
+            self.push(Some(range), DiagnosticKind::Unsupported);
         }
     }
 

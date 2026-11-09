@@ -350,7 +350,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let effects = effects.as_ref().map_or_else(Ty::nothing, |ts| self.lower_row(ts));
                 Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten), Box::new(effects))
             }
-            TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
+            TypeRef::ImplTrait { .. }
+            | TypeRef::Bounded(_)
+            | TypeRef::MacroCall { .. }
+            | TypeRef::NamedTuple(_) => {
                 self.diagnostics.push(LowerDiagnostic::Unsupported(id));
                 return (Ty::Error, None);
             }

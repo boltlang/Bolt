@@ -66,3 +66,14 @@ A type alias that refers to itself
 ================================================================================
 type A = A;
    //^ error: type alias `A` refers to itself
+
+================================================================================
+Tuples with named fields, spreads and packs aren't supported yet
+================================================================================
+fn first[T, *Ts](t: (T, *Ts)) = t;
+          //^^^ warning: the type checker doesn't support this yet
+                  //^^^^^^^^ warning: the type checker doesn't support this yet
+let p = (x: 1, y: 2);
+      //^^^^^^^^^^^^ warning: the type checker doesn't support this yet
+let n = match (1, 2) { (a, x: b) => 1, _ => 2 };
+                     //^^^^^^^^^ warning: the type checker doesn't support this yet

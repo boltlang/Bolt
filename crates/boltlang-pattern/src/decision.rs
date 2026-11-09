@@ -421,7 +421,10 @@ impl<'db> Builder<'_, 'db> {
             ),
             Pat::Lit { .. } | Pat::Range { .. } => true,
             // Reported when tested.
-            Pat::Slice { .. } | Pat::ConstBlock(_) | Pat::MacroCall { .. } => true,
+            Pat::Slice { .. }
+            | Pat::ConstBlock(_)
+            | Pat::MacroCall { .. }
+            | Pat::NamedTuple { .. } => true,
         }
     }
 

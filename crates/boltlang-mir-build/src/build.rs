@@ -394,6 +394,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 }
             }
             Expr::Range { .. } => self.unsupported(e, "a range without a start or an end"),
+            Expr::NamedTuple { .. } => self.unsupported(e, "a tuple with named fields or spreads"),
             Expr::Tuple { exprs } => {
                 let fields = self.exprs(exprs);
                 self.literal(

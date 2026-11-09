@@ -70,6 +70,37 @@ pub enum LambdaKind {
     Function,
 }
 
+/// What a spread or a rest in a tuple stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Spread {
+    /// `*`: positional fields.
+    Positional,
+    /// `**`: named fields.
+    Named,
+    /// `...`: both.
+    All,
+}
+
+/// A part of a tuple with named fields or spreads, like the `1`, `x: 2`
+/// and `...p` of `(1, x: 2, ...p)`. `T` is what each part holds: an
+/// expression, a type or a pattern.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub enum TupleItem<T> {
+    Positional(T),
+    Named(Name, T),
+    /// A spread in an expression, or a rest in a type, like `*Ts`.
+    Spread(Spread, T),
+}
+
+impl<T: Copy> TupleItem<T> {
+    /// What the part holds.
+    pub fn value(&self) -> T {
+        match self {
+            TupleItem::Positional(v) | TupleItem::Named(_, v) | TupleItem::Spread(_, v) => *v,
+        }
+    }
+}
+
 /// An expression.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum Expr {
@@ -141,6 +172,11 @@ pub enum Expr {
     },
     Tuple {
         exprs: Box<[ExprId]>,
+    },
+    /// A tuple with named fields or spreads, like `(1, x: 2)` or
+    /// `(x: 5, ...origin)`. The checker doesn't support it yet.
+    NamedTuple {
+        items: Box<[TupleItem<ExprId>]>,
     },
     /// `[a, b]`
     Array {
@@ -307,6 +343,13 @@ pub enum Pat {
         args: Box<[PatId]>,
         rest: Option<u32>,
     },
+    /// A tuple pattern with named fields, like `(a, x: b, ..)`. `rest` is
+    /// whether it has a `..`, which ignores the other fields. Its items are
+    /// never spreads. The checker doesn't support it yet.
+    NamedTuple {
+        items: Box<[TupleItem<PatId>]>,
+        rest: bool,
+    },
     /// `Some(x)`
     TupleStruct {
         path: Path,
@@ -376,6 +419,7 @@ impl Expr {
             Expr::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
             Expr::Range { lhs, rhs, .. } => out.extend(lhs.iter().chain(rhs.iter())),
             Expr::Tuple { exprs } | Expr::Array { exprs } => out.extend(exprs.iter()),
+            Expr::NamedTuple { items } => out.extend(items.iter().map(TupleItem::value)),
             Expr::ArrayRepeat { value, count } => out.extend([*value, *count]),
             Expr::Record { fields, spread, .. } => {
                 out.extend(fields.iter().map(|f| f.expr));
@@ -439,6 +483,7 @@ impl Pat {
             | Pat::Slice { args, .. }
             | Pat::Or(args) => args.to_vec(),
             Pat::Record { fields, .. } => fields.iter().map(|f| f.pat).collect(),
+            Pat::NamedTuple { items, .. } => items.iter().map(TupleItem::value).collect(),
             Pat::Range { start, end, .. } => start.iter().chain(end.iter()).copied().collect(),
             Pat::Missing
             | Pat::Wild
@@ -523,6 +568,9 @@ pub enum TypeRef {
     Path(Path),
     /// `(A, B)`, or `()` for the unit type.
     Tuple(Box<[TypeRefId]>),
+    /// A tuple type with named fields or rests, like `(A, x: B)` or
+    /// `(T, *Ts)`. The checker doesn't support it yet.
+    NamedTuple(Box<[TupleItem<TypeRefId>]>),
     /// `[T]` or `[T; N]`, with the `mut` or `imm` written before it
     Array {
         element: TypeRefId,

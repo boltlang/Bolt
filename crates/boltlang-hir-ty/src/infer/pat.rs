@@ -137,6 +137,12 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
             }
             Pat::ConstBlock(expr) => self.check_expr(*expr, expected),
+            // The match is reported as unsupported where it's compiled.
+            Pat::NamedTuple { items, .. } => {
+                for item in items.iter() {
+                    self.check_pat(item.value(), &Ty::Error);
+                }
+            }
         }
     }
 

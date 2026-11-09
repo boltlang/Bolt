@@ -38,6 +38,23 @@ impl Printer<'_> {
         items.iter().map(|i| f(self, *i)).collect::<Vec<_>>().join(" ")
     }
 
+    /// The parts of a tuple with names or spreads, as written.
+    fn items<T: Copy>(&self, items: &[TupleItem<T>], f: impl Fn(&Self, T) -> String) -> String {
+        let item = |i: &TupleItem<T>| match i {
+            TupleItem::Positional(v) => f(self, *v),
+            TupleItem::Named(name, v) => format!("{name}: {}", f(self, *v)),
+            TupleItem::Spread(spread, v) => {
+                let s = match spread {
+                    Spread::Positional => "*",
+                    Spread::Named => "**",
+                    Spread::All => "...",
+                };
+                format!("{s}{}", f(self, *v))
+            }
+        };
+        items.iter().map(item).collect::<Vec<_>>().join(", ")
+    }
+
     fn opt_expr(&self, e: Option<ExprId>) -> String {
         e.map_or("_".into(), |e| self.expr(e))
     }
@@ -157,6 +174,7 @@ impl Printer<'_> {
                 )
             }
             Expr::Tuple { exprs } => format!("(tuple {})", self.list(exprs, Self::expr)),
+            Expr::NamedTuple { items } => format!("(tuple {})", self.items(items, Self::expr)),
             Expr::Array { exprs } => format!("[{}]", self.list(exprs, Self::expr)),
             Expr::ArrayRepeat { value, count } => {
                 format!("[{}; {}]", self.expr(*value), self.expr(*count))
@@ -280,6 +298,9 @@ impl Printer<'_> {
             }
             Pat::Path(path) => format!("<{}>", self.path(path)),
             Pat::Tuple { args, rest: r } => format!("({})", rest(args, *r)),
+            Pat::NamedTuple { items, rest } => {
+                format!("({}{})", self.items(items, Self::pat), if *rest { ", .." } else { "" })
+            }
             Pat::TupleStruct { path, args, rest: r } => {
                 format!("{}({})", self.path(path), rest(args, *r))
             }
@@ -313,6 +334,7 @@ impl Printer<'_> {
             TypeRef::Error => "<error>".into(),
             TypeRef::Path(p) => self.path(p),
             TypeRef::Tuple(ts) => format!("({})", self.list(ts, Self::ty)),
+            TypeRef::NamedTuple(items) => format!("({})", self.items(items, Self::ty)),
             TypeRef::Array { element, len, mutability } => {
                 let prefix = match mutability {
                     Some(Mutability::Mut) => "mut ",
@@ -455,6 +477,21 @@ fn compound_expressions() {
         "(tuple a b);\n(tuple );\n[1 2];\n[0; (+ n 1)];\n\
          (record Point x: x, y: 1 ..base);\n(record Shape.Circle radius: r);\n\
          (.. a b);\n(..= _ c);\n(.. d _);\n(.. _ _);"
+    );
+}
+
+#[test]
+fn tuples_with_named_fields_and_spreads() {
+    assert_eq!(
+        render(
+            "(1, x: 2);\n(x: a);\n(*xs, 1, **opts);\n(x: 5, ...origin);\n\
+             let (a, x: b, ..) = t;\nlet (x: (c, _)) = t;\nlet t: (i32, *Ts, x: i32, **Ks);\nlet u: (...A);"
+        ),
+        "(tuple 1, x: 2);\n(tuple x: a);\n(tuple *xs, 1, **opts);\n(tuple x: 5, ...origin);\n\
+         (let (a, x: b, ..) = t)\n\
+         (let (x: (c, _)) = t)\n\
+         (let t : (i32, *Ts, x: i32, **Ks))\n\
+         (let u : (...A))"
     );
 }
 

@@ -472,7 +472,8 @@ impl<'db> KindInference<'db> {
                 K::Type
             }
             TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),
-            TypeRef::Never => K::Type,
+            // Reported as unsupported where it's lowered.
+            TypeRef::Never | TypeRef::NamedTuple(_) => K::Type,
             TypeRef::Error
             | TypeRef::ImplTrait { .. }
             | TypeRef::Bounded(_)

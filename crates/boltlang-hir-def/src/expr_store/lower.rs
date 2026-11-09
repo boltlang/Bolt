@@ -16,7 +16,7 @@ use crate::{
     hir::{
         BinaryOp, Binding, BindingId, BlockKind, EffectArm, Expr, ExprId, GenericArg, Label,
         LambdaKind, Literal, LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path,
-        PathSegment, RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
+        PathSegment, RecordField, RecordFieldPat, Spread, Statement, TupleItem, TypeRef, TypeRefId,
     },
 };
 
@@ -90,7 +90,28 @@ impl ExprCollector {
                 None => TypeRef::Error,
             },
             ast::Type::Tuple(ty) => {
-                TypeRef::Tuple(ty.fields().map(|t| self.lower_type(t)).collect())
+                let plain =
+                    ty.items().all(|item| matches!(item, ast::TupleTypeItem::Positional(_)));
+                if plain {
+                    TypeRef::Tuple(ty.fields().map(|t| self.lower_type(t)).collect())
+                } else {
+                    let items = ty
+                        .items()
+                        .map(|item| match item {
+                            ast::TupleTypeItem::Positional(t) => {
+                                TupleItem::Positional(self.lower_type(t))
+                            }
+                            ast::TupleTypeItem::Named(f) => {
+                                let name = field_name(f.name().map(|n| n.text()));
+                                TupleItem::Named(name, self.lower_opt_type(f.ty()))
+                            }
+                            ast::TupleTypeItem::Rest(r) => {
+                                TupleItem::Spread(spread(r.spread()), self.lower_opt_type(r.ty()))
+                            }
+                        })
+                        .collect();
+                    TypeRef::NamedTuple(items)
+                }
             }
             ast::Type::Array(ty) => {
                 let element = self.lower_opt_type(ty.element());
@@ -332,7 +353,27 @@ impl ExprCollector {
                 Expr::Range { lhs, rhs, inclusive }
             }
             E::Tuple(e) => {
-                Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() }
+                let plain = e.items().all(|item| matches!(item, ast::TupleExprItem::Positional(_)));
+                if plain {
+                    Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() }
+                } else {
+                    let items = e
+                        .items()
+                        .map(|item| match item {
+                            ast::TupleExprItem::Positional(x) => {
+                                TupleItem::Positional(self.lower_expr(x))
+                            }
+                            ast::TupleExprItem::Named(f) => {
+                                let name = field_name(f.name_ref().map(|n| n.text()));
+                                TupleItem::Named(name, self.lower_opt_expr(f.expr()))
+                            }
+                            ast::TupleExprItem::Spread(s) => {
+                                TupleItem::Spread(spread(s.spread()), self.lower_opt_expr(s.expr()))
+                            }
+                        })
+                        .collect();
+                    Expr::NamedTuple { items }
+                }
             }
             E::Array(e) => {
                 if e.is_repeat() {
@@ -567,9 +608,24 @@ impl ExprCollector {
                 Some(path) => Pat::Path(path),
                 None => Pat::Missing,
             },
-            P::Tuple(p) => {
+            P::Tuple(p) if p.items().all(|item| item.is_ok()) => {
                 let (args, rest) = self.lower_pat_list(p.fields());
                 Pat::Tuple { args, rest }
+            }
+            P::Tuple(p) => {
+                let mut items = Vec::new();
+                let mut rest = false;
+                for item in p.items() {
+                    match item {
+                        Ok(ast::Pattern::Rest(_)) => rest = true,
+                        Ok(pat) => items.push(TupleItem::Positional(self.lower_pat(pat))),
+                        Err(f) => {
+                            let name = field_name(f.name_ref().map(|n| n.text()));
+                            items.push(TupleItem::Named(name, self.lower_opt_pat(f.pattern())));
+                        }
+                    }
+                }
+                Pat::NamedTuple { items: items.into(), rest }
             }
             P::TupleStruct(p) => {
                 let Some(path) = p.path().and_then(|p| self.lower_path(p)) else {
@@ -726,6 +782,21 @@ fn alloc<T>(
         back.insert(id, ptr);
     }
     id
+}
+
+/// The name of a field of a tuple. The parser only makes one with a name.
+fn field_name(text: Option<impl AsRef<str>>) -> Name {
+    text.map_or_else(|| Name::new(""), |t| Name::from_ident(t.as_ref()))
+}
+
+/// What a spread or a rest stands for. The parser only makes one that's
+/// written one of the three ways.
+fn spread(spread: Option<ast::Spread>) -> Spread {
+    match spread {
+        Some(ast::Spread::Positional) => Spread::Positional,
+        Some(ast::Spread::Named) => Spread::Named,
+        Some(ast::Spread::All) | None => Spread::All,
+    }
 }
 
 fn name(name: Option<ast::Name>) -> Option<Name> {
