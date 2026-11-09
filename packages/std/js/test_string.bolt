@@ -7,6 +7,7 @@ import "../string" (String);
 import "../semigroup" *;
 import "../option" (Option, Some, None);
 import "../vec" (Vec, push);
+import "../effect" (resume);
 
 #[cfg(host = "wasm")]
 #[test]
@@ -113,4 +114,33 @@ fn a_for_loop_over_js_strings() {
     all = all <> x;
   }
   assert(all.to_string() == "ab");
+}
+
+// An operation's type parameters are `any`, so an `Option[JsString]` is
+// converted to an `Option[any]` and back (#400).
+
+#[cfg(host = "wasm")]
+effect Pick {
+  fn pick[T](x: Option[T], y: Option[T]) -> Option[T];
+  fn same[T](x: T) -> T;
+}
+
+#[cfg(host = "wasm")]
+fn first_some(body: fn() -> Bool does Pick) -> Bool = match body() {
+  b => b,
+  effect pick(x, y), k => resume(k, match x { Some(_) => x, None => y }),
+  effect same(x), k => resume(k, x),
+};
+
+#[cfg(host = "wasm")]
+#[test]
+fn an_option_of_a_js_string_goes_through_an_operation() {
+  assert(first_some(|| {
+    let a: Option[JsString] = None;
+    let b = Some(JsString.from("b"));
+    let picked = match pick(a, b) { Some(s) => s.to_string() == "b", None => False };
+    let none = match pick(a, a) { Some(_) => False, None => True };
+    let kept = match same(b) { Some(s) => s.to_string() == "b", None => False };
+    picked && none && kept
+  }));
 }

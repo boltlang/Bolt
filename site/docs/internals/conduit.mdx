@@ -138,8 +138,10 @@ Bolt's are: `Effect20`.
   `Some(x)` is `x`, a `match` tests `host_is_null`, and the `x` it binds
   is `host_unwrap`. So a function the host provides that may give `null`,
   like `getElementById`, is declared to give an `Option[Element]`, and a
-  JavaScript `null` arrives as `None`. Giving one to an operation's type
-  parameter isn't supported yet.
+  JavaScript `null` arrives as `None`. Where an operation has an
+  `Option[T]` of its own type parameter, which is the data type of
+  `Option[any]`, the conversion makes `None` of a null and `Some` of a
+  host value, boxed, and the other way back.
 - **An operation's own type parameters are `any`.** The `T` of
   `fn fail[T](error: E) -> T` is Conduit's boxed `any` in the operation's
   signature, so every use of `fail` is the same operation, and its

@@ -10,6 +10,10 @@
 //! value with a type parameter of the operation in it can't be converted,
 //! since the handler would get a copy of it rather than the value itself.
 //!
+//! An `Option` of a type of the host is a `nullable host`, not data, so
+//! its conversion to an `Option[any]` makes `None` of a null and `Some`
+//! of a host value, boxed, and the other way gives a null for `None`.
+//!
 //! Each conversion of data, an array or a closure is a function of its
 //! own, so that a type that holds itself, like `List[T]`, is converted by
 //! one that calls itself. They're all found before the bodies are lowered,
@@ -22,12 +26,12 @@ use boltlang_hir_def::{ids::EnumVariantId, signatures::enum_signature};
 use boltlang_hir_ty::{AdtId, lower::VariantDef};
 use boltlang_mir_mono::{MonoMut, MonoRow, MonoTy, field_types};
 use conduit_ir::{
-    Atom, CtorId, Func, FuncId, Lit, Module, MutParams, Mutability, Sig, Ty, build::FuncBuilder,
+    Atom, CtorId, Func, FuncId, Lit, Module, MutParams, Mutability, Op, Sig, Ty, build::FuncBuilder,
 };
 
 use crate::{
     ErrorKind,
-    ty::{PLACEHOLDER, Types, is_nullable_host, placeholder},
+    ty::{PLACEHOLDER, Types, is_nullable_host, none_index, placeholder},
 };
 
 /// How a value of one type becomes one of the other.
@@ -77,12 +81,6 @@ impl<'db> ConvCx<'_, 'db> {
             (MonoTy::Any(_), MonoTy::Any(_)) => Ok(Step::Same),
             (_, MonoTy::Any(_)) => Ok(Step::Box),
             (MonoTy::Any(_), _) => Ok(Step::Unbox),
-            // A `nullable host` isn't an object of `Option`'s data type.
-            _ if is_nullable_host(self.db, self.root, from)
-                || is_nullable_host(self.db, self.root, to) =>
-            {
-                Err(unsupported("converting an `Option` of a type of the host"))
-            }
             _ if self.value(from)? == self.value(to)? => Ok(Step::Same),
             _ => Ok(Step::Call),
         }
@@ -287,6 +285,11 @@ impl<'db> Convs<'db> {
                 (MonoTy::Array(_, a), MonoTy::Array(_, e)) => {
                     self.array(cx, &mut b, x, to, a, e)?
                 }
+                _ if is_nullable_host(cx.db, cx.root, from)
+                    || is_nullable_host(cx.db, cx.root, to) =>
+                {
+                    self.nullable_host(cx, &mut b, x, from, to)?
+                }
                 _ => self.data(cx, &mut b, x, from, to)?,
             }
             out.push((id, finish(b)?));
@@ -327,6 +330,59 @@ impl<'db> Convs<'db> {
             }
             let obj = b.new_object_full(tc, m, margs.clone(), rows.clone(), converted);
             b.ret(vec![Atom::Var(obj)]);
+        }
+        Ok(())
+    }
+
+    /// Convert between an `Option` of a type of the host, a `nullable host`,
+    /// and an `Option` of `any`, which is data.
+    fn nullable_host(
+        &self,
+        cx: &mut ConvCx<'_, 'db>,
+        b: &mut FuncBuilder<'_, Module>,
+        x: Atom,
+        from: &MonoTy<'db>,
+        to: &MonoTy<'db>,
+    ) -> Result<(), ErrorKind> {
+        let MonoTy::Adt(AdtId::Enum(option), ..) = from else {
+            return Err(unsupported("converting this `Option`"));
+        };
+        let none = none_index(cx.db, *option);
+        let some = 1 - none;
+        let field = |t: &MonoTy<'db>| match t {
+            MonoTy::Adt(_, args, ..) => args[0].clone(),
+            _ => unreachable!("an `Option`"),
+        };
+        let (f, t) = (field(from), field(to));
+        if is_nullable_host(cx.db, cx.root, from) {
+            let Some(Ty::Data(tid, m, margs, rows)) = cx.value(to)? else {
+                return Err(unsupported("converting this `Option`"));
+            };
+            let null = b.op(Op::HostIsNull, [x.clone()])[0];
+            let case = b.case(null);
+            b.arm(case, 1);
+            let ctor = CtorId { data: tid, index: none };
+            let obj = b.new_object_full(ctor, m, margs.clone(), rows.clone(), Vec::<Atom>::new());
+            b.ret(vec![Atom::Var(obj)]);
+            b.default(case);
+            let v = Atom::Var(b.op(Op::HostUnwrap, [x])[0]);
+            let v = self.emit(cx, b, Some(v), &f, &t)?;
+            let ctor = CtorId { data: tid, index: some };
+            let obj = b.new_object_full(ctor, m, margs, rows, v.into_iter().collect::<Vec<_>>());
+            b.ret(vec![Atom::Var(obj)]);
+        } else {
+            let Some(Ty::Data(fid, ..)) = cx.value(from)? else {
+                return Err(unsupported("converting this `Option`"));
+            };
+            let case = b.case(x.clone());
+            b.arm(case, CtorId { data: fid, index: none });
+            let null = b.op(Op::HostNull, ())[0];
+            b.ret(vec![Atom::Var(null)]);
+            b.arm(case, CtorId { data: fid, index: some });
+            let ctor = CtorId { data: fid, index: some };
+            let v = Atom::Var(b.get(ctor, 0, x));
+            let v = self.emit(cx, b, Some(v), &f, &t)?;
+            b.ret(v.into_iter().collect::<Vec<_>>());
         }
         Ok(())
     }
