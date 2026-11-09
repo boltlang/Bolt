@@ -9,7 +9,7 @@ use boltlang_hir_def::{
 use super::{InferenceContext, InferenceDiagnostic};
 use crate::{
     lower::{FieldsKind, VariantDef, const_ty, field_types, subst_params},
-    solve::{ExprOrPat, Origin, TypeError},
+    solve::{Constraint, ExprOrPat, Origin, TuplePatConstraint, TuplePatPart, TypeError},
     ty::{Ty, VarKind},
 };
 
@@ -160,18 +160,19 @@ impl<'db> InferenceContext<'_, 'db> {
 
     /// A tuple pattern with named fields, like `(a, x: b)`. Without `..`,
     /// it says the whole type, so it's matched like a tuple pattern. With
-    /// `..`, the type must be known, to find the fields it names.
+    /// `..`, the fields it names are found once the type is known.
     fn check_named_tuple_pat(
         &mut self,
         pat: PatId,
         items: &[TupleItem<PatId>],
-        rest: bool,
+        rest: Option<u32>,
         expected: &Ty<'db>,
     ) {
         let origin = self.pat_origin(pat);
         // Each name once; a field given twice is matched against nothing.
         let mut names: Vec<&Name> = Vec::new();
         let mut parts = Vec::new();
+        let mut positional = 0;
         for item in items {
             match item {
                 TupleItem::Named(name, p) if names.contains(&name) => {
@@ -181,66 +182,42 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
                 TupleItem::Named(name, p) => {
                     names.push(name);
-                    parts.push((Some(name.clone()), *p));
+                    parts.push((TuplePatPart::Named(name.clone()), *p));
                 }
-                TupleItem::Positional(p) => parts.push((None, *p)),
+                TupleItem::Positional(p) => {
+                    parts.push((TuplePatPart::Positional(positional), *p));
+                    positional += 1;
+                }
                 TupleItem::Spread(_, p) => self.check_pat(*p, &Ty::Error),
             }
         }
-        // The type the fields say, with a variable for each.
         let vars: Vec<Ty<'db>> =
             parts.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
-        let positional = parts
-            .iter()
-            .zip(&vars)
-            .filter(|((name, _), _)| name.is_none())
-            .map(|(_, v)| v.clone())
-            .collect();
-        let named = parts
-            .iter()
-            .zip(&vars)
-            .filter_map(|((name, _), v)| Some((name.clone()?, v.clone())))
-            .collect();
-        let m = self.solver.new_var(VarKind::Mutability);
-        let shape = Ty::record(positional, named, m);
-        let resolved = self.solver.unifier.shallow_resolve(expected);
-        let is_tuple = matches!(resolved, Ty::Record(..) | Ty::Tuple(..) | Ty::Error | Ty::Never);
-        // Without `..`, or for what isn't a tuple, which is then reported.
-        if !rest || !is_tuple && !matches!(resolved, Ty::Var(_)) {
+        if rest.is_none() {
+            let positional = parts
+                .iter()
+                .zip(&vars)
+                .filter(|((part, _), _)| matches!(part, TuplePatPart::Positional(_)))
+                .map(|(_, v)| v.clone())
+                .collect();
+            let named = parts
+                .iter()
+                .zip(&vars)
+                .filter_map(|((part, _), v)| match part {
+                    TuplePatPart::Named(name) => Some((name.clone(), v.clone())),
+                    TuplePatPart::Positional(_) => None,
+                })
+                .collect();
+            let m = self.solver.new_var(VarKind::Mutability);
+            let shape = Ty::record(positional, named, m);
             self.expect_shape(pat, expected, &shape, &vars);
-            for ((_, p), ty) in parts.iter().zip(vars) {
-                self.check_pat(*p, &ty);
-            }
-            return;
+        } else {
+            let fields = parts.iter().map(|(part, _)| part.clone()).zip(vars.clone()).collect();
+            let constraint = TuplePatConstraint { ty: expected.clone(), fields, positional, rest };
+            self.solver.add(Constraint::TuplePat { constraint, origin });
         }
-        let (tys, fields) = match self.solver.unifier.shallow_resolve(expected) {
-            Ty::Record(tys, fields, _) => (tys.into_vec(), fields.into_vec()),
-            Ty::Tuple(tys, _) => (tys.into_vec(), Vec::new()),
-            Ty::Error | Ty::Never => (Vec::new(), Vec::new()),
-            _ => {
-                self.solver.errors.push(TypeError::TypeNeeded { origin });
-                for (_, p) in parts {
-                    self.check_pat(p, &Ty::Error);
-                }
-                return;
-            }
-        };
-        let mut position = 0;
-        for (name, p) in parts {
-            let field = match &name {
-                None => {
-                    position += 1;
-                    tys.get(position - 1).cloned()
-                }
-                Some(name) => fields.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone()),
-            };
-            let field = field.unwrap_or_else(|| {
-                let name = name.unwrap_or_else(|| Name::new((position - 1).to_string()));
-                let ty = self.solver.unifier.resolve(expected);
-                self.solver.errors.push(TypeError::NoSuchField { origin, ty, name });
-                Ty::Error
-            });
-            self.check_pat(p, &field);
+        for ((_, p), ty) in parts.iter().zip(vars) {
+            self.check_pat(*p, &ty);
         }
     }
 

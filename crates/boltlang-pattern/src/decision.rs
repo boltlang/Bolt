@@ -24,7 +24,9 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{
     body::{Body, DefWithBodyId, body},
     builtin_type::BuiltinValue,
-    hir::{BindingId, Expr, ExprId, Literal, Pat, PatId, Path, Statement, TupleItem},
+    hir::{
+        BindingId, Expr, ExprId, Literal, Pat, PatId, Path, Statement, TupleItem, positional_index,
+    },
     ids::{ConstId, EnumVariantId, FunctionId, StructId},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
 };
@@ -378,18 +380,23 @@ impl<'db> Builder<'_, 'db> {
                 // Its fields are where the type has them: the positional
                 // ones first, then the named ones in the order of their
                 // names.
-                Pat::NamedTuple { items, .. } => {
+                // `..` ignores the fields it stands for, so the positional
+                // ones after it are the last ones.
+                Pat::NamedTuple { items, rest } => {
                     let Ty::Record(tys, named, _) = infer_body(self.db, self.def).pat_ty(pat)
                     else {
                         return Err(DecisionError::Unknown(pat));
                     };
                     let arity = (tys.len() + named.len()) as u32;
+                    let given =
+                        items.iter().filter(|i| matches!(i, TupleItem::Positional(_))).count();
                     let mut position = 0;
                     for (k, item) in items.iter().enumerate() {
                         let (index, sub) = match item {
                             TupleItem::Positional(sub) => {
                                 position += 1;
-                                (position - 1, *sub)
+                                let at = positional_index(position - 1, *rest, given, tys.len());
+                                (at.ok_or(DecisionError::Unknown(pat))?, *sub)
                             }
                             TupleItem::Named(name, sub) => {
                                 let at = named.iter().position(|(n, _)| n == name);

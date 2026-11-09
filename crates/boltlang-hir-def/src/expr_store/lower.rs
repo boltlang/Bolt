@@ -614,11 +614,17 @@ impl ExprCollector {
             }
             P::Tuple(p) => {
                 let mut items = Vec::new();
-                let mut rest = false;
+                let mut rest = None;
+                let mut positional = 0;
                 for item in p.items() {
                     match item {
-                        Ok(ast::Pattern::Rest(_)) => rest = true,
-                        Ok(pat) => items.push(TupleItem::Positional(self.lower_pat(pat))),
+                        Ok(ast::Pattern::Rest(_)) => {
+                            rest.get_or_insert(positional);
+                        }
+                        Ok(pat) => {
+                            positional += 1;
+                            items.push(TupleItem::Positional(self.lower_pat(pat)));
+                        }
                         Err(f) => {
                             let name = field_name(f.name_ref().map(|n| n.text()));
                             items.push(TupleItem::Named(name, self.lower_opt_pat(f.pattern())));

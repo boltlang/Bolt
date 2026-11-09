@@ -9,7 +9,7 @@ use boltlang_hir_def::{
     Name,
     arena::Idx,
     body::{DefWithBody, DefWithBodyId},
-    hir::{ExprId, PatId, TypeRefId},
+    hir::{ExprId, PatId, TypeRefId, positional_index},
     ids::{ClassId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     nameres::{file_scope, files_used_by},
     resolver::GenericDefId,
@@ -106,6 +106,26 @@ pub struct SpreadConstraint<'db> {
     pub parts: Vec<TuplePart<'db>>,
     pub mutability: Ty<'db>,
     pub result: Ty<'db>,
+}
+
+/// A field that a tuple pattern names: the `i`th of its positional ones,
+/// or a named one.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum TuplePatPart {
+    Positional(usize),
+    Named(Name),
+}
+
+/// That `ty` is a tuple with the fields a pattern with `..` names, like
+/// `(a, .., z, x: n)`, of the types given. It's solved once `ty` is known.
+/// `positional` is how many positional fields the pattern has, and `rest`
+/// how many of them come before its `..`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TuplePatConstraint<'db> {
+    pub ty: Ty<'db>,
+    pub fields: Vec<(TuplePatPart, Ty<'db>)>,
+    pub positional: usize,
+    pub rest: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -253,6 +273,8 @@ pub enum Constraint<'db> {
     Field { constraint: FieldConstraint<'db>, origin: Origin<'db> },
     /// The type is a tuple made of parts, some of them spread.
     Spread { constraint: SpreadConstraint<'db>, origin: Origin<'db> },
+    /// The type is a tuple with the fields a pattern names.
+    TuplePat { constraint: TuplePatConstraint<'db>, origin: Origin<'db> },
     /// The type is an associated type of a class.
     Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
     /// Something is at most a mutability.
@@ -416,6 +438,7 @@ pub struct Solver<'db> {
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_spreads: Vec<(SpreadConstraint<'db>, Origin<'db>)>,
+    pending_tuple_pats: Vec<(TuplePatConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
@@ -454,6 +477,7 @@ impl<'db> Solver<'db> {
             pending: Vec::new(),
             pending_fields: Vec::new(),
             pending_spreads: Vec::new(),
+            pending_tuple_pats: Vec::new(),
             pending_assoc: Vec::new(),
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
@@ -594,6 +618,11 @@ impl<'db> Solver<'db> {
                     self.pending_spreads.push((constraint, origin));
                 }
             }
+            Constraint::TuplePat { constraint, origin } => {
+                if !self.solve_tuple_pat(&constraint, origin) {
+                    self.pending_tuple_pats.push((constraint, origin));
+                }
+            }
             // Solved right away when possible too.
             Constraint::Assoc { constraint, origin } => {
                 if !self.solve_assoc(&constraint, origin) {
@@ -693,6 +722,65 @@ impl<'db> Solver<'db> {
         }
         let ty = Ty::record(positional.into(), named, c.mutability.clone());
         self.equal(&c.result, &ty, origin);
+        true
+    }
+
+    /// Match the fields a tuple pattern with `..` names against its type,
+    /// once that's known. Returns `false` if it has to wait.
+    fn solve_tuple_pat(&mut self, c: &TuplePatConstraint<'db>, origin: Origin<'db>) -> bool {
+        let (tys, named) = match self.unifier.shallow_resolve(&c.ty) {
+            Ty::Var(_) => return false,
+            Ty::Record(tys, named, _) => (tys.into_vec(), named.into_vec()),
+            Ty::Tuple(tys, _) => (tys.into_vec(), Vec::new()),
+            // Reported already.
+            Ty::Error | Ty::Never => {
+                for (_, ty) in &c.fields {
+                    self.unifier.met_error(ty);
+                }
+                return true;
+            }
+            // Not a tuple: shown as the tuple the pattern says.
+            ty => {
+                let expected = self.unifier.resolve(&ty);
+                let mut positional = Vec::new();
+                let mut named = Vec::new();
+                for (part, ty) in &c.fields {
+                    match part {
+                        TuplePatPart::Positional(_) => positional.push(ty.clone()),
+                        TuplePatPart::Named(name) => named.push((name.clone(), ty.clone())),
+                    }
+                }
+                let m = self.new_var(VarKind::Mutability);
+                let actual = Ty::record(positional.into(), named, m);
+                self.errors.push(TypeError::Mismatch { origin, expected, actual });
+                for (_, ty) in &c.fields {
+                    self.unifier.met_error(ty);
+                }
+                return true;
+            }
+        };
+        for (part, ty) in &c.fields {
+            let field = match part {
+                TuplePatPart::Positional(i) => {
+                    positional_index(*i, c.rest, c.positional, tys.len()).map(|at| tys[at].clone())
+                }
+                TuplePatPart::Named(name) => {
+                    named.iter().find(|(n, _)| n == name).map(|(_, t)| t.clone())
+                }
+            };
+            match field {
+                Some(field) => self.equal(&field, ty, origin),
+                None => {
+                    let name = match part {
+                        TuplePatPart::Positional(i) => Name::new(i.to_string()),
+                        TuplePatPart::Named(name) => name.clone(),
+                    };
+                    let ty_of = self.unifier.resolve(&c.ty);
+                    self.errors.push(TypeError::NoSuchField { origin, ty: ty_of, name });
+                    self.unifier.met_error(ty);
+                }
+            }
+        }
         true
     }
 
@@ -1476,6 +1564,13 @@ impl<'db> Solver<'db> {
                     self.pending_spreads.push((constraint, origin));
                 }
             }
+            for (constraint, origin) in std::mem::take(&mut self.pending_tuple_pats) {
+                if self.solve_tuple_pat(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_tuple_pats.push((constraint, origin));
+                }
+            }
             for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {
                 if self.solve_assoc(&constraint, origin) {
                     progress = true;
@@ -1562,11 +1657,19 @@ impl<'db> Solver<'db> {
     }
 
     /// The field constraints that couldn't be solved yet, resolved.
-    /// Report each spread whose type is still unknown: the type of what's
-    /// spread must be known.
-    pub fn report_pending_spreads(&mut self) {
-        for (_, origin) in std::mem::take(&mut self.pending_spreads) {
+    /// Report each spread, and each tuple pattern with `..`, whose type is
+    /// still unknown: a function's type can't say what they need. What
+    /// they'd decide is the error type, so that it isn't generalized.
+    pub fn report_pending_tuples(&mut self) {
+        for (c, origin) in std::mem::take(&mut self.pending_spreads) {
             self.errors.push(TypeError::TypeNeeded { origin });
+            self.unifier.met_error(&c.result);
+        }
+        for (c, origin) in std::mem::take(&mut self.pending_tuple_pats) {
+            self.errors.push(TypeError::TypeNeeded { origin });
+            for (_, ty) in &c.fields {
+                self.unifier.met_error(ty);
+            }
         }
     }
 
@@ -1607,7 +1710,7 @@ impl<'db> Solver<'db> {
         for (_, origin) in self.take_pending_fields() {
             self.errors.push(TypeError::TypeNeeded { origin });
         }
-        self.report_pending_spreads();
+        self.report_pending_tuples();
         let errors = std::mem::take(&mut self.errors);
         self.errors = errors.into_iter().map(|e| resolve_error(&self.unifier, e)).collect();
         prune_implied_errors(self.db, &mut self.errors);

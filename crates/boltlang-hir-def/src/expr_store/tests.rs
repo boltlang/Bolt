@@ -299,7 +299,23 @@ impl Printer<'_> {
             Pat::Path(path) => format!("<{}>", self.path(path)),
             Pat::Tuple { args, rest: r } => format!("({})", rest(args, *r)),
             Pat::NamedTuple { items, rest } => {
-                format!("({}{})", self.items(items, Self::pat), if *rest { ", .." } else { "" })
+                let mut parts: Vec<String> =
+                    items.iter().map(|i| self.items(std::slice::from_ref(i), Self::pat)).collect();
+                if let Some(before) = rest {
+                    // Before the first positional field after it, or last.
+                    let mut seen = 0;
+                    let at = items
+                        .iter()
+                        .position(|i| {
+                            let positional = matches!(i, TupleItem::Positional(_));
+                            let after = positional && seen >= *before;
+                            seen += positional as u32;
+                            after
+                        })
+                        .unwrap_or(items.len());
+                    parts.insert(at, "..".into());
+                }
+                format!("({})", parts.join(", "))
             }
             Pat::TupleStruct { path, args, rest: r } => {
                 format!("{}({})", self.path(path), rest(args, *r))
@@ -485,10 +501,11 @@ fn tuples_with_named_fields_and_spreads() {
     assert_eq!(
         render(
             "(1, x: 2);\n(x: a);\n(*xs, 1, **opts);\n(x: 5, ...origin);\n\
-             let (a, x: b, ..) = t;\nlet (x: (c, _)) = t;\nlet t: (i32, *Ts, x: i32, **Ks);\nlet u: (...A);"
+             let (a, x: b, ..) = t;\nlet (a, .., z, x: b) = t;\nlet (x: (c, _)) = t;\nlet t: (i32, *Ts, x: i32, **Ks);\nlet u: (...A);"
         ),
         "(tuple 1, x: 2);\n(tuple x: a);\n(tuple *xs, 1, **opts);\n(tuple x: 5, ...origin);\n\
          (let (a, x: b, ..) = t)\n\
+         (let (a, .., z, x: b) = t)\n\
          (let (x: (c, _)) = t)\n\
          (let t : (i32, *Ts, x: i32, **Ks))\n\
          (let u : (...A))"

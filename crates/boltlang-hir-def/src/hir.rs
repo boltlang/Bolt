@@ -92,6 +92,20 @@ pub enum TupleItem<T> {
     Spread(Spread, T),
 }
 
+/// Where the `i`th of the `given` positional fields of a tuple pattern is
+/// in a tuple with `len` positional fields, when `rest` of them come before
+/// a `..`: the fields after it are the last ones. `None` if the tuple has
+/// no such field.
+pub fn positional_index(i: usize, rest: Option<u32>, given: usize, len: usize) -> Option<usize> {
+    match rest {
+        Some(before) if i >= before as usize => {
+            let at = len.checked_sub(given - i)?;
+            (at >= before as usize).then_some(at)
+        }
+        _ => (i < len).then_some(i),
+    }
+}
+
 impl<T: Copy> TupleItem<T> {
     /// What the part holds.
     pub fn value(&self) -> T {
@@ -343,12 +357,13 @@ pub enum Pat {
         args: Box<[PatId]>,
         rest: Option<u32>,
     },
-    /// A tuple pattern with named fields, like `(a, x: b, ..)`. `rest` is
-    /// whether it has a `..`, which ignores the other fields. Its items are
-    /// never spreads. The checker doesn't support it yet.
+    /// A tuple pattern with named fields, like `(a, .., z, x: b)`. `rest`
+    /// is the number of positional fields before its `..`, if it has one,
+    /// which ignores the other fields: those after it are the last ones.
+    /// Its items are never spreads.
     NamedTuple {
         items: Box<[TupleItem<PatId>]>,
-        rest: bool,
+        rest: Option<u32>,
     },
     /// `Some(x)`
     TupleStruct {
