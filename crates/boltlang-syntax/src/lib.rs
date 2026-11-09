@@ -298,6 +298,12 @@ pub enum SyntaxKind {
     PARAM_LIST,
     PARAM,
     /// `...` or `args: ...`
+    /// `*args: *Ts` or `**opts: **Ks`: the other positional or keyword
+    /// arguments of a call
+    REST_PARAM,
+    /// A `*` alone in a parameter list, after which the parameters can only
+    /// be passed by name
+    KEYWORD_MARKER,
     VARIADIC_PARAM,
     /// `pub`, `pub(super)` or `pub(package)`
     VISIBILITY,
@@ -496,6 +502,8 @@ impl SyntaxKind {
             RET_TYPE => "a return type",
             PARAM_LIST => "a parameter list",
             VARIADIC_PARAM => "a variadic parameter",
+            REST_PARAM => "a rest parameter",
+            KEYWORD_MARKER => "a `*` before keyword-only parameters",
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",
             TUPLE_TYPE_FIELD => "a named field of a tuple type",

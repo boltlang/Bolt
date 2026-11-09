@@ -338,8 +338,12 @@ fn call_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
     m.complete(p, CALL_EXPR)
 }
 
+/// `(a, b)`, with named arguments like `sep: ","` and spreads like `*xs`
+/// and `**opts`. The positional ones and `*e` come first.
 pub(super) fn arg_list(p: &mut Parser) {
+    use crate::grammar::{at_named_field, at_spread, name_ref, spread, spread_side};
     let m = p.start();
+    let mut named = false;
     crate::grammar::delimited(
         p,
         T!['('],
@@ -347,7 +351,39 @@ pub(super) fn arg_list(p: &mut Parser) {
         T![,],
         || "expected an expression".into(),
         EXPR_FIRST,
-        |p| expr(p).is_some(),
+        |p| {
+            let positional = if at_named_field(p) {
+                false
+            } else if at_spread(p) {
+                spread_side(p) != crate::grammar::TupleSide::Named
+            } else {
+                true
+            };
+            if positional && named {
+                p.error("a positional argument can't come after a named one");
+            }
+            named |= !positional;
+            if at_named_field(p) {
+                let field = p.start();
+                name_ref(p);
+                p.bump(T![:]);
+                if expr(p).is_none() {
+                    p.error("expected an expression");
+                }
+                field.complete(p, TUPLE_EXPR_FIELD);
+                true
+            } else if at_spread(p) {
+                let s = p.start();
+                spread(p);
+                if expr(p).is_none() {
+                    p.error("expected an expression");
+                }
+                s.complete(p, TUPLE_EXPR_SPREAD);
+                true
+            } else {
+                expr(p).is_some()
+            }
+        },
     );
     m.complete(p, ARG_LIST);
 }

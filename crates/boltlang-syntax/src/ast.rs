@@ -1553,12 +1553,31 @@ impl CallExpr {
     pub fn operator(&self) -> Option<Expr> {
         self.find_node()
     }
+    /// The positional arguments, leaving out named ones and spreads.
     pub fn args(&self) -> impl Iterator<Item = Expr> {
         self.0
             .children()
             .find(|node| node.kind() == ARG_LIST)
             .into_iter()
             .flat_map(|list| list.children().filter_map(Expr::cast))
+    }
+    /// The arguments, with named ones like `sep: ","` and spreads like
+    /// `*xs`, in order.
+    pub fn arg_items(&self) -> impl Iterator<Item = TupleExprItem> {
+        self.0
+            .children()
+            .find(|node| node.kind() == ARG_LIST)
+            .into_iter()
+            .flat_map(|list| list.children())
+            .filter_map(|n| {
+                if let Some(f) = TupleExprField::cast(n.clone()) {
+                    Some(TupleExprItem::Named(f))
+                } else if let Some(s) = TupleExprSpread::cast(n.clone()) {
+                    Some(TupleExprItem::Spread(s))
+                } else {
+                    Expr::cast(n).map(TupleExprItem::Positional)
+                }
+            })
     }
 }
 
@@ -1610,6 +1629,49 @@ impl ParamList {
         ChildrenIter::new(&self.0)
     }
     pub fn variadic_param(&self) -> Option<VariadicParam> {
+        self.find_node()
+    }
+    /// All the parameters, in order: ordinary ones, rests like
+    /// `*args: *Ts`, a `*` alone, and in a function type, packs like
+    /// `*Ts`.
+    pub fn items(&self) -> impl Iterator<Item = ParamItem> {
+        self.0.children().filter_map(|n| match n.kind() {
+            PARAM => Some(ParamItem::Param(Param(n))),
+            REST_PARAM => Some(ParamItem::Rest(RestParam(n))),
+            KEYWORD_MARKER => Some(ParamItem::Marker),
+            TUPLE_TYPE_REST => Some(ParamItem::Pack(TupleTypeRest(n))),
+            _ => None,
+        })
+    }
+}
+
+/// A parameter in a [`ParamList`].
+pub enum ParamItem {
+    Param(Param),
+    /// `*args: *Ts` or `**opts: **Ks`
+    Rest(RestParam),
+    /// A `*` alone.
+    Marker,
+    /// `*Ts` or `**Ks` in a function type.
+    Pack(TupleTypeRest),
+}
+
+/// `*args: *Ts` or `**opts: **Ks`
+pub struct RestParam(SyntaxNode);
+
+simple_node!(RestParam, REST_PARAM);
+
+impl RestParam {
+    /// What it takes: the other positional arguments for `*`, or the other
+    /// named ones for `**`.
+    pub fn spread(&self) -> Option<Spread> {
+        spread_of(&self.0)
+    }
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+    /// Its type, like `*Ts`.
+    pub fn pack(&self) -> Option<TupleTypeRest> {
         self.find_node()
     }
 }

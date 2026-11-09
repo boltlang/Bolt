@@ -179,13 +179,17 @@ pub(crate) fn opt_ret_type(p: &mut Parser) {
 }
 
 const FN_TYPE_PARAM_FIRST: TokenSet =
-    TYPE_FIRST.union(TokenSet::new(&[T![_], T![mut], T![...], T![#]]));
+    TYPE_FIRST.union(TokenSet::new(&[T![_], T![mut], T![...], T![#], T![*]]));
 
 /// The parameters of a function type. Unlike in a function declaration, a
 /// bare name is a type here: `fn(i32)` takes an `i32`. A parameter can still
-/// be named, as in `fn(x: i32)`.
+/// be named, as in `fn(x: i32)`. After a `*` or a positional pack like
+/// `*Ts`, the parameters are keyword-only, so they must be named, and a
+/// named pack like `**Ks` comes last: `fn(i32, *Ts, sep: String, **Ks)`.
 fn fn_type_param_list(p: &mut Parser) {
     let m = p.start();
+    let mut keyword = false;
+    let mut done = false;
     delimited(
         p,
         T!['('],
@@ -194,17 +198,46 @@ fn fn_type_param_list(p: &mut Parser) {
         || "expected a parameter".into(),
         FN_TYPE_PARAM_FIRST,
         |p| {
-            if !p.at_ts(FN_TYPE_PARAM_FIRST) {
+            if !p.at_ts(FN_TYPE_PARAM_FIRST) && !p.at_op("**") {
                 return false;
             }
-            fn_type_param(p);
+            if done {
+                p.error("`**` takes the other keyword arguments, so it comes last");
+            }
+            // `*` alone, before keyword-only parameters.
+            if p.at(T![*]) && (p.nth_at(1, T![,]) || p.nth_at(1, T![')'])) {
+                if keyword {
+                    p.error("there's already a `*` before this");
+                }
+                keyword = true;
+                let m = p.start();
+                p.bump(T![*]);
+                m.complete(p, KEYWORD_MARKER);
+                return true;
+            }
+            // `...` is the old variadic parameter, not a pack.
+            if p.at(T![*]) || p.at_op("**") {
+                match spread_side(p) {
+                    TupleSide::Named => done = true,
+                    _ if keyword => p.error("there's already a `*` before this"),
+                    _ => keyword = true,
+                }
+                let rest = p.start();
+                spread(p);
+                type_(p);
+                rest.complete(p, TUPLE_TYPE_REST);
+                return true;
+            }
+            fn_type_param(p, keyword);
             true
         },
     );
     m.complete(p, PARAM_LIST);
 }
 
-fn fn_type_param(p: &mut Parser) {
+/// One parameter of a function type, which must be named when it's
+/// `keyword`-only.
+fn fn_type_param(p: &mut Parser, keyword: bool) {
     let m = p.start();
     outer_attrs(p);
     if p.eat(T![...]) {
@@ -222,8 +255,15 @@ fn fn_type_param(p: &mut Parser) {
             return;
         }
         type_(p);
-    } else if !p.eat(T![_]) {
-        type_(p);
+    } else {
+        if keyword {
+            p.error(
+                "a parameter after `*` or a positional pack can only be passed by name, so it needs one",
+            );
+        }
+        if !p.eat(T![_]) {
+            type_(p);
+        }
     }
     m.complete(p, PARAM);
 }
