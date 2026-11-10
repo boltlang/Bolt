@@ -62,9 +62,7 @@
 use std::path::Path;
 
 use boltlang_base_db::{File, Settings, SystemPathBuf, TestDb, source_text};
-use boltlang_corpus::{
-    Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
-};
+use boltlang_corpus::{Case, case_trial, catch, data_files, data_name, file_trials, split_files};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
@@ -420,53 +418,12 @@ fn main() {
                 continue;
             }
         };
-        let mut text = std::fs::read_to_string(&path).unwrap();
-        if updating()
-            && let Ok(cases) = parse_cases(&text, 1)
-        {
-            let new = update(&text, &cases, |case| updated(case, kind));
-            if new != text {
-                std::fs::write(&path, &new).unwrap();
-                text = new;
-            }
-        }
-        let cases = match parse_cases(&text, 1) {
-            Ok(cases) => cases,
-            Err(error) => {
-                let message = format!("{}: {error}", path.display());
-                trials.push(Trial::test(stem, move || Err(message.into())));
-                continue;
-            }
-        };
-        let mut seen = Vec::new();
-        for case in cases {
-            let name = format!("{stem}::{}", slug(&case.title));
-            if seen.contains(&name) {
-                let message = format!("{}: two cases are called `{}`", path.display(), case.title);
-                trials.push(Trial::test(format!("{name}_again"), move || Err(message.into())));
-                continue;
-            }
-            seen.push(name.clone());
-            let attributes = match Attributes::parse(&case) {
-                Ok(attributes) => attributes,
-                Err(error) => {
-                    let message = format!("{}: {error}", path.display());
-                    trials.push(Trial::test(name, move || Err(message.into())));
-                    continue;
-                }
-            };
-            let trial = if attributes.skip {
-                // Never run, even with `--ignored`, since it may hang.
-                Trial::test(name, || Ok(())).with_kind("skip").with_ignored_flag(true)
-            } else if attributes.todo {
-                Trial::test(name, move || run(&case, kind, &attributes))
-                    .with_kind("todo")
-                    .with_ignored_flag(true)
-            } else {
-                Trial::test(name, move || run(&case, kind, &attributes))
-            };
-            trials.push(trial);
-        }
+        let updated = |case: &Case| updated(case, kind);
+        trials.extend(file_trials(&root, &path, 1, updated, |name, case| {
+            let attributes = Attributes::parse(&case)?;
+            let (skip, todo) = (attributes.skip, attributes.todo);
+            Ok(case_trial(name, skip, todo, move || run(&case, kind, &attributes)))
+        }));
     }
     libtest_mimic::run(&args, trials).exit();
 }
