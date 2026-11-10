@@ -6,9 +6,9 @@
 //! test. It gives the module Node's WASI preview 1 as
 //! `wasi_snapshot_preview1`, with no arguments, environment or preopened
 //! directories, and every other import a function that stops the
-//! program, as the evaluator does for a host function it doesn't have. It exits with 1 when the export stops
-//! with an error, or exits with a code other than 0, and with 2 when the
-//! module can't be run.
+//! program, as the evaluator does for a host function it doesn't have. It
+//! exits with 1 when the export stops with an error, or exits with a code
+//! other than 0, and with 2 when the module can't be run.
 
 use std::{
     path::{Path, PathBuf},
@@ -92,22 +92,10 @@ impl NodeHost {
     /// Call the export `name` of the module at `module`, with its output on
     /// ours: `Err` with why it stopped, if it stopped with an error.
     pub fn run(&self, module: &Path, name: &str) -> std::io::Result<Result<(), String>> {
-        // Node's WASI warns that it's experimental.
-        let status = Command::new("node")
-            .args(NODE_FLAGS)
-            .arg(self.dir.join("runtime.mjs"))
-            .arg(module)
-            .arg(name)
-            .status()?;
-        Ok(match status.code() {
-            Some(0) => Ok(()),
-            Some(2) => Err("the module couldn't be run".into()),
-            _ => Err("the program stopped with an error".into()),
-        })
+        let status = self.command(Runtime::Node, module, name).status()?;
+        Ok(outcome(status.code()))
     }
-}
 
-impl NodeHost {
     /// Like [`NodeHost::run`], with `runtime`, but with what the program
     /// wrote to stdout and stderr given back, after the result, instead of
     /// shown.
@@ -117,20 +105,26 @@ impl NodeHost {
         module: &Path,
         name: &str,
     ) -> std::io::Result<(Result<(), String>, String)> {
-        let output = Command::new("node")
-            .args(NODE_FLAGS)
-            .arg(self.dir.join(runtime.script()))
-            .arg(module)
-            .arg(name)
-            .output()?;
+        let output = self.command(runtime, module, name).output()?;
         let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
         text.push_str(&String::from_utf8_lossy(&output.stderr));
-        let result = match output.status.code() {
-            Some(0) => Ok(()),
-            Some(2) => Err("the module couldn't be run".into()),
-            _ => Err("the program stopped with an error".into()),
-        };
-        Ok((result, text))
+        Ok((outcome(output.status.code()), text))
+    }
+
+    /// The command that calls the export `name` of `module` with `runtime`.
+    fn command(&self, runtime: Runtime, module: &Path, name: &str) -> Command {
+        let mut command = Command::new("node");
+        command.args(NODE_FLAGS).arg(self.dir.join(runtime.script())).arg(module).arg(name);
+        command
+    }
+}
+
+/// What the exit code of a runtime says about the run.
+fn outcome(code: Option<i32>) -> Result<(), String> {
+    match code {
+        Some(0) => Ok(()),
+        Some(2) => Err("the module couldn't be run".into()),
+        _ => Err("the program stopped with an error".into()),
     }
 }
 
