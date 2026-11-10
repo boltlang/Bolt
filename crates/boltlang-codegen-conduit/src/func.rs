@@ -1257,7 +1257,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     }
 
     fn prim(&mut self, op: PrimOp, s: Scalar, args: Vec<Atom>) -> R<Val> {
-        let sign = if s.signed() { Sign::Signed } else { Sign::Unsigned };
+        let sign = s.sign();
         let float = matches!(s, Scalar::F32 | Scalar::F64);
         let p = match op {
             // In the bytes of an `[i8]`, as Conduit reads and writes them:
@@ -1321,7 +1321,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         }
         // Narrower keeps the low bits, and wider extends by the sign of what's
         // cast. Of the same width, only how it's read changes.
-        let sign = if from.signed() { Sign::Signed } else { Sign::Unsigned };
+        let sign = from.sign();
         let v = if from.ty() == to.ty() { v } else { Atom::Var(self.b.convert(to.ty(), sign, v)) };
         Ok(Some(v))
     }
@@ -1808,8 +1808,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                 let v = if nullable { l.host_is_null(v) } else { v };
                 let v = match Scalar::of(&t)? {
                     Some(sc @ Scalar::Int { bits: 8 | 16, .. }) => {
-                        let sign = if sc.signed() { Sign::Signed } else { Sign::Unsigned };
-                        Atom::Var(l.b.convert(Ty::I32, sign, v))
+                        Atom::Var(l.b.convert(Ty::I32, sc.sign(), v))
                     }
                     _ => v,
                 };
@@ -1890,7 +1889,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                         Scalar::Int { bits: 32, signed: false }
                     }
                 };
-                let sign = if s.signed() { Sign::Signed } else { Sign::Unsigned };
+                let sign = s.sign();
                 let bound = |b: &Bound<'_>| -> R<Atom> {
                     Ok(match b {
                         Bound::Int(n) => int_lit(s, *n),

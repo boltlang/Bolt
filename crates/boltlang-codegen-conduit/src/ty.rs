@@ -40,7 +40,7 @@ use boltlang_hir_ty::{
     lower::VariantDef,
 };
 use boltlang_mir_mono::{MonoMut, MonoRow, MonoTy, field_types};
-use conduit_ir::{CtorDecl, DataDecl, DataId, EffectId, Mutability, Row, Sig, Ty};
+use conduit_ir::{CtorDecl, DataDecl, DataId, EffectId, Mutability, Row, Sig, Sign, Ty};
 
 use crate::{EffectKey, ErrorKind};
 
@@ -105,8 +105,9 @@ impl Scalar {
         }
     }
 
-    pub(crate) fn signed(self) -> bool {
-        matches!(self, Scalar::Int { signed: true, .. })
+    /// How Conduit reads a value of this type.
+    pub(crate) fn sign(self) -> Sign {
+        if matches!(self, Scalar::Int { signed: true, .. }) { Sign::Signed } else { Sign::Unsigned }
     }
 }
 
