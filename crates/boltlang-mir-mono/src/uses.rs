@@ -901,11 +901,6 @@ pub(crate) fn bind<'db>(
     }
 }
 
-/// Match the row `pattern` of a scheme with a use's `row`: each row it's
-/// made of, like the `E` of `Log + E`, is what `row` has besides the
-/// effects `pattern` names. With several, like `E + F`, each gets all of
-/// it, which is more than it needs, and still fits. A row that's matched
-/// more than once gets all of what it's matched with.
 /// Match a tuple type with packs spread in it, like `(T, *Ts, x: i32,
 /// **R)`, with a use's tuple: the positional fields from both ends, then
 /// the positional pack, if there's one, gets the ones in between, as a
@@ -968,6 +963,11 @@ fn bind_tuple<'db>(
     }
 }
 
+/// Match the row `pattern` of a scheme with a use's `row`: each row it's
+/// made of, like the `E` of `Log + E`, is what `row` has besides the
+/// effects `pattern` names. With several, like `E + F`, each gets all of
+/// it, which is more than it needs, and still fits. A row that's matched
+/// more than once gets all of what it's matched with.
 fn bind_row<'db>(
     params: &[GenericParamId<'db>],
     pattern: &Ty<'db>,
