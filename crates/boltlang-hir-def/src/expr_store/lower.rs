@@ -337,10 +337,7 @@ impl ExprCollector {
             }
             E::Field(e) => {
                 let expr = self.lower_opt_expr(e.expr());
-                let name = e
-                    .name_ref()
-                    .map(|n| Name::from_ident(&n.text()))
-                    .unwrap_or_else(|| Name::new(""));
+                let name = field_name(e.name_ref().map(|n| n.text()));
                 Expr::Field { expr, name }
             }
             E::Try(e) => {
@@ -475,26 +472,20 @@ impl ExprCollector {
             },
             E::Continue(e) => Expr::Continue { label: e.label().and_then(|l| label_name(&l)) },
             E::Ret(e) => Expr::Return { expr: e.expr().map(|x| self.lower_expr(x)) },
-            E::Closure(e) => {
-                let effects = self.lower_effect_row(e.effect_row());
-                self.lower_lambda(
-                    e.param_list(),
-                    e.ret_type(),
-                    effects,
-                    e.body(),
-                    LambdaKind::Closure,
-                )
-            }
-            E::Fun(e) => {
-                let effects = self.lower_effect_row(e.effect_row());
-                self.lower_lambda(
-                    e.param_list(),
-                    e.ret_type(),
-                    effects,
-                    e.body(),
-                    LambdaKind::Function,
-                )
-            }
+            E::Closure(e) => self.lower_lambda(
+                e.param_list(),
+                e.ret_type(),
+                e.effect_row(),
+                e.body(),
+                LambdaKind::Closure,
+            ),
+            E::Fun(e) => self.lower_lambda(
+                e.param_list(),
+                e.ret_type(),
+                e.effect_row(),
+                e.body(),
+                LambdaKind::Function,
+            ),
             E::Macro(e) => Expr::MacroCall { name: macro_name(e.macro_call()) },
         };
         self.alloc_expr(lowered, Some(&node))
@@ -505,10 +496,11 @@ impl ExprCollector {
         &mut self,
         list: Option<ast::ParamList>,
         ret_type: Option<ast::RetType>,
-        effects: Option<Box<[TypeRefId]>>,
+        effect_row: Option<ast::EffectRow>,
         body: Option<ast::Expr>,
         kind: LambdaKind,
     ) -> Expr {
+        let effects = self.lower_effect_row(effect_row);
         let mut params = Vec::new();
         let mut param_types = Vec::new();
         for param in list.iter().flat_map(|l| l.params()) {
@@ -805,7 +797,7 @@ fn alloc<T>(
     id
 }
 
-/// The name of a field of a tuple. The parser only makes one with a name.
+/// The name of a field, or an empty name where the parser found none.
 fn field_name(text: Option<impl AsRef<str>>) -> Name {
     text.map_or_else(|| Name::new(""), |t| Name::from_ident(t.as_ref()))
 }
