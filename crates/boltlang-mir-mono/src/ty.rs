@@ -202,6 +202,26 @@ impl<'db> MonoTy<'db> {
         }
     }
 
+    /// The mutabilities right inside the type: an ADT's mutability
+    /// arguments, and the mutability of the type itself.
+    fn muts(&self) -> impl Iterator<Item = MonoMut> + '_ {
+        let (args, own): (&[MonoMut], Option<MonoMut>) = match self {
+            MonoTy::Adt(_, _, ms, own) => (ms, Some(*own)),
+            MonoTy::Tuple(_, own)
+            | MonoTy::Record(_, _, own)
+            | MonoTy::Array(own, _)
+            | MonoTy::Fn(_, _, _, own, _) => (&[], Some(*own)),
+            MonoTy::Builtin(_)
+            | MonoTy::Row(_)
+            | MonoTy::Never
+            | MonoTy::Erased(_)
+            | MonoTy::ErasedAssoc(..)
+            | MonoTy::Any(_)
+            | MonoTy::Host(_) => (&[], None),
+        };
+        args.iter().copied().chain(own)
+    }
+
     /// Whether an erased type is somewhere in the type.
     pub fn has_erased(&self) -> bool {
         match self {
@@ -362,29 +382,8 @@ impl<'db> MonoTy<'db> {
 
     /// Whether a mutability parameter is somewhere in the type.
     pub fn has_mut_param(&self) -> bool {
-        let param = |m: &MonoMut| matches!(m, MonoMut::Param(_));
-        match self {
-            MonoTy::Erased(_)
-            | MonoTy::Builtin(_)
-            | MonoTy::Never
-            | MonoTy::Any(_)
-            | MonoTy::Host(_) => false,
-            MonoTy::ErasedAssoc(_, args) => args.iter().any(MonoTy::has_mut_param),
-            MonoTy::Adt(_, args, ms, m) => {
-                param(m) || ms.iter().any(param) || args.iter().any(MonoTy::has_mut_param)
-            }
-            MonoTy::Tuple(args, m) | MonoTy::Record(args, _, m) => {
-                param(m) || args.iter().any(MonoTy::has_mut_param)
-            }
-            MonoTy::Array(m, elem) => param(m) || elem.has_mut_param(),
-            MonoTy::Fn(params, _, ret, m, row) => {
-                param(m)
-                    || params.iter().any(MonoTy::has_mut_param)
-                    || ret.has_mut_param()
-                    || row.any_ty(&mut MonoTy::has_mut_param)
-            }
-            MonoTy::Row(row) => row.any_ty(&mut MonoTy::has_mut_param),
-        }
+        self.muts().any(|m| matches!(m, MonoMut::Param(_)))
+            || self.any_child(&mut MonoTy::has_mut_param)
     }
 
     /// The type as the type checker writes it, to choose impls with, with
