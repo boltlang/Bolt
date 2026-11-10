@@ -402,11 +402,6 @@ impl<'a, 'db> Builder<'a, 'db> {
                         row.cols.insert(i + k, (field, sub));
                     }
                 }
-                // Its fields are where the type has them: the positional
-                // ones first, then the named ones in the order of their
-                // names.
-                // `..` ignores the fields it stands for, so the positional
-                // ones after it are the last ones.
                 // With a pack spread in the tuple, the positional fields
                 // after `..` are counted from the end, and the named ones are
                 // found by name.
@@ -434,6 +429,10 @@ impl<'a, 'db> Builder<'a, 'db> {
                         row.cols.insert(i + k, (field, sub));
                     }
                 }
+                // Its fields are where the type has them: the positional
+                // ones first, then the named ones in the order of their
+                // names. `..` ignores the fields it stands for, so the
+                // positional ones after it are the last ones.
                 Pat::NamedTuple { items, rest } => {
                     let Ty::Record(tys, named, _) = infer_body(self.db, self.def).pat_ty(pat)
                     else {
@@ -542,13 +541,13 @@ impl<'a, 'db> Builder<'a, 'db> {
         }
     }
 
-    /// How many elements the tuple that a tuple pattern matches has: those
-    /// it gives, or, with `..`, what its type says.
     /// Whether the type of `pat` is a tuple with a pack spread in it.
     fn pat_has_spread(&self, pat: PatId) -> bool {
         infer_body(self.db, self.def).pat_ty(pat).has_spread()
     }
 
+    /// How many elements the tuple that a tuple pattern matches has: those
+    /// it gives, or, with `..`, what its type says.
     fn tuple_arity(
         &self,
         pat: PatId,
