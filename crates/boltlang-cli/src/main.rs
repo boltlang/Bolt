@@ -192,14 +192,7 @@ struct CheckCommand {
 impl Exec for CheckCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database_for(self.target.target(self.wasm)?)?;
-        let mut ok = true;
-        let mut files = Vec::new();
-        for path in &self.files {
-            match open(&db, path) {
-                Some(file) => files.push(file),
-                None => ok = false,
-            }
-        }
+        let (files, mut ok) = open_all(&db, &self.files);
         for &file in &files {
             let found = checked(&db, file, &files);
             report(&db, &found)?;
@@ -336,14 +329,7 @@ impl Exec for TestCommand {
         for root in &roots {
             bolt_files(root, &mut paths)?;
         }
-        let mut files = Vec::new();
-        let mut ok = true;
-        for path in &paths {
-            match open(&db, path) {
-                Some(file) => files.push(file),
-                None => ok = false,
-            }
-        }
+        let (files, mut ok) = open_all(&db, &paths);
         let selected = |name: &str| self.filter.as_ref().is_none_or(|f| name.contains(f.as_str()));
         let wasm = if self.wasm { Some(node_host("bolt test --wasm")?) } else { None };
         let (mut passed, mut failed, mut skipped) = (0, 0, 0);
@@ -517,6 +503,13 @@ fn open(db: &CliDatabase, path: &std::path::Path) -> Option<File> {
         return None;
     }
     Some(file)
+}
+
+/// The files at `paths` that can be read, and whether all of them can.
+fn open_all(db: &CliDatabase, paths: &[PathBuf]) -> (Vec<File>, bool) {
+    let files: Vec<File> = paths.iter().filter_map(|path| open(db, path)).collect();
+    let all = files.len() == paths.len();
+    (files, all)
 }
 
 fn print(out: &mut impl Write, indent: usize, element: SyntaxElement) -> io::Result<()> {
