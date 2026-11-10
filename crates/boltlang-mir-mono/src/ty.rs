@@ -19,12 +19,12 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File};
-use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_def::{
     Name,
     builtin_type::BuiltinType,
     hir::Mutability,
     ids::{EffectId, ItemContainerId, TypeAliasId},
+    resolver::GenericDefId,
 };
 use boltlang_hir_ty::{
     AdtId, GenericParamId, Ty,
@@ -487,6 +487,13 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
             }
             Ok(())
         };
+        // A value's own mutability, before its type, unless it's `imm`.
+        let mutability = |f: &mut fmt::Formatter<'_>, own: MonoMut| -> fmt::Result {
+            if own != MonoMut::Imm {
+                write!(f, "{own} ")?;
+            }
+            Ok(())
+        };
         match self.ty {
             MonoTy::Erased(i) => write!(f, "any{i}"),
             MonoTy::Any(_) => write!(f, "any"),
@@ -503,9 +510,7 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
             MonoTy::Builtin(b) => write!(f, "{b}"),
             MonoTy::Adt(adt, args, ms, own) => {
                 // An enum, and an `imm struct`, are always `imm`.
-                if *own != MonoMut::Imm {
-                    write!(f, "{own} ")?;
-                }
+                mutability(f, *own)?;
                 write!(f, "{}", adt_name(db, *adt))?;
                 if !args.is_empty() || !ms.is_empty() {
                     write!(f, "[")?;
@@ -521,9 +526,7 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 Ok(())
             }
             MonoTy::Tuple(tys, own) => {
-                if *own != MonoMut::Imm {
-                    write!(f, "{own} ")?;
-                }
+                mutability(f, *own)?;
                 write!(f, "(")?;
                 list(f, tys)?;
                 if tys.len() == 1 {
@@ -532,9 +535,7 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 write!(f, ")")
             }
             MonoTy::Record(tys, names, own) => {
-                if *own != MonoMut::Imm {
-                    write!(f, "{own} ")?;
-                }
+                mutability(f, *own)?;
                 write!(f, "(")?;
                 let split = tys.len() - names.len();
                 for (i, ty) in tys.iter().enumerate() {
@@ -550,9 +551,7 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
             }
             MonoTy::Array(own, elem) => write!(f, "{own} [{}]", DisplayMonoTy { db, ty: elem }),
             MonoTy::Fn(params, names, ret, own, row) => {
-                if *own != MonoMut::Imm {
-                    write!(f, "{own} ")?;
-                }
+                mutability(f, *own)?;
                 // The keyword parameters with their names.
                 let split = params.len() - names.len();
                 let parts: Vec<String> = params
