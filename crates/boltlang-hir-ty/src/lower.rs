@@ -644,8 +644,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             );
         }
         // A type of the host, which is a type of its own.
-        let item = alias.item(self.db);
-        if item.link.is_some() && !item.has_value {
+        if alias.item(self.db).is_host_type() {
             return (Ty::Host(alias), Some(Kind::Type));
         }
         let ty = match &type_alias_ty(self.db, alias).ty {
