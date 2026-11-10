@@ -652,7 +652,8 @@ fn fn_generics<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db Generics
 }
 
 /// The dictionary for `want` that `dict`, for `have`, gives: itself, or one
-/// of the superclass dictionaries it holds, searched breadth-first.
+/// of the superclass dictionaries it holds, searched depth-first, in the
+/// order of [`superclasses`].
 fn find_super<'db>(
     db: &'db dyn Db,
     dict: Dict<'db>,
