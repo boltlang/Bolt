@@ -189,47 +189,39 @@ const FN_TYPE_PARAM_FIRST: TokenSet =
 fn fn_type_param_list(p: &mut Parser) {
     let m = p.start();
     let mut order = ParamOrder::default();
-    delimited(
-        p,
-        T!['('],
-        T![')'],
-        T![,],
-        || "expected a parameter".into(),
-        FN_TYPE_PARAM_FIRST,
-        |p| {
-            // A function type says a parameter has no name by leaving it
-            // out, so it has no `/`.
-            if at_positional_marker(p) {
-                p.error_and_bump(
-                    "a function type has no `/`: leave out the names of the parameters that are \
+    delimited(p, T!['('], T![')'], T![,], "expected a parameter", FN_TYPE_PARAM_FIRST, |p| {
+        // A function type says a parameter has no name by leaving it
+        // out, so it has no `/`.
+        if at_positional_marker(p) {
+            p.error_and_bump(
+                "a function type has no `/`: leave out the names of the parameters that are \
                      positional-only, as in `fn(i32, y: i32)`",
-                );
-                return true;
-            }
-            if !p.at_ts(FN_TYPE_PARAM_FIRST) && !p.at_op("**") {
-                return false;
-            }
-            let marker = at_keyword_marker(p);
-            // `...` is the old variadic parameter, not a pack.
-            let rest = p.at(T![*]) || p.at_op("**");
-            order.check(p);
-            if marker {
-                let m = p.start();
-                p.bump(T![*]);
-                m.complete(p, KEYWORD_MARKER);
-                return true;
-            }
-            if rest {
-                let rest = p.start();
-                spread(p);
-                type_(p);
-                rest.complete(p, TUPLE_TYPE_REST);
-                return true;
-            }
-            fn_type_param(p, order.keyword);
-            true
-        },
-    );
+            );
+            return true;
+        }
+        if !p.at_ts(FN_TYPE_PARAM_FIRST) && !p.at_op("**") {
+            return false;
+        }
+        let marker = at_keyword_marker(p);
+        // `...` is the old variadic parameter, not a pack.
+        let rest = p.at(T![*]) || p.at_op("**");
+        order.check(p);
+        if marker {
+            let m = p.start();
+            p.bump(T![*]);
+            m.complete(p, KEYWORD_MARKER);
+            return true;
+        }
+        if rest {
+            let rest = p.start();
+            spread(p);
+            type_(p);
+            rest.complete(p, TUPLE_TYPE_REST);
+            return true;
+        }
+        fn_type_param(p, order.keyword);
+        true
+    });
     m.complete(p, PARAM_LIST);
 }
 

@@ -329,21 +329,13 @@ const TUPLE_FIELD_FIRST: TokenSet = TYPE_FIRST.union(TokenSet::new(&[T![pub], T!
 
 fn variant_list(p: &mut Parser) {
     let m = p.start();
-    delimited(
-        p,
-        T!['{'],
-        T!['}'],
-        T![,],
-        || "expected a variant".into(),
-        NAMED_MEMBER_FIRST,
-        |p| {
-            if !p.at_ts(NAMED_MEMBER_FIRST) {
-                return false;
-            }
-            variant(p);
-            true
-        },
-    );
+    delimited(p, T!['{'], T!['}'], T![,], "expected a variant", NAMED_MEMBER_FIRST, |p| {
+        if !p.at_ts(NAMED_MEMBER_FIRST) {
+            return false;
+        }
+        variant(p);
+        true
+    });
     m.complete(p, VARIANT_LIST);
 }
 
@@ -367,52 +359,36 @@ fn variant(p: &mut Parser) {
 /// `{ x: i32, pub y: i32 }`
 pub(crate) fn record_field_list(p: &mut Parser) {
     let m = p.start();
-    delimited(
-        p,
-        T!['{'],
-        T!['}'],
-        T![,],
-        || "expected a field".into(),
-        NAMED_MEMBER_FIRST,
-        |p| {
-            if !p.at_ts(NAMED_MEMBER_FIRST) {
-                return false;
-            }
-            let field = p.start();
-            outer_attrs(p);
-            opt_visibility(p);
-            name(p);
-            p.expect(T![:]);
-            type_(p);
-            field.complete(p, RECORD_FIELD);
-            true
-        },
-    );
+    delimited(p, T!['{'], T!['}'], T![,], "expected a field", NAMED_MEMBER_FIRST, |p| {
+        if !p.at_ts(NAMED_MEMBER_FIRST) {
+            return false;
+        }
+        let field = p.start();
+        outer_attrs(p);
+        opt_visibility(p);
+        name(p);
+        p.expect(T![:]);
+        type_(p);
+        field.complete(p, RECORD_FIELD);
+        true
+    });
     m.complete(p, RECORD_FIELD_LIST);
 }
 
 /// `(i32, pub String)`
 pub(crate) fn tuple_field_list(p: &mut Parser) {
     let m = p.start();
-    delimited(
-        p,
-        T!['('],
-        T![')'],
-        T![,],
-        || "expected a type".into(),
-        TUPLE_FIELD_FIRST,
-        |p| {
-            if !p.at_ts(TUPLE_FIELD_FIRST) {
-                return false;
-            }
-            let field = p.start();
-            outer_attrs(p);
-            opt_visibility(p);
-            type_(p);
-            field.complete(p, TUPLE_FIELD);
-            true
-        },
-    );
+    delimited(p, T!['('], T![')'], T![,], "expected a type", TUPLE_FIELD_FIRST, |p| {
+        if !p.at_ts(TUPLE_FIELD_FIRST) {
+            return false;
+        }
+        let field = p.start();
+        outer_attrs(p);
+        opt_visibility(p);
+        type_(p);
+        field.complete(p, TUPLE_FIELD);
+        true
+    });
     m.complete(p, TUPLE_FIELD_LIST);
 }
 
@@ -619,7 +595,7 @@ fn import_list(p: &mut Parser) {
         T!['('],
         T![')'],
         T![,],
-        || "expected a name or an operator".into(),
+        "expected a name or an operator",
         TokenSet::new(&[IDENT, OPERATOR, VBAR, LT, GT, STAR, PLUS, MINUS, EXCL]),
         |p| {
             if is_infix_operator(p.current()) || is_prefix_operator(p.current()) {

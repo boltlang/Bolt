@@ -376,31 +376,23 @@ fn tuple_expr_spread(p: &mut Parser) {
 pub(super) fn arg_list(p: &mut Parser) {
     let m = p.start();
     let mut named = false;
-    delimited(
-        p,
-        T!['('],
-        T![')'],
-        T![,],
-        || "expected an expression".into(),
-        EXPR_FIRST,
-        |p| {
-            let positional =
-                !at_named_field(p) && !(at_spread(p) && spread_side(p) == TupleSide::Named);
-            if positional && named {
-                p.error("a positional argument can't come after a named one");
-            }
-            named |= !positional;
-            if at_named_field(p) {
-                tuple_expr_field(p);
-                true
-            } else if at_spread(p) {
-                tuple_expr_spread(p);
-                true
-            } else {
-                expr(p).is_some()
-            }
-        },
-    );
+    delimited(p, T!['('], T![')'], T![,], "expected an expression", EXPR_FIRST, |p| {
+        let positional =
+            !at_named_field(p) && !(at_spread(p) && spread_side(p) == TupleSide::Named);
+        if positional && named {
+            p.error("a positional argument can't come after a named one");
+        }
+        named |= !positional;
+        if at_named_field(p) {
+            tuple_expr_field(p);
+            true
+        } else if at_spread(p) {
+            tuple_expr_spread(p);
+            true
+        } else {
+            expr(p).is_some()
+        }
+    });
     m.complete(p, ARG_LIST);
 }
 

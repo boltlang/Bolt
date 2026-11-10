@@ -23,7 +23,7 @@ pub(crate) fn generic_param_list(p: &mut Parser) {
         T!['['],
         T![']'],
         T![,],
-        || "expected a generic parameter".into(),
+        "expected a generic parameter",
         GENERIC_PARAM_FIRST,
         generic_param,
     );

@@ -24,7 +24,7 @@ pub(crate) fn generic_arg_list(p: &mut Parser) {
         T!['['],
         T![']'],
         T![,],
-        || "expected a generic argument".into(),
+        "expected a generic argument",
         GENERIC_ARG_FIRST,
         generic_arg,
     );

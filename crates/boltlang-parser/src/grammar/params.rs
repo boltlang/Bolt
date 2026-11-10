@@ -23,22 +23,14 @@ pub(crate) fn param_list(p: &mut Parser) {
     }
     let m = p.start();
     let mut order = ParamOrder::default();
-    delimited(
-        p,
-        T!['('],
-        T![')'],
-        T![,],
-        || "expected a parameter".into(),
-        PARAM_FIRST,
-        |p| {
-            if !p.at_ts(PARAM_FIRST) && !p.at_op("**") && !at_positional_marker(p) {
-                return false;
-            }
-            order.check(p);
-            param(p);
-            true
-        },
-    );
+    delimited(p, T!['('], T![')'], T![,], "expected a parameter", PARAM_FIRST, |p| {
+        if !p.at_ts(PARAM_FIRST) && !p.at_op("**") && !at_positional_marker(p) {
+            return false;
+        }
+        order.check(p);
+        param(p);
+        true
+    });
     m.complete(p, PARAM_LIST);
 }
 

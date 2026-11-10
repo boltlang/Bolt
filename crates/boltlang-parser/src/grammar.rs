@@ -171,29 +171,27 @@ pub(crate) fn name_ref(p: &mut Parser) {
     }
 }
 
-/// The `parser` passed this is required to at least consume one token if it returns `true`.
-/// If the `parser` returns false, parsing will stop.
+/// A list like `(a, b, c)`: `bra`, elements separated by `delim`, and
+/// `ket`. `parser` parses one element. It returns `false` if no element
+/// starts here, which ends the list, and must consume a token if it returns
+/// `true`. `missing_message` is the error for a missing element, like in
+/// `(a, , b)`, and `first_set` holds the tokens that start an element.
 fn delimited(
     p: &mut Parser<'_>,
     bra: SyntaxKind,
     ket: SyntaxKind,
     delim: SyntaxKind,
-    unexpected_delim_message: impl Fn() -> String,
+    missing_message: &str,
     first_set: TokenSet,
     mut parser: impl FnMut(&mut Parser<'_>) -> bool,
 ) {
     p.bump(bra);
     while !p.at(ket) && !p.at(EOF) {
         if p.at(delim) {
-            // Recover if an argument is missing and only got a delimiter,
-            // e.g. `(a, , b)`.
-
-            // Wrap the erroneous delimiter in an error node so that fixup logic gets rid of it.
-            // FIXME: Ideally this should be handled in fixup in a structured way, but our list
-            // nodes currently have no concept of a missing node between two delimiters.
-            // So doing it this way is easier.
+            // An element is missing, as in `(a, , b)`. The delimiter goes in
+            // an error node.
             let m = p.start();
-            p.error(unexpected_delim_message());
+            p.error(missing_message);
             p.bump(delim);
             m.complete(p, ERROR);
             continue;

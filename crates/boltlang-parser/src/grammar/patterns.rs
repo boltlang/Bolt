@@ -178,34 +178,26 @@ fn path_or_struct_pattern(p: &mut Parser) -> CompletedMarker {
 fn tuple_pattern(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     let mut kind = TupleKind::default();
-    delimited(
-        p,
-        T!['('],
-        T![')'],
-        T![,],
-        || "expected a pattern".into(),
-        PATTERN_FIRST,
-        |p| {
-            // `x: pattern`, a named field.
-            if at_named_field(p) {
-                kind.next(p, TupleSide::Named);
-                let field = p.start();
-                name_ref(p);
-                p.bump(T![:]);
-                parse_pattern(p);
-                field.complete(p, TUPLE_PATT_FIELD);
-                return true;
-            }
-            if !p.at_ts(PATTERN_FIRST) {
-                return false;
-            }
-            // `..` ignores the other fields, positional and named.
-            let side = if p.at(T![..]) { TupleSide::Either } else { TupleSide::Positional };
-            kind.next(p, side);
+    delimited(p, T!['('], T![')'], T![,], "expected a pattern", PATTERN_FIRST, |p| {
+        // `x: pattern`, a named field.
+        if at_named_field(p) {
+            kind.next(p, TupleSide::Named);
+            let field = p.start();
+            name_ref(p);
+            p.bump(T![:]);
             parse_pattern(p);
-            true
-        },
-    );
+            field.complete(p, TUPLE_PATT_FIELD);
+            return true;
+        }
+        if !p.at_ts(PATTERN_FIRST) {
+            return false;
+        }
+        // `..` ignores the other fields, positional and named.
+        let side = if p.at(T![..]) { TupleSide::Either } else { TupleSide::Positional };
+        kind.next(p, side);
+        parse_pattern(p);
+        true
+    });
     m.complete(p, TUPLE_PATT)
 }
 
@@ -221,21 +213,13 @@ fn pattern_list(
     bra: boltlang_syntax::SyntaxKind,
     ket: boltlang_syntax::SyntaxKind,
 ) {
-    delimited(
-        p,
-        bra,
-        ket,
-        T![,],
-        || "expected a pattern".into(),
-        PATTERN_FIRST,
-        |p| {
-            if !p.at_ts(PATTERN_FIRST) {
-                return false;
-            }
-            parse_pattern(p);
-            true
-        },
-    );
+    delimited(p, bra, ket, T![,], "expected a pattern", PATTERN_FIRST, |p| {
+        if !p.at_ts(PATTERN_FIRST) {
+            return false;
+        }
+        parse_pattern(p);
+        true
+    });
 }
 
 /// `{ x, mut y, z: pattern, .. }`
@@ -245,7 +229,7 @@ fn field_pattern_list(p: &mut Parser) {
         T!['{'],
         T!['}'],
         T![,],
-        || "expected a field".into(),
+        "expected a field",
         TokenSet::new(&[IDENT, T![mut], T![..]]),
         |p| {
             match p.current() {
