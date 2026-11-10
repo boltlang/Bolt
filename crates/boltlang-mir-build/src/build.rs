@@ -362,7 +362,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         })
     }
 
-    /// A call of `item` used at the type `ty`, with `args`, for `e`.
+    /// A call of `item`, named at `callee_at`, with `args`, for `e`. The
+    /// item is used at the type of a function from the types of `args` to
+    /// that of `e`.
     fn call(
         &mut self,
         e: hir::ExprId,
