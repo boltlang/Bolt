@@ -315,7 +315,7 @@ const EVENT_SIZE: i32 = 32;
 /// Write the arguments to `buf`, each ending in a zero, and their
 /// addresses to `argv`. `args_sizes_get` says how big each must be.
 #[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
-pub(package) fn args_get(#[nolen] argv: mut [u32], #[nolen] buf: mut [u8]) -> Errno;
+pub(package) fn args_get(#[addr] argv: mut [u32], #[addr] buf: mut [u8]) -> Errno;
 
 /// How many arguments there are, and how many bytes they take.
 #[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
@@ -324,7 +324,7 @@ pub(package) fn args_sizes_get() -> (Errno, Size, Size);
 /// Write the environment variables to `buf` as `KEY=value`, each ending in
 /// a zero, and their addresses to `environ`.
 #[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
-pub(package) fn environ_get(#[nolen] environ: mut [u32], #[nolen] buf: mut [u8]) -> Errno;
+pub(package) fn environ_get(#[addr] environ: mut [u32], #[addr] buf: mut [u8]) -> Errno;
 
 /// How many environment variables there are, and how many bytes they take.
 #[link(wasm, module = "wasi_snapshot_preview1", abi = flat)]
@@ -355,7 +355,7 @@ pub(package) fn fd_close(fd: Fd) -> Errno;
 pub(package) fn fd_datasync(fd: Fd) -> Errno;
 
 #[link(wasm, module = "wasi_snapshot_preview1", name = "fd_fdstat_get", abi = flat)]
-fn fd_fdstat_get_bytes(fd: Fd, #[nolen] stat: mut [u8]) -> Errno;
+fn fd_fdstat_get_bytes(fd: Fd, #[addr] stat: mut [u8]) -> Errno;
 
 /// What a file descriptor is, and may do.
 pub(package) fn fd_fdstat_get(fd: Fd) -> (Errno, Fdstat) {
@@ -379,7 +379,7 @@ pub(package) fn fd_fdstat_set_flags(fd: Fd, flags: Fdflags) -> Errno;
 pub(package) fn fd_fdstat_set_rights(fd: Fd, base: Rights, inheriting: Rights) -> Errno;
 
 #[link(wasm, module = "wasi_snapshot_preview1", name = "fd_filestat_get", abi = flat)]
-fn fd_filestat_get_bytes(fd: Fd, #[nolen] stat: mut [u8]) -> Errno;
+fn fd_filestat_get_bytes(fd: Fd, #[addr] stat: mut [u8]) -> Errno;
 
 /// What an open file is.
 pub(package) fn fd_filestat_get(fd: Fd) -> (Errno, Filestat) {
@@ -402,7 +402,7 @@ pub(package) fn fd_filestat_set_times(fd: Fd, atim: Timestamp, mtim: Timestamp, 
 pub(package) fn fd_pread(fd: Fd, iovs: [mut [u8]], offset: Filesize) -> (Errno, Size);
 
 #[link(wasm, module = "wasi_snapshot_preview1", name = "fd_prestat_get", abi = flat)]
-fn fd_prestat_get_bytes(fd: Fd, #[nolen] stat: mut [u8]) -> Errno;
+fn fd_prestat_get_bytes(fd: Fd, #[addr] stat: mut [u8]) -> Errno;
 
 /// What a preopened file descriptor is: `Badf` once there are no more.
 pub(package) fn fd_prestat_get(fd: Fd) -> (Errno, Prestat) {
@@ -455,7 +455,7 @@ pub(package) fn fd_write(fd: Fd, iovs: [[u8]]) -> (Errno, Size);
 pub(package) fn path_create_directory(fd: Fd, path: [u8]) -> Errno;
 
 #[link(wasm, module = "wasi_snapshot_preview1", name = "path_filestat_get", abi = flat)]
-fn path_filestat_get_bytes(fd: Fd, flags: Lookupflags, path: [u8], #[nolen] stat: mut [u8]) -> Errno;
+fn path_filestat_get_bytes(fd: Fd, flags: Lookupflags, path: [u8], #[addr] stat: mut [u8]) -> Errno;
 
 /// What a file is, by its path.
 pub(package) fn path_filestat_get(fd: Fd, flags: Lookupflags, path: [u8]) -> (Errno, Filestat) {
@@ -512,7 +512,7 @@ pub(package) fn path_symlink(old_path: [u8], fd: Fd, new_path: [u8]) -> Errno;
 pub(package) fn path_unlink_file(fd: Fd, path: [u8]) -> Errno;
 
 #[link(wasm, module = "wasi_snapshot_preview1", name = "poll_oneoff", abi = flat)]
-fn poll_oneoff_bytes(#[nolen] subs: [u8], #[nolen] events: mut [u8], count: Size) -> (Errno, Size);
+fn poll_oneoff_bytes(#[addr] subs: [u8], #[addr] events: mut [u8], count: Size) -> (Errno, Size);
 
 /// Wait until one of `subs` happens: the events that did.
 pub(package) fn poll_oneoff(subs: [Subscription]) -> (Errno, [Event]) {

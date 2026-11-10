@@ -511,9 +511,9 @@ pub enum BadLink<'db> {
     /// With `abi = flat`, a result that can't be given back so: only
     /// scalars, or a tuple of them.
     FlatResult(Ty<'db>),
-    /// `#[nolen]` on a parameter that isn't an array of a function linked
+    /// `#[addr]` on a parameter that isn't an array of a function linked
     /// with `abi = flat`.
-    Nolen,
+    Addr,
     /// An `emu` function in a `#[cfg]` on something other than `host`,
     /// like `pointer_width`: the evaluator's host is the same for every
     /// machine it imitates.
@@ -1158,7 +1158,7 @@ impl<'db> Collector<'db> {
     }
 
     /// Check the types of a function linked with `abi = flat`: what its
-    /// parameters and results can be, and that `#[nolen]` is on arrays.
+    /// parameters and results can be, and that `#[addr]` is on arrays.
     fn flat_link(&mut self, f: FunctionId<'db>) {
         let db = self.db;
         let range = Some(self.item_range(f.item(db).ast_id));
@@ -1189,15 +1189,15 @@ impl<'db> Collector<'db> {
         };
         for (i, ty) in sig.params.iter().enumerate() {
             let Some(ty) = ty else { continue };
-            let nolen = declared.params.get(i).is_some_and(|p| p.nolen);
+            let addr = declared.params.get(i).is_some_and(|p| p.addr);
             let ok = match ty {
                 Ty::Array(_, elem) if scalar(elem) => true,
-                Ty::Array(_, elem) => !nolen && matches!(&**elem, Ty::Array(_, b) if bytes(b)),
-                t => !nolen && scalar(t),
+                Ty::Array(_, elem) => !addr && matches!(&**elem, Ty::Array(_, b) if bytes(b)),
+                t => !addr && scalar(t),
             };
             if !ok {
-                let reason = if nolen && !matches!(ty, Ty::Array(..)) {
-                    BadLink::Nolen
+                let reason = if addr && !matches!(ty, Ty::Array(..)) {
+                    BadLink::Addr
                 } else {
                     BadLink::FlatParam(ty.clone())
                 };
@@ -1269,13 +1269,13 @@ impl<'db> Collector<'db> {
         }
     }
 
-    /// Report `#[nolen]` on a parameter of a function that isn't linked
+    /// Report `#[addr]` on a parameter of a function that isn't linked
     /// with `abi = flat`.
-    fn no_nolen(&mut self, f: FunctionId<'db>) {
+    fn no_addr(&mut self, f: FunctionId<'db>) {
         let db = self.db;
-        if function_signature(db, f).params.iter().any(|p| p.nolen) {
+        if function_signature(db, f).params.iter().any(|p| p.addr) {
             let range = Some(self.item_range(f.item(db).ast_id));
-            self.push(range, DiagnosticKind::BadLink { reason: BadLink::Nolen });
+            self.push(range, DiagnosticKind::BadLink { reason: BadLink::Addr });
         }
     }
 
@@ -1304,14 +1304,14 @@ impl<'db> Collector<'db> {
             if link.abi == LinkAbi::Flat {
                 self.flat_link(f);
             } else {
-                self.no_nolen(f);
+                self.no_addr(f);
             }
             if link.kind == boltlang_hir_def::item_tree::LinkKind::Emu {
                 self.emu_link(f);
             }
             return;
         }
-        self.no_nolen(f);
+        self.no_addr(f);
         if !item.is_builtin {
             if top && !item.has_body {
                 self.push(range, DiagnosticKind::MissingBody);

@@ -411,7 +411,7 @@ fn log(x: i32);
 #[link(emu, abi = flat)]
 fn gather(fd: i32, iovs: [[u8]]) -> (u16, u32);
 #[link(emu, abi = flat)]
-fn fill(#[nolen] buf: mut [u8], len: u32) -> u16;
+fn fill(#[addr] buf: mut [u8], len: u32) -> u16;
 let r = gather(1, [[104u8, 105u8], [33u8]]);
 log(r.0 as i32);
 log(r.1 as i32);

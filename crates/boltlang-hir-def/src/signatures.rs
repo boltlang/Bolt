@@ -103,9 +103,9 @@ pub struct ParamData {
     /// `(**Ks)` that the body sees.
     pub type_ref: Option<TypeRefId>,
     pub default: Option<ExprId>,
-    /// Whether it has `#[nolen]`: an array that a function linked with
+    /// Whether it has `#[addr]`: an array that a function linked with
     /// `abi = flat` is given the address of, without its length.
-    pub nolen: bool,
+    pub addr: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -340,16 +340,16 @@ fn lower_function<'db>(
                     ast::ParamItem::Param(param) => {
                         let type_ref = param.type_expr().map(|t| c.lower_type(t));
                         let default = param.default().map(|e| c.lower_expr(e));
-                        let nolen = crate::item_tree::has_attr(&param, "nolen");
+                        let addr = crate::item_tree::has_attr(&param, "addr");
                         let kind = if keyword { ParamKind::Keyword } else { ParamKind::Positional };
                         let name = pattern_name(param.pattern());
-                        params.push(ParamData { name, kind, type_ref, default, nolen });
+                        params.push(ParamData { name, kind, type_ref, default, addr });
                     }
                     ast::ParamItem::Rest(rest) => {
                         let kind = rest_kind(rest.spread(), &mut keyword);
                         let type_ref = rest.pack().map(|r| c.lower_pack_tuple(&r));
                         let name = pattern_name(rest.pattern());
-                        let data = ParamData { name, kind, type_ref, default: None, nolen: false };
+                        let data = ParamData { name, kind, type_ref, default: None, addr: false };
                         params.push(data);
                     }
                     ast::ParamItem::Marker => keyword = true,

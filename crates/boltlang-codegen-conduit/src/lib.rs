@@ -989,18 +989,18 @@ fn declare_extern<'db>(
     let MonoTy::Fn(params, _, ret, ..) = use_ty(site)? else {
         return Err(ErrorKind::unsupported("a host function whose type isn't a function"));
     };
-    // With `abi = flat`, each `#[nolen]` array is passed without its
-    // length, and a tuple result is the extern's results: the first is what
+    // With `abi = flat`, each `#[addr]` array is passed as its address
+    // alone, without its length, and a tuple result is the extern's results: the first is what
     // the host gives back, and the others it writes to memory.
     let flat = boltlang_hir_ty::builtin::link(db, linked)
         .is_some_and(|l| l.abi == boltlang_hir_def::item_tree::LinkAbi::Flat);
     let declared = boltlang_hir_def::signatures::function_signature(db, linked);
     let mut sig = Sig::new(Vec::new(), Vec::new());
-    let mut nolen = Vec::new();
+    let mut addr = Vec::new();
     for (i, t) in params.iter().enumerate() {
         if let Some(t) = types.value(db, cx.root, t)? {
             sig.params.push(t);
-            nolen.push(declared.params.get(i).is_some_and(|p| p.nolen));
+            addr.push(declared.params.get(i).is_some_and(|p| p.addr));
         }
     }
     match &*ret {
@@ -1016,8 +1016,8 @@ fn declare_extern<'db>(
     let mut ext = Extern { debug_name, ..Extern::new(link, sig) };
     if flat {
         ext.abi = conduit_ir::Abi::Flat;
-        if nolen.contains(&true) {
-            ext.addr = nolen;
+        if addr.contains(&true) {
+            ext.addr = addr;
         }
     }
     module.externs.insert(id, ext);

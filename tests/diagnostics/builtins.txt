@@ -151,7 +151,7 @@ What abi = flat can pass
 struct Point { x: i32 }
 enum Errno { Success, Badf }
 #[link(wasm, module = "host", abi = flat)]
-fn ok(fd: i32, buf: mut [u8], iovs: [[u8]], #[nolen] out: mut [u32]) -> (Errno, u32);
+fn ok(fd: i32, buf: mut [u8], iovs: [[u8]], #[addr] out: mut [u32]) -> (Errno, u32);
 #[link(wasm, module = "host", abi = flat)]
 fn point(p: Point);
  //^^^^^ error: a function linked with `abi = flat` can't take a `Point`: only scalars, arrays of them, and arrays of `[u8]`
@@ -159,11 +159,11 @@ fn point(p: Point);
 fn gives() -> Point;
  //^^^^^ error: a function linked with `abi = flat` can't give a `Point`: only scalars, or a tuple of them
 #[link(wasm, module = "host", abi = flat)]
-fn scalar(#[nolen] n: i32);
- //^^^^^^ error: `#[nolen]` is only for an array that a function linked with `abi = flat` takes
+fn scalar(#[addr] n: i32);
+ //^^^^^^ error: `#[addr]` is only for an array that a function linked with `abi = flat` takes
 #[link(wasm, module = "host")]
-fn conduit(#[nolen] xs: [u8]);
- //^^^^^^^ error: `#[nolen]` is only for an array that a function linked with `abi = flat` takes
+fn conduit(#[addr] xs: [u8]);
+ //^^^^^^^ error: `#[addr]` is only for an array that a function linked with `abi = flat` takes
 #[link(wasm, module = "host", abi = cdecl)]
 fn other(x: i32);
  //^^^^^ error: there's no ABI `cdecl`; the only one is `flat`

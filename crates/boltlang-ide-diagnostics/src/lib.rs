@@ -846,7 +846,7 @@ fn describe(
                     "a function linked with `abi = flat` can't give a `{}`: only scalars, or a tuple of them",
                     ty.display_with(db, names)
                 ),
-                BadLink::Nolen => "`#[nolen]` is only for an array that a function linked with `abi = flat` takes"
+                BadLink::Addr => "`#[addr]` is only for an array that a function linked with `abi = flat` takes"
                     .to_string(),
                 BadLink::EmuGated(key) => format!(
                     "a function linked to `emu` can't be in a `#[cfg]` on `{key}`, only on `host`: the evaluator \
