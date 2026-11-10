@@ -63,7 +63,7 @@ impl Marker {
         }
     }
 
-    /// Will create a node with children between [Parer::start] and the current position.
+    /// Create a node of `kind` with everything between [`Parser::start`] and here.
     pub(crate) fn complete(mut self, p: &mut Parser, kind: SyntaxKind) -> CompletedMarker {
         self.bomb.defuse();
         let idx = self.pos as usize;
@@ -73,7 +73,7 @@ impl Marker {
             }
             _ => unreachable!(),
         }
-        p.push_event(Event::Finish);
+        p.events.push(Event::Finish);
         CompletedMarker::new(self.pos, kind)
     }
 }
@@ -326,7 +326,7 @@ impl<'t> Parser<'t> {
     /// belong to the same node.
     pub(crate) fn start(&mut self) -> Marker {
         let pos = self.events.len() as u32;
-        self.push_event(Event::tombstone());
+        self.events.push(Event::tombstone());
         Marker::new(pos)
     }
 
@@ -347,7 +347,7 @@ impl<'t> Parser<'t> {
     /// Emit an error.
     pub(crate) fn error<T: Into<String>>(&mut self, message: T) {
         let msg = message.into();
-        self.push_event(Event::Error { msg });
+        self.events.push(Event::Error { msg });
     }
 
     /// Consume the next token if it is `kind` or emit an error
@@ -382,10 +382,7 @@ impl<'t> Parser<'t> {
             return true;
         }
 
-        let m = self.start();
-        self.error(message);
-        self.bump_any();
-        m.complete(self, ERROR);
+        self.error_and_bump(message);
         false
     }
 
@@ -430,12 +427,7 @@ impl<'t> Parser<'t> {
         }
         self.pos += 1;
         self.steps.set(0);
-        self.push_event(Event::Token { kind });
-    }
-
-    /// Helper function to add an event to the builder.
-    fn push_event(&mut self, event: Event) {
-        self.events.push(event);
+        self.events.push(Event::Token { kind });
     }
 
     /// Finishes the builder and returns the events that were generated during
