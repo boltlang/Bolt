@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    str::Chars,
-};
+use std::{collections::VecDeque, str::Chars};
 
 use crate::{
     diagnostic::{Diagnostics, UnexpectedCharDiagnostic},
@@ -10,7 +7,6 @@ use crate::{
 use boltlang_common::Span;
 use boltlang_syntax::SyntaxKind::{self, *};
 
-use lazy_static::lazy_static;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
 const CHAR_EOF: char = '\u{FFFF}';
@@ -95,42 +91,42 @@ fn is_operator(ch: char) -> bool {
     matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '!' | '.')
 }
 
-lazy_static! {
-    static ref KEYWORDS: HashMap<&'static str, SyntaxKind> = {
-        // `macro_rules` is a contextual keyword, so it's left out here; the
-        // parser remaps it where needed.
-        let mut m = HashMap::new();
-        m.insert("as", AS_KEYWORD);
-        m.insert("break", BREAK_KEYWORD);
-        m.insert("class", CLASS_KEYWORD);
-        m.insert("const", CONST_KEYWORD);
-        m.insert("continue", CONTINUE_KEYWORD);
-        m.insert("does", DOES_KEYWORD);
-        m.insert("effect", EFFECT_KEYWORD);
-        m.insert("else", ELSE_KEYWORD);
-        m.insert("enum", ENUM_KEYWORD);
-        m.insert("extern", EXTERN_KEYWORD);
-        m.insert("fn", FN_KEYWORD);
-        m.insert("for", FOR_KEYWORD);
-        m.insert("if", IF_KEYWORD);
-        m.insert("imm", IMM_KEYWORD);
-        m.insert("impl", IMPL_KEYWORD);
-        m.insert("import", IMPORT_KEYWORD);
-        m.insert("in", IN_KEYWORD);
-        m.insert("let", LET_KEYWORD);
-        m.insert("loop", LOOP_KEYWORD);
-        m.insert("match", MATCH_KEYWORD);
-        m.insert("mut", MUT_KEYWORD);
-        m.insert("package", PACKAGE_KEYWORD);
-        m.insert("pub", PUB_KEYWORD);
-        m.insert("return", RETURN_KEYWORD);
-        m.insert("struct", STRUCT_KEYWORD);
-        m.insert("super", SUPER_KEYWORD);
-        m.insert("type", TYPE_KEYWORD);
-        m.insert("where", WHERE_KEYWORD);
-        m.insert("while", WHILE_KEYWORD);
-        m
+/// The keyword `name` is, if it's one. `macro_rules` is a contextual
+/// keyword, so it's left out here; the parser remaps it where needed.
+fn keyword_kind(name: &str) -> Option<SyntaxKind> {
+    let kind = match name {
+        "as" => AS_KEYWORD,
+        "break" => BREAK_KEYWORD,
+        "class" => CLASS_KEYWORD,
+        "const" => CONST_KEYWORD,
+        "continue" => CONTINUE_KEYWORD,
+        "does" => DOES_KEYWORD,
+        "effect" => EFFECT_KEYWORD,
+        "else" => ELSE_KEYWORD,
+        "enum" => ENUM_KEYWORD,
+        "extern" => EXTERN_KEYWORD,
+        "fn" => FN_KEYWORD,
+        "for" => FOR_KEYWORD,
+        "if" => IF_KEYWORD,
+        "imm" => IMM_KEYWORD,
+        "impl" => IMPL_KEYWORD,
+        "import" => IMPORT_KEYWORD,
+        "in" => IN_KEYWORD,
+        "let" => LET_KEYWORD,
+        "loop" => LOOP_KEYWORD,
+        "match" => MATCH_KEYWORD,
+        "mut" => MUT_KEYWORD,
+        "package" => PACKAGE_KEYWORD,
+        "pub" => PUB_KEYWORD,
+        "return" => RETURN_KEYWORD,
+        "struct" => STRUCT_KEYWORD,
+        "super" => SUPER_KEYWORD,
+        "type" => TYPE_KEYWORD,
+        "where" => WHERE_KEYWORD,
+        "while" => WHILE_KEYWORD,
+        _ => return None,
     };
+    Some(kind)
 }
 
 impl<'a, 'd> Lexer<'a, 'd> {
@@ -516,7 +512,7 @@ impl<'a, 'd> Lexer<'a, 'd> {
                 if name == "_" {
                     return UNDERSCORE;
                 }
-                KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENT)
+                keyword_kind(&name).unwrap_or(IDENT)
             }
             c0 if is_dec_num(c0) => self.scan_number(c0),
             '?' => QUEST,
