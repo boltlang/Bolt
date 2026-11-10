@@ -312,7 +312,7 @@ fn plan_perform<'db>(
 /// The program of `entry` and its tests, in Conduit.
 pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     let p = program(db, entry);
-    let mut errors = program_errors(db, &p);
+    let mut errors = program_errors(db, p);
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -345,10 +345,10 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     let mut module = Module::default();
     let mut types = Types::default();
-    let effects = used_effects(db, &p, &mut errors);
+    let effects = used_effects(db, p, &mut errors);
     declare_effects(&mut cx, &mut module, &mut types, effects, &mut errors);
     // The functions of each handler, after the lambdas.
-    plan_handles(&mut cx, &p, &mut names);
+    plan_handles(&mut cx, p, &mut names);
     // Every type a body has, so that the data types are all declared before
     // the bodies are built. An error is reported where the type is used.
     let mut sigs = Vec::new();
