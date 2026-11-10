@@ -30,7 +30,7 @@ use conduit_ir::{
 };
 
 use crate::{
-    ErrorKind, finish,
+    ErrorKind, finish, new_func,
     ty::{PLACEHOLDER, Types, is_nullable_host, none_index, placeholder},
 };
 
@@ -183,19 +183,14 @@ impl<'db> Convs<'db> {
             return Err(unsupported("converting a type with no values"));
         };
         let db = cx.db;
-        let mut fresh = |name: String| {
-            let id = FuncId(names.len() as u64);
-            names.insert(id, name);
-            id
-        };
         let name = format!("convert[{}, {}]", from.display(db), to.display(db));
-        let id = fresh(name.clone());
+        let id = new_func(names, name.clone());
         self.funcs.insert(key.clone(), id);
         self.order.push(key.clone());
         sigs.push((id, (Sig::new(vec![ft.clone()], vec![tt]), MutParams::default(), 0)));
         match (from, to) {
             (MonoTy::Fn(ps, _, r, _, _), MonoTy::Fn(qs, _, s, _, row)) => {
-                let wrapper = fresh(format!("{name}::closure"));
+                let wrapper = new_func(names, format!("{name}::closure"));
                 self.wrappers.insert(key, wrapper);
                 // It takes the closure it converts first.
                 let mut sig = cx.types.fn_sig(cx.db, cx.root, qs, s, row)?;

@@ -367,18 +367,16 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     // From 0, in the order they're defined, so that the text format can
     // write each by its name alone.
     let mut names = BTreeMap::new();
-    for (i, iu) in p.instances.iter().enumerate() {
-        let id = FuncId(i as u64);
+    for iu in &p.instances {
+        let id = new_func(&mut names, iu.instance.display(db).to_string());
         cx.funcs.insert(iu.instance, id);
-        names.insert(id, iu.instance.display(db).to_string());
     }
     // The lambdas, lifted, after the instances.
     for iu in &p.instances {
         let Some(body) = iu.instance.body(db) else { continue };
         for (k, lambda) in body_lambdas(db, body).iter().enumerate() {
-            let id = FuncId(names.len() as u64);
+            let id = new_func(&mut names, format!("{}::lambda{k}", iu.instance.display(db)));
             cx.lambdas.insert((iu.instance, lambda.expr), id);
-            names.insert(id, format!("{}::lambda{k}", iu.instance.display(db)));
         }
     }
     let mut module = Module::default();
@@ -433,11 +431,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 else {
                     continue;
                 };
-                let mut fresh = |name: String| {
-                    let id = FuncId(names.len() as u64);
-                    names.insert(id, name);
-                    id
-                };
+                let mut fresh = |name: String| new_func(&mut names, name);
                 let Ok(handled) = handled_effects(&lcx, ops) else { continue };
                 let body_fn = fresh(format!("{instance}::handle{n}"));
                 let ret = fresh(format!("{instance}::handle{n}_return"));
@@ -1013,6 +1007,13 @@ fn declare_extern<'db>(
     module.externs.insert(id, ext);
     cx.externs.insert(f, id);
     Ok(())
+}
+
+/// A new function, numbered after those of `names`, named `name`.
+pub(crate) fn new_func(names: &mut BTreeMap<FuncId, String>, name: String) -> FuncId {
+    let id = FuncId(names.len() as u64);
+    names.insert(id, name);
+    id
 }
 
 /// The function `b` built, or why Conduit's builder rejected it.
