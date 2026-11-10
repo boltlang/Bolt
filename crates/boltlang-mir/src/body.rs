@@ -10,7 +10,7 @@ use boltlang_hir_def::{
     ids::{ConstId, FunctionId, ImplId},
 };
 use boltlang_hir_ty::{Ty, builtin::Builtin};
-use boltlang_pattern::decision::{Ctor, Decision};
+use boltlang_pattern::decision::{Ctor, Decision, Node};
 
 /// A node of a [`Body`], by the order it was added in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::SalsaValue)]
@@ -439,15 +439,8 @@ impl<'db> Body<'db> {
     pub fn free_locals(&self, roots: &[ExprId], bound: &[Local]) -> Vec<Local> {
         let mut used = Vec::new();
         let mut bound = bound.to_vec();
-        let decision = |d: &Decision<'db>, bound: &mut Vec<Local>| {
-            for node in &d.nodes {
-                if let boltlang_pattern::decision::Node::Arm { bindings, .. }
-                | boltlang_pattern::decision::Node::Guard { bindings, .. } = node
-                {
-                    bound.extend(bindings.iter().map(|&(b, _)| Local::Binding(b)));
-                }
-            }
-        };
+        let decision =
+            |d: &Decision<'db>, bound: &mut Vec<Local>| bound.extend(decision_bindings(d));
         let pattern = |p: &Pattern<'db>, bound: &mut Vec<Local>| match p {
             Pattern::Local(l) => bound.extend(*l),
             Pattern::Decision(d) => decision(d, bound),
@@ -499,13 +492,7 @@ impl<'db> Body<'db> {
         let mut out = Vec::new();
         let decisions = std::iter::once(&**value).chain(ops.iter().map(|o| &*o.decision));
         for d in decisions {
-            for node in &d.nodes {
-                if let boltlang_pattern::decision::Node::Arm { bindings, .. }
-                | boltlang_pattern::decision::Node::Guard { bindings, .. } = node
-                {
-                    out.extend(bindings.iter().map(|&(b, _)| Local::Binding(b)));
-                }
-            }
+            out.extend(decision_bindings(d));
         }
         out.extend(ops.iter().flat_map(|o| o.conts.iter().flatten()));
         out
@@ -522,6 +509,17 @@ impl<'db> Body<'db> {
     pub fn exprs(&self) -> impl Iterator<Item = (ExprId, &Expr<'db>)> {
         self.exprs.iter().enumerate().map(|(i, e)| (ExprId(i as u32), e))
     }
+}
+
+/// The locals that the arms and guards of a decision bind.
+fn decision_bindings<'a>(d: &'a Decision<'_>) -> impl Iterator<Item = Local> + 'a {
+    d.nodes
+        .iter()
+        .flat_map(|node| match node {
+            Node::Arm { bindings, .. } | Node::Guard { bindings, .. } => bindings.as_slice(),
+            _ => &[],
+        })
+        .map(|&(b, _)| Local::Binding(b))
 }
 
 impl<'db> ops::Index<ExprId> for Body<'db> {
