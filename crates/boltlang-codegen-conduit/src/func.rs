@@ -94,11 +94,9 @@ pub(crate) fn lower_body<'db>(
     iu: &InstanceUses<'db>,
     part: Part<'_>,
 ) -> Result<Func, Error> {
-    let lambda = match part {
-        Part::Lambda(lambda) => Some(lambda),
-        _ => None,
-    };
     let db = cx.db;
+    let error =
+        |kind: ErrorKind| Error { instance: iu.instance.display(db).to_string(), at: None, kind };
     let def = iu.instance.source_body(db);
     let map = def.map(|def| &body_with_source_map(db, def).1);
     // A shim's MIR, which the compiler makes, rather than a body's.
@@ -113,27 +111,7 @@ pub(crate) fn lower_body<'db>(
         (InstanceDef::Default(_, param), Some(bodies)) => bodies.default(*param),
         _ => None,
     };
-    let lcx = Cx::new(db, iu.instance, &cx.erased).map_err(|e| Error {
-        instance: iu.instance.display(db).to_string(),
-        at: None,
-        kind: e.into(),
-    })?;
-    let (id, mir) = match (lambda, bodies, &shim) {
-        (_, _, Some(shim)) => (cx.funcs[&iu.instance], shim),
-        (_, None, None) => unreachable!("an instance is of a body or a shim"),
-        (Some(lambda), Some(bodies), None) => {
-            let Some(mir) = bodies.lambda(lambda.expr) else {
-                return Err(Error {
-                    instance: iu.instance.display(db).to_string(),
-                    at: None,
-                    kind: ErrorKind::unsupported("a lambda without a body"),
-                });
-            };
-            (cx.lambdas[&(iu.instance, lambda.expr)], mir)
-        }
-        (None, Some(_), None) if let Some((_, mir)) = default => (cx.funcs[&iu.instance], mir),
-        (None, Some(bodies), None) => (cx.funcs[&iu.instance], &bodies.body),
-    };
+    let lcx = Cx::new(db, iu.instance, &cx.erased).map_err(|e| error(e.into()))?;
     // The MIR body a handler is in, and which of its functions this is.
     let (body_index, handle) = match part {
         Part::Body => (default.map_or(0, |(i, _)| i), None),
@@ -149,24 +127,30 @@ pub(crate) fn lower_body<'db>(
         Part::HandleRet(i, e) => (i, Some((e, HandlePart::Ret))),
         Part::HandleClause(i, e, effect, op) => (i, Some((e, HandlePart::Clause(effect, op)))),
     };
-    let (id, mir) = match (handle, bodies) {
-        (Some((e, which)), Some(bodies)) => {
-            let fns = &cx.handles[&(iu.instance, body_index, e)];
-            let id = match which {
-                HandlePart::Body => fns.body,
-                HandlePart::Ret => fns.ret,
-                HandlePart::Clause(effect, op) => fns.effects[effect].1[op],
-            };
-            let Some(mir) = bodies.nth(body_index) else {
-                return Err(Error {
-                    instance: iu.instance.display(db).to_string(),
-                    at: None,
-                    kind: ErrorKind::unsupported("a handler in a body that isn't there"),
-                });
-            };
-            (id, mir)
-        }
-        _ => (id, mir),
+    let (id, mir) = match (bodies, &shim) {
+        (_, Some(shim)) => (cx.funcs[&iu.instance], shim),
+        (None, None) => unreachable!("an instance is of a body or a shim"),
+        (Some(bodies), None) => match (part, handle) {
+            (Part::Lambda(lambda), _) => {
+                let mir = bodies
+                    .lambda(lambda.expr)
+                    .ok_or_else(|| error(ErrorKind::unsupported("a lambda without a body")))?;
+                (cx.lambdas[&(iu.instance, lambda.expr)], mir)
+            }
+            (_, Some((e, which))) => {
+                let fns = &cx.handles[&(iu.instance, body_index, e)];
+                let id = match which {
+                    HandlePart::Body => fns.body,
+                    HandlePart::Ret => fns.ret,
+                    HandlePart::Clause(effect, op) => fns.effects[effect].1[op],
+                };
+                let mir = bodies.nth(body_index).ok_or_else(|| {
+                    error(ErrorKind::unsupported("a handler in a body that isn't there"))
+                })?;
+                (id, mir)
+            }
+            _ => (cx.funcs[&iu.instance], default.map_or(&bodies.body, |(_, mir)| mir)),
+        },
     };
     let sig = &module.funcs[&id];
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
@@ -181,7 +165,7 @@ pub(crate) fn lower_body<'db>(
         mir,
         map,
         b,
-        is_lambda: lambda.is_some(),
+        is_lambda: matches!(part, Part::Lambda(_)),
         body_index,
         handle,
         locals: HashMap::new(),
@@ -189,22 +173,14 @@ pub(crate) fn lower_body<'db>(
         at: None,
         var_names: Default::default(),
     };
-    let error = |l: &Lower<'_, '_, 'db>, kind: ErrorKind| Error {
-        instance: iu.instance.display(db).to_string(),
-        at: l.at.map(|e| l.snippet(e)),
-        kind,
-    };
     if let Err(kind) = l.run() {
-        return Err(error(&l, kind));
+        return Err(Error { at: l.at.map(|e| l.snippet(e)), ..error(kind) });
     }
-    let instance = iu.instance.display(db).to_string();
     let var_names = std::mem::take(&mut l.var_names);
-    let mut f = l.b.finish().map_err(|es| Error {
-        instance,
-        at: None,
-        kind: ErrorKind::Invalid(
+    let mut f = l.b.finish().map_err(|es| {
+        error(ErrorKind::Invalid(
             es.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "),
-        ),
+        ))
     })?;
     f.debug.vars.extend(var_names.into_iter().map(|(v, n)| (v, n.into())));
     Ok(f)
