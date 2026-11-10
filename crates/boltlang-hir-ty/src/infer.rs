@@ -880,6 +880,37 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         value_ty
     }
 
+    /// `e as T`: the type `T`. A cast to or from a struct or enum is an
+    /// error, unless it's to the same one.
+    fn infer_cast(&mut self, expr: ExprId) -> Ty<'db> {
+        let Expr::Cast { expr: inner, type_ref } = &self.body[expr] else {
+            unreachable!("only called for a cast")
+        };
+        let from = self.infer_expr(*inner);
+        let to = self.lower_ty(expr, *type_ref);
+        // A struct or enum isn't a number, even an `imm struct`
+        // that holds one, like `Char`: it has functions for that,
+        // like `to_u32`.
+        let from = self.solver.unifier.shallow_resolve(&from);
+        let adt = |ty: &Ty<'db>| match ty {
+            Ty::Adt(id, ..) => Some(*id),
+            _ => None,
+        };
+        let known = |ty: &Ty<'db>| !matches!(ty, Ty::Var(_) | Ty::Error | Ty::Never);
+        if known(&from)
+            && known(&to)
+            && (adt(&from).is_some() || adt(&to).is_some())
+            && adt(&from) != adt(&to)
+        {
+            self.result.diagnostics.push(InferenceDiagnostic::InvalidCast {
+                expr,
+                from,
+                to: to.clone(),
+            });
+        }
+        to
+    }
+
     fn check_expr_because(&mut self, expr: ExprId, expected: &Ty<'db>, reason: Reason<'db>) {
         let actual = self.infer_expr_expect(expr, Some(Expectation { ty: expected, reason }));
         self.solver.equal(expected, &actual, Origin { reason, ..self.origin(expr) });
@@ -938,31 +969,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
             Expr::Try { expr: inner, value, error } => self.infer_try(expr, *inner, *value, *error),
-            Expr::Cast { expr: inner, type_ref } => {
-                let from = self.infer_expr(*inner);
-                let to = self.lower_ty(expr, *type_ref);
-                // A struct or enum isn't a number, even an `imm struct`
-                // that holds one, like `Char`: it has functions for that,
-                // like `to_u32`.
-                let from = self.solver.unifier.shallow_resolve(&from);
-                let adt = |ty: &Ty<'db>| match ty {
-                    Ty::Adt(id, ..) => Some(*id),
-                    _ => None,
-                };
-                let known = |ty: &Ty<'db>| !matches!(ty, Ty::Var(_) | Ty::Error | Ty::Never);
-                if known(&from)
-                    && known(&to)
-                    && (adt(&from).is_some() || adt(&to).is_some())
-                    && adt(&from) != adt(&to)
-                {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidCast {
-                        expr,
-                        from,
-                        to: to.clone(),
-                    });
-                }
-                to
-            }
+            Expr::Cast { .. } => self.infer_cast(expr),
             Expr::Index { base, index } => {
                 // Through the impl of `Index` for the type, arrays too.
                 let base_ty = self.infer_expr(*base);
