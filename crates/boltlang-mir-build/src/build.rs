@@ -93,14 +93,8 @@ pub fn mir_bodies<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> MirBodies<'d
         mut_literals: infer_body(db, def).mut_literals.iter().map(|&(o, i)| (i, o)).collect(),
     };
     let mut lambdas = Vec::new();
-    let mut b = Builder::new(&cx, BodyOwner::Def(def), &mut lambdas);
-    let root = if b.params(&hir.params) {
-        b.expr(hir.body_expr)
-    } else {
-        b.unsupported(hir.body_expr, "patterns in parameters")
-    };
-    let mut body = b.finish();
-    body.root = root;
+    let b = Builder::new(&cx, BodyOwner::Def(def), &mut lambdas);
+    let mut body = b.finish(&hir.params, hir.body_expr, "patterns in parameters");
     if let boltlang_hir_def::body::DefWithBody::Function(f) = def.def(db) {
         let params = &boltlang_hir_def::signatures::function_signature(db, f).params;
         if params.iter().any(|p| p.kind != hir::ParamKind::Positional) {
@@ -113,25 +107,18 @@ pub fn mir_bodies<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> MirBodies<'d
         let Some(default) = *default else { continue };
         let owner = BodyOwner::Default { parent: def, param: i as u32 };
         let mut inner = Vec::new();
-        let mut b = Builder::new(&cx, owner, &mut inner);
-        let root = if b.params(&hir.params[..i]) {
-            b.expr(default)
-        } else {
-            b.unsupported(default, "patterns in parameters")
-        };
-        let mut body = b.finish();
+        let b = Builder::new(&cx, owner, &mut inner);
+        let mut body = b.finish(&hir.params[..i], default, "patterns in parameters");
         // A lambda's body would be part of the default's instance, and a
         // handler's functions too, which codegen doesn't make yet.
         let has_handler = body.exprs().any(|(_, n)| matches!(n.kind, ExprKind::Handle { .. }));
-        body.root = if !inner.is_empty() || has_handler {
-            body.alloc(
+        if !inner.is_empty() || has_handler {
+            body.root = body.alloc(
                 ExprKind::Unsupported("a lambda or handler in a default"),
                 cx.infer.expr_ty(default).clone(),
                 Some(default),
-            )
-        } else {
-            root
-        };
+            );
+        }
         defaults.push(body);
     }
     MirBodies { body, lambdas, defaults }
@@ -171,7 +158,12 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         Builder { cx, db: cx.db, mir: Body::new(owner), scopes: Vec::new(), lambdas }
     }
 
-    fn finish(self) -> Body<'db> {
+    /// The body with the parameters `params` and the code `expr`, or with
+    /// an [`ExprKind::Unsupported`] that says `what` instead of the code
+    /// when a parameter's pattern isn't simple.
+    fn finish(mut self, params: &[PatId], expr: hir::ExprId, what: &'static str) -> Body<'db> {
+        let root = if self.params(params) { self.expr(expr) } else { self.unsupported(expr, what) };
+        self.mir.root = root;
         self.mir
     }
 
@@ -1254,13 +1246,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             b.declare(id);
         }
         b.mir.captures = captures.to_vec();
-        let root = if b.params(params) {
-            b.expr(*inner)
-        } else {
-            b.unsupported(*inner, "patterns in a lambda's parameters")
-        };
-        let mut body = b.finish();
-        body.root = root;
+        let body = b.finish(params, *inner, "patterns in a lambda's parameters");
         self.lambdas.push(body);
         self.lambdas.extend(found);
         self.node(e, ExprKind::Closure { lambda: e, captures })
