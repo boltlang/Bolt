@@ -226,60 +226,6 @@ struct RunCommand {
     args: Vec<String>,
 }
 
-/// Check files, then run their tests, with Conduit's evaluator: the
-/// functions with `#[test]` before them. A test fails when it stops with an
-/// error, like a panic.
-#[derive(clap::Parser)]
-struct TestCommand {
-    /// Files, or directories whose `.bolt` files to test, recursively
-    /// [default: the current directory]
-    paths: Vec<PathBuf>,
-    #[command(flatten)]
-    prelude: PreludeArgs,
-    /// Only run the tests whose name contains this.
-    #[arg(long, value_name = "NAME")]
-    filter: Option<String>,
-    /// Stop a test after this many steps of the evaluator.
-    #[arg(long, value_name = "STEPS", conflicts_with = "wasm")]
-    fuel: Option<u64>,
-    /// Compile each file to WebAssembly, as `bolt build` does, and run its
-    /// tests with Node, each in an instance of its own, instead of with the
-    /// evaluator.
-    #[arg(long)]
-    wasm: bool,
-    #[command(flatten)]
-    target: TargetArgs,
-}
-
-/// The Node runtime, `runtime/node.mjs`, for `command`, like `bolt test
-/// --wasm`, if there's a `node` to run it with.
-fn node_host(command: &str) -> anyhow::Result<NodeHost> {
-    if !boltlang_codegen_conduit::node::available() {
-        anyhow::bail!("`{command}` runs the program with Node, but there's no `node`");
-    }
-    Ok(NodeHost::new()?)
-}
-
-/// Check a file, then compile it to a WebAssembly module, whose export
-/// `main` runs the statements at its top level. It imports the functions
-/// with `#[link(wasm, ..)]` from the modules they name, like WASI's
-/// `fd_write`, which std's `print` writes with.
-#[derive(clap::Parser)]
-struct BuildCommand {
-    file: PathBuf,
-    #[command(flatten)]
-    prelude: PreludeArgs,
-    /// Where to write the module [default: the file's name, with `.wasm`,
-    /// in the current directory]
-    #[arg(short, long, value_name = "PATH")]
-    output: Option<PathBuf>,
-    /// Don't optimize the program before compiling it.
-    #[arg(long)]
-    no_opt: bool,
-    #[command(flatten)]
-    target: TargetArgs,
-}
-
 impl Exec for RunCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database_for(self.target.target(self.wasm)?)?;
@@ -309,6 +255,31 @@ impl Exec for RunCommand {
         };
         Ok(ok_or_print(result).is_some())
     }
+}
+
+/// Check files, then run their tests, with Conduit's evaluator: the
+/// functions with `#[test]` before them. A test fails when it stops with an
+/// error, like a panic.
+#[derive(clap::Parser)]
+struct TestCommand {
+    /// Files, or directories whose `.bolt` files to test, recursively
+    /// [default: the current directory]
+    paths: Vec<PathBuf>,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Only run the tests whose name contains this.
+    #[arg(long, value_name = "NAME")]
+    filter: Option<String>,
+    /// Stop a test after this many steps of the evaluator.
+    #[arg(long, value_name = "STEPS", conflicts_with = "wasm")]
+    fuel: Option<u64>,
+    /// Compile each file to WebAssembly, as `bolt build` does, and run its
+    /// tests with Node, each in an instance of its own, instead of with the
+    /// evaluator.
+    #[arg(long)]
+    wasm: bool,
+    #[command(flatten)]
+    target: TargetArgs,
 }
 
 impl Exec for TestCommand {
@@ -396,6 +367,63 @@ impl Exec for TestCommand {
     }
 }
 
+/// The Node runtime, `runtime/node.mjs`, for `command`, like `bolt test
+/// --wasm`, if there's a `node` to run it with.
+fn node_host(command: &str) -> anyhow::Result<NodeHost> {
+    if !boltlang_codegen_conduit::node::available() {
+        anyhow::bail!("`{command}` runs the program with Node, but there's no `node`");
+    }
+    Ok(NodeHost::new()?)
+}
+
+/// Check a file, then compile it to a WebAssembly module, whose export
+/// `main` runs the statements at its top level. It imports the functions
+/// with `#[link(wasm, ..)]` from the modules they name, like WASI's
+/// `fd_write`, which std's `print` writes with.
+#[derive(clap::Parser)]
+struct BuildCommand {
+    file: PathBuf,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Where to write the module [default: the file's name, with `.wasm`,
+    /// in the current directory]
+    #[arg(short, long, value_name = "PATH")]
+    output: Option<PathBuf>,
+    /// Don't optimize the program before compiling it.
+    #[arg(long)]
+    no_opt: bool,
+    #[command(flatten)]
+    target: TargetArgs,
+}
+
+impl Exec for BuildCommand {
+    fn exec(&self) -> anyhow::Result<bool> {
+        let db = self.prelude.database_for(self.target.target(true)?)?;
+        let Some(file) = open(&db, &self.file) else { return Ok(false) };
+        let found = checked(&db, file, &[file]);
+        report(&db, &found)?;
+        if has_errors(&found) {
+            return Ok(false);
+        }
+        let Some(program) = lowered(&db, file) else { return Ok(false) };
+        let Some(bytes) =
+            ok_or_print(boltlang_codegen_conduit::wasm::build(&program, !self.no_opt))
+        else {
+            return Ok(false);
+        };
+        let output = match &self.output {
+            Some(path) => path.clone(),
+            None => {
+                let stem = self.file.file_stem().unwrap_or(self.file.as_os_str());
+                PathBuf::from(stem).with_extension("wasm")
+            }
+        };
+        std::fs::write(&output, bytes)
+            .map_err(|e| anyhow::anyhow!("can't write `{}`: {e}", output.display()))?;
+        Ok(true)
+    }
+}
+
 /// What `result` holds, or `None` after printing its error.
 fn ok_or_print<T>(result: Result<T, impl std::fmt::Display>) -> Option<T> {
     result.map_err(|error| eprintln!("error: {error}")).ok()
@@ -435,34 +463,6 @@ fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<
         }
     }
     Ok(())
-}
-
-impl Exec for BuildCommand {
-    fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database_for(self.target.target(true)?)?;
-        let Some(file) = open(&db, &self.file) else { return Ok(false) };
-        let found = checked(&db, file, &[file]);
-        report(&db, &found)?;
-        if has_errors(&found) {
-            return Ok(false);
-        }
-        let Some(program) = lowered(&db, file) else { return Ok(false) };
-        let Some(bytes) =
-            ok_or_print(boltlang_codegen_conduit::wasm::build(&program, !self.no_opt))
-        else {
-            return Ok(false);
-        };
-        let output = match &self.output {
-            Some(path) => path.clone(),
-            None => {
-                let stem = self.file.file_stem().unwrap_or(self.file.as_os_str());
-                PathBuf::from(stem).with_extension("wasm")
-            }
-        };
-        std::fs::write(&output, bytes)
-            .map_err(|e| anyhow::anyhow!("can't write `{}`: {e}", output.display()))?;
-        Ok(true)
-    }
 }
 
 /// The diagnostics of `file`, and one for each file it uses that has errors
