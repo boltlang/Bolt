@@ -148,8 +148,8 @@ Unknown types are named per message
 ================================================================================
 let f = |x| x;
   if True { f } else { 1 };
-        //^^^^^ label: this has type `fn(a) -> a`
-                     //^ error: expected `fn(a) -> a`, found an integer
+        //^^^^^ label: this has type `fn(x: a) -> a`
+                     //^ error: expected `fn(x: a) -> a`, found an integer
 class Show[T] { fn show(x: T) -> i32; }
 let s = show([]);
       //^^^^ error: there is no instance `Show[imm [a]]`
@@ -159,7 +159,7 @@ Unknown types skip the names of type parameters
 ================================================================================
 fn g[a](x: a) = if True { x } else { |y| y };
                       //^^^^^ label: this has type `a`
-                                   //^^^^^ error: expected `a`, found `fn(b) -> b`
+                                   //^^^^^ error: expected `a`, found `fn(y: b) -> b`
 
 ================================================================================
 Fields of values of unknown types

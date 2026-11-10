@@ -96,6 +96,8 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                         ctx.solver.assume_at_most(assumption);
                     }
                     // A method of a class impl must have the class's types.
+                    // Its parameters can have other names than the class
+                    // gives them: calls through the class use the class's.
                     if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
                         let origin = Origin::new(def, ExprOrPat::Expr(ctx.body.body_expr));
                         for (own, class) in params.iter().zip(class_params.iter()) {
@@ -375,6 +377,7 @@ fn infer_group<'db>(
     solve_overloads(db, &mut solver, env);
     solver.report_pending_overloads();
     solver.settle_copies();
+    solver.settle_names();
     solver.keep_pending_assoc();
     // What's left about the functions' types becomes part of them; the
     // other unknowns in "at most" constraints can be chosen to meet them.

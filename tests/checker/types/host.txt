@@ -13,9 +13,9 @@ fn copy(s: JsString) -> JsString = imm s;
 fn twice(e: Element) = (e, imm e);
 --------------------------------------------------------------------------------
 text: fn() -> JsString
-set_text: fn(Element, JsString) -> ()
-copy: fn(JsString) -> JsString
-twice: fn(Element) -> imm (Element, Element)
+set_text: fn(e: Element, s: JsString) -> ()
+copy: fn(s: JsString) -> JsString
+twice: fn(e: Element) -> imm (Element, Element)
 
 ================================================================================
 Two types of the host aren't the same
@@ -32,7 +32,7 @@ fn set_text(e: Element, s: JsString);
 fn wrong() = set_text(text(), text());
 --------------------------------------------------------------------------------
 text: fn() -> JsString
-set_text: fn(Element, JsString) -> ()
+set_text: fn(e: Element, s: JsString) -> ()
 wrong: fn() -> ()
 --------------------------------------------------------------------------------
 error at `text()`: expected Element, found JsString
@@ -50,6 +50,6 @@ pub fn JsString.of(n: i32) -> JsString = make(n);
 import "./js" (JsString);
 let s = JsString.of(1);
 --------------------------------------------------------------------------------
-/js.bolt: make: fn(i32) -> JsString
-/js.bolt: JsString.of: fn(i32) -> JsString
+/js.bolt: make: fn(n: i32) -> JsString
+/js.bolt: JsString.of: fn(n: i32) -> JsString
 /main.bolt: let s: JsString

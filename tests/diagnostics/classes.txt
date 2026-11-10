@@ -100,7 +100,7 @@ Comparing closures says there is no instance
 fn same(a, b) = a == b;
               //^^^^^^ label: needed by this use in `same`
   same(|x| x + 1, |x| x + 1);
-//^^^^ error: there is no instance `Eq[fn(i32) -> i32]`
+//^^^^ error: there is no instance `Eq[fn(x: i32) -> i32]`
 
 ================================================================================
 An ambiguous instance

@@ -4,7 +4,7 @@ A function applied to itself has an infinite type
 ================================================================================
 fn f(x) = x(x);
 --------------------------------------------------------------------------------
-f: forall a b e. fn(fn(a) -> b does e) -> b does e
+f: forall a b e. fn(x: fn(a) -> b does e) -> b does e
 --------------------------------------------------------------------------------
 error at `x`: infinite type fn(a) -> b
 
@@ -14,9 +14,9 @@ A function that returns itself has an infinite type
 ================================================================================
 fn f(x) = (x, f);
 --------------------------------------------------------------------------------
-f: forall a b. a: imm => fn(a) -> b
+f: forall a b. a: imm => fn(x: a) -> b
 --------------------------------------------------------------------------------
-error at `(x, f)`: infinite type imm (a, fn(a) -> b)
+error at `(x, f)`: infinite type imm (a, fn(x: a) -> b)
 
 ================================================================================
 A list that contains itself has an infinite type
@@ -24,7 +24,7 @@ A list that contains itself has an infinite type
 ================================================================================
 fn f(x) = [x, [x]];
 --------------------------------------------------------------------------------
-f: forall a. a: imm => fn(a) -> imm [a]
+f: forall a. a: imm => fn(x: a) -> imm [a]
 --------------------------------------------------------------------------------
 error at `[x]`: infinite type imm [a]
 
@@ -33,7 +33,7 @@ Polymorphic recursion with a signature
 ================================================================================
 fn f[T](x: T) -> i32 = { f(1); f(True); 0 };
 --------------------------------------------------------------------------------
-f: forall T. fn(T) -> i32
+f: forall T. fn(x: T) -> i32
 
 ================================================================================
 Polymorphic recursion through a nested type
@@ -45,7 +45,7 @@ fn depth[T](n: Nested[T]) -> i32 = match n {
   Nested.Nest(m) => 1 + depth(m),
 };
 --------------------------------------------------------------------------------
-depth: forall T. fn(Nested[T]) -> i32
+depth: forall T. fn(n: Nested[T]) -> i32
 
 ================================================================================
 Polymorphic recursion without a signature
@@ -58,7 +58,7 @@ fn depth(n) = match n {
   Nested.Nest(m) => 1 + depth(m),
 };
 --------------------------------------------------------------------------------
-depth: forall a. fn(Nested[a]) -> i32
+depth: forall a. fn(n: Nested[a]) -> i32
 --------------------------------------------------------------------------------
 error at `m`: infinite type imm [a]
 
@@ -70,8 +70,8 @@ fn b(x) = a(x);
 a(1);
 b(True);
 --------------------------------------------------------------------------------
-a: forall T. fn(T) -> T
-b: forall a. fn(a) -> a
+a: forall T. fn(x: T) -> T
+b: forall a. fn(x: a) -> a
 a(1): i32
 b(True): Bool
 
@@ -81,8 +81,8 @@ Mutual recursion without anything known
 fn f(x) = g(x);
 fn g(x) = f(x);
 --------------------------------------------------------------------------------
-f: forall a b. fn(a) -> b
-g: forall a b. fn(a) -> b
+f: forall a b. fn(x: a) -> b
+g: forall a b. fn(x: a) -> b
 
 ================================================================================
 Mutually recursive functions are generic only outside their group
@@ -90,8 +90,8 @@ Mutually recursive functions are generic only outside their group
 fn f(x) = { g(1); x };
 fn g(y) = { f(True); y };
 --------------------------------------------------------------------------------
-f: fn(Bool) -> Bool
-g: fn(i32) -> i32
+f: fn(x: Bool) -> Bool
+g: fn(y: i32) -> i32
 
 ================================================================================
 A group of three
@@ -101,9 +101,9 @@ fn a(n) = if n == 0 { 0 } else { b(n - 1) };
 fn b(n) = c(n);
 fn c(n) = a(n) + 1;
 --------------------------------------------------------------------------------
-a: fn(i32) -> i32
-b: fn(i32) -> i32
-c: fn(i32) -> i32
+a: fn(n: i32) -> i32
+b: fn(n: i32) -> i32
+c: fn(n: i32) -> i32
 
 ================================================================================
 A lambda can't call itself through its let

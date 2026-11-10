@@ -127,6 +127,7 @@ pub fn split<'db>(
         | Ty::Host(_)
         | Ty::Mutability(_)
         | Ty::Unwritten
+        | Ty::ParamName(_)
         | Ty::Row(..)
         | Ty::Number(_)
         | Ty::Never

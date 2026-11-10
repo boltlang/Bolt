@@ -10,7 +10,7 @@ fn f() {
   inner(Wrap { inner: Point { x: 0, y: 0 } }).x = 1;
 }
 --------------------------------------------------------------------------------
-inner: fn('m Wrap) -> 'm Point
+inner: fn(w: 'm Wrap) -> 'm Point
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `inner(Wrap { inner: Point { x: 0, y: 0 } })`: can't change imm Point
@@ -26,7 +26,7 @@ fn f() {
   same([1])[0] = 2;
 }
 --------------------------------------------------------------------------------
-same: fn('m [i32]) -> 'm [i32]
+same: fn(xs: 'm [i32]) -> 'm [i32]
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `same([1])`: can't change imm [i32]
@@ -40,7 +40,7 @@ both(mut [1], mut [2]);
 both([1], [2]);
 both(mut [1], [2]);
 --------------------------------------------------------------------------------
-both: fn('m [i32], 'm [i32]) -> ()
+both: fn(a: 'm [i32], b: 'm [i32]) -> ()
 both(mut [1], mut [2]): ()
 both([1], [2]): ()
 both(mut [1], [2]): ()
@@ -53,7 +53,7 @@ Different names are different mutabilities
 fn pair(a: 'm [i32], b: 'n [i32]) -> mut ('m [i32], 'n [i32]) = mut (a, b);
 pair(mut [1], [2]);
 --------------------------------------------------------------------------------
-pair: fn('m [i32], 'n [i32]) -> mut ('m [i32], 'n [i32])
+pair: fn(a: 'm [i32], b: 'n [i32]) -> mut ('m [i32], 'n [i32])
 pair(mut [1], [2]): mut (mut [i32], imm [i32])
 
 ================================================================================
@@ -63,7 +63,7 @@ A named mutability can't be changed
 struct Counter { n: i32 }
 fn clear(c: 'm Counter) { c.n = 0; }
 --------------------------------------------------------------------------------
-clear: fn('m Counter) -> ()
+clear: fn(c: 'm Counter) -> ()
 --------------------------------------------------------------------------------
 error at `c`: can't change 'm Counter
 
@@ -89,8 +89,8 @@ fn g(xs: 'm [i32]) {
   let zs: 'm [i32] = [1];
 }
 --------------------------------------------------------------------------------
-f: fn('m [i32]) -> 'm [i32]
-g: fn('m [i32]) -> ()
+f: fn(xs: 'm [i32]) -> 'm [i32]
+g: fn(xs: 'm [i32]) -> ()
 --------------------------------------------------------------------------------
 error at `[1]`: expected 'm [i32], found imm [i32]
 
@@ -131,7 +131,7 @@ A name before a type that can't have a mutability
 ================================================================================
 fn f(x: 'm i32, y: 'm (i32, i32)) {}
 --------------------------------------------------------------------------------
-f: fn(i32, 'm (i32, i32)) -> ()
+f: fn(x: i32, y: 'm (i32, i32)) -> ()
 --------------------------------------------------------------------------------
 error at `'m i32`: can't be mut or imm
 
@@ -142,8 +142,8 @@ fn a(x: 'm [i32]) -> 'm [i32] = x;
 fn b(y: 'm [i32]) -> 'm [i32] = a(y);
 b(mut [1]);
 --------------------------------------------------------------------------------
-a: fn('m [i32]) -> 'm [i32]
-b: fn('m [i32]) -> 'm [i32]
+a: fn(x: 'm [i32]) -> 'm [i32]
+b: fn(y: 'm [i32]) -> 'm [i32]
 b(mut [1]): mut [i32]
 
 ================================================================================
@@ -153,7 +153,7 @@ fn first(xs: 'm [i32]) = ();
 first(mut [1]);
 first([1]);
 --------------------------------------------------------------------------------
-first: fn('m [i32]) -> ()
+first: fn(xs: 'm [i32]) -> ()
 first(mut [1]): ()
 first([1]): ()
 
@@ -164,8 +164,8 @@ fn apply(f: fn('m [i32]) -> 'm [i32], xs: 'm [i32]) -> 'm [i32] = f(xs);
 fn id(xs: 'k [i32]) -> 'k [i32] = xs;
 apply(id, mut [1]);
 --------------------------------------------------------------------------------
-apply: fn(fn('m [i32]) -> 'm [i32], 'm [i32]) -> 'm [i32]
-id: fn('k [i32]) -> 'k [i32]
+apply: fn(f: fn('m [i32]) -> 'm [i32], xs: 'm [i32]) -> 'm [i32]
+id: fn(xs: 'k [i32]) -> 'k [i32]
 apply(id, mut [1]): mut [i32]
 
 ================================================================================
@@ -176,7 +176,7 @@ fn unbox[T](b: 'm Box['m [T]]) -> 'm [T] = b.item;
 unbox(mut Box { item: mut [1] });
 unbox(Box { item: [True] });
 --------------------------------------------------------------------------------
-unbox: forall T. fn('m Box['m [T]]) -> 'm [T]
+unbox: forall T. fn(b: 'm Box['m [T]]) -> 'm [T]
 unbox(mut Box { item: mut [1] }): mut [i32]
 unbox(Box { item: [True] }): imm [Bool]
 
@@ -190,7 +190,7 @@ same(mut [1], mut [True]);
 same([1], [True]);
 same(mut [1], [True]);
 --------------------------------------------------------------------------------
-Same['m [i32], 'm [Bool]].same: fn('m [i32], 'm [Bool]) -> i32
+Same['m [i32], 'm [Bool]].same: fn(a: 'm [i32], b: 'm [Bool]) -> i32
 same(mut [1], mut [True]): i32
 same([1], [True]): i32
 same(mut [1], [True]): i32
@@ -205,9 +205,9 @@ fn pick(c, a, b) = if c { array_len(a); a } else { b };
 fn size(xs) = array_len(xs);
 fn same(xs: [i32]) -> [i32] = xs;
 --------------------------------------------------------------------------------
-pick: forall a. fn(Bool, 'm [a], 'm [a]) -> 'm [a]
-size: forall a. fn([a]) -> i32
-same: fn('m [i32]) -> 'm [i32]
+pick: forall a. fn(c: Bool, a: 'm [a], b: 'm [a]) -> 'm [a]
+size: forall a. fn(xs: [a]) -> i32
+same: fn(xs: 'm [i32]) -> 'm [i32]
 
 ================================================================================
 A complete signature with names
@@ -215,8 +215,8 @@ A complete signature with names
 fn same(xs: 'm [i32]) -> 'm [i32] = xs;
 fn copy(xs: [i32]) -> [i32] = [1];
 --------------------------------------------------------------------------------
-same: fn('m [i32]) -> 'm [i32]
-copy: fn([i32]) -> imm [i32]
+same: fn(xs: 'm [i32]) -> 'm [i32]
+copy: fn(xs: [i32]) -> imm [i32]
 
 ================================================================================
 An impl's associated type can use the impl's named mutability (#245)
@@ -231,7 +231,7 @@ let a = inner(Counter { n: 1 });
 let b = inner(mut Counter { n: 1 });
 b.n = 2;
 --------------------------------------------------------------------------------
-Wrap['m Counter].inner: fn('m Counter) -> 'm Counter
+Wrap['m Counter].inner: fn(c: 'm Counter) -> 'm Counter
 let a: imm Counter
 let b: mut Counter
 b.n = 2: ()
@@ -247,6 +247,6 @@ impl Wrap[Counter] {
   fn inner(c) = c;
 }
 --------------------------------------------------------------------------------
-Wrap[Counter].inner: fn(Counter) -> imm Counter
+Wrap[Counter].inner: fn(c: Counter) -> imm Counter
 --------------------------------------------------------------------------------
 error at `c`: expected imm Counter, found Counter

@@ -144,7 +144,7 @@ ys[0] = 2;
 let zs = id([1]);
 zs[0] = 2;
 --------------------------------------------------------------------------------
-id: forall a. fn(a) -> a
+id: forall a. fn(x: a) -> a
 let xs: mut [i32]
 let ys: mut [i32]
 ys[0] = 2: ()
@@ -162,7 +162,7 @@ fn f(c: Bool) {
   xs[0] = 2;
 }
 --------------------------------------------------------------------------------
-f: fn(Bool) -> ()
+f: fn(c: Bool) -> ()
 
 ================================================================================
 Branches with different mutabilities
@@ -172,7 +172,7 @@ fn f(c: Bool) {
   let xs = if c { mut [1] } else { [2] };
 }
 --------------------------------------------------------------------------------
-f: fn(Bool) -> ()
+f: fn(c: Bool) -> ()
 --------------------------------------------------------------------------------
 error at `[2]`: expected mut [{integer}], found imm [{integer}]
 
@@ -273,7 +273,7 @@ fn sum(xs: [i32]) -> i32 = xs[0] + xs[1];
 sum([1, 2]);
 sum(mut [1, 2]);
 --------------------------------------------------------------------------------
-sum: fn([i32]) -> i32
+sum: fn(xs: [i32]) -> i32
 sum([1, 2]): i32
 sum(mut [1, 2]): i32
 
@@ -284,7 +284,7 @@ A parameter without mut or imm can't be changed
 ================================================================================
 fn clear(xs: [i32]) { xs[0] = 0; }
 --------------------------------------------------------------------------------
-clear: fn([i32]) -> ()
+clear: fn(xs: [i32]) -> ()
 --------------------------------------------------------------------------------
 error at `xs`: can't change [i32]
 
@@ -297,7 +297,7 @@ fn clear(xs: mut [i32]) { xs[0] = 0; }
 clear(mut [1]);
 clear([1]);
 --------------------------------------------------------------------------------
-clear: fn(mut [i32]) -> ()
+clear: fn(xs: mut [i32]) -> ()
 clear(mut [1]): ()
 clear([1]): ()
 --------------------------------------------------------------------------------
@@ -312,7 +312,7 @@ fn keep(xs: imm [i32]) -> i32 = xs[0];
 keep([1]);
 keep(mut [1]);
 --------------------------------------------------------------------------------
-keep: fn(imm [i32]) -> i32
+keep: fn(xs: imm [i32]) -> i32
 keep([1]): i32
 keep(mut [1]): i32
 --------------------------------------------------------------------------------
@@ -326,7 +326,7 @@ fn both(a: [i32], b: [i32]) -> i32 = a[0] + b[0];
 both([1], mut [2]);
 both(mut [1], [2]);
 --------------------------------------------------------------------------------
-both: fn([i32], [i32]) -> i32
+both: fn(a: [i32], b: [i32]) -> i32
 both([1], mut [2]): i32
 both(mut [1], [2]): i32
 
@@ -341,7 +341,7 @@ put(mut ["a"], "b");
 put(["a"], "b");
 put(mut ["a"], 1);
 --------------------------------------------------------------------------------
-put: forall T. fn(mut [T], T) -> ()
+put: forall T. fn(xs: mut [T], x: T) -> ()
 put(mut [1], 2): ()
 put(mut ["a"], "b"): ()
 put(["a"], "b"): ()
@@ -389,7 +389,7 @@ fn f() {
   same([1])[0] = 2;
 }
 --------------------------------------------------------------------------------
-same: fn('m [i32]) -> 'm [i32]
+same: fn(xs: 'm [i32]) -> 'm [i32]
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `same([1])`: can't change imm [i32]
@@ -404,8 +404,8 @@ first([1]);
 first(mut [True]);
 copy_first(mut [1]);
 --------------------------------------------------------------------------------
-first: forall a. Index[a] => fn(a) -> a.Item
-copy_first: forall a. Index[a] => a.Item: imm => fn(a) -> imm [a.Item]
+first: forall a. Index[a] => fn(xs: a) -> a.Item
+copy_first: forall a. Index[a] => a.Item: imm => fn(xs: a) -> imm [a.Item]
 first([1]): i32
 first(mut [True]): Bool
 copy_first(mut [1]): imm [i32]
@@ -419,7 +419,7 @@ fn set(xs, x) { xs[0] = x; }
 set(mut [1], 2);
 set([1], 2);
 --------------------------------------------------------------------------------
-set: forall a. IndexMut[a] => fn(a, a.Item) -> ()
+set: forall a. IndexMut[a] => fn(xs: a, x: a.Item) -> ()
 set(mut [1], 2): ()
 set([1], 2): ()
 --------------------------------------------------------------------------------
@@ -447,7 +447,7 @@ fn add(xs: [i32], y) = xs[0] + y;
 add([1], 2);
 add(mut [1], 2);
 --------------------------------------------------------------------------------
-add: fn([i32], i32) -> i32
+add: fn(xs: [i32], y: i32) -> i32
 add([1], 2): i32
 add(mut [1], 2): i32
 
@@ -459,8 +459,8 @@ fn even(xs, n) = if n == 0 { xs[0] = True; } else { odd(xs, n - 1) };
 fn odd(xs, n) = if n == 0 { xs[0] = False; } else { even(xs, n - 1) };
 even(mut [False], 3);
 --------------------------------------------------------------------------------
-even: forall a. IndexMut[a] => a.Item = Bool => fn(a, i32) -> ()
-odd: forall a. IndexMut[a] => a.Item = Bool => fn(a, i32) -> ()
+even: forall a. IndexMut[a] => a.Item = Bool => fn(xs: a, n: i32) -> ()
+odd: forall a. IndexMut[a] => a.Item = Bool => fn(xs: a, n: i32) -> ()
 even(mut [False], 3): ()
 
 ================================================================================
@@ -486,7 +486,7 @@ let [a, b] = mut [1, 2];
 let [c, ..] = [True];
 fn f(xs: mut [i32]) -> i32 = match xs { [x, ..] => x, [] => 0 };
 --------------------------------------------------------------------------------
-f: fn(mut [i32]) -> i32
+f: fn(xs: mut [i32]) -> i32
 let [a, b]: mut [i32]
 let [c, ..]: imm [Bool]
 
@@ -504,7 +504,7 @@ a.items[0] = 2;
 let c = Inventory { items: mut [1] };
 let d = mut Inventory { items: [1] };
 --------------------------------------------------------------------------------
-f: fn(Inventory) -> ()
+f: fn(inv: Inventory) -> ()
 let a: imm Inventory
 let b: mut Inventory
 b.items[0] = 2: ()
@@ -567,7 +567,7 @@ enum Shape { Points([(f64, f64)]) }
 fn f(s: Shape) = match s { Shape.Points(ps) => ps[0] = (0.0, 0.0) };
 let s = Shape.Points(mut [(0.0, 1.0)]);
 --------------------------------------------------------------------------------
-f: fn(Shape) -> ()
+f: fn(s: Shape) -> ()
 let s: Shape
 --------------------------------------------------------------------------------
 error at `ps`: can't change imm [imm (f64, f64)]
@@ -602,7 +602,7 @@ sum(mut [1]);
 let a: Ints = mut [1];
 a[0] = 2;
 --------------------------------------------------------------------------------
-sum: fn([i32]) -> i32
+sum: fn(xs: [i32]) -> i32
 sum([1]): i32
 sum(mut [1]): i32
 let a: mut [i32]
@@ -618,7 +618,7 @@ fn fill(b: Buffer) { b[0] = 0; }
 fill(mut [1]);
 fill([1]);
 --------------------------------------------------------------------------------
-fill: fn(mut [u8]) -> ()
+fill: fn(b: mut [u8]) -> ()
 fill(mut [1]): ()
 fill([1]): ()
 --------------------------------------------------------------------------------
@@ -669,7 +669,7 @@ impl Size[[i32]] { fn size(x) = 1; }
 size([1]);
 size(mut [1]);
 --------------------------------------------------------------------------------
-Size[[i32]].size: fn([i32]) -> i32
+Size[[i32]].size: fn(x: [i32]) -> i32
 size([1]): i32
 size(mut [1]): i32
 
@@ -682,7 +682,7 @@ impl Size[mut [Bool]] { fn size(x) = 1; }
 size(mut [True]);
 size([True]);
 --------------------------------------------------------------------------------
-Size[mut [Bool]].size: fn(mut [Bool]) -> i32
+Size[mut [Bool]].size: fn(x: mut [Bool]) -> i32
 size(mut [True]): i32
 size([True]): i32
 --------------------------------------------------------------------------------
@@ -698,8 +698,8 @@ impl Name[imm [i32]] { fn name(x) = "imm"; }
 name(mut [1]);
 name([1]);
 --------------------------------------------------------------------------------
-Name[mut [i32]].name: fn(mut [i32]) -> String
-Name[imm [i32]].name: fn(imm [i32]) -> String
+Name[mut [i32]].name: fn(x: mut [i32]) -> String
+Name[imm [i32]].name: fn(x: imm [i32]) -> String
 name(mut [1]): String
 name([1]): String
 
@@ -713,8 +713,8 @@ impl[T] Show[[T]] where T: Show { fn show(x) = "array"; }
 show([1]);
 show(mut [mut [1]]);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-Show[[T]].show: forall T. Show[T] => fn([T]) -> String
+Show[i32].show: fn(x: i32) -> String
+Show[[T]].show: forall T. Show[T] => fn(x: [T]) -> String
 show([1]): String
 show(mut [mut [1]]): String
 
@@ -729,7 +729,7 @@ xs.clear();
 [1].clear();
 (mut [1]).clear();
 --------------------------------------------------------------------------------
-clear: fn(mut [i32]) -> ()
+clear: fn(xs: mut [i32]) -> ()
 let xs: mut [i32]
 xs.clear(): ()
 [1].clear(): ()
@@ -748,13 +748,13 @@ apply(clear, mut [1]);
 let g: fn([i32]) -> () = clear;
 let h: fn(imm [i32]) -> () = clear;
 --------------------------------------------------------------------------------
-clear: fn(mut [i32]) -> ()
-apply: fn(fn(mut [i32]) -> (), mut [i32]) -> ()
+clear: fn(xs: mut [i32]) -> ()
+apply: fn(f: fn(mut [i32]) -> (), xs: mut [i32]) -> ()
 apply(clear, mut [1]): ()
 let g: fn(mut [i32]) -> ()
 let h: fn(imm [i32]) -> ()
 --------------------------------------------------------------------------------
-error at `clear`: expected fn(imm [i32]) -> (), found fn(mut [i32]) -> ()
+error at `clear`: expected fn(imm [i32]) -> (), found fn(xs: mut [i32]) -> ()
 
 ================================================================================
 A closure that changes its argument
@@ -765,7 +765,7 @@ let clear = |xs| xs[0] = 0;
 clear(mut [1]);
 clear([1]);
 --------------------------------------------------------------------------------
-let clear: fn(mut [i32]) -> ()
+let clear: fn(xs: mut [i32]) -> ()
 clear(mut [1]): ()
 clear([1]): ()
 --------------------------------------------------------------------------------
@@ -780,8 +780,8 @@ let first = |xs: [i32]| xs[0];
 clear(mut [1]);
 first([1]);
 --------------------------------------------------------------------------------
-let clear: fn(mut [i32]) -> ()
-let first: fn(imm [i32]) -> i32
+let clear: fn(xs: mut [i32]) -> ()
+let first: fn(xs: imm [i32]) -> i32
 clear(mut [1]): ()
 first([1]): i32
 
@@ -841,7 +841,7 @@ fn f(xs: mut [i32]) {}
 f([True]);
 let a: (mut [i32], Bool) = mut ([1], True);
 --------------------------------------------------------------------------------
-f: fn(mut [i32]) -> ()
+f: fn(xs: mut [i32]) -> ()
 f([True]): ()
 let a: mut (mut [i32], Bool)
 --------------------------------------------------------------------------------

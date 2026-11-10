@@ -6,7 +6,7 @@ fn wrap[T: imm](x: T) -> imm Box[T] = Box { item: x };
 wrap(1);
 wrap([1]);
 --------------------------------------------------------------------------------
-wrap: forall T. T: imm => fn(T) -> imm Box[T]
+wrap: forall T. T: imm => fn(x: T) -> imm Box[T]
 wrap(1): imm Box[i32]
 wrap([1]): imm Box[imm [i32]]
 
@@ -18,7 +18,7 @@ struct Box[T] { item: T }
 fn wrap[T: imm](x: T) -> imm Box[T] = Box { item: x };
 wrap(mut [1]);
 --------------------------------------------------------------------------------
-wrap: forall T. T: imm => fn(T) -> imm Box[T]
+wrap: forall T. T: imm => fn(x: T) -> imm Box[T]
 wrap(mut [1]): imm Box[mut [i32]]
 --------------------------------------------------------------------------------
 error at `wrap`: mut [i32] isn't at most imm
@@ -29,7 +29,7 @@ A bound in a where clause
 struct Box[T] { item: T }
 fn wrap[T](x: T) -> imm Box[T] where T: imm = Box { item: x };
 --------------------------------------------------------------------------------
-wrap: forall T. T: imm => fn(T) -> imm Box[T]
+wrap: forall T. T: imm => fn(x: T) -> imm Box[T]
 
 ================================================================================
 A mutability bounded by another
@@ -39,7 +39,7 @@ fn reader(c: 'v Counter) -> 'f fn() -> i32 where 'v: 'f = || c.n;
 let a = reader(Counter { n: 1 });
 let b = reader(mut Counter { n: 1 });
 --------------------------------------------------------------------------------
-reader: 'v: 'f => fn('v Counter) -> 'f fn() -> i32
+reader: 'v: 'f => fn(c: 'v Counter) -> 'f fn() -> i32
 let a: fn() -> i32
 let b: mut fn() -> i32
 
@@ -50,7 +50,7 @@ Without the bound, the closure can't be at most 'f
 struct Counter { n: i32 }
 fn reader(c: 'v Counter) -> 'f fn() -> i32 = || c.n;
 --------------------------------------------------------------------------------
-reader: fn('v Counter) -> 'f fn() -> i32
+reader: fn(c: 'v Counter) -> 'f fn() -> i32
 --------------------------------------------------------------------------------
 error at `|| c.n`: 'v isn't at most 'f
 
@@ -60,7 +60,7 @@ A mutability bounded by imm
 fn nest(xs: 'v [i32]) -> imm [[i32]] where 'v: imm = [xs];
 nest([1]);
 --------------------------------------------------------------------------------
-nest: 'v: imm => fn('v [i32]) -> imm ['v [i32]]
+nest: 'v: imm => fn(xs: 'v [i32]) -> imm ['v [i32]]
 nest([1]): imm [imm [i32]]
 
 ================================================================================
@@ -88,7 +88,7 @@ impl[T: imm] Freeze[Box[T]] { fn freeze(b) = b; }
 freeze(Box { item: 1 });
 freeze(mut Box { item: mut [1] });
 --------------------------------------------------------------------------------
-Freeze[Box[T]].freeze: forall T. T: imm => fn('m Box[T]) -> 'm Box[T]
+Freeze[Box[T]].freeze: forall T. T: imm => fn(b: 'm Box[T]) -> 'm Box[T]
 freeze(Box { item: 1 }): imm Box[i32]
 freeze(mut Box { item: mut [1] }): mut Box[mut [i32]]
 --------------------------------------------------------------------------------
@@ -124,7 +124,7 @@ fn freeze(xs: 'a [i32]) -> imm ['a [i32]]
   where 'a: 'b, 'b: 'c, 'c: 'd, 'd: 'e, 'e: 'f, 'f: 'g, 'g: 'h, 'h: 'i, 'i: 'j, 'j: imm
   = [xs];
 --------------------------------------------------------------------------------
-freeze: 'a: 'b => 'b: 'c => 'c: 'd => 'd: 'e => 'e: 'f => 'f: 'g => 'g: 'h => 'h: 'i => 'i: 'j => 'j: imm => fn('a [i32]) -> imm ['a [i32]]
+freeze: 'a: 'b => 'b: 'c => 'c: 'd => 'd: 'e => 'e: 'f => 'f: 'g => 'g: 'h => 'h: 'i => 'i: 'j => 'j: imm => fn(xs: 'a [i32]) -> imm ['a [i32]]
 
 ================================================================================
 An assumption that starts at mut is above everything
@@ -132,7 +132,7 @@ An assumption that starts at mut is above everything
 struct Counter { n: i32 }
 fn reader(c: 'a Counter) -> 'v fn() -> i32 where mut: 'v = || c.n;
 --------------------------------------------------------------------------------
-reader: mut: 'v => fn('a Counter) -> 'v fn() -> i32
+reader: mut: 'v => fn(c: 'a Counter) -> 'v fn() -> i32
 
 ================================================================================
 A cycle of assumptions ends, and says nothing more
@@ -140,6 +140,6 @@ A cycle of assumptions ends, and says nothing more
 ================================================================================
 fn freeze(xs: 'a [i32]) -> imm ['a [i32]] where 'a: 'b, 'b: 'a = [xs];
 --------------------------------------------------------------------------------
-freeze: 'a: 'b => 'b: 'a => fn('a [i32]) -> imm ['a [i32]]
+freeze: 'a: 'b => 'b: 'a => fn(xs: 'a [i32]) -> imm ['a [i32]]
 --------------------------------------------------------------------------------
 error at `[xs]`: 'a [i32] isn't at most imm

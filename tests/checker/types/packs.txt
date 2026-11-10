@@ -15,11 +15,11 @@ let f = same(());
 let g = same_named((x: True));
 let h = same_named(());
 --------------------------------------------------------------------------------
-first: forall T Ts. fn((T, *Ts)) -> T
-last: forall Ts U. fn((*Ts, U)) -> U
-name_of: forall R. fn((name: i32, **R)) -> i32
-same: forall Ts. fn((*Ts)) -> (*Ts)
-same_named: forall Ks. fn((**Ks)) -> (**Ks)
+first: forall T Ts. fn(t: (T, *Ts)) -> T
+last: forall Ts U. fn(t: (*Ts, U)) -> U
+name_of: forall R. fn(p: (name: i32, **R)) -> i32
+same: forall Ts. fn(a: (*Ts)) -> (*Ts)
+same_named: forall Ks. fn(a: (**Ks)) -> (**Ks)
 let a: i32
 let b: i32
 let c: i32
@@ -35,7 +35,7 @@ Two packs in a result
 fn join[*As, *Bs](a: (*As), b: (*Bs)) -> (*As, *Bs) = (*a, *b);
 let c = join((1, True), (2u8,));
 --------------------------------------------------------------------------------
-join: forall As Bs. *As: imm => *Bs: imm => fn((*As), (*Bs)) -> imm (*As, *Bs)
+join: forall As Bs. *As: imm => *Bs: imm => fn(a: (*As), b: (*Bs)) -> imm (*As, *Bs)
 let c: imm (i32, Bool, u8)
 
 ================================================================================
@@ -44,7 +44,7 @@ Named packs on both sides take each other's fields
 fn both[**R](a: (x: i32, **R), b: (**R)) -> (x: i32, **R) = a;
 let c = both((x: 1, y: True), (y: False));
 --------------------------------------------------------------------------------
-both: forall R. fn((x: i32, **R), (**R)) -> (x: i32, **R)
+both: forall R. fn(a: (x: i32, **R), b: (**R)) -> (x: i32, **R)
 let c: imm (x: i32, y: Bool)
 
 ================================================================================
@@ -55,7 +55,7 @@ fn with_id[**R](r: (**R), id: i32) -> (id: i32, **R) = (id: id, **r);
 let w = with_id((name: True), 1);
 let d = with_id((id: True), 1);
 --------------------------------------------------------------------------------
-with_id: forall R. **R: imm => fn((**R), i32) -> imm (id: i32, **R)
+with_id: forall R. **R: imm => fn(r: (**R), id: i32) -> imm (id: i32, **R)
 let w: imm (id: i32, name: Bool)
 let d: imm (id: i32, id: Bool)
 --------------------------------------------------------------------------------
@@ -69,9 +69,9 @@ fn f[*Ts](x: Ts) = x;
 fn g[*Ts](x: (**Ts)) = x;
 fn h(x: (*i32)) = x;
 --------------------------------------------------------------------------------
-f: forall Ts. fn({error}) -> {error}
-g: forall Ts. fn(()) -> ()
-h: fn(()) -> ()
+f: forall Ts. fn(x: {error}) -> {error}
+g: forall Ts. fn(x: ()) -> ()
+h: fn(x: ()) -> ()
 --------------------------------------------------------------------------------
 error at `Ts`: expected kind Type, found *Pack
 error at `Ts`: not a pack
@@ -83,6 +83,6 @@ Only the fields before a pack are known
 ================================================================================
 fn second[T, *Ts](t: (T, *Ts)) = t.1;
 --------------------------------------------------------------------------------
-second: forall T Ts. fn((T, *Ts)) -> {error}
+second: forall T Ts. fn(t: (T, *Ts)) -> {error}
 --------------------------------------------------------------------------------
 error at `t.1`: (T, *Ts) has no field 1

@@ -12,7 +12,7 @@ impl[T] Get[Box[T]] {
 }
 get(Box { item: True });
 --------------------------------------------------------------------------------
-Get[Box[T]].get: forall T. fn(Box[T]) -> T
+Get[Box[T]].get: forall T. fn(c: Box[T]) -> T
 get(Box { item: True }): Bool
 
 ================================================================================
@@ -30,8 +30,8 @@ impl[T] Get[Box[T]] {
 fn f(c) = get(c);
 f(Box { item: 1 });
 --------------------------------------------------------------------------------
-Get[Box[T]].get: forall T. fn(Box[T]) -> T
-f: forall a. Get[a] => fn(a) -> a.Item
+Get[Box[T]].get: forall T. fn(c: Box[T]) -> T
+f: forall a. Get[a] => fn(c: a) -> a.Item
 f(Box { item: 1 }): i32
 
 ================================================================================
@@ -49,8 +49,8 @@ impl[T] Get[Box[T]] {
 fn first[C](c: C) -> C.Item where Get[C] = get(c);
 let x: Bool = first(Box { item: True });
 --------------------------------------------------------------------------------
-Get[Box[T]].get: forall T. fn(Box[T]) -> T
-first: forall C. Get[C] => fn(C) -> C.Item
+Get[Box[T]].get: forall T. fn(c: Box[T]) -> T
+first: forall C. Get[C] => fn(c: C) -> C.Item
 let x: Bool
 
 ================================================================================
@@ -64,8 +64,8 @@ class Get[C] {
 fn first[C](c: C) -> C.Item where Get[C] = get(c);
 fn wrong[C](c: C) -> i32 where Get[C] = get(c);
 --------------------------------------------------------------------------------
-first: forall C. Get[C] => fn(C) -> C.Item
-wrong: forall C. Get[C] => fn(C) -> i32
+first: forall C. Get[C] => fn(c: C) -> C.Item
+wrong: forall C. Get[C] => fn(c: C) -> i32
 --------------------------------------------------------------------------------
 error at `get(c)`: expected i32, found C.Item
 
@@ -92,9 +92,9 @@ fn f[C](c: C, x: C.Item) where Put[C] = put(c, x);
 f(Box { item: 1 }, 2);
 f(Box { item: 1 }, True);
 --------------------------------------------------------------------------------
-Get[Box[T]].get: forall T. fn(Box[T]) -> T
-Put[Box[T]].put: forall T. fn(Box[T], T) -> ()
-f: forall C. Put[C] => fn(C, C.Item) -> ()
+Get[Box[T]].get: forall T. fn(c: Box[T]) -> T
+Put[Box[T]].put: forall T. fn(c: Box[T], x: T) -> ()
+f: forall C. Put[C] => fn(c: C, x: C.Item) -> ()
 f(Box { item: 1 }, 2): ()
 f(Box { item: 1 }, True): ()
 --------------------------------------------------------------------------------
@@ -115,7 +115,7 @@ impl[T] Get[Box[T]] {
 }
 let n: i32 = get(Box { item: True });
 --------------------------------------------------------------------------------
-Get[Box[T]].get: forall T. fn(Box[T]) -> T
+Get[Box[T]].get: forall T. fn(c: Box[T]) -> T
 let n: i32
 --------------------------------------------------------------------------------
 error at `get(Box { item: True })`: expected i32, found Bool
@@ -131,8 +131,8 @@ class Get[C] {
 fn none[C](c: C) -> C.Item = get(c);
 fn other[C](c: C) -> C.Thing where Get[C] = get(c);
 --------------------------------------------------------------------------------
-none: forall C. fn(C) -> {error}
-other: forall C. Get[C] => fn(C) -> {error}
+none: forall C. fn(c: C) -> {error}
+other: forall C. Get[C] => fn(c: C) -> {error}
 --------------------------------------------------------------------------------
 error at `C.Item`: no such associated type
 error at `C.Thing`: no such associated type
@@ -146,7 +146,7 @@ class A[C] { type Item; }
 class B[C] { type Item; }
 fn f[C](c: C) -> C.Item where A[C], B[C] = f(c);
 --------------------------------------------------------------------------------
-f: forall C. A[C] => B[C] => fn(C) -> {error}
+f: forall C. A[C] => B[C] => fn(c: C) -> {error}
 --------------------------------------------------------------------------------
 error at `C.Item`: ambiguous associated type
 
@@ -177,8 +177,8 @@ impl[A: Iterator, B: Iterator] Iterator[Pair[A, B]] {
 }
 next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } });
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> i32
-Iterator[Pair[A, B]].next: forall A B. Iterator[A] => Iterator[B] => fn(Pair[A, B]) -> mut (A.Item, B.Item)
+Iterator[Ints].next: fn(it: Ints) -> i32
+Iterator[Pair[A, B]].next: forall A B. Iterator[A] => Iterator[B] => fn(it: Pair[A, B]) -> mut (A.Item, B.Item)
 next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } }): mut (i32, i32)
 
 ================================================================================
@@ -189,8 +189,8 @@ class Coll[C] { type It: Iter2; fn it(c: C) -> It; }
 fn first[C: Coll](c: C) -> C.It.Item = next2(it(c));
 fn second(c) = next2(it(c));
 --------------------------------------------------------------------------------
-first: forall C. Coll[C] => fn(C) -> C.It.Item
-second: forall a. Coll[a] => fn(a) -> a.It.Item
+first: forall C. Coll[C] => fn(c: C) -> C.It.Item
+second: forall a. Coll[a] => fn(c: a) -> a.It.Item
 
 ================================================================================
 A chain of associated types needs a class at each step
@@ -200,7 +200,7 @@ class Iter2[I] { type Item; fn next2(it: I) -> Item; }
 class Coll[C] { type It; fn it(c: C) -> It; }
 fn first[C: Coll](c: C) -> C.It.Item = next2(it(c));
 --------------------------------------------------------------------------------
-first: forall C. Coll[C] => fn(C) -> {error}
+first: forall C. Coll[C] => fn(c: C) -> {error}
 --------------------------------------------------------------------------------
 error at `C.It.Item`: no such associated type
 error at `next2`: no instance Iter2[C.It]
@@ -221,9 +221,9 @@ fn first[T, I: Iterator[Item = T]](it: I) -> Option[T] = next(it);
 sum(Ints { n: 1 }, 2);
 first(Ints { n: 1 });
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> Option[i32]
-sum: forall I. Iterator[I] => I.Item = i32 => fn(I, I.Item) -> i32
-first: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+Iterator[Ints].next: fn(it: Ints) -> Option[i32]
+sum: forall I. Iterator[I] => I.Item = i32 => fn(it: I, x: I.Item) -> i32
+first: forall T I. Iterator[I] => I.Item = T => fn(it: I) -> Option[T]
 sum(Ints { n: 1 }, 2): i32
 first(Ints { n: 1 }): Option[i32]
 
@@ -235,8 +235,8 @@ class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
 fn first[T, I](it: I) -> Option[T] where Iterator[I, Item = T] = next(it);
 fn second[T, I](it: I) -> Option[T] where I: Iterator[Item = T] = next(it);
 --------------------------------------------------------------------------------
-first: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
-second: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+first: forall T I. Iterator[I] => I.Item = T => fn(it: I) -> Option[T]
+second: forall T I. Iterator[I] => I.Item = T => fn(it: I) -> Option[T]
 
 ================================================================================
 A call needs the associated type that the bound says
@@ -251,9 +251,9 @@ fn first[T, I: Iterator[Item = T]](it: I) -> Option[T] = next(it);
 any(Ints { n: 1 });
 let b: Option[Bool] = first(Ints { n: 1 });
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> Option[i32]
-any: forall I. Iterator[I] => I.Item = Bool => fn(I) -> Bool
-first: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+Iterator[Ints].next: fn(it: Ints) -> Option[i32]
+any: forall I. Iterator[I] => I.Item = Bool => fn(it: I) -> Bool
+first: forall T I. Iterator[I] => I.Item = T => fn(it: I) -> Option[T]
 any(Ints { n: 1 }): Bool
 let b: Option[Bool]
 --------------------------------------------------------------------------------
@@ -278,9 +278,9 @@ impl[I] Sum[Wrap[I]] where Iterator[I, Item = i32] {
 total(Wrap { it: Ints { n: 1 } });
 total(Wrap { it: Bools { b: True } });
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> Option[i32]
-Iterator[Bools].next: fn(Bools) -> Option[Bool]
-Sum[Wrap[I]].total: forall I. Iterator[I] => I.Item = i32 => fn(Wrap[I]) -> i32
+Iterator[Ints].next: fn(it: Ints) -> Option[i32]
+Iterator[Bools].next: fn(it: Bools) -> Option[Bool]
+Sum[Wrap[I]].total: forall I. Iterator[I] => I.Item = i32 => fn(w: Wrap[I]) -> i32
 total(Wrap { it: Ints { n: 1 } }): i32
 total(Wrap { it: Bools { b: True } }): i32
 --------------------------------------------------------------------------------
@@ -294,7 +294,7 @@ enum Option[T] { None, Some(T) }
 class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
 fn f[I: Iterator[Itme = i32]](it: I) = ();
 --------------------------------------------------------------------------------
-f: forall I. Iterator[I] => fn(I) -> ()
+f: forall I. Iterator[I] => fn(it: I) -> ()
 --------------------------------------------------------------------------------
 error at `Iterator[Itme = i32]`: Iterator has no associated type Itme
 
@@ -308,7 +308,7 @@ struct Ints { n: i32 }
 impl Iterator[Ints, Item = i32] { type Item = i32; fn next(it) = Option.Some(it.n); }
 struct W[I: Iterator[Item = i32]] { it: I }
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> Option[i32]
+Iterator[Ints].next: fn(it: Ints) -> Option[i32]
 --------------------------------------------------------------------------------
 error at `Iterator[Ints, Item = i32]`: an associated type can't be given here
 error at `Iterator[Item = i32]`: an associated type can't be given here
@@ -328,10 +328,10 @@ fn first_inferred(c) = next(iter(c));
 first(Bag { n: 1 });
 first_inferred(Bag { n: 1 });
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> Option[i32]
-Iterable[Bag].iter: fn(Bag) -> imm Ints
-first: forall C. Iterable[C] => fn(C) -> Option[C.Item]
-first_inferred: forall a. Iterable[a] => fn(a) -> Option[a.Iter.Item]
+Iterator[Ints].next: fn(it: Ints) -> Option[i32]
+Iterable[Bag].iter: fn(b: Bag) -> imm Ints
+first: forall C. Iterable[C] => fn(c: C) -> Option[C.Item]
+first_inferred: forall a. Iterable[a] => fn(c: a) -> Option[a.Iter.Item]
 first(Bag { n: 1 }): Option[i32]
 first_inferred(Bag { n: 1 }): Option[i32]
 
@@ -346,8 +346,8 @@ fn get[C: Coll](c: C) -> C.Item = first(c);
 get(Bag { n: 1 });
 let b: Bool = first(Bag { n: 1 });
 --------------------------------------------------------------------------------
-Coll[Bag].first: fn(Bag) -> i32
-get: forall C. Coll[C] => fn(C) -> C.Item
+Coll[Bag].first: fn(c: Bag) -> i32
+get: forall C. Coll[C] => fn(c: C) -> C.Item
 get(Bag { n: 1 }): i32
 let b: Bool
 --------------------------------------------------------------------------------
@@ -368,9 +368,9 @@ fn first[C: Iterable](c: C) -> Option[C.Item] = next(iter(c));
 first(Bag { n: 1 });
 let y: Option[Bool] = first(Bag { n: 1 });
 --------------------------------------------------------------------------------
-Iterator[Ints].next: fn(Ints) -> Option[i32]
-Iterable[Bag].iter: fn(Bag) -> imm Ints
-first: forall C. Iterable[C] => fn(C) -> Option[C.Item]
+Iterator[Ints].next: fn(it: Ints) -> Option[i32]
+Iterable[Bag].iter: fn(b: Bag) -> imm Ints
+first: forall C. Iterable[C] => fn(c: C) -> Option[C.Item]
 first(Bag { n: 1 }): Option[i32]
 let y: Option[Bool]
 --------------------------------------------------------------------------------
@@ -387,9 +387,9 @@ fn get[C: Pair](c: C) -> C.A = left(c);
 get(Bag { n: 1 });
 right(Bag { n: 1 });
 --------------------------------------------------------------------------------
-Pair[Bag].left: fn(Bag) -> {error}
-Pair[Bag].right: fn(Bag) -> {error}
-get: forall C. Pair[C] => fn(C) -> C.A
+Pair[Bag].left: fn(c: Bag) -> {error}
+Pair[Bag].right: fn(c: Bag) -> {error}
+get: forall C. Pair[C] => fn(c: C) -> C.A
 get(Bag { n: 1 }): {error}
 right(Bag { n: 1 }): {error}
 --------------------------------------------------------------------------------

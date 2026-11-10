@@ -73,8 +73,8 @@ fn size(x: i32) -> i32 = x;
  //^^^^ label: the function it overlaps
 fn size(b: Bool) -> i32 = 1;
 fn size(y: i32) -> Bool = True;
- //^^^^ error: this `size`, of type `fn(i32) -> Bool`, overlaps the `size` of type `fn(i32) -> i32`: a call could fit both, so it couldn't choose one; give them different numbers or types of parameters
+ //^^^^ error: this `size`, of type `fn(y: i32) -> Bool`, overlaps the `size` of type `fn(x: i32) -> i32`: a call could fit both, so it couldn't choose one; give them different numbers or types of parameters
 fn f(it) = size(it);
-         //^^^^ error: more than one function `size` fits this use: `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`; give the arguments types that leave one
+         //^^^^ error: more than one function `size` fits this use: `fn(x: i32) -> i32`, `fn(b: Bool) -> i32` and `fn(y: i32) -> Bool`; give the arguments types that leave one
 let v: i32 = size(1.5, 1);
-           //^^^^ error: no function `size` fits this use, of type `fn(f64, i32) -> i32`; the functions called `size` are `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`
+           //^^^^ error: no function `size` fits this use, of type `fn(f64, i32) -> i32`; the functions called `size` are `fn(x: i32) -> i32`, `fn(b: Bool) -> i32` and `fn(y: i32) -> Bool`

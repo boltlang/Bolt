@@ -99,9 +99,9 @@ A function has no deep copy
 ================================================================================
 let f = to_imm_deep(|x: i32| x);
 --------------------------------------------------------------------------------
-let f: fn(i32) -> i32
+let f: fn(x: i32) -> i32
 --------------------------------------------------------------------------------
-error at `to_imm_deep`: no instance ToImmDeep[fn(i32) -> i32]
+error at `to_imm_deep`: no instance ToImmDeep[fn(x: i32) -> i32]
 
 ================================================================================
 Deep copies of tuples up to ten elements
@@ -144,6 +144,6 @@ A deep copy must be imm all the way down
 struct Cell { items: [i32] }
 impl ToImmDeep[Cell] { fn to_imm_deep(c) = c; }
 --------------------------------------------------------------------------------
-ToImmDeep[Cell].to_imm_deep: fn(Cell) -> imm Cell
+ToImmDeep[Cell].to_imm_deep: fn(c: Cell) -> imm Cell
 --------------------------------------------------------------------------------
 error at `c`: expected imm Cell, found Cell

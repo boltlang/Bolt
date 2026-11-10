@@ -6,7 +6,7 @@ let a = split(1, at: 2);
 let f: fn(i32, *, at: i32) -> i32 = split;
 let b = f(3, at: 4);
 --------------------------------------------------------------------------------
-split: fn(i32, *, at: i32) -> i32
+split: fn(s: i32, *, at: i32) -> i32
 let a: i32
 let f: fn(i32, *, at: i32) -> i32
 let b: i32
@@ -24,7 +24,7 @@ let d = opts(1);
 let e = both(1, 2, sep: 3, w: True);
 --------------------------------------------------------------------------------
 count: forall Ts. fn(*Ts) -> (*Ts)
-opts: forall Ks. fn(i32, **Ks) -> (**Ks)
+opts: forall Ks. fn(x: i32, **Ks) -> (**Ks)
 both: forall Ts Ks. fn(*Ts, sep: i32, **Ks) -> i32
 let a: (i32, Bool, u8)
 let b: ()
@@ -43,7 +43,7 @@ let r = (k: 1);
 let b = opts(0, **r, z: True);
 --------------------------------------------------------------------------------
 count: forall Ts. fn(*Ts) -> (*Ts)
-opts: forall Ks. fn(i32, **Ks) -> (**Ks)
+opts: forall Ks. fn(x: i32, **Ks) -> (**Ks)
 let t: imm (i32, Bool)
 let a: (i32, Bool, i32)
 let r: imm (k: i32)
@@ -74,7 +74,7 @@ A keyword-only parameter must be given by name
 fn split(s: i32, *, at: i32) -> i32 = s;
 let a = split(1, 2);
 --------------------------------------------------------------------------------
-split: fn(i32, *, at: i32) -> i32
+split: fn(s: i32, *, at: i32) -> i32
 let a: i32
 --------------------------------------------------------------------------------
 error at `split(1, 2)`: expected (i32, at: i32), found ({integer}, {integer})
@@ -86,7 +86,7 @@ An argument of the wrong type
 fn split(s: i32, *, at: i32) -> i32 = s;
 let a = split(1, at: True);
 --------------------------------------------------------------------------------
-split: fn(i32, *, at: i32) -> i32
+split: fn(s: i32, *, at: i32) -> i32
 let a: i32
 --------------------------------------------------------------------------------
 error at `split(1, at: True)`: expected (i32, at: i32), found (i32, at: Bool)
@@ -98,7 +98,7 @@ An argument given twice
 fn split(s: i32, *, at: i32) -> i32 = s;
 let a = split(1, at: 1, at: 2);
 --------------------------------------------------------------------------------
-split: fn(i32, *, at: i32) -> i32
+split: fn(s: i32, *, at: i32) -> i32
 let a: i32
 --------------------------------------------------------------------------------
 error at `split(1, at: 1, at: 2)`: argument at is given twice
@@ -110,7 +110,7 @@ A name the function doesn't take
 fn split(s: i32, *, at: i32) -> i32 = s;
 let a = split(1, at: 1, by: 2);
 --------------------------------------------------------------------------------
-split: fn(i32, *, at: i32) -> i32
+split: fn(s: i32, *, at: i32) -> i32
 let a: i32
 --------------------------------------------------------------------------------
 error at `split(1, at: 1, by: 2)`: expected (i32, at: i32), found ({integer}, at: {integer}, by: {integer})

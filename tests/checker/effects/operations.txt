@@ -6,7 +6,7 @@ effect Log { fn log(message: String); }
 fn greet(name: String) { log(name); }
 greet("Bolt");
 --------------------------------------------------------------------------------
-greet: fn(String) -> () does Log
+greet: fn(name: String) -> () does Log
 greet("Bolt"): ()
 --------------------------------------------------------------------------------
 error at `greet("Bolt")`: does Log, only Nothing allowed
@@ -49,7 +49,7 @@ An operation with type parameters of its own
 effect Raise[E] { fn raise[T](error: E) -> T; }
 fn divide(a: i32, b: i32) -> i32 = if b == 0 { raise("division by zero") } else { a / b };
 --------------------------------------------------------------------------------
-divide: fn(i32, i32) -> i32
+divide: fn(a: i32, b: i32) -> i32
 --------------------------------------------------------------------------------
 error at `raise("division by zero")`: does Raise[String], only Nothing allowed
 
@@ -61,6 +61,6 @@ An effect isn't a type
 effect Log { fn log(message: String); }
 fn f(x: Log) = x;
 --------------------------------------------------------------------------------
-f: fn({error}) -> {error}
+f: fn(x: {error}) -> {error}
 --------------------------------------------------------------------------------
 error at `Log`: expected kind Type, found Effect

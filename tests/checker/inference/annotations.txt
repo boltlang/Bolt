@@ -35,7 +35,7 @@ type Pair[T] = (T, T);
 fn f(x: Int) -> Pair[Int] = (x, x);
 let p: Pair[Bool] = (True, 1);
 --------------------------------------------------------------------------------
-f: fn(i32) -> imm (i32, i32)
+f: fn(x: i32) -> imm (i32, i32)
 let p: imm (Bool, Bool)
 --------------------------------------------------------------------------------
 error at `(True, 1)`: expected imm (Bool, Bool), found imm (Bool, {integer})
@@ -100,8 +100,8 @@ fn unit(f: fn()) = f();
 apply(|x| x * 2, 3);
 unit(|| {});
 --------------------------------------------------------------------------------
-apply: fn(fn(i32) -> i32, i32) -> i32
-unit: fn(fn() -> ()) -> ()
+apply: fn(f: fn(i32) -> i32, x: i32) -> i32
+unit: fn(f: fn() -> ()) -> ()
 apply(|x| x * 2, 3): i32
 unit(|| {}): ()
 
@@ -140,7 +140,7 @@ A type alias that refers to itself
 type A = A;
 fn f(x: A) = x;
 --------------------------------------------------------------------------------
-f: fn({error}) -> {error}
+f: fn(x: {error}) -> {error}
 --------------------------------------------------------------------------------
 error at `A`: recursive alias
 
@@ -152,7 +152,7 @@ type A = B;
 type B = (A, i32);
 fn f(x: A) = x;
 --------------------------------------------------------------------------------
-f: fn({error}) -> {error}
+f: fn(x: {error}) -> {error}
 --------------------------------------------------------------------------------
 error at `A`: recursive alias
 
@@ -163,7 +163,7 @@ A type alias inside a type that refers to itself
 type L = [L];
 fn f(x: L) = x;
 --------------------------------------------------------------------------------
-f: fn({error}) -> {error}
+f: fn(x: {error}) -> {error}
 --------------------------------------------------------------------------------
 error at `L`: recursive alias
 
@@ -211,7 +211,7 @@ fn all[T](xs: [T], p: Pred[T]) -> Bool = True;
 all([1, 2], |x| x > 0);
 all([1, 2], |x| x);
 --------------------------------------------------------------------------------
-all: forall T. fn([T], fn(T) -> Bool) -> Bool
+all: forall T. fn(xs: [T], p: fn(T) -> Bool) -> Bool
 all([1, 2], |x| x > 0): Bool
 all([1, 2], |x| x): Bool
 --------------------------------------------------------------------------------
@@ -223,7 +223,7 @@ A type parameter that isn't declared
 ================================================================================
 fn f(x: T) -> T = x;
 --------------------------------------------------------------------------------
-f: fn({error}) -> {error}
+f: fn(x: {error}) -> {error}
 --------------------------------------------------------------------------------
 error at `T`: unresolved type
 error at `T`: unresolved type
@@ -235,8 +235,8 @@ Type parameters that can't be the same
 fn f[A, B](a: A) -> B = a;
 fn g[T](x: T) -> i32 = x;
 --------------------------------------------------------------------------------
-f: forall A B. fn(A) -> B
-g: forall T. fn(T) -> i32
+f: forall A B. fn(a: A) -> B
+g: forall T. fn(x: T) -> i32
 --------------------------------------------------------------------------------
 error at `a`: expected B, found A
 error at `x`: expected i32, found T
@@ -256,7 +256,7 @@ A type parameter that shadows a type
 fn f[i32](x: i32) -> i32 = x;
 f(True);
 --------------------------------------------------------------------------------
-f: forall i32. fn(i32) -> i32
+f: forall i32. fn(x: i32) -> i32
 f(True): Bool
 
 ================================================================================
@@ -302,7 +302,7 @@ fn call(f: fn(i32) -> i32) -> i32 = f(1);
 call(|x: Bool| 1);
 call(|x| -> Bool { True });
 --------------------------------------------------------------------------------
-call: fn(fn(i32) -> i32) -> i32
+call: fn(f: fn(i32) -> i32) -> i32
 call(|x: Bool| 1): i32
 call(|x| -> Bool { True }): i32
 --------------------------------------------------------------------------------
@@ -319,8 +319,8 @@ let g: fn() -> i32 = |x| 1;
 let f: fn(i32, i32) -> i32
 let g: fn() -> i32
 --------------------------------------------------------------------------------
-error at `|x| x`: expected fn(i32, i32) -> i32, found fn(a) -> a
-error at `|x| 1`: expected fn() -> i32, found fn(a) -> {integer}
+error at `|x| x`: expected fn(i32, i32) -> i32, found fn(x: a) -> a
+error at `|x| 1`: expected fn() -> i32, found fn(x: a) -> {integer}
 
 ================================================================================
 A type alias with too many arguments

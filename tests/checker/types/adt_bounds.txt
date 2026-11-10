@@ -12,7 +12,7 @@ let b = Wrap(2);
 let c = Labeled { value: True };
 let d = Wrap("s");
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 let a: imm Labeled[i32]
 let b: imm Wrap[i32]
 let c: imm Labeled[Bool]
@@ -34,7 +34,7 @@ let b: Maybe[i32] = Maybe.Nothing;
 let c = Maybe.Has(True);
 let d = Maybe.Nothing;
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 let a: Maybe[i32]
 let b: Maybe[i32]
 let c: Maybe[Bool]
@@ -53,8 +53,8 @@ struct Labeled[A: Show] { value: A }
 fn label(x) = Labeled { value: x };
 label(1);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-label: forall a. Show[a] => a: imm => fn(a) -> imm Labeled[a]
+Show[i32].show: fn(x: i32) -> String
+label: forall a. Show[a] => a: imm => fn(x: a) -> imm Labeled[a]
 label(1): imm Labeled[i32]
 
 ================================================================================
@@ -68,7 +68,7 @@ struct Pair[A, B] where Show[A], Show[B] { first: A, second: B }
 let a = Pair { first: 1, second: 2 };
 let b = Pair { first: 1, second: True };
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 let a: imm Pair[i32, i32]
 let b: imm Pair[i32, Bool]
 --------------------------------------------------------------------------------
@@ -84,7 +84,7 @@ enum E[T: Missing] { A(T) }
 class C[T] where Point[T] { fn c(x: T) -> i32; }
 impl[T: Point] C[S[T]] { fn c(x) = 1; }
 --------------------------------------------------------------------------------
-C[S[T]].c: forall T. fn(S[T]) -> i32
+C[S[T]].c: forall T. fn(x: S[T]) -> i32
 --------------------------------------------------------------------------------
 error at `Point`: not a class
 error at `Missing`: unresolved type

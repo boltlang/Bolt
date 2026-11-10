@@ -5,7 +5,7 @@ A written row allows what's in it
 effect Log { fn log(message: String); }
 fn greet(name: String) -> () does Log { log(name); }
 --------------------------------------------------------------------------------
-greet: fn(String) -> () does Log
+greet: fn(name: String) -> () does Log
 
 ================================================================================
 A written row allows nothing else
@@ -16,7 +16,7 @@ effect Log { fn log(message: String); }
 effect Async { fn wait(); }
 fn greet(name: String) does Log { log(name); wait(); }
 --------------------------------------------------------------------------------
-greet: fn(String) -> () does Log
+greet: fn(name: String) -> () does Log
 --------------------------------------------------------------------------------
 error at `wait()`: does Async, only Log allowed
 
@@ -41,7 +41,7 @@ effect Log { fn log(message: String); }
 fn double(x: i32) does Nothing = x * 2;
 fn noisy() does Nothing { log("hi"); }
 --------------------------------------------------------------------------------
-double: fn(i32) -> i32
+double: fn(x: i32) -> i32
 noisy: fn() -> ()
 --------------------------------------------------------------------------------
 error at `log("hi")`: does Log, only Nothing allowed
@@ -66,9 +66,9 @@ fn map[A, B, E](x: A, f: fn(A) -> B does E) -> B does E = f(x);
 fn noisy(x: i32) = map(x, |y| { log("y"); y });
 fn quiet(x: i32) = map(x, |y| y + 1);
 --------------------------------------------------------------------------------
-map: forall A B E. fn(A, fn(A) -> B does E) -> B does E
-noisy: fn(i32) -> i32 does Log
-quiet: fn(i32) -> i32
+map: forall A B E. fn(x: A, f: fn(A) -> B does E) -> B does E
+noisy: fn(x: i32) -> i32 does Log
+quiet: fn(x: i32) -> i32
 
 ================================================================================
 A function without effects takes no function with effects
@@ -79,7 +79,7 @@ effect Log { fn log(message: String); }
 fn run(f: fn() -> ()) -> () = f();
 fn g() { run(|| log("hi")); }
 --------------------------------------------------------------------------------
-run: fn(fn() -> ()) -> ()
+run: fn(f: fn() -> ()) -> ()
 g: fn() -> ()
 --------------------------------------------------------------------------------
 error at `log("hi")`: does Log, only Nothing allowed
@@ -91,7 +91,7 @@ A row parameter isn't known to fit anywhere else
 ================================================================================
 fn run[E](f: fn() -> () does E) -> () = f();
 --------------------------------------------------------------------------------
-run: forall E. fn(fn() -> () does E) -> ()
+run: forall E. fn(f: fn() -> () does E) -> ()
 --------------------------------------------------------------------------------
 error at `f()`: does E, only Nothing allowed
 
@@ -133,7 +133,7 @@ fn quiet() = retry(3, || 1);
 fn loud() = retry(3, || { log("again"); 1 });
 fn slow() = retry(3, || { wait(); 1 });
 --------------------------------------------------------------------------------
-retry: forall T E. fn(i32, fn() -> T does E) -> T does Log + E
+retry: forall T E. fn(times: i32, f: fn() -> T does E) -> T does Log + E
 quiet: fn() -> i32 does Log
 loud: fn() -> i32 does Log
 slow: fn() -> i32 does Log + Async
@@ -150,7 +150,7 @@ fn both[E, F](f: fn() -> () does E, g: fn() -> () does F) -> () does E + F {
 }
 fn h() = both(|| log("a"), || wait());
 --------------------------------------------------------------------------------
-both: forall E F. fn(fn() -> () does E, fn() -> () does F) -> () does E + F
+both: forall E F. fn(f: fn() -> () does E, g: fn() -> () does F) -> () does E + F
 h: fn() -> () does Log + Async
 
 ================================================================================
@@ -165,11 +165,11 @@ fn h() = quiet(both);
 fn i() = quiet(|| log("b"));
 fn pass(f) = quiet(f);
 --------------------------------------------------------------------------------
-quiet: forall E. fn(fn() -> () does Log + E) -> () does E
+quiet: forall E. fn(f: fn() -> () does Log + E) -> () does E
 both: fn() -> () does Log + Async
 h: fn() -> () does Async
 i: fn() -> ()
-pass: forall e. fn(fn() -> () does Log + e) -> () does e
+pass: forall e. fn(f: fn() -> () does Log + e) -> () does e
 --------------------------------------------------------------------------------
 error at `quiet`: expected Log + a, found Log
 
@@ -180,7 +180,7 @@ An inferred row made of an effect and an effect variable
 effect Log { fn log(message: String); }
 fn noisy(f) { log("calling"); f() }
 --------------------------------------------------------------------------------
-noisy: forall a e. fn(fn() -> a does e) -> a does Log + e
+noisy: forall a e. fn(f: fn() -> a does e) -> a does Log + e
 
 ================================================================================
 A row with an effect variable allows nothing else
@@ -194,6 +194,6 @@ fn retry[T, E](f: fn() -> T does E) -> T does Log + E {
   f()
 }
 --------------------------------------------------------------------------------
-retry: forall T E. fn(fn() -> T does E) -> T does Log + E
+retry: forall T E. fn(f: fn() -> T does E) -> T does Log + E
 --------------------------------------------------------------------------------
 error at `wait()`: does Async, only Log + E allowed

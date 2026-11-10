@@ -24,7 +24,9 @@ pub struct TyVar(pub u32);
 /// empty row: a function that nothing says does something does nothing.
 /// A pack variable stands for the positional or the named fields that a
 /// pack spread in a tuple gives: it becomes a [`Ty::Tuple`] of their types,
-/// or a [`Ty::Record`] of the named ones.
+/// or a [`Ty::Record`] of the named ones. A `Name` variable stands for the
+/// name of a positional parameter, and becomes a [`Ty::ParamName`]: see
+/// [`Unifier::settle_names`](crate::unify::Unifier::settle_names).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum VarKind {
     General,
@@ -34,16 +36,21 @@ pub enum VarKind {
     Effect,
     PositionalPack,
     NamedPack,
+    Name,
 }
 
-/// The parameters of a function type: `(i32, *Ts, sep: String, **Ks)`.
-/// The positional ones come first, then a pack for the other positional
-/// arguments, then the keyword-only ones in the order of their names, then
-/// a pack for the other keyword arguments. A pack that's solved is spliced
-/// in, as in a tuple: a function type has one form.
+/// The parameters of a function type: `(x: i32, *Ts, sep: String, **Ks)`.
+/// The positional ones come first, each with its name, then a pack for the
+/// other positional arguments, then the keyword-only ones in the order of
+/// their names, then a pack for the other keyword arguments. A pack that's
+/// solved is spliced in, as in a tuple: a function type has one form.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub struct Params<'db> {
     pub positional: Box<[Ty<'db>]>,
+    /// The name of each positional parameter, which it can be passed by:
+    /// [`Ty::ParamName`], or a variable of kind [`VarKind::Name`] while it's
+    /// inferred. As many as `positional`.
+    pub names: Box<[Ty<'db>]>,
     /// `*Ts`: a positional pack.
     pub rest: Option<Box<Ty<'db>>>,
     pub keyword: Box<[(Name, Ty<'db>)]>,
@@ -52,18 +59,23 @@ pub struct Params<'db> {
 }
 
 impl<'db> Params<'db> {
-    /// Positional parameters, and nothing else.
+    /// Positional parameters without names, and nothing else.
     pub fn positional(tys: impl Into<Box<[Ty<'db>]>>) -> Self {
-        Params { positional: tys.into(), rest: None, keyword: Box::new([]), keyword_rest: None }
+        let positional: Box<[Ty<'db>]> = tys.into();
+        let names = positional.iter().map(|_| Ty::ParamName(None)).collect();
+        Params { positional, names, rest: None, keyword: Box::new([]), keyword_rest: None }
     }
 
-    /// The parameters, with the packs that are solved spliced in.
+    /// The parameters, with the packs that are solved spliced in. `names`
+    /// are those of `positional`; the parameters a pack becomes have none.
     pub fn new(
         positional: Vec<Ty<'db>>,
+        names: Vec<Ty<'db>>,
         rest: Option<Ty<'db>>,
         keyword: Vec<(Name, Ty<'db>)>,
         keyword_rest: Option<Ty<'db>>,
     ) -> Self {
+        debug_assert_eq!(positional.len(), names.len());
         // A pack that stands for what it's solved to is spliced in, through
         // a tuple; otherwise the parameters are what's given.
         let solved =
@@ -73,6 +85,7 @@ impl<'db> Params<'db> {
             keyword.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
             return Params {
                 positional: positional.into(),
+                names: names.into(),
                 rest: rest.map(Box::new),
                 keyword: keyword.into(),
                 keyword_rest: keyword_rest.map(Box::new),
@@ -81,12 +94,23 @@ impl<'db> Params<'db> {
         let mut tys = positional;
         tys.extend(rest.map(|r| Ty::Spread(PackHalf::Positional, Box::new(r))));
         tys.extend(keyword_rest.map(|r| Ty::Spread(PackHalf::Named, Box::new(r))));
-        Params::from_tuple(&Ty::record(tys.into(), keyword, Ty::Mutability(Mutability::Imm)))
+        let tuple = Ty::record(tys.into(), keyword, Ty::Mutability(Mutability::Imm));
+        Params::from_tuple(&tuple).with_names(names)
+    }
+
+    /// The parameters with `names` for the first positional ones, and none
+    /// for the others.
+    pub fn with_names(mut self, names: Vec<Ty<'db>>) -> Self {
+        let mut names = names.into_iter();
+        self.names =
+            self.positional.iter().map(|_| names.next().unwrap_or(Ty::ParamName(None))).collect();
+        self
     }
 
     /// The parameters as a tuple type, which unifies like the arguments of
     /// a call: `(i32, *Ts, sep: String, **Ks)`. It isn't a value, so its
-    /// mutability is [`Ty::Unwritten`], which isn't shown.
+    /// mutability is [`Ty::Unwritten`], which isn't shown. The names of the
+    /// positional parameters aren't in it.
     pub fn as_tuple(&self) -> Ty<'db> {
         let mut tys = self.positional.to_vec();
         tys.extend(self.rest.iter().map(|r| Ty::Spread(PackHalf::Positional, r.clone())));
@@ -96,7 +120,7 @@ impl<'db> Params<'db> {
 
     /// The parameters of a tuple type made by [`Params::as_tuple`], or by
     /// unifying one: its first positional pack is the rest, and so is its
-    /// first named one.
+    /// first named one. The positional ones have no names.
     pub fn from_tuple(ty: &Ty<'db>) -> Self {
         let Some(parts) = ty.tuple_parts() else { return Params::positional([]) };
         let mut positional = Vec::new();
@@ -108,6 +132,7 @@ impl<'db> Params<'db> {
             }
         }
         Params {
+            names: positional.iter().map(|_| Ty::ParamName(None)).collect(),
             positional: positional.into(),
             rest,
             keyword: parts.named.into(),
@@ -120,8 +145,17 @@ impl<'db> Params<'db> {
         self.rest.is_none() && self.keyword.is_empty() && self.keyword_rest.is_none()
     }
 
+    /// The name of the `i`th positional parameter, if it's known to have
+    /// one.
+    pub fn name(&self, i: usize) -> Option<&Name> {
+        match self.names.get(i) {
+            Some(Ty::ParamName(name)) => name.as_ref(),
+            _ => None,
+        }
+    }
+
     /// Every type in it: the positional ones, the rest, the keyword ones
-    /// and the rest of them.
+    /// and the rest of them. Not the names.
     pub fn tys(&self) -> impl Iterator<Item = &Ty<'db>> {
         self.positional
             .iter()
@@ -131,13 +165,15 @@ impl<'db> Params<'db> {
     }
 
     /// The parameters with each type replaced by what `f` gives, and the
-    /// packs that become what they stand for spliced in.
+    /// packs that become what they stand for spliced in. The names stay.
     pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
         if self.is_positional() {
-            return Params::positional(self.positional.iter().map(&mut f).collect::<Box<[_]>>());
+            let positional = self.positional.iter().map(&mut f).collect::<Box<[_]>>();
+            return Params { positional, names: self.names.clone(), ..Params::positional([]) };
         }
         Params::new(
             self.positional.iter().map(&mut f).collect(),
+            self.names.to_vec(),
             self.rest.as_deref().map(&mut f),
             self.keyword.iter().map(|(n, t)| (n.clone(), f(t))).collect(),
             self.keyword_rest.as_deref().map(&mut f),
@@ -258,6 +294,11 @@ pub enum Ty<'db> {
     /// body, or `Imm`. Only type aliases keep it, for the types they're
     /// used in to replace.
     Unwritten,
+    /// The name of a positional parameter of a function type, like the `x`
+    /// of `fn(x: i32)`, or `None` for one that has none. It's only in
+    /// [`Params::names`]. Names aren't types: a function with names fits
+    /// where fewer are asked for (see `site/docs/internals/type-checking/types.mdx`).
+    ParamName(Option<Name>),
     /// `fn(A, B) -> C does E`: the parameters, the result, the mutability
     /// and the effects. A closure is `mut` if it can change what it
     /// captured, or capture something that can change, and `imm` otherwise;
@@ -648,6 +689,7 @@ impl<'db> Ty<'db> {
             | Ty::Host(_)
             | Ty::Mutability(_)
             | Ty::Unwritten
+            | Ty::ParamName(_)
             | Ty::Param(_)
             | Ty::Bound(_)
             | Ty::Number(_)
@@ -683,7 +725,10 @@ impl<'db> Ty<'db> {
             Ty::Spread(half, pack) => Ty::Spread(*half, Box::new(pack.fold(f))),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret, mutability, effects) => Ty::Fn(
-                Box::new(params.map(|t| t.fold(f))),
+                Box::new({
+                    let names = params.names.iter().map(|n| n.fold(f)).collect();
+                    params.map(|t| t.fold(f)).with_names(names)
+                }),
                 Box::new(ret.fold(f)),
                 Box::new(mutability.fold(f)),
                 Box::new(effects.fold(f)),
@@ -704,6 +749,7 @@ impl<'db> Ty<'db> {
             | Ty::Host(_)
             | Ty::Mutability(_)
             | Ty::Unwritten
+            | Ty::ParamName(_)
             | Ty::Param(_)
             | Ty::Bound(_)
             | Ty::Number(_)
@@ -1057,6 +1103,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
             Ty::Mutability(Mutability::Mut) => f.write_str("Mut"),
             Ty::Mutability(Mutability::Imm) => f.write_str("Imm"),
             Ty::Unwritten => f.write_str("_"),
+            Ty::ParamName(name) => f.write_str(name.as_ref().map_or("_", |n| n.as_str())),
             Ty::Fn(params, ret, mutability, effects) => {
                 // An `imm` function is shown as just `fn(...)`, since most
                 // are.
@@ -1068,7 +1115,11 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 let parts: Vec<String> = params
                     .positional
                     .iter()
-                    .map(|t| show(t).to_string())
+                    .enumerate()
+                    .map(|(i, t)| match params.name(i) {
+                        Some(name) => format!("{name}: {}", show(t)),
+                        None => show(t).to_string(),
+                    })
                     .chain(params.rest.iter().map(|r| format!("*{}", show(r))))
                     .chain(params.keyword.iter().enumerate().map(|(i, (name, t))| {
                         // A `*` when there's no positional pack before them.

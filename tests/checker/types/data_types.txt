@@ -11,8 +11,8 @@ let Point { x, .. } = p;
 get(Option.Some(p), Point { x: 0 });
 p.z;
 --------------------------------------------------------------------------------
-get: forall a. fn(Option[a], a) -> a
-norm: forall a b. Mul[b] => a.x: b => fn(a) -> b.Output
+get: forall a. fn(o: Option[a], d: a) -> a
+norm: forall a b. Mul[b] => a.x: b => fn(p: a) -> b.Output
 let p: imm Point
 let Point { x, .. }: imm Point
 get(Option.Some(p), Point { x: 0 }): imm Point
@@ -36,8 +36,8 @@ get_x((1, 2));
 let t = (True, 1);
 t.0;
 --------------------------------------------------------------------------------
-get_x: forall a b. a.x: b => fn(a) -> b
-start_x: forall a b c. a.start: c => c.x: b => fn(a) -> b
+get_x: forall a b. a.x: b => fn(p: a) -> b
+start_x: forall a b c. a.start: c => c.x: b => fn(l: a) -> b
 get_x(Point { x: 1, y: 2 }): i32
 get_x(Size { x: 3u8 }): u8
 start_x(Line { start: Point { x: 1, y: 2 } }): i32
@@ -66,7 +66,7 @@ let p = Pair { first: 1, second: "a" };
 p.first;
 let q: Pair[Bool, i32] = Pair { first: 1, second: True };
 --------------------------------------------------------------------------------
-swap: forall a b c. a.second: b => a.first: c => b: imm => c: imm => fn(a) -> imm Pair[b, c]
+swap: forall a b c. a.second: b => a.first: c => b: imm => c: imm => fn(p: a) -> imm Pair[b, c]
 let p: imm Pair[i32, String]
 p.first: i32
 let q: imm Pair[Bool, i32]
@@ -84,7 +84,7 @@ let u = Unit;
 Meters(1.0);
 Meters("a");
 --------------------------------------------------------------------------------
-double: fn(Meters) -> imm Meters
+double: fn(m: Meters) -> imm Meters
 let u: imm Unit
 Meters(1.0): imm Meters
 Meters("a"): imm Meters
@@ -157,7 +157,7 @@ Field shorthand
 struct Point { x: i32, y: i32 }
 fn make(x, y) = Point { x, y };
 --------------------------------------------------------------------------------
-make: fn(i32, i32) -> imm Point
+make: fn(x: i32, y: i32) -> imm Point
 
 ================================================================================
 Fields of tuples
@@ -184,8 +184,8 @@ fn get(b: Box[i32]) = b.value;
 fn unbox(b) = b.value;
 unbox(Box { value: "a" });
 --------------------------------------------------------------------------------
-get: fn(Box[i32]) -> i32
-unbox: forall a b. a.value: b => fn(a) -> b
+get: fn(b: Box[i32]) -> i32
+unbox: forall a b. a.value: b => fn(b: a) -> b
 unbox(Box { value: "a" }): String
 
 ================================================================================
@@ -196,7 +196,7 @@ fn sum(p) = p.x + p.y;
 struct V { x: i32, y: i32 }
 sum(V { x: 1, y: 2 });
 --------------------------------------------------------------------------------
-sum: forall a b. Add[b] => a.x: b => a.y: b => fn(a) -> b.Output
+sum: forall a b. Add[b] => a.x: b => a.y: b => fn(p: a) -> b.Output
 sum(V { x: 1, y: 2 }): i32
 
 ================================================================================
@@ -207,7 +207,7 @@ fn map(f, o) = match o { Option.Some(x) => Option.Some(f(x)), Option.None => Opt
 let wrap = Option.Some;
 wrap(1);
 --------------------------------------------------------------------------------
-map: forall a b e. fn(fn(a) -> b does e, Option[a]) -> Option[b] does e
+map: forall a b e. fn(f: fn(a) -> b does e, o: Option[a]) -> Option[b] does e
 let wrap: fn(i32) -> Option[i32]
 wrap(1): Option[i32]
 
@@ -217,7 +217,7 @@ A struct that contains itself
 struct Loop { next: Loop }
 fn next(l: Loop) -> Loop = l.next;
 --------------------------------------------------------------------------------
-next: fn('m Loop) -> 'm Loop
+next: fn(l: 'm Loop) -> 'm Loop
 
 ================================================================================
 A generic struct with a parameter it doesn't use
@@ -275,7 +275,7 @@ Fields of a type parameter
 ================================================================================
 fn f[T](x: T) = x.y;
 --------------------------------------------------------------------------------
-f: forall T. fn(T) -> {error}
+f: forall T. fn(x: T) -> {error}
 --------------------------------------------------------------------------------
 error at `x.y`: T has no field y
 
@@ -297,7 +297,7 @@ struct Point { x: i32 }
 fn get_y(p) = p.y;
 get_y(Point { x: 1 });
 --------------------------------------------------------------------------------
-get_y: forall a b. a.y: b => fn(a) -> b
+get_y: forall a b. a.y: b => fn(p: a) -> b
 get_y(Point { x: 1 }): {error}
 --------------------------------------------------------------------------------
 error at `get_y`: imm Point has no field y
@@ -311,7 +311,7 @@ struct C { d: i32 }
 fn f(a) = a.b.c.d;
 f(A { b: B { c: C { d: 1 } } });
 --------------------------------------------------------------------------------
-f: forall a b c d. a.b: c => c.c: d => d.d: b => fn(a) -> b
+f: forall a b c d. a.b: c => c.c: d => d.d: b => fn(a: a) -> b
 f(A { b: B { c: C { d: 1 } } }): i32
 
 ================================================================================
@@ -323,8 +323,8 @@ first((1, True));
 second((1, True));
 second((1,));
 --------------------------------------------------------------------------------
-first: forall a b. a.0: b => fn(a) -> b
-second: forall a b. a.1: b => fn(a) -> b
+first: forall a b. a.0: b => fn(t: a) -> b
+second: forall a b. a.1: b => fn(t: a) -> b
 first((1, True)): i32
 second((1, True)): Bool
 second((1,)): {error}
@@ -343,8 +343,8 @@ struct Q { x: Bool }
 f(P { x: 1 });
 f(Q { x: True });
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-f: forall a b. Show[b] => a.x: b => fn(a) -> String
+Show[i32].show: fn(x: i32) -> String
+f: forall a b. Show[b] => a.x: b => fn(p: a) -> String
 f(P { x: 1 }): String
 f(Q { x: True }): String
 --------------------------------------------------------------------------------
@@ -451,8 +451,8 @@ fn len(xs) = match xs { Nil => 0, Cons(_, t) => 1 + len(t) };
 fn map(f, xs) = match xs { Nil => Nil, Cons(h, t) => Cons(f(h), map(f, t)) };
 Cons(1, Cons(True, Nil));
 --------------------------------------------------------------------------------
-len: forall a. fn(List[a]) -> i32
-map: forall a b e. fn(fn(a) -> b does e, List[a]) -> List[b] does e
+len: forall a. fn(xs: List[a]) -> i32
+map: forall a b e. fn(f: fn(a) -> b does e, xs: List[a]) -> List[b] does e
 Cons(1, Cons(True, Nil)): List[i32]
 --------------------------------------------------------------------------------
 error at `Cons(True, Nil)`: expected List[{integer}], found List[Bool]

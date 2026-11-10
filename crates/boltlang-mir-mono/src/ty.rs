@@ -442,7 +442,10 @@ impl<'db> MonoTy<'db> {
                     let mut ps = all(ps)?.into_vec();
                     let keyword = ps.split_off(ps.len() - names.len());
                     let keyword = names.iter().cloned().zip(keyword).collect();
-                    Box::new(Params::new(ps, None, keyword, None))
+                    // The names of positional parameters are only for calls,
+                    // which are checked.
+                    let unnamed = ps.iter().map(|_| Ty::ParamName(None)).collect();
+                    Box::new(Params::new(ps, unnamed, None, keyword, None))
                 },
                 Box::new(ret.to_ty_with(param, row)?),
                 Box::new(m(own)),
@@ -838,7 +841,7 @@ impl<'db> Subst<'_, 'db> {
             Ty::Var(_) => MonoTy::unit(),
             // A row as a type argument, as for a parameter above.
             Ty::Row(..) => MonoTy::Row(self.row(ty)?),
-            Ty::Mutability(_) | Ty::Unwritten | Ty::Number(_) | Ty::Error => {
+            Ty::Mutability(_) | Ty::Unwritten | Ty::ParamName(_) | Ty::Number(_) | Ty::Error => {
                 return Err(TyError::Unknown);
             }
         })

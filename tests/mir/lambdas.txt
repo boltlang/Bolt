@@ -25,6 +25,6 @@ Lambdas in lambdas
 ================================================================================
 fn f(a: i32) = |x| |y| x + y + a;
 --------------------------------------------------------------------------------
-fn f(a: i32) -> fn(a) -> fn(a) -> i32 = lambda#6 capturing [a]
-lambda#6 capturing [a](x: a) -> fn(a) -> i32 = lambda#5 capturing [x, a]
+fn f(a: i32) -> fn(x: a) -> fn(y: a) -> i32 = lambda#6 capturing [a]
+lambda#6 capturing [a](x: a) -> fn(y: a) -> i32 = lambda#5 capturing [x, a]
 lambda#5 capturing [x, a](y: a) -> i32 = `+`(`+`(x, y), a)

@@ -13,7 +13,7 @@ impl Functor[Option] {
 fmap(|n| n + 1, Option.Some(1));
 fmap(|n| n == 0, Option.Some(1));
 --------------------------------------------------------------------------------
-Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+Functor[Option].fmap: forall A B. fn(f: fn(A) -> B, x: Option[A]) -> Option[B]
 fmap(|n| n + 1, Option.Some(1)): Option[i32]
 fmap(|n| n == 0, Option.Some(1)): Option[Bool]
 
@@ -29,7 +29,7 @@ impl Functor[Option] {
   };
 }
 --------------------------------------------------------------------------------
-Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+Functor[Option].fmap: forall A B. fn(f: fn(A) -> B, x: Option[A]) -> Option[B]
 
 ================================================================================
 Generic functions over type constructors
@@ -46,10 +46,10 @@ fn bad[F](x: F[i32]) -> F[i32] = fmap(|n| n * 2, x);
 double(Option.Some(1));
 inferred(Option.Some(1));
 --------------------------------------------------------------------------------
-Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
-double: forall F. Functor[F] => fn(F[i32]) -> F[i32]
-inferred: forall a. Functor[a] => fn(a[i32]) -> a[i32]
-bad: forall F. fn(F[i32]) -> F[i32]
+Functor[Option].fmap: forall A B. fn(f: fn(A) -> B, x: Option[A]) -> Option[B]
+double: forall F. Functor[F] => fn(x: F[i32]) -> F[i32]
+inferred: forall a. Functor[a] => fn(x: a[i32]) -> a[i32]
+bad: forall F. fn(x: F[i32]) -> F[i32]
 double(Option.Some(1)): Option[i32]
 inferred(Option.Some(1)): Option[i32]
 --------------------------------------------------------------------------------
@@ -70,7 +70,7 @@ impl[E] Functor[Either[E]] {
 let r: Either[String, i32] = Either.Right(1);
 fmap(|n| n > 0, r);
 --------------------------------------------------------------------------------
-Functor[Either[E]].fmap: forall E A B. fn(fn(A) -> B, Either[E, A]) -> Either[E, B]
+Functor[Either[E]].fmap: forall E A B. fn(f: fn(A) -> B, x: Either[E, A]) -> Either[E, B]
 let r: Either[String, i32]
 fmap(|n| n > 0, r): Either[String, Bool]
 
@@ -86,7 +86,7 @@ impl Functor[Option] {
 }
 fmap(|n| n, Box { value: 1 });
 --------------------------------------------------------------------------------
-Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+Functor[Option].fmap: forall A B. fn(f: fn(A) -> B, x: Option[A]) -> Option[B]
 fmap(|n| n, Box { value: 1 }): imm Box[i32]
 --------------------------------------------------------------------------------
 error at `fmap`: no instance Functor[imm Box]
@@ -104,9 +104,9 @@ fn f(x: Option) -> i32 = 1;
 fn g[F](x: F[i32], y: F) -> i32 = 1;
 fn h[T: Functor](x: T) -> T = x;
 --------------------------------------------------------------------------------
-f: fn(Option[{error}]) -> i32
-g: forall F. fn(F[i32], {error}) -> i32
-h: forall T. Functor[{error}] => fn(T) -> T
+f: fn(x: Option[{error}]) -> i32
+g: forall F. fn(x: F[i32], y: {error}) -> i32
+h: forall T. Functor[{error}] => fn(x: T) -> T
 --------------------------------------------------------------------------------
 error at `i32`: expected kind Type -> Type, found Type
 error at `Either`: expected kind Type -> Type, found Type -> Type -> Type
@@ -123,7 +123,7 @@ fn unwrap[F, A](w: Wrap[F, A]) -> F[A] = w.inner;
 let w = Wrap { inner: Option.Some(True) };
 unwrap(w);
 --------------------------------------------------------------------------------
-unwrap: forall F A. fn(Wrap[F, A]) -> F[A]
+unwrap: forall F A. fn(w: Wrap[F, A]) -> F[A]
 let w: imm Wrap[Option, Bool]
 unwrap(w): Option[Bool]
 
@@ -142,7 +142,7 @@ impl Functor[List] {
 }
 fmap(|x| x * 2, Cons(1, Cons(2, Nil)));
 --------------------------------------------------------------------------------
-Functor[List].fmap: forall T R. fn(fn(T) -> R, List[T]) -> List[R]
+Functor[List].fmap: forall T R. fn(f: fn(T) -> R, xs: List[T]) -> List[R]
 fmap(|x| x * 2, Cons(1, Cons(2, Nil))): List[i32]
 
 ================================================================================
@@ -164,7 +164,7 @@ fn both[F](a: F[i32], b: F[Bool]) -> (F[i32], F[Bool]) = (a, b);
 both(Option.Some(1), Option.None);
 both(Option.Some(1), [True]);
 --------------------------------------------------------------------------------
-both: forall F. fn(F[i32], F[Bool]) -> imm (F[i32], F[Bool])
+both: forall F. fn(a: F[i32], b: F[Bool]) -> imm (F[i32], F[Bool])
 both(Option.Some(1), Option.None): imm (Option[i32], Option[Bool])
 both(Option.Some(1), [True]): imm (Option[i32], Option[Bool])
 --------------------------------------------------------------------------------
@@ -179,7 +179,7 @@ fn inner[F, A](x: F[A]) -> F[A] = x;
 let r: Either[String, i32] = Either.Right(1);
 inner(r);
 --------------------------------------------------------------------------------
-inner: forall F A. fn(F[A]) -> F[A]
+inner: forall F A. fn(x: F[A]) -> F[A]
 let r: Either[String, i32]
 inner(r): Either[String, i32]
 
@@ -192,14 +192,14 @@ inner([1]);
 inner((1, True));
 inner(|x: i32| x);
 --------------------------------------------------------------------------------
-inner: forall F A. fn(F[A]) -> F[A]
+inner: forall F A. fn(x: F[A]) -> F[A]
 inner([1]): a[b]
 inner((1, True)): a[b]
 inner(|x: i32| x): a[b]
 --------------------------------------------------------------------------------
 error at `[1]`: expected a[b], found imm [{integer}]
 error at `(1, True)`: expected a[b], found imm ({integer}, Bool)
-error at `|x: i32| x`: expected a[b], found fn(i32) -> i32
+error at `|x: i32| x`: expected a[b], found fn(x: i32) -> i32
 
 ================================================================================
 The kind of a type parameter comes from how it is used
@@ -208,8 +208,8 @@ The kind of a type parameter comes from how it is used
 fn f[F](x: F[i32, Bool]) -> i32 = 1;
 fn g[F](x: F[i32], y: F[i32, Bool]) -> i32 = 1;
 --------------------------------------------------------------------------------
-f: forall F. fn(F[i32, Bool]) -> i32
-g: forall F. fn(F[i32], {error}) -> i32
+f: forall F. fn(x: F[i32, Bool]) -> i32
+g: forall F. fn(x: F[i32], y: {error}) -> i32
 --------------------------------------------------------------------------------
 error at `F[i32, Bool]`: expected 1 type arguments, found 2
 
@@ -232,6 +232,6 @@ A class of type constructors used with a type
 class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
 fn f(x: i32) -> i32 where Functor[i32] = x;
 --------------------------------------------------------------------------------
-f: Functor[{error}] => fn(i32) -> i32
+f: Functor[{error}] => fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `i32`: expected kind Type -> Type, found Type

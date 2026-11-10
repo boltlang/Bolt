@@ -1140,16 +1140,30 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Never
             }
             Expr::Lambda { params, param_types, ret_type, effects, body: lambda_body, .. } => {
-                let (hint_params, hint_ret) =
+                let (hint_params, hint_names, hint_ret) =
                     match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
                         // A lambda only has positional parameters for now.
                         Some(Ty::Fn(ps, r, _, _))
                             if ps.is_positional() && ps.positional.len() == params.len() =>
                         {
-                            (Some(ps.positional), Some(*r))
+                            (Some(ps.positional), Some(ps.names), Some(*r))
                         }
-                        _ => (None, None),
+                        _ => (None, None, None),
                     };
+                // The names of the parameters are those of the function type
+                // it's checked against, or else those of its patterns.
+                let names = hint_names.map(|n| n.into_vec()).unwrap_or_else(|| {
+                    let body = self.body;
+                    params
+                        .iter()
+                        .map(|&p| match &body[p] {
+                            Pat::Bind { id, subpat: None } => {
+                                Ty::ParamName(Some(body[*id].name.clone()))
+                            }
+                            _ => Ty::ParamName(None),
+                        })
+                        .collect()
+                });
                 self.closures.push(ClosureFrame::default());
                 let mut param_tys = Vec::new();
                 for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
@@ -1186,7 +1200,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let frame = self.closures.pop().unwrap();
                 let body = self.body;
                 let closure = Ty::Fn(
-                    Box::new(Params::positional(param_tys)),
+                    Box::new(Params::positional(param_tys).with_names(names)),
                     Box::new(ret),
                     Box::new(self.new_mutability()),
                     Box::new(effects),
@@ -1927,6 +1941,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let positional = items.iter().filter(|i| matches!(i, TupleItem::Positional(_)));
                 let count = positional.count() + receiver.is_some() as usize;
                 let positional = (0..count).map(|_| self.new_var()).collect();
+                let names = (0..count).map(|_| Ty::ParamName(None)).collect();
                 let keyword = items
                     .iter()
                     .filter_map(|i| match i {
@@ -1934,7 +1949,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         _ => None,
                     })
                     .collect();
-                let params = Params::new(positional, None, keyword, None);
+                let params = Params::new(positional, names, None, keyword, None);
                 let ret = self.new_var();
                 let effects = self.solver.new_var(VarKind::Effect);
                 let fn_ty = Ty::Fn(

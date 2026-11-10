@@ -91,7 +91,7 @@ Not of an unknown type needs Not
 ================================================================================
 fn f(x) = !x;
 --------------------------------------------------------------------------------
-f: forall a. Not[a] => fn(a) -> a.Output
+f: forall a. Not[a] => fn(x: a) -> a.Output
 
 ================================================================================
 Assignments give unit
@@ -128,7 +128,7 @@ fn f(p: Point, xs: [i32; 2]) {
   z = 2;
 }
 --------------------------------------------------------------------------------
-f: fn(Point, [i32]) -> ()
+f: fn(p: Point, xs: [i32]) -> ()
 --------------------------------------------------------------------------------
 error at `x`: not mut
 error at `x`: not mut
@@ -175,7 +175,7 @@ fn[T] (a: T) <> (b: T) -> (T, T) = (a, b);
 True <> False;
 1 <> True;
 --------------------------------------------------------------------------------
-<>: forall T. T: imm => fn(T, T) -> imm (T, T)
+<>: forall T. T: imm => fn(a: T, b: T) -> imm (T, T)
 1 <> 2: imm (i32, i32)
 True <> False: imm (Bool, Bool)
 1 <> True: imm (i32, i32)
@@ -244,7 +244,7 @@ fn negate(x) = -x;
 negate(1);
 negate(1.5);
 --------------------------------------------------------------------------------
-negate: forall a. Neg[a] => fn(a) -> a.Output
+negate: forall a. Neg[a] => fn(x: a) -> a.Output
 negate(1): i32
 negate(1.5): f64
 
@@ -257,12 +257,12 @@ inc == inc;
 (1, True) == (1, True);
 (1, True) < (2, False);
 --------------------------------------------------------------------------------
-inc: fn(i32) -> i32
+inc: fn(x: i32) -> i32
 inc == inc: Bool
 (1, True) == (1, True): Bool
 (1, True) < (2, False): Bool
 --------------------------------------------------------------------------------
-error at `inc == inc`: no instance Eq[fn(i32) -> i32]
+error at `inc == inc`: no instance Eq[fn(x: i32) -> i32]
 
 ================================================================================
 Operators on the results of calls
@@ -289,7 +289,7 @@ fn (a: i32) <+> (b: i32) -> i32 = a + b;
 1 <+> True;
 True <+> 1;
 --------------------------------------------------------------------------------
-<+>: fn(i32, i32) -> i32
+<+>: fn(a: i32, b: i32) -> i32
 1 <+> True: i32
 True <+> 1: i32
 --------------------------------------------------------------------------------
@@ -302,7 +302,7 @@ Custom operators without types
 fn a <&> b = (b, a);
 1 <&> True;
 --------------------------------------------------------------------------------
-<&>: forall a b. b: imm => a: imm => fn(a, b) -> imm (b, a)
+<&>: forall a b. b: imm => a: imm => fn(a: a, b: b) -> imm (b, a)
 1 <&> True: imm (Bool, i32)
 
 ================================================================================
@@ -313,7 +313,7 @@ struct P { x: i32 }
 impl PartialOrd[P] { fn partial_cmp(a, b) = partial_cmp(a.x, b.x); }
 P { x: 1 } < P { x: 2 };
 --------------------------------------------------------------------------------
-PartialOrd[P].partial_cmp: fn('m P, 'm P) -> Option[Ordering]
+PartialOrd[P].partial_cmp: fn(a: 'm P, b: 'm P) -> Option[Ordering]
 P { x: 1 } < P { x: 2 }: Bool
 
 ================================================================================
@@ -338,11 +338,11 @@ fn total(a: Money) = a + a;
 fn owed(a: Money) = -a;
 fn twice[T: Add](x: T) = x + x;
 --------------------------------------------------------------------------------
-Add[Money].add: fn('m Money, 'm Money) -> imm Money
-Neg[Money].neg: fn(Money) -> i32
-total: fn(Money) -> imm Money
-owed: fn(Money) -> i32
-twice: forall T. Add[T] => fn(T) -> T.Output
+Add[Money].add: fn(a: 'm Money, b: 'm Money) -> imm Money
+Neg[Money].neg: fn(a: Money) -> i32
+total: fn(a: Money) -> imm Money
+owed: fn(a: Money) -> i32
+twice: forall T. Add[T] => fn(x: T) -> T.Output
 
 ================================================================================
 An operator on a struct needs an impl
@@ -353,8 +353,8 @@ struct Point { x: i32 }
 fn f(p: Point) = p * p;
 fn g(p: Point) = !p;
 --------------------------------------------------------------------------------
-f: fn(Point) -> {error}
-g: fn(Point) -> {error}
+f: fn(p: Point) -> {error}
+g: fn(p: Point) -> {error}
 --------------------------------------------------------------------------------
 error at `p * p`: no instance Mul[Point]
 error at `!p`: no instance Not[Point]

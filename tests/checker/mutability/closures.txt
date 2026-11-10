@@ -57,7 +57,7 @@ let mut total = 0;
 apply_twice(|x| { total += x; x }, 1);
 apply_twice(|x| x + 1, 1);
 --------------------------------------------------------------------------------
-apply_twice: forall a e. fn(fn(a) -> a does e, a) -> a does e
+apply_twice: forall a e. fn(f: fn(a) -> a does e, x: a) -> a does e
 let total: i32
 apply_twice(|x| { total += x; x }, 1): i32
 apply_twice(|x| x + 1, 1): i32
@@ -106,7 +106,7 @@ struct Op { f: fn(i32) -> i32 }
 fn inc(x: i32) -> i32 = x + 1;
 let op = Op { f: inc };
 --------------------------------------------------------------------------------
-inc: fn(i32) -> i32
+inc: fn(x: i32) -> i32
 let op: imm Op
 
 ================================================================================
@@ -127,7 +127,7 @@ fn reader(c: Counter) = || c.n;
 let a = reader(Counter { n: 1 });
 let b = reader(mut Counter { n: 1 });
 --------------------------------------------------------------------------------
-reader: 'm: 'n => fn('m Counter) -> 'n fn() -> i32
+reader: 'm: 'n => fn(c: 'm Counter) -> 'n fn() -> i32
 let a: fn() -> i32
 let b: mut fn() -> i32
 
@@ -139,7 +139,7 @@ fn always[T](x: T) -> fn() -> T = || x;
 let a = always(1);
 let b = always(mut Counter { n: 1 });
 --------------------------------------------------------------------------------
-always: forall T. T: 'm => fn(T) -> 'm fn() -> T
+always: forall T. T: 'm => fn(x: T) -> 'm fn() -> T
 let a: fn() -> i32
 let b: mut fn() -> mut Counter
 

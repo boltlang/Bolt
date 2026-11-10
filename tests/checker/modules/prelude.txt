@@ -13,8 +13,8 @@ fn get(o, d) = match o { Some(x) => x, None => d };
 get(Some(id(1)), 2);
 let o: Option[Bool] = None;
 --------------------------------------------------------------------------------
-/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
-/main.bolt: get: forall a. fn(Option[a], a) -> a
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(x: T) -> T
+/main.bolt: get: forall a. fn(o: Option[a], d: a) -> a
 /main.bolt: get(Some(id(1)), 2): i32
 /main.bolt: let o: Option[Bool]
 
@@ -33,14 +33,14 @@ fn id(x: i32) -> String = "mine";
 id(1);
 first(True, False);
 --------------------------------------------------------------------------------
-/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
-/toolchain/std/__prelude__/lib.bolt: first: fn(i32, i32) -> i32
-/lib.bolt: first: fn(Bool, Bool) -> Bool
-/main.bolt: id: fn(i32) -> {error}
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(x: T) -> T
+/toolchain/std/__prelude__/lib.bolt: first: fn(x: i32, y: i32) -> i32
+/lib.bolt: first: fn(x: Bool, y: Bool) -> Bool
+/main.bolt: id: fn(x: i32) -> {error}
 /main.bolt: id(1): a
 /main.bolt: first(True, False): Bool
 --------------------------------------------------------------------------------
-/main.bolt: error at `id`: overlaps the id of type forall T. fn(T) -> T
+/main.bolt: error at `id`: overlaps the id of type forall T. fn(x: T) -> T
 /main.bolt: error at `String`: unresolved type
 /main.bolt: error at `"mine"`: needs String from the prelude
 /main.bolt: error at `id`: ambiguous, 2 overloads fit
@@ -55,7 +55,7 @@ impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 show(1);
 --------------------------------------------------------------------------------
-/toolchain/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> {error}
+/toolchain/std/__prelude__/lib.bolt: Show[i32].show: fn(x: i32) -> {error}
 /main.bolt: show(1): {error}
 --------------------------------------------------------------------------------
 /toolchain/std/__prelude__/lib.bolt: error at `"int"`: needs String from the prelude
@@ -73,8 +73,8 @@ import "./lib" as lib;
 lib.twice(1);
 lib.id(1);
 --------------------------------------------------------------------------------
-/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
-/lib.bolt: twice: forall T. T: imm => fn(T) -> imm (T, T)
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(x: T) -> T
+/lib.bolt: twice: forall T. T: imm => fn(x: T) -> imm (T, T)
 /main.bolt: lib.twice(1): imm (i32, i32)
 /main.bolt: lib.id(1): {error}
 --------------------------------------------------------------------------------
@@ -89,5 +89,5 @@ pub fn id[T](x: T) -> T = x;
 //- /main.bolt
 id(1);
 --------------------------------------------------------------------------------
-/toolchain/std/__prelude__.bolt: id: forall T. fn(T) -> T
+/toolchain/std/__prelude__.bolt: id: forall T. fn(x: T) -> T
 /main.bolt: id(1): i32

@@ -43,9 +43,9 @@ fn f(x) = match x { 0 => "zero", -1 => "minus one", _ => "other" };
 fn g(s) = match s { "a" => 1, _ => 2 };
 fn h(x: i32) = match x { "a" => 1, _ => 2 };
 --------------------------------------------------------------------------------
-f: fn(i32) -> String
-g: fn(String) -> i32
-h: fn(i32) -> i32
+f: fn(x: i32) -> String
+g: fn(s: String) -> i32
+h: fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `"a"`: expected i32, found String
 
@@ -56,8 +56,8 @@ Range patterns
 fn f(x) = match x { 0..=9 => "digit", 10.. => "more", _ => "negative" };
 fn g(c: Char) = match c { 'a'..='z' => True, _ => False };
 --------------------------------------------------------------------------------
-f: fn(i32) -> String
-g: fn(Char) -> Bool
+f: fn(x: i32) -> String
+g: fn(c: Char) -> Bool
 
 ================================================================================
 Or patterns
@@ -66,8 +66,8 @@ Or patterns
 fn f(x) = match x { 1 | 2 | 3 => "small", _ => "big" };
 fn g(x: i32) = match x { 1 | "two" => 1, _ => 2 };
 --------------------------------------------------------------------------------
-f: fn(i32) -> String
-g: fn(i32) -> i32
+f: fn(x: i32) -> String
+g: fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `"two"`: expected i32, found String
 
@@ -82,7 +82,7 @@ fn area(s) = match s {
   Shape.Empty => 0.0,
 };
 --------------------------------------------------------------------------------
-area: fn(Shape) -> f64
+area: fn(s: Shape) -> f64
 
 ================================================================================
 Variant patterns with the wrong number of fields
@@ -94,7 +94,7 @@ fn f(s: Shape) = match s {
   Shape.Rect(w, ..) => 3,
 };
 --------------------------------------------------------------------------------
-f: fn(Shape) -> i32
+f: fn(s: Shape) -> i32
 --------------------------------------------------------------------------------
 error at `Shape.Circle(r, extra)`: expected 1 arguments, found 2
 error at `Shape.Rect(w)`: expected 2 arguments, found 1
@@ -108,9 +108,9 @@ fn x_of(p) = match p { Point { x, .. } => x };
 fn r_of(s) = match s { Shape.Circle { r, .. } => r };
 fn center_x(s: Shape) = match s { Shape.Circle { center: Point { x, y: _ }, r: _ } => x };
 --------------------------------------------------------------------------------
-x_of: fn(Point) -> i32
-r_of: fn(Shape) -> f64
-center_x: fn(Shape) -> i32
+x_of: fn(p: Point) -> i32
+r_of: fn(s: Shape) -> f64
+center_x: fn(s: Shape) -> i32
 
 ================================================================================
 Record patterns with unknown fields
@@ -118,7 +118,7 @@ Record patterns with unknown fields
 struct Point { x: i32, y: i32 }
 fn f(p: Point) = match p { Point { z, .. } => z };
 --------------------------------------------------------------------------------
-f: fn(Point) -> {error}
+f: fn(p: Point) -> {error}
 --------------------------------------------------------------------------------
 error at `Point { z, .. }`: no field z
 
@@ -128,7 +128,7 @@ Patterns of unknown variants
 enum Shape { Circle(f64) }
 fn f(s: Shape) = match s { Shape.Square(x) => x, Nope.Thing => 0.0 };
 --------------------------------------------------------------------------------
-f: fn(Shape) -> f64
+f: fn(s: Shape) -> f64
 --------------------------------------------------------------------------------
 error at `Shape.Square(x)`: unresolved
 error at `Nope.Thing`: unresolved
@@ -152,8 +152,8 @@ fn unwrap(o: Option[i32]) -> i32 {
   x
 }
 --------------------------------------------------------------------------------
-get: forall a. fn(Option[a], a) -> a
-unwrap: fn(Option[i32]) -> i32
+get: forall a. fn(o: Option[a], default: a) -> a
+unwrap: fn(o: Option[i32]) -> i32
 
 ================================================================================
 A pattern that can't match the type
@@ -162,8 +162,8 @@ struct Point { x: i32, y: i32 }
 fn f(p: Point) = match p { (a, b) => a };
 fn g(x: i32) = match x { Point { x, .. } => x };
 --------------------------------------------------------------------------------
-f: fn(Point) -> {error}
-g: fn(i32) -> i32
+f: fn(p: Point) -> {error}
+g: fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `(a, b)`: expected Point, found (a, b)
 error at `Point { x, .. }`: expected i32, found Point
@@ -186,7 +186,7 @@ Or patterns that bind a variable at the same type
 enum Either[L, R] { Left(L), Right(R) }
 fn f(e: Either[i32, i32]) = match e { Either.Left(x) | Either.Right(x) => x };
 --------------------------------------------------------------------------------
-f: fn(Either[i32, i32]) -> i32
+f: fn(e: Either[i32, i32]) -> i32
 
 ================================================================================
 Nested patterns in slices
@@ -194,7 +194,7 @@ Nested patterns in slices
 ================================================================================
 fn f(xs) = match xs { [(a, b), ..] => a + b, [] => 0 };
 --------------------------------------------------------------------------------
-f: forall a b. Add[a] => a.Output = i32 => fn([(a, a)]) -> i32
+f: forall a b. Add[a] => a.Output = i32 => fn(xs: [(a, a)]) -> i32
 
 ================================================================================
 Range patterns of strings
@@ -212,7 +212,7 @@ Range patterns of floats
 ================================================================================
 fn g(x: f64) = match x { 0.0..=1.0 => 1, _ => 2 };
 --------------------------------------------------------------------------------
-g: fn(f64) -> i32
+g: fn(x: f64) -> i32
 
 ================================================================================
 Range patterns whose ends have different types
@@ -221,7 +221,7 @@ Range patterns whose ends have different types
 ================================================================================
 fn f(x) = match x { 0..='z' => 1, _ => 2 };
 --------------------------------------------------------------------------------
-f: fn(i32) -> i32
+f: fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `'z'`: expected {integer}, found Char
 
@@ -231,7 +231,7 @@ A literal pattern with a suffix of another type
 ================================================================================
 fn f(x: u8) = match x { 1i32 => 1, _ => 2 };
 --------------------------------------------------------------------------------
-f: fn(u8) -> i32
+f: fn(x: u8) -> i32
 --------------------------------------------------------------------------------
 error at `1i32`: expected u8, found i32
 
@@ -250,7 +250,7 @@ Bindings with @ and a range
 ================================================================================
 fn f(x) = match x { n @ 1..=5 => n, _ => 0 };
 --------------------------------------------------------------------------------
-f: fn(i32) -> i32
+f: fn(x: i32) -> i32
 
 ================================================================================
 A slice pattern on a tuple and a tuple pattern on an array
@@ -259,8 +259,8 @@ A slice pattern on a tuple and a tuple pattern on an array
 fn f(t: (i32, i32)) = match t { [a, b] => a };
 fn g(a: [i32]) = match a { (x, y) => x };
 --------------------------------------------------------------------------------
-f: fn((i32, i32)) -> {error}
-g: fn([i32]) -> {error}
+f: fn(t: (i32, i32)) -> {error}
+g: fn(a: [i32]) -> {error}
 --------------------------------------------------------------------------------
 error at `[a, b]`: expected (i32, i32), found [a]
 error at `(x, y)`: expected [i32], found (a, b)
@@ -273,7 +273,7 @@ struct A { x: i32 }
 struct B { x: i32 }
 fn f(a: A) = match a { B { x } => x };
 --------------------------------------------------------------------------------
-f: fn(A) -> i32
+f: fn(a: A) -> i32
 --------------------------------------------------------------------------------
 error at `B { x }`: expected A, found B
 
@@ -286,8 +286,8 @@ struct Pair(i32, i32);
 fn f(p: Point) = match p { Point(a, b) => a };
 fn g(p: Pair) = match p { Pair { x, .. } => x };
 --------------------------------------------------------------------------------
-f: fn(Point) -> i32
-g: fn(Pair) -> {error}
+f: fn(p: Point) -> i32
+g: fn(p: Pair) -> {error}
 --------------------------------------------------------------------------------
 error at `Point(a, b)`: unresolved
 error at `Pair { x, .. }`: no field x
@@ -299,7 +299,7 @@ struct Box[T] { value: T }
 fn unbox(b) = match b { Box { value } => value };
 unbox(Box { value: True });
 --------------------------------------------------------------------------------
-unbox: forall a. fn(Box[a]) -> a
+unbox: forall a. fn(b: Box[a]) -> a
 unbox(Box { value: True }): Bool
 
 ================================================================================
@@ -308,4 +308,4 @@ Unit structs in patterns
 struct Marker[T];
 fn f(m: Marker[i32]) = match m { Marker => 1 };
 --------------------------------------------------------------------------------
-f: fn(Marker[i32]) -> i32
+f: fn(m: Marker[i32]) -> i32

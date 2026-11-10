@@ -18,8 +18,8 @@ True and False in patterns
 fn f(b) = match b { True => 1, False => 0 };
 fn g(p: (Bool, i32)) = match p { (True, n) => n, (False, _) => 0 };
 --------------------------------------------------------------------------------
-f: fn(Bool) -> i32
-g: fn((Bool, i32)) -> i32
+f: fn(b: Bool) -> i32
+g: fn(p: (Bool, i32)) -> i32
 
 ================================================================================
 True in a pattern of another type
@@ -28,7 +28,7 @@ True in a pattern of another type
 fn f(x: i32) = match x { True => 1, _ => 0 };
 let True = 1;
 --------------------------------------------------------------------------------
-f: fn(i32) -> i32
+f: fn(x: i32) -> i32
 let True: i32
 --------------------------------------------------------------------------------
 error at `True`: expected i32, found Bool
@@ -42,7 +42,7 @@ import Answer.*;
 let a = True;
 fn f(x) = match x { True => 1, Maybe => 2 };
 --------------------------------------------------------------------------------
-f: fn(Answer) -> i32
+f: fn(x: Answer) -> i32
 let a: Answer
 
 ================================================================================
@@ -68,7 +68,7 @@ pub fn id(x) = x;
 import "./lib" as lib;
 lib.True;
 --------------------------------------------------------------------------------
-/lib.bolt: id: forall a. fn(a) -> a
+/lib.bolt: id: forall a. fn(x: a) -> a
 /main.bolt: lib.True: {error}
 --------------------------------------------------------------------------------
 /main.bolt: error at `lib.True`: unresolved

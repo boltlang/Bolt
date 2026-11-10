@@ -5,8 +5,8 @@
 fn inc(x: Option[i32]) = Some(x? + 1);
 fn first(xs: Option[Option[Bool]]) = xs?;
 --------------------------------------------------------------------------------
-inc: fn(Option[i32]) -> Option[i32]
-first: fn(Option[Option[Bool]]) -> Option[Bool]
+inc: fn(x: Option[i32]) -> Option[i32]
+first: fn(xs: Option[Option[Bool]]) -> Option[Bool]
 
 ================================================================================
 ? on what the function's type says it is
@@ -15,8 +15,8 @@ first: fn(Option[Option[Bool]]) -> Option[Bool]
 fn get[T](f: fn() -> Option[T]) -> Option[T] = Some(f()?);
 fn later(g) -> Option[i32] = Some(g()? + 1);
 --------------------------------------------------------------------------------
-get: forall T. fn(fn() -> Option[T]) -> Option[T]
-later: forall e. e ≲ Nothing => fn(fn() -> Option[i32] does e) -> Option[i32]
+get: forall T. fn(f: fn() -> Option[T]) -> Option[T]
+later: forall e. e ≲ Nothing => fn(g: fn() -> Option[i32] does e) -> Option[i32]
 
 ================================================================================
 ? that can't be checked
@@ -26,9 +26,9 @@ fn not_an_option(x: i32) -> Option[i32] = Some(x?);
 fn not_in_an_option(x: Option[i32]) -> i32 = x?;
 fn unknown(g) { g()? }
 --------------------------------------------------------------------------------
-not_an_option: fn(i32) -> Option[i32]
-not_in_an_option: fn(Option[i32]) -> i32
-unknown: forall a e. fn(fn() -> a does e) -> {error} does e
+not_an_option: fn(x: i32) -> Option[i32]
+not_in_an_option: fn(x: Option[i32]) -> i32
+unknown: forall a e. fn(g: fn() -> a does e) -> {error} does e
 --------------------------------------------------------------------------------
 error at `x?`: bad ?: not an Option or a Result: i32
 error at `x?`: bad ?: in a function that gives i32

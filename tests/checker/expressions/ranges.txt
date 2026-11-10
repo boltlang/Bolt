@@ -40,7 +40,7 @@ let mut sum = 0;
 for i in 0..10 { sum += i; }
 fn count(n: i32) -> i32 { let mut c = 0; for _ in 0..n { c += 1; } c }
 --------------------------------------------------------------------------------
-count: fn(i32) -> i32
+count: fn(n: i32) -> i32
 let r: imm Range[i32]
 let bytes: imm Range[u8]
 let sum: i32

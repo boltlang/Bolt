@@ -6,7 +6,7 @@ fn plus(a: i32, b: i32) -> i32 = a + b;
 plus(1, 2);
 plus(1, True);
 --------------------------------------------------------------------------------
-plus: fn(i32, i32) -> i32
+plus: fn(a: i32, b: i32) -> i32
 plus(1, 2): i32
 plus(1, True): i32
 --------------------------------------------------------------------------------
@@ -20,7 +20,7 @@ fn plus(a: i32, b: i32) -> i32 = a + b;
 plus(1);
 plus(1, 2, 3);
 --------------------------------------------------------------------------------
-plus: fn(i32, i32) -> i32
+plus: fn(a: i32, b: i32) -> i32
 plus(1): i32
 plus(1, 2, 3): i32
 --------------------------------------------------------------------------------
@@ -52,9 +52,9 @@ let g = inc;
 apply(inc, 1);
 g(True);
 --------------------------------------------------------------------------------
-inc: fn(i32) -> i32
-apply: forall a b e. fn(fn(a) -> b does e, a) -> b does e
-let g: fn(i32) -> i32
+inc: fn(x: i32) -> i32
+apply: forall a b e. fn(f: fn(a) -> b does e, x: a) -> b does e
+let g: fn(x: i32) -> i32
 apply(inc, 1): i32
 g(True): i32
 --------------------------------------------------------------------------------
@@ -69,9 +69,9 @@ fn twice(f, x) = f(f(x));
 compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 });
 twice(fn (s: String) = s, "a");
 --------------------------------------------------------------------------------
-compose: forall a b c e f. 'm: 'o => 'n: 'o => fn('m fn(a) -> b does e, 'n fn(c) -> a does f) -> 'o fn(c) -> b does e + f
-twice: forall a e. fn(fn(a) -> a does e, a) -> a does e
-compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 }): fn(Bool) -> i32
+compose: forall a b c e f. 'm: 'o => 'n: 'o => fn(f: 'm fn(a) -> b does e, g: 'n fn(c) -> a does f) -> 'o fn(x: c) -> b does e + f
+twice: forall a e. fn(f: fn(a) -> a does e, x: a) -> a does e
+compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 }): fn(x: Bool) -> i32
 twice(fn (s: String) = s, "a"): String
 
 ================================================================================
@@ -83,10 +83,10 @@ let a = id(1);
 let b = id("a");
 let c = id(id);
 --------------------------------------------------------------------------------
-id: forall a. fn(a) -> a
+id: forall a. fn(x: a) -> a
 let a: i32
 let b: String
-let c: fn(a) -> a
+let c: fn(x: a) -> a
 
 ================================================================================
 Recursion
@@ -95,15 +95,15 @@ Recursion
 fn fact(n) = if n == 0 { 1 } else { n * fact(n - 1) };
 fn loop_forever(x) = loop_forever(x);
 --------------------------------------------------------------------------------
-fact: fn(i32) -> i32
-loop_forever: forall a b. fn(a) -> b
+fact: fn(n: i32) -> i32
+loop_forever: forall a b. fn(x: a) -> b
 
 ================================================================================
 A recursive function is not generic inside its own body
 ================================================================================
 fn f(x) = { f(1); f(True); x };
 --------------------------------------------------------------------------------
-f: fn(i32) -> i32
+f: fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `True`: expected {integer}, found Bool
 
@@ -113,7 +113,7 @@ A function is generic in the functions that call it
 fn id(x) = x;
 fn both() = (id(1), id(True));
 --------------------------------------------------------------------------------
-id: forall a. fn(a) -> a
+id: forall a. fn(x: a) -> a
 both: fn() -> imm (i32, Bool)
 
 ================================================================================
@@ -122,8 +122,8 @@ Partial signatures
 fn f(x: i32, y) = (x, y);
 fn g(x) -> Bool = x;
 --------------------------------------------------------------------------------
-f: forall a. a: imm => fn(i32, a) -> imm (i32, a)
-g: fn(Bool) -> Bool
+f: forall a. a: imm => fn(x: i32, y: a) -> imm (i32, a)
+g: fn(x: Bool) -> Bool
 
 ================================================================================
 Generic signatures
@@ -133,8 +133,8 @@ fn pair[A, B](a: A, b: B) -> (A, B) = (a, b);
 fn wrong[T](x: T) -> T = 1;
 pair(1, "a");
 --------------------------------------------------------------------------------
-pair: forall A B. A: imm => B: imm => fn(A, B) -> imm (A, B)
-wrong: forall T. fn(T) -> T
+pair: forall A B. A: imm => B: imm => fn(a: A, b: B) -> imm (A, B)
+wrong: forall T. fn(x: T) -> T
 pair(1, "a"): imm (i32, String)
 --------------------------------------------------------------------------------
 error at `1`: expected T, found {integer}
@@ -149,10 +149,10 @@ apply(|b| !b, True);
 let k = |x: i32| x;
 k(True);
 --------------------------------------------------------------------------------
-apply: forall a b e. fn(fn(a) -> b does e, a) -> b does e
+apply: forall a b e. fn(f: fn(a) -> b does e, x: a) -> b does e
 apply(fn (x) = x + 1, 2): i32
 apply(|b| !b, True): Bool
-let k: fn(i32) -> i32
+let k: fn(x: i32) -> i32
 k(True): i32
 --------------------------------------------------------------------------------
 error at `True`: expected i32, found Bool
@@ -166,13 +166,13 @@ call(|s| 1);
 call(|s| s);
 call(|a, b| 1);
 --------------------------------------------------------------------------------
-call: fn(fn(String) -> i32) -> i32
+call: fn(f: fn(String) -> i32) -> i32
 call(|s| 1): i32
 call(|s| s): i32
 call(|a, b| 1): i32
 --------------------------------------------------------------------------------
 error at `s`: expected i32, found String
-error at `|a, b| 1`: expected fn(String) -> i32, found fn(a, b) -> {integer}
+error at `|a, b| 1`: expected fn(String) -> i32, found fn(a: a, b: b) -> {integer}
 
 ================================================================================
 Lambdas capture variables
@@ -180,7 +180,7 @@ Lambdas capture variables
 ================================================================================
 fn adder(n: i32) = |x| x + n;
 --------------------------------------------------------------------------------
-adder: fn(i32) -> fn(i32) -> i32
+adder: fn(n: i32) -> fn(x: i32) -> i32
 
 ================================================================================
 Lambdas are not generic
@@ -207,8 +207,8 @@ c.get().inc();
 c.n.inc();
 get(c);
 --------------------------------------------------------------------------------
-get: fn(Counter) -> i32
-inc: fn(i32) -> i32
+get: fn(c: Counter) -> i32
+inc: fn(x: i32) -> i32
 let c: imm Counter
 c.get().inc(): i32
 c.n.inc(): i32
@@ -223,7 +223,7 @@ fn plus(a: i32, b: i32) -> i32 = a + b;
 1.plus(True);
 1.plus();
 --------------------------------------------------------------------------------
-plus: fn(i32, i32) -> i32
+plus: fn(a: i32, b: i32) -> i32
 1.plus(2): i32
 1.plus(True): i32
 1.plus(): i32
@@ -272,8 +272,8 @@ t.r#loop;
 r#enum.r#fn(2);
 r#where(True);
 --------------------------------------------------------------------------------
-match: fn(i32) -> i32
-where: forall T. fn(T) -> T
+match: fn(x: i32) -> i32
+where: forall T. fn(x: T) -> T
 r#match(1): i32
 let t: imm type
 t.r#loop: i32

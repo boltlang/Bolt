@@ -8,7 +8,7 @@ Point.origin();
 Point.at(1, 2);
 --------------------------------------------------------------------------------
 Point.origin: fn() -> imm Point
-Point.at: fn(i32, i32) -> imm Point
+Point.at: fn(x: i32, y: i32) -> imm Point
 Point.origin(): imm Point
 Point.at(1, 2): imm Point
 
@@ -34,8 +34,8 @@ fn Box.of(x) = Box { item: x };
 fn twice(x) = Box.of(Box.of(x));
 twice(1);
 --------------------------------------------------------------------------------
-Box.of: forall a. a: imm => fn(a) -> imm Box[a]
-twice: forall a. a: imm => fn(a) -> imm Box[imm Box[a]]
+Box.of: forall a. a: imm => fn(x: a) -> imm Box[a]
+twice: forall a. a: imm => fn(x: a) -> imm Box[imm Box[a]]
 twice(1): imm Box[imm Box[i32]]
 
 ================================================================================
@@ -46,7 +46,7 @@ enum Sign { Neg, Pos }
 fn Sign.of(x: i32) -> Sign = if x < 0 { Sign.Neg } else { Sign.Pos };
 Sign.of(3);
 --------------------------------------------------------------------------------
-Sign.of: fn(i32) -> Sign
+Sign.of: fn(x: i32) -> Sign
 Sign.of(3): Sign
 
 ================================================================================
@@ -58,7 +58,7 @@ fn Point.norm(p: Point) -> i32 = p.x * p.x + p.y * p.y;
 let p = Point { x: 1, y: 2 };
 p.norm();
 --------------------------------------------------------------------------------
-Point.norm: fn(Point) -> i32
+Point.norm: fn(p: Point) -> i32
 let p: imm Point
 p.norm(): {error}
 --------------------------------------------------------------------------------
@@ -81,7 +81,7 @@ lib.Box.of("a");
 Box.secret();
 Box.nope();
 --------------------------------------------------------------------------------
-/lib.bolt: Box.of: forall T. T: imm => fn(T) -> imm Box[T]
+/lib.bolt: Box.of: forall T. T: imm => fn(x: T) -> imm Box[T]
 /lib.bolt: Box.secret: fn() -> i32
 /main.bolt: Box.of(1): imm Box[i32]
 /main.bolt: lib.Box.of("a"): imm Box[String]

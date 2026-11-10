@@ -95,8 +95,7 @@ pub struct FunctionSignature {
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ParamData {
-    /// The name it's passed by, for a keyword-only parameter or
-    /// `**opts`: that of its pattern, if it's a name.
+    /// The name it can be passed by: that of its pattern, if it's a name.
     pub name: Option<Name>,
     /// How it's passed.
     pub kind: ParamKind,

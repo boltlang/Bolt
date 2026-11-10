@@ -7,7 +7,7 @@ id(1) + 1;
 id("foo") + 1;
 let b = id(True);
 --------------------------------------------------------------------------------
-id: forall a. fn(a) -> a
+id: forall a. fn(x: a) -> a
 id(1) + 1: i32
 id("foo") + 1: {error}
 let b: Bool
@@ -21,8 +21,8 @@ Functions used before their definition
 fn pair(x) = (first(x), first(True));
 fn first(y) = y;
 --------------------------------------------------------------------------------
-pair: forall a. a: imm => fn(a) -> imm (a, Bool)
-first: forall a. fn(a) -> a
+pair: forall a. a: imm => fn(x: a) -> imm (a, Bool)
+first: forall a. fn(y: a) -> a
 
 ================================================================================
 Mutual recursion
@@ -31,8 +31,8 @@ Mutual recursion
 fn even(n) = if n == 0 { True } else { odd(n - 1) };
 fn odd(n) = if n == 0 { False } else { even(n - 1) };
 --------------------------------------------------------------------------------
-even: fn(i32) -> Bool
-odd: fn(i32) -> Bool
+even: fn(n: i32) -> Bool
+odd: fn(n: i32) -> Bool
 
 ================================================================================
 Declared signatures are checked
@@ -42,8 +42,8 @@ fn g[T](x: T) -> T = x;
 g(1u8);
 f(True);
 --------------------------------------------------------------------------------
-f: fn(i32) -> Bool
-g: forall T. fn(T) -> T
+f: fn(x: i32) -> Bool
+g: forall T. fn(x: T) -> T
 g(1u8): u8
 f(True): Bool
 --------------------------------------------------------------------------------
@@ -58,8 +58,8 @@ fn g(c: Bool) = if c { nope } else { 1 };
 fn h(x) = { nope(x); x };
 --------------------------------------------------------------------------------
 f: fn() -> {error}
-g: fn(Bool) -> i32
-h: forall a. fn(a) -> a
+g: fn(c: Bool) -> i32
+h: forall a. fn(x: a) -> a
 --------------------------------------------------------------------------------
 error at `nope`: unresolved
 error at `nope`: unresolved

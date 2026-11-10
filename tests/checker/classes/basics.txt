@@ -8,8 +8,8 @@ fn twice(x) = (show(x), show(x));
 twice(1);
 twice(True);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-twice: forall a. Show[a] => fn(a) -> imm (String, String)
+Show[i32].show: fn(x: i32) -> String
+twice: forall a. Show[a] => fn(x: a) -> imm (String, String)
 twice(1): imm (String, String)
 twice(True): imm (String, String)
 --------------------------------------------------------------------------------
@@ -23,8 +23,8 @@ class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn le[T](a: T, b: T) -> Bool where Ord[T] = lt(a, b) || eq(a, b);
 fn bad[T](a: T) -> Bool = eq(a, a);
 --------------------------------------------------------------------------------
-le: forall T. Ord[T] => fn(T, T) -> Bool
-bad: forall T. fn(T) -> Bool
+le: forall T. Ord[T] => fn(a: T, b: T) -> Bool
+bad: forall T. fn(a: T) -> Bool
 --------------------------------------------------------------------------------
 error at `eq`: no instance Eq[T]
 
@@ -37,9 +37,9 @@ impl Convert[i32, String] { fn convert(a) = "int"; }
 fn to_str(x: i32) -> String = convert(x);
 fn to_bool(x: i32) -> Bool = convert(x);
 --------------------------------------------------------------------------------
-Convert[i32, String].convert: fn(i32) -> String
-to_str: fn(i32) -> String
-to_bool: fn(i32) -> Bool
+Convert[i32, String].convert: fn(a: i32) -> String
+to_str: fn(x: i32) -> String
+to_bool: fn(x: i32) -> Bool
 --------------------------------------------------------------------------------
 error at `convert`: no instance Convert[i32, Bool]
 
@@ -54,8 +54,8 @@ impl[T] Show[Option[T]] where Show[T] { fn show(x) = "option"; }
 show(Option.Some(1));
 show(Option.Some(True));
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-Show[Option[T]].show: forall T. Show[T] => fn(Option[T]) -> String
+Show[i32].show: fn(x: i32) -> String
+Show[Option[T]].show: forall T. Show[T] => fn(x: Option[T]) -> String
 show(Option.Some(1)): String
 show(Option.Some(True)): String
 --------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn max[T](a: T, b: T) -> T where Ord[T] = if lt(a, b) || eq(a, b) { b } else { a };
 --------------------------------------------------------------------------------
-max: forall T. Ord[T] => fn(T, T) -> T
+max: forall T. Ord[T] => fn(a: T, b: T) -> T
 
 ================================================================================
 Constraints are inferred from several methods
@@ -78,7 +78,7 @@ class Show[T] { fn show(x: T) -> String; }
 class Same[T] { fn same(a: T, b: T) -> Bool; }
 fn show_if_same(a, b) = if same(a, b) { show(a) } else { "different" };
 --------------------------------------------------------------------------------
-show_if_same: forall a. Same[a] => Show[a] => fn(a, a) -> String
+show_if_same: forall a. Same[a] => Show[a] => fn(a: a, b: a) -> String
 
 ================================================================================
 A constraint on a type that is never known is ambiguous
@@ -101,7 +101,7 @@ Methods of impls are checked against the class
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = 1; }
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 --------------------------------------------------------------------------------
 error at `1`: expected String, found {integer}
 
@@ -134,7 +134,7 @@ impl Show[i32] { fn show(x) = "int"; }
 1.show();
 True.show();
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 1.show(): String
 True.show(): String
 --------------------------------------------------------------------------------
@@ -152,7 +152,7 @@ impl Semigroup[i32] {
   fn concat(a, b) = concat(b, a);
 }
 --------------------------------------------------------------------------------
-/main.bolt: Semigroup[i32].concat: fn(i32, i32) -> i32
+/main.bolt: Semigroup[i32].concat: fn(a: i32, b: i32) -> i32
 
 ================================================================================
 Methods in an impl can use the other items of the class
@@ -169,8 +169,8 @@ impl Monoid[i32] {
   fn concat3(a, b, c) = concat(a, concat(b, c));
 }
 --------------------------------------------------------------------------------
-Monoid[i32].concat: fn(i32, i32) -> i32
-Monoid[i32].concat3: fn(i32, i32, i32) -> i32
+Monoid[i32].concat: fn(a: i32, b: i32) -> i32
+Monoid[i32].concat3: fn(a: i32, b: i32, c: i32) -> i32
 
 ================================================================================
 Two impls for the same type make uses ambiguous
@@ -182,8 +182,8 @@ impl Show[i32] { fn show(x) = "one"; }
 impl Show[i32] { fn show(x) = "two"; }
 show(1);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
+Show[i32].show: fn(x: i32) -> String
 show(1): String
 --------------------------------------------------------------------------------
 error at `Show[i32]`: overlaps the impl for Show[i32]
@@ -197,8 +197,8 @@ class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
 impl Show[i32] { fn show(x) = "two"; }
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
+Show[i32].show: fn(x: i32) -> String
 --------------------------------------------------------------------------------
 error at `Show[i32]`: overlaps the impl for Show[i32]
 
@@ -212,8 +212,8 @@ impl[T] Show[T] { fn show(x) = "any"; }
 impl Show[i32] { fn show(x) = "int"; }
 show(1);
 --------------------------------------------------------------------------------
-Show[T].show: forall T. fn(T) -> String
-Show[i32].show: fn(i32) -> String
+Show[T].show: forall T. fn(x: T) -> String
+Show[i32].show: fn(x: i32) -> String
 show(1): String
 --------------------------------------------------------------------------------
 error at `Show[i32]`: overlaps the impl for Show[T]
@@ -231,11 +231,11 @@ impl Size[imm [i32]] { fn size(x) = 5; }
 size((1, True));
 size((1, 2));
 --------------------------------------------------------------------------------
-Size[(i32, Bool)].size: fn((i32, Bool)) -> i32
-Size[(A, A)].size: forall A. fn((A, A)) -> i32
-Size[(U, [U])].size: forall U. fn((U, [U])) -> i32
-Size[mut [i32]].size: fn(mut [i32]) -> i32
-Size[imm [i32]].size: fn(imm [i32]) -> i32
+Size[(i32, Bool)].size: fn(x: (i32, Bool)) -> i32
+Size[(A, A)].size: forall A. fn(x: (A, A)) -> i32
+Size[(U, [U])].size: forall U. fn(x: (U, [U])) -> i32
+Size[mut [i32]].size: fn(x: mut [i32]) -> i32
+Size[imm [i32]].size: fn(x: imm [i32]) -> i32
 size((1, True)): i32
 size((1, 2)): i32
 
@@ -246,8 +246,8 @@ class Size[T] { fn size(x: T) -> i32; }
 impl Size[[i32]] { fn size(x) = 1; }
 impl Size[mut [i32]] { fn size(x) = 2; }
 --------------------------------------------------------------------------------
-Size[[i32]].size: fn([i32]) -> i32
-Size[mut [i32]].size: fn(mut [i32]) -> i32
+Size[[i32]].size: fn(x: [i32]) -> i32
+Size[mut [i32]].size: fn(x: mut [i32]) -> i32
 --------------------------------------------------------------------------------
 error at `Size[mut [i32]]`: overlaps the impl for Size[[i32]]
 
@@ -263,8 +263,8 @@ impl[T] Size[[T]] { fn size(x) = 1; }
 import "./lib" (Size);
 impl Size[[Bool]] { fn size(x) = 2; }
 --------------------------------------------------------------------------------
-/lib.bolt: Size[[T]].size: forall T. fn([T]) -> i32
-/main.bolt: Size[[Bool]].size: fn([Bool]) -> i32
+/lib.bolt: Size[[T]].size: forall T. fn(x: [T]) -> i32
+/main.bolt: Size[[Bool]].size: fn(x: [Bool]) -> i32
 --------------------------------------------------------------------------------
 /main.bolt: error at `Size[[Bool]]`: overlaps the impl for Size[[T]]
 
@@ -314,8 +314,8 @@ class Show[T] { fn show(x: T) -> String; }
 impl Show[i32, Bool] { fn show(x) = "int"; }
 impl Show { fn show(x) = "int"; }
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-Show[{error}].show: fn({error}) -> String
+Show[i32].show: fn(x: i32) -> String
+Show[{error}].show: fn(x: {error}) -> String
 --------------------------------------------------------------------------------
 error at `Show[i32, Bool]`: expected 1 type arguments, found 2
 error at `Show`: expected 1 type arguments, found 0
@@ -339,7 +339,7 @@ class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn le(a, b) = lt(a, b) || eq(a, b);
 --------------------------------------------------------------------------------
-le: forall a. Ord[a] => fn(a, a) -> Bool
+le: forall a. Ord[a] => fn(a: a, b: a) -> Bool
 
 ================================================================================
 A class method whose type doesn't mention the class parameter
@@ -349,7 +349,7 @@ class Weird[T] { fn weird(x: i32) -> i32; }
 impl Weird[Bool] { fn weird(x) = x; }
 weird(1);
 --------------------------------------------------------------------------------
-Weird[Bool].weird: fn(i32) -> i32
+Weird[Bool].weird: fn(x: i32) -> i32
 weird(1): i32
 --------------------------------------------------------------------------------
 error at `weird`: ambiguous
@@ -401,8 +401,8 @@ let s: fn(i32) -> String = show;
 apply(show, 1);
 apply(show, True);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-apply: forall a b e. fn(fn(a) -> b does e, a) -> b does e
+Show[i32].show: fn(x: i32) -> String
+apply: forall a b e. fn(f: fn(a) -> b does e, x: a) -> b does e
 let s: fn(i32) -> String
 apply(show, 1): String
 apply(show, True): String
@@ -417,8 +417,8 @@ class Show[T] { fn show(x: T) -> String; }
 fn f[T](x: T) -> String where Show[T] = x.show();
 fn g[T](x: T) -> String = x.show();
 --------------------------------------------------------------------------------
-f: forall T. Show[T] => fn(T) -> String
-g: forall T. fn(T) -> String
+f: forall T. Show[T] => fn(x: T) -> String
+g: forall T. fn(x: T) -> String
 --------------------------------------------------------------------------------
 error at `x.show`: no instance Show[T]
 
@@ -431,7 +431,7 @@ class Convert[A, B] { fn convert(a: A) -> B; }
 impl Convert[i32, String] { fn convert(a) = "int"; }
 fn f() { convert(1); }
 --------------------------------------------------------------------------------
-Convert[i32, String].convert: fn(i32) -> String
+Convert[i32, String].convert: fn(a: i32) -> String
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `convert`: ambiguous
@@ -447,8 +447,8 @@ show((1, True));
 show(|x: i32| x);
 show((True, 1));
 --------------------------------------------------------------------------------
-Show[(i32, Bool)].show: fn((i32, Bool)) -> String
-Show[fn(i32) -> i32].show: fn(fn(i32) -> i32) -> String
+Show[(i32, Bool)].show: fn(x: (i32, Bool)) -> String
+Show[fn(i32) -> i32].show: fn(x: fn(i32) -> i32) -> String
 show((1, True)): String
 show(|x: i32| x): String
 show((True, 1)): String
@@ -464,7 +464,7 @@ type Int = i32;
 impl Show[Int] { fn show(x) = "int"; }
 show(1);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 show(1): String
 
 ================================================================================
@@ -478,7 +478,7 @@ class Show[T] {
 impl Show[i32] { fn show(x) = "int"; }
 show_twice(1);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(x: i32) -> String
 show_twice(1): String
 
 ================================================================================
@@ -491,8 +491,8 @@ impl Show[i32] { fn show(x) = "int"; }
 fn twice[T](x: T) -> (String, String) where Show[T] = (show(x), show(x));
 fn call() = twice("a");
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> String
-twice: forall T. Show[T] => fn(T) -> imm (String, String)
+Show[i32].show: fn(x: i32) -> String
+twice: forall T. Show[T] => fn(x: T) -> imm (String, String)
 call: fn() -> imm (String, String)
 --------------------------------------------------------------------------------
 error at `twice`: no instance Show[String]
@@ -521,7 +521,7 @@ impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
 fn f() = show(|x| x);
 fn g() = show(|x| x + 1);
 --------------------------------------------------------------------------------
-Show[fn(i32) -> i32].show: fn(fn(i32) -> i32) -> String
+Show[fn(i32) -> i32].show: fn(x: fn(i32) -> i32) -> String
 f: fn() -> String
 g: fn() -> String
 --------------------------------------------------------------------------------
@@ -537,9 +537,9 @@ impl[T, U] Show[Box[T]] { fn show(x) = 1; }
 impl[T, 'v] Show[[T]] { fn show(x) = 2; }
 impl Show[i32] where 'q: imm { fn show(x) = 3; }
 --------------------------------------------------------------------------------
-Show[Box[T]].show: forall T U. fn(Box[T]) -> i32
-Show[[T]].show: forall T. fn([T]) -> i32
-Show[i32].show: 'q: imm => fn(i32) -> i32
+Show[Box[T]].show: forall T U. fn(x: Box[T]) -> i32
+Show[[T]].show: forall T. fn(x: [T]) -> i32
+Show[i32].show: 'q: imm => fn(x: i32) -> i32
 --------------------------------------------------------------------------------
 error at `U`: not in the instance
 error at `'v`: not in the instance
@@ -553,8 +553,8 @@ struct It[T, 'v] { data: 'v [T] }
 impl[T, 'v] Show['v [T]] { fn show(x) = 1; }
 impl[T, 'w] Show[It[T, 'w]] { fn show(x) = 2; }
 --------------------------------------------------------------------------------
-Show['v [T]].show: forall T. fn('v [T]) -> i32
-Show[It[T, 'w]].show: forall T. fn(It[T, 'w]) -> i32
+Show['v [T]].show: forall T. fn(x: 'v [T]) -> i32
+Show[It[T, 'w]].show: forall T. fn(x: It[T, 'w]) -> i32
 
 ================================================================================
 An instance with an error doesn't say what's missing
@@ -563,6 +563,6 @@ An instance with an error doesn't say what's missing
 class Show[T] { fn show(x: T) -> i32; }
 impl[T] Show[Missing[T]] { fn show(x) = 1; }
 --------------------------------------------------------------------------------
-Show[{error}].show: forall T. fn({error}) -> i32
+Show[{error}].show: forall T. fn(x: {error}) -> i32
 --------------------------------------------------------------------------------
 error at `Missing[T]`: unresolved type

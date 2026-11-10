@@ -37,9 +37,68 @@ struct Var<'db> {
     defaulted: Option<NumberKind>,
 }
 
-#[derive(Debug, Default, Clone)]
+/// That the name `lo` of a positional parameter is at most `hi`: `lo` has
+/// no name, or the same as `hi`. A written type is a requirement, which a
+/// function with more names meets: `fn(x: i32)` fits where `fn(i32)` is
+/// expected, but not the other way around. `tag` is what the solver set
+/// when it was made, to know where to report it.
+#[derive(Debug, Clone)]
+pub struct NameEdge<'db> {
+    pub lo: Ty<'db>,
+    pub hi: Ty<'db>,
+    pub tag: u32,
+}
+
+/// What a name variable can be, as [`Unifier::name_solutions`] finds it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum NameBound {
+    /// Nothing says.
+    Any,
+    Is(Option<Name>),
+    /// Two different names.
+    Conflict,
+}
+
+impl NameBound {
+    fn of(name: &Option<Name>) -> Self {
+        NameBound::Is(name.clone())
+    }
+
+    /// The least name at least both: a name below gives it.
+    fn join(&self, other: &NameBound) -> NameBound {
+        match (self, other) {
+            (NameBound::Any, b) | (b, NameBound::Any) => b.clone(),
+            (NameBound::Is(None), b) | (b, NameBound::Is(None)) => b.clone(),
+            (a, b) if a == b => a.clone(),
+            _ => NameBound::Conflict,
+        }
+    }
+
+    /// The greatest name at most both: two different names give none.
+    fn meet(&self, other: &NameBound) -> NameBound {
+        match (self, other) {
+            (NameBound::Any, b) | (b, NameBound::Any) => b.clone(),
+            (a, b) if a == b => a.clone(),
+            _ => NameBound::Is(None),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Unifier<'db> {
     vars: Vec<Var<'db>>,
+    /// Inside the parameters of a function type, an odd number of times:
+    /// names are related the other way around there.
+    flipped: bool,
+    names: Vec<NameEdge<'db>>,
+    /// The tag of the name edges made from now on.
+    pub tag: u32,
+}
+
+impl Default for Unifier<'_> {
+    fn default() -> Self {
+        Unifier { vars: Vec::new(), flipped: false, names: Vec::new(), tag: u32::MAX }
+    }
 }
 
 impl<'db> Unifier<'db> {
@@ -223,7 +282,10 @@ impl<'db> Unifier<'db> {
                 }
                 Ok(())
             }
-            (Ty::Var(var), ty) | (ty, Ty::Var(var)) => self.bind(*var, ty),
+            // The variable on the side that's expected takes the names that
+            // the other has as an upper bound, and the other way around.
+            (Ty::Var(var), ty) => self.bind_freshened(*var, ty, true),
+            (ty, Ty::Var(var)) => self.bind_freshened(*var, ty, false),
             // A tuple with a pack spread in it: its fields are matched with
             // the other's, and the packs take what's left.
             (x, y)
@@ -292,17 +354,27 @@ impl<'db> Unifier<'db> {
             (Ty::Unwritten, Ty::Unwritten) => Ok(()),
             // Positional parameters one by one. With packs or keyword
             // parameters, the parameters unify as tuples do: by position, by
-            // name, and with the packs taking what's left.
+            // name, and with the packs taking what's left. The names of the
+            // positional ones that both have are related, the expected ones
+            // at most the others.
             (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f))
                 if !(xs.is_positional() && ys.is_positional())
                     || xs.positional.len() == ys.positional.len() =>
             {
-                if xs.is_positional() && ys.is_positional() {
-                    self.unify_all(&xs.positional, &ys.positional)?;
-                } else {
-                    self.unify(&xs.as_tuple(), &ys.as_tuple())
+                for (p, q) in xs.names.iter().zip(ys.names.iter()) {
+                    let (lo, hi) = if self.flipped { (q, p) } else { (p, q) };
+                    self.relate_names(lo, hi)
                         .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))?;
                 }
+                self.flipped = !self.flipped;
+                let params = if xs.is_positional() && ys.is_positional() {
+                    self.unify_all(&xs.positional, &ys.positional)
+                } else {
+                    self.unify(&xs.as_tuple(), &ys.as_tuple())
+                        .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))
+                };
+                self.flipped = !self.flipped;
+                params?;
                 self.unify(x, y)?;
                 self.unify(m, n)?;
                 self.unify(e, f)
@@ -440,6 +512,206 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// That the name `lo` is at most `hi`, now if both are known, or once
+    /// they're settled otherwise.
+    fn relate_names(&mut self, lo: &Ty<'db>, hi: &Ty<'db>) -> Result<(), ()> {
+        let (lo, hi) = (self.shallow_resolve(lo), self.shallow_resolve(hi));
+        match (&lo, &hi) {
+            (Ty::ParamName(None), _) => Ok(()),
+            (Ty::ParamName(x), Ty::ParamName(y)) => {
+                if x == y {
+                    Ok(())
+                } else {
+                    Err(())
+                }
+            }
+            (Ty::Var(x), Ty::Var(y)) if x == y => Ok(()),
+            _ => {
+                self.names.push(NameEdge { lo, hi, tag: self.tag });
+                Ok(())
+            }
+        }
+    }
+
+    /// Bind `var` to `ty`, with new variables for the names of the
+    /// parameters in it, which the names of `ty` bound: from above when
+    /// `var` is on the side that's expected, and from below otherwise. A
+    /// variable that two functions with different names meet in has the
+    /// names they share, like that of `if c { f } else { g }`.
+    fn bind_freshened(
+        &mut self,
+        var: TyVar,
+        ty: &Ty<'db>,
+        expected: bool,
+    ) -> Result<(), UnifyError<'db>> {
+        let has_names = |t: &Ty<'db>| matches!(t, Ty::Fn(p, ..) if !p.names.is_empty());
+        if self.var_kind(var) != Some(VarKind::General) || !ty.any(&mut |t| has_names(t)) {
+            return self.bind(var, ty);
+        }
+        let low = expected != self.flipped;
+        let ty = self.freshen(&self.resolve(ty), low);
+        self.bind(var, &ty)
+    }
+
+    /// `ty` with a new variable for each name of a parameter, at most that
+    /// name when `low`, and at least it otherwise. Inside the parameters of
+    /// a function type, the other way around.
+    fn freshen(&mut self, ty: &Ty<'db>, low: bool) -> Ty<'db> {
+        ty.fold(&mut |t| {
+            let Ty::Fn(params, ret, m, e) = t else { return None };
+            let names = params
+                .names
+                .iter()
+                .map(|name| {
+                    let fresh = self.new_var(VarKind::Name);
+                    let (lo, hi) = if low { (&fresh, name) } else { (name, &fresh) };
+                    let _ = self.relate_names(lo, hi);
+                    fresh
+                })
+                .collect();
+            let params = params.map(|p| self.freshen(p, !low)).with_names(names);
+            Some(Ty::Fn(
+                Box::new(params),
+                Box::new(self.freshen(ret, low)),
+                m.clone(),
+                Box::new(self.freshen(e, low)),
+            ))
+        })
+    }
+
+    /// The names that `names` would have if they were settled now.
+    pub fn names_now(&self, names: &[Ty<'db>]) -> Vec<Option<Name>> {
+        let mut solutions = None;
+        names
+            .iter()
+            .map(|n| match self.shallow_resolve(n) {
+                Ty::ParamName(name) => name,
+                Ty::Var(v) => solutions
+                    .get_or_insert_with(|| self.name_solutions())
+                    .get(&v)
+                    .cloned()
+                    .flatten(),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// How many relations between names there are, to tell whether
+    /// unifying made one.
+    pub fn name_edge_count(&self) -> usize {
+        self.names.len()
+    }
+
+    /// That the name `ty` is `name`, as a call by that name needs.
+    pub fn require_name(&mut self, ty: &Ty<'db>, name: &Name) {
+        let _ = self.relate_names(&Ty::ParamName(Some(name.clone())), ty);
+    }
+
+    /// What each name variable is when the names are settled: a name that
+    /// must be at least one is that one, and otherwise it's the greatest
+    /// that what it must be at most allows, which is no name when they
+    /// differ or when nothing says.
+    fn name_solutions(&self) -> std::collections::HashMap<TyVar, Option<Name>> {
+        use std::collections::HashMap;
+        let edges: Vec<(Ty<'db>, Ty<'db>)> = self
+            .names
+            .iter()
+            .map(|e| (self.shallow_resolve(&e.lo), self.shallow_resolve(&e.hi)))
+            .collect();
+        let mut lower: HashMap<TyVar, NameBound> = HashMap::new();
+        let bound = |t: &Ty<'db>, map: &HashMap<TyVar, NameBound>| match t {
+            Ty::ParamName(name) => NameBound::of(name),
+            Ty::Var(v) => map.get(v).cloned().unwrap_or(NameBound::Any),
+            _ => NameBound::Any,
+        };
+        // What each must be at least, from the names below it.
+        loop {
+            let mut changed = false;
+            for (lo, hi) in &edges {
+                let &Ty::Var(v) = hi else { continue };
+                let old = lower.get(&v).cloned().unwrap_or(NameBound::Any);
+                let new = old.join(&bound(lo, &lower));
+                if new != old {
+                    lower.insert(v, new);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let forced = |v: &TyVar| match lower.get(v) {
+            Some(NameBound::Is(Some(name))) => Some(NameBound::Is(Some(name.clone()))),
+            Some(NameBound::Conflict) => Some(NameBound::Conflict),
+            _ => None,
+        };
+        // What each can be at most, from the names above it.
+        let mut upper: HashMap<TyVar, NameBound> = HashMap::new();
+        let above = |t: &Ty<'db>, upper: &HashMap<TyVar, NameBound>| match t {
+            Ty::ParamName(name) => NameBound::of(name),
+            Ty::Var(v) => {
+                forced(v).unwrap_or_else(|| upper.get(v).cloned().unwrap_or(NameBound::Any))
+            }
+            _ => NameBound::Any,
+        };
+        loop {
+            let mut changed = false;
+            for (lo, hi) in &edges {
+                let &Ty::Var(v) = lo else { continue };
+                let old = upper.get(&v).cloned().unwrap_or(NameBound::Any);
+                let new = old.meet(&above(hi, &upper));
+                if new != old {
+                    upper.insert(v, new);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let vars = edges.iter().flat_map(|(lo, hi)| [lo, hi]).filter_map(|t| match t {
+            Ty::Var(v) => Some(*v),
+            _ => None,
+        });
+        vars.map(|v| {
+            let name = match forced(&v).or_else(|| upper.get(&v).cloned()) {
+                Some(NameBound::Is(name)) => name,
+                _ => None,
+            };
+            (v, name)
+        })
+        .collect()
+    }
+
+    /// Give each name variable its name, as [`Unifier::name_solutions`]
+    /// finds it, and those that nothing decided none. The tags of the
+    /// relations between names that don't hold are given back.
+    pub fn settle_names(&mut self) -> Vec<u32> {
+        for (var, name) in self.name_solutions() {
+            if self.var_kind(var) == Some(VarKind::Name) {
+                self.vars[var.0 as usize].state = VarState::Bound(Ty::ParamName(name));
+            }
+        }
+        for var in &mut self.vars {
+            if matches!(var.state, VarState::Unbound(VarKind::Name)) {
+                var.state = VarState::Bound(Ty::ParamName(None));
+            }
+        }
+        let mut broken = Vec::new();
+        for edge in std::mem::take(&mut self.names) {
+            let (lo, hi) = (self.shallow_resolve(&edge.lo), self.shallow_resolve(&edge.hi));
+            let holds = match (&lo, &hi) {
+                (Ty::ParamName(None), _) => true,
+                (Ty::ParamName(x), Ty::ParamName(y)) => x == y,
+                _ => true,
+            };
+            if !holds && !broken.contains(&edge.tag) {
+                broken.push(edge.tag);
+            }
+        }
+        broken
+    }
+
     fn unify_all(&mut self, xs: &[Ty<'db>], ys: &[Ty<'db>]) -> Result<(), UnifyError<'db>> {
         xs.iter().zip(ys).try_for_each(|(x, y)| self.unify(x, y))
     }
@@ -460,6 +732,8 @@ impl<'db> Unifier<'db> {
                 ty,
                 Ty::Tuple(..) | Ty::Record(..) | Ty::Param(_) | Ty::Bound(_) | Ty::Error
             ),
+            // Names are related, never unified.
+            VarKind::Name => false,
         };
         if !fits {
             return Err(UnifyError::Mismatch(Ty::Var(var), ty.clone()));
@@ -476,6 +750,7 @@ impl<'db> Unifier<'db> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ty::Params;
 
     fn i32() -> Ty<'static> {
         Ty::Builtin(BuiltinType::Int(BuiltinInt::I32))
@@ -505,6 +780,52 @@ mod tests {
         // Different arities differ as a whole.
         let err = u.unify(&fun(vec![], i32()), &fun(vec![i32()], i32()));
         assert!(matches!(err, Err(UnifyError::Mismatch(Ty::Fn(..), Ty::Fn(..)))));
+    }
+
+    /// `fn(x: i32) -> i32`, with `None` for no name.
+    fn named(name: Option<&str>) -> Ty<'static> {
+        let params =
+            Params::positional([i32()]).with_names(vec![Ty::ParamName(name.map(Name::new))]);
+        Ty::func_with(params, i32(), Ty::nothing())
+    }
+
+    #[test]
+    fn names_fit_where_fewer_are_expected() {
+        let mut u = Unifier::new();
+        assert!(u.unify(&named(None), &named(Some("x"))).is_ok());
+        assert!(u.unify(&named(Some("x")), &named(Some("x"))).is_ok());
+        assert!(u.unify(&named(Some("x")), &named(None)).is_err());
+        assert!(u.unify(&named(Some("x")), &named(Some("y"))).is_err());
+        // Inside a parameter, the other way around.
+        let takes = |t| Ty::func(vec![t], i32());
+        assert!(u.unify(&takes(named(Some("x"))), &takes(named(None))).is_ok());
+        assert!(u.unify(&takes(named(None)), &takes(named(Some("x")))).is_err());
+    }
+
+    #[test]
+    fn a_variable_has_the_names_that_meet_in_it() {
+        let mut u = Unifier::new();
+        let a = u.new_var(VarKind::General);
+        u.unify(&a, &named(Some("x"))).unwrap();
+        let b = u.new_var(VarKind::General);
+        u.unify(&b, &named(Some("x"))).unwrap();
+        u.unify(&b, &named(Some("y"))).unwrap();
+        assert!(u.settle_names().is_empty());
+        assert_eq!(u.resolve(&a), named(Some("x")));
+        assert_eq!(u.resolve(&b), named(None));
+    }
+
+    #[test]
+    fn a_name_a_call_uses_is_kept() {
+        let mut u = Unifier::new();
+        let a = u.new_var(VarKind::General);
+        u.unify(&a, &named(Some("x"))).unwrap();
+        let Ty::Fn(params, ..) = u.resolve(&a) else { unreachable!() };
+        assert_eq!(u.names_now(&params.names), vec![Some(Name::new("x"))]);
+        u.require_name(&params.names[0], &Name::new("x"));
+        u.tag = 7;
+        u.unify(&a, &named(Some("y"))).unwrap();
+        assert_eq!(u.settle_names(), vec![7]);
     }
 
     #[test]

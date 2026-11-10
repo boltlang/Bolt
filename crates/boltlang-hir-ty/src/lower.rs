@@ -1398,20 +1398,18 @@ impl FnSig<'_> {
 /// rest.
 pub fn fn_params<'db>(db: &'db dyn Db, f: FunctionId<'db>, tys: Vec<Ty<'db>>) -> Params<'db> {
     let decl = &function_signature(db, f).params;
-    if decl.iter().all(|p| p.kind == ParamKind::Positional) {
-        return Params::positional(tys);
-    }
     params_from(decl.iter().zip(tys).map(|(p, t)| (p.kind, p.name.clone(), t)))
 }
 
 /// The parameters of a function type from its declared parameters, in
-/// order: how each is passed, the name of a keyword-only one, and its type,
+/// order: how each is passed, its name, and its type,
 /// which for `*args` or `**opts` is the tuple `(*Ts)` or `(**Ks)` whose
 /// pack is the rest.
 fn params_from<'db>(
     params: impl IntoIterator<Item = (ParamKind, Option<Name>, Ty<'db>)>,
 ) -> Params<'db> {
     let mut positional = Vec::new();
+    let mut names = Vec::new();
     let mut rest = None;
     let mut keyword = Vec::new();
     let mut keyword_rest = None;
@@ -1422,13 +1420,16 @@ fn params_from<'db>(
     };
     for (kind, name, t) in params {
         match kind {
-            ParamKind::Positional => positional.push(t),
+            ParamKind::Positional => {
+                positional.push(t);
+                names.push(Ty::ParamName(name));
+            }
             ParamKind::Keyword => keyword.push((name.unwrap_or_else(|| Name::new("_")), t)),
             ParamKind::Rest => rest = pack(&t),
             ParamKind::KeywordRest => keyword_rest = pack(&t),
         }
     }
-    Params::new(positional, rest, keyword, keyword_rest)
+    Params::new(positional, names, rest, keyword, keyword_rest)
 }
 
 /// The types of the declared parameters of `f`, in order, from the

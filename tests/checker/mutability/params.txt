@@ -9,7 +9,7 @@ let b = start(mut Counter { n: 1 });
 a.index = 1;
 b.data.n = 5;
 --------------------------------------------------------------------------------
-start: fn('v Counter) -> mut Iter['v]
+start: fn(c: 'v Counter) -> mut Iter['v]
 let a: mut Iter[imm]
 let b: mut Iter[mut]
 a.index = 1: ()
@@ -36,8 +36,8 @@ struct Iter['v] { data: 'v [i32], index: i32 }
 fn get(it: Iter['v]) -> 'v [i32] = it.data;
 fn index(it: Iter) -> i32 = it.index;
 --------------------------------------------------------------------------------
-get: fn(Iter['v]) -> 'v [i32]
-index: fn(Iter) -> i32
+get: fn(it: Iter['v]) -> 'v [i32]
+index: fn(it: Iter) -> i32
 
 ================================================================================
 Type and mutability arguments
@@ -49,8 +49,8 @@ fn poke(it: Iter[i32, mut]) { it.data.item = 1; }
 let a = first(Iter { data: Box { item: 1 }, index: 0 });
 poke(mut Iter { data: mut Box { item: 1 }, index: 0 });
 --------------------------------------------------------------------------------
-first: fn(Iter[i32, imm]) -> i32
-poke: fn(Iter[i32, mut]) -> ()
+first: fn(it: Iter[i32, imm]) -> i32
+poke: fn(it: Iter[i32, mut]) -> ()
 let a: i32
 poke(mut Iter { data: mut Box { item: 1 }, index: 0 }): ()
 
@@ -61,8 +61,8 @@ struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs) = mut Iter { data: xs, index: 0 };
 fn frozen(xs) = Iter { data: xs, index: 0 };
 --------------------------------------------------------------------------------
-start: fn('m [i32]) -> mut Iter['m]
-frozen: fn(imm [i32]) -> imm Iter[imm]
+start: fn(xs: 'm [i32]) -> mut Iter['m]
+frozen: fn(xs: imm [i32]) -> imm Iter[imm]
 
 ================================================================================
 An imm struct can't hold a mutability that may be mut
@@ -71,7 +71,7 @@ An imm struct can't hold a mutability that may be mut
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs: 'v [i32]) -> imm Iter['v] = Iter { data: xs, index: 0 };
 --------------------------------------------------------------------------------
-start: fn('v [i32]) -> imm Iter['v]
+start: fn(xs: 'v [i32]) -> imm Iter['v]
 --------------------------------------------------------------------------------
 error at `Iter { data: xs, index: 0 }`: 'v isn't at most imm
 
@@ -82,7 +82,7 @@ struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs: 'v [i32]) -> imm Iter['v] where 'v: imm = Iter { data: xs, index: 0 };
 start([1]);
 --------------------------------------------------------------------------------
-start: 'v: imm => fn('v [i32]) -> imm Iter['v]
+start: 'v: imm => fn(xs: 'v [i32]) -> imm Iter['v]
 start([1]): imm Iter[imm]
 
 ================================================================================
@@ -119,7 +119,7 @@ fn data(o: Outer) -> Counter = o.it.data;
 let o = mut Outer { it: mut Iter { data: mut Counter { n: 1 }, index: 0 } };
 o.it.data.n = 2;
 --------------------------------------------------------------------------------
-data: fn('m Outer) -> 'm Counter
+data: fn(o: 'm Outer) -> 'm Counter
 let o: mut Outer
 o.it.data.n = 2: ()
 
@@ -130,7 +130,7 @@ struct Iter['v] { data: 'v [i32], index: i32 }
 struct Outer['w] { it: Iter['w] }
 fn data(o: Outer['w]) -> 'w [i32] = o.it.data;
 --------------------------------------------------------------------------------
-data: fn(Outer['w]) -> 'w [i32]
+data: fn(o: Outer['w]) -> 'w [i32]
 
 ================================================================================
 A field can't be given mut
@@ -161,7 +161,7 @@ struct Iter['v] { data: 'v [i32] }
 struct Point { x: i32 }
 fn f(a: Iter[imm, imm], b: Point[imm]) {}
 --------------------------------------------------------------------------------
-f: fn(Iter[imm], Point) -> ()
+f: fn(a: Iter[imm], b: Point) -> ()
 --------------------------------------------------------------------------------
 error at `Iter[imm, imm]`: expected at most 1 mutability arguments, found 2
 error at `Point[imm]`: expected at most 0 mutability arguments, found 1
@@ -184,7 +184,7 @@ Updating a struct keeps its mutability arguments
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn advance(it: mut Iter['v]) -> mut Iter['v] = mut Iter { index: it.index + 1, ..it };
 --------------------------------------------------------------------------------
-advance: fn(mut Iter['v]) -> mut Iter['v]
+advance: fn(it: mut Iter['v]) -> mut Iter['v]
 
 ================================================================================
 A tuple struct's mutability argument is decided by what it's given
@@ -193,7 +193,7 @@ struct Wrap['v]('v [i32]);
 fn wrap(xs: 'v [i32]) -> imm Wrap['v] where 'v: imm = Wrap(xs);
 let a = Wrap([1]);
 --------------------------------------------------------------------------------
-wrap: 'v: imm => fn('v [i32]) -> imm Wrap['v]
+wrap: 'v: imm => fn(xs: 'v [i32]) -> imm Wrap['v]
 let a: imm Wrap[imm]
 
 ================================================================================
@@ -220,8 +220,8 @@ let b = walk(mut [1, 2]);
 advance(a);
 b.data[0] = 3;
 --------------------------------------------------------------------------------
-Iterator[mut ArrayIter[T]].advance: forall T. fn(mut ArrayIter[T]) -> Option[T]
-Iterable['m [T]].walk: forall T. fn('m [T]) -> mut ArrayIter[T, 'm]
+Iterator[mut ArrayIter[T]].advance: forall T. fn(it: mut ArrayIter[T]) -> Option[T]
+Iterable['m [T]].walk: forall T. fn(data: 'm [T]) -> mut ArrayIter[T, 'm]
 let a: mut ArrayIter[i32, imm]
 let b: mut ArrayIter[i32, mut]
 advance(a): Option[i32]
@@ -249,10 +249,10 @@ drain(b);
 drain(a);
 fn bump(it) { it.next += 1; it.vec }
 --------------------------------------------------------------------------------
-remaining: forall T. fn(VecIter[T]) -> i32
-reset: forall T. fn(VecIter[T]) -> ()
-drain: forall T. fn(VecIter[T, mut]) -> ()
-bump: forall a b. mut a.next: i32 => a.vec: b => fn(a) -> b
+remaining: forall T. fn(it: VecIter[T]) -> i32
+reset: forall T. fn(it: VecIter[T]) -> ()
+drain: forall T. fn(it: VecIter[T, mut]) -> ()
+bump: forall a b. mut a.next: i32 => a.vec: b => fn(it: a) -> b
 let frozen: imm Vec[i32]
 let growing: mut Vec[i32]
 let a: mut VecIter[i32, imm]

@@ -483,6 +483,9 @@ pub struct Solver<'db> {
     /// parameters of its scheme, then its bound variables, at the use: see
     /// [`crate::InferenceResult::type_args`].
     pub instantiations: Vec<(Origin<'db>, Box<[Ty<'db>]>)>,
+    /// Where each equality that can relate names of parameters is, with its
+    /// types, by the tag the unifier gives what it relates there.
+    name_origins: Vec<(Origin<'db>, Ty<'db>, Ty<'db>)>,
     pub errors: Vec<TypeError<'db>>,
 }
 
@@ -511,6 +514,7 @@ impl<'db> Solver<'db> {
             overload_choices: Vec::new(),
             chosen: Vec::new(),
             instantiations: Vec::new(),
+            name_origins: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -611,7 +615,15 @@ impl<'db> Solver<'db> {
     pub fn add(&mut self, constraint: Constraint<'db>) {
         match constraint {
             Constraint::Equal { expected, actual, origin } => {
-                if let Err(err) = self.unifier.unify(&expected, &actual) {
+                self.unifier.tag = self.name_origins.len() as u32;
+                let edges = self.unifier.name_edge_count();
+                let unified = self.unifier.unify(&expected, &actual);
+                if self.unifier.name_edge_count() > edges {
+                    self.name_origins.push((origin, expected.clone(), actual.clone()));
+                }
+                // What else relates names isn't anywhere to report.
+                self.unifier.tag = u32::MAX;
+                if let Err(err) = unified {
                     let error = match err {
                         UnifyError::Mismatch(..) => TypeError::Mismatch {
                             origin,
@@ -1825,12 +1837,29 @@ impl<'db> Solver<'db> {
         self.solve();
     }
 
+    /// Give the names of parameters that inference didn't decide the
+    /// names they can have, and report the equalities whose names don't
+    /// fit, like a function with a parameter `y` where one with `x` is
+    /// expected.
+    pub fn settle_names(&mut self) {
+        for tag in self.unifier.settle_names() {
+            let Some((origin, expected, actual)) = self.name_origins.get(tag as usize).cloned()
+            else {
+                continue;
+            };
+            let expected = self.unifier.resolve(&expected);
+            let actual = self.unifier.resolve(&actual);
+            self.errors.push(TypeError::Mismatch { origin, expected, actual });
+        }
+    }
+
     /// Finish solving: default numeric variables and mutabilities, solve
     /// what can be, and report the rest as ambiguous.
     pub fn finish(&mut self) {
         self.solve_with_defaults();
         self.report_pending_overloads();
         self.settle_copies();
+        self.settle_names();
         // A body checked on its own can't add to its function's type.
         self.settle_at_most(&[], false);
         self.finish_rows();

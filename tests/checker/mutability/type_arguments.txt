@@ -16,7 +16,7 @@ A type argument held in a field with its own mutability is at most that one
 struct VecIter[T, 'v] { data: 'v [T], index: i32 }
 fn f(it: mut VecIter[mut [i32], imm]) {}
 --------------------------------------------------------------------------------
-f: fn(mut VecIter[mut [i32], imm]) -> ()
+f: fn(it: mut VecIter[mut [i32], imm]) -> ()
 --------------------------------------------------------------------------------
 error at `it`: mut VecIter[mut [i32], imm] holds mut [i32]
 
@@ -42,7 +42,7 @@ fn start[T](xs: 'm [T]) -> mut VecIter[T, 'm] = mut VecIter { data: xs, index: 0
 let a = start([[1]]);
 let b = start(mut [mut [1]]);
 --------------------------------------------------------------------------------
-start: forall T. fn('m [T]) -> mut VecIter[T, 'm]
+start: forall T. fn(xs: 'm [T]) -> mut VecIter[T, 'm]
 let a: mut VecIter[imm [i32], imm]
 let b: mut VecIter[mut [i32], mut]
 

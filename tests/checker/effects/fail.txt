@@ -7,8 +7,8 @@ fn twice(s: String) -> i32 does Fail[String] = parse(s).or_fail() * 2;
 fn both() = attempt(|| twice("42") + twice("x"));
 fn direct() = attempt(|| fail("no"));
 --------------------------------------------------------------------------------
-parse: fn(String) -> Result[String, i32]
-twice: fn(String) -> i32 does Fail[String]
+parse: fn(s: String) -> Result[String, i32]
+twice: fn(s: String) -> i32 does Fail[String]
 both: fn() -> Result[String, i32]
 direct: forall a. fn() -> Result[String, a]
 
