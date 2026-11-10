@@ -95,7 +95,8 @@ pub struct FunctionSignature {
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ParamData {
-    /// The name it can be passed by: that of its pattern, if it's a name.
+    /// The name it can be passed by: that of its pattern, if it's a name,
+    /// and it isn't before a `/`.
     pub name: Option<Name>,
     /// How it's passed.
     pub kind: ParamKind,
@@ -353,6 +354,12 @@ fn lower_function<'db>(
                         params.push(data);
                     }
                     ast::ParamItem::Marker => keyword = true,
+                    // The parameters before a `/` can't be passed by name.
+                    ast::ParamItem::PositionalMarker => {
+                        for p in &mut params {
+                            p.name = None;
+                        }
+                    }
                     // Only in a function type.
                     ast::ParamItem::Pack(_) => {}
                 }

@@ -303,6 +303,9 @@ pub enum SyntaxKind {
     /// A `*` alone in a parameter list, after which the parameters can only
     /// be passed by name
     KEYWORD_MARKER,
+    /// A `/` alone in a parameter list, before which the parameters can only
+    /// be passed by position
+    POSITIONAL_MARKER,
     /// `...` or `args: ...`
     VARIADIC_PARAM,
     /// `pub`, `pub(super)` or `pub(package)`
@@ -504,6 +507,7 @@ impl SyntaxKind {
             VARIADIC_PARAM => "a variadic parameter",
             REST_PARAM => "a rest parameter",
             KEYWORD_MARKER => "a `*` before keyword-only parameters",
+            POSITIONAL_MARKER => "a `/` after positional-only parameters",
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",
             TUPLE_TYPE_FIELD => "a named field of a tuple type",

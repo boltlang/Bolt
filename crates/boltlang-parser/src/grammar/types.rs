@@ -5,8 +5,8 @@ use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
     grammar::{
         ParamOrder, TupleKind, TupleSide, at_keyword_marker, at_macro_call, at_named_field,
-        at_spread, delimited, generic_param_list, is_path_start, macro_call, name, outer_attrs,
-        parse_expr, pattern_single, spread, spread_side, type_path,
+        at_positional_marker, at_spread, delimited, generic_param_list, is_path_start, macro_call,
+        name, outer_attrs, parse_expr, pattern_single, spread, spread_side, type_path,
     },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
@@ -197,6 +197,15 @@ fn fn_type_param_list(p: &mut Parser) {
         || "expected a parameter".into(),
         FN_TYPE_PARAM_FIRST,
         |p| {
+            // A function type says a parameter has no name by leaving it
+            // out, so it has no `/`.
+            if at_positional_marker(p) {
+                p.error_and_bump(
+                    "a function type has no `/`: leave out the names of the parameters that are \
+                     positional-only, as in `fn(i32, y: i32)`",
+                );
+                return true;
+            }
             if !p.at_ts(FN_TYPE_PARAM_FIRST) && !p.at_op("**") {
                 return false;
             }

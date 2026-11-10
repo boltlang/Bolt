@@ -190,14 +190,15 @@ lowered yet (#405).
 A function's parameters are positional, keyword-only, or rests:
 
 ```bolt
+fn push(xs: [T], /, x: T)                        // `xs` only by position
 fn split(s: String, *, at: Char)                 // `at` only by name
 fn print[*Ts](*args: *Ts, sep: String)           // the other positional arguments
 fn call[*Ts, **Ks](f: F, *args: *Ts, **opts: **Ks)
 ```
 
-After a `*` or `*args`, parameters can only be passed by name, and
-`**opts` comes last, so a positional pack is never followed by positional
-parameters. In the body, `args` is the tuple `(*Ts)` and `opts` the tuple
+Before a `/`, parameters can only be passed by position, after a `*` or
+`*args` only by name, and `**opts` comes last, so a positional pack is
+never followed by positional parameters. In the body, `args` is the tuple `(*Ts)` and `opts` the tuple
 `(**Ks)`.
 
 `Ty::Fn` holds a `Params`: the positional parameters, a positional pack,
@@ -259,12 +260,17 @@ doesn't hold then is reported as a mismatch at its equality. A call with a
 named argument looks at the names the callee would have now
 (`Unifier::names_now`), and a name it uses becomes a lower bound.
 
+A parameter before a `/` has no name (`ParamData::name` is `None`), so
+its type is the same as if the name were left out: `fn f(x: i32, /, y:
+i32)` has type `fn(i32, y: i32)`. A function type has no `/` for that
+reason, since leaving the names out says the same.
+
 A lambda's parameters have the names of the function type it's checked
 against, or else those of its patterns. A method of a class impl can name
 its parameters otherwise than the class: calls through the class use the
 class's names.
 
-What's left: `/`, default values, lambdas with keyword parameters, and
+What's left: default values, lambdas with keyword parameters, and
 passing a pack on, like `f(*args)` in a generic body (#405).
 
 ## References

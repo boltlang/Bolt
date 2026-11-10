@@ -85,7 +85,9 @@ pub fn body_with_source_map<'db>(
                             .filter_map(|item| match item {
                                 ast::ParamItem::Param(p) => Some(p.pattern()),
                                 ast::ParamItem::Rest(r) => Some(r.pattern()),
-                                ast::ParamItem::Marker | ast::ParamItem::Pack(_) => None,
+                                ast::ParamItem::Marker
+                                | ast::ParamItem::PositionalMarker
+                                | ast::ParamItem::Pack(_) => None,
                             })
                             .map(|p| collector.lower_opt_pat(p))
                             .collect();

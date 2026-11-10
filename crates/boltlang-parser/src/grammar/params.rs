@@ -2,8 +2,8 @@
 
 use crate::{
     grammar::{
-        PATTERN_FIRST, ParamOrder, at_keyword_marker, at_spread, delimited, outer_attrs,
-        parse_expr, pattern_single, spread, type_,
+        PATTERN_FIRST, ParamOrder, at_keyword_marker, at_positional_marker, at_spread, delimited,
+        outer_attrs, parse_expr, pattern_single, spread, type_,
     },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
@@ -12,9 +12,10 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 const PARAM_FIRST: TokenSet = PATTERN_FIRST.union(TokenSet::new(&[T![...], T![#], T![*]]));
 
-/// `(a, b: T = 1, ...)`, and `(a, *, sep: T)`, `(a, *args: *Ts)` or
-/// `(a, **opts: **Ks)`. After a `*` or `*args`, the parameters can only be
-/// passed by name, and `**opts` comes last.
+/// `(a, b: T = 1, ...)`, and `(a, /, b)`, `(a, *, sep: T)`, `(a, *args:
+/// *Ts)` or `(a, **opts: **Ks)`. Before a `/`, the parameters can only be
+/// passed by position, after a `*` or `*args` only by name, and `**opts`
+/// comes last.
 pub(crate) fn param_list(p: &mut Parser) {
     if !p.at(T!['(']) {
         p.error("expected '('");
@@ -30,7 +31,7 @@ pub(crate) fn param_list(p: &mut Parser) {
         || "expected a parameter".into(),
         PARAM_FIRST,
         |p| {
-            if !p.at_ts(PARAM_FIRST) && !p.at_op("**") {
+            if !p.at_ts(PARAM_FIRST) && !p.at_op("**") && !at_positional_marker(p) {
                 return false;
             }
             order.check(p);
@@ -43,10 +44,15 @@ pub(crate) fn param_list(p: &mut Parser) {
 
 /// One parameter: `...`, `args: ...`, a pattern with an optional type
 /// and default value, like `x`, `x: T` or `x: T = 1`, a rest like
-/// `*args: *Ts` or `**opts: **Ks`, or a `*` alone.
+/// `*args: *Ts` or `**opts: **Ks`, or a `/` or `*` alone.
 pub(crate) fn param(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     outer_attrs(p);
+    // `/` alone, after positional-only parameters.
+    if at_positional_marker(p) {
+        p.bump_any();
+        return m.complete(p, POSITIONAL_MARKER);
+    }
     if p.at(T![...]) {
         p.bump(T![...]);
         return m.complete(p, VARIADIC_PARAM);

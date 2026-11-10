@@ -1632,13 +1632,14 @@ impl ParamList {
         self.find_node()
     }
     /// All the parameters, in order: ordinary ones, rests like
-    /// `*args: *Ts`, a `*` alone, and in a function type, packs like
+    /// `*args: *Ts`, a `/` or `*` alone, and in a function type, packs like
     /// `*Ts`.
     pub fn items(&self) -> impl Iterator<Item = ParamItem> {
         self.0.children().filter_map(|n| match n.kind() {
             PARAM => Some(ParamItem::Param(Param(n))),
             REST_PARAM => Some(ParamItem::Rest(RestParam(n))),
             KEYWORD_MARKER => Some(ParamItem::Marker),
+            POSITIONAL_MARKER => Some(ParamItem::PositionalMarker),
             TUPLE_TYPE_REST => Some(ParamItem::Pack(TupleTypeRest(n))),
             _ => None,
         })
@@ -1652,6 +1653,8 @@ pub enum ParamItem {
     Rest(RestParam),
     /// A `*` alone.
     Marker,
+    /// A `/` alone, after the positional-only parameters.
+    PositionalMarker,
     /// `*Ts` or `**Ks` in a function type.
     Pack(TupleTypeRest),
 }

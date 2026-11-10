@@ -73,15 +73,23 @@ pub(crate) fn at_keyword_marker(p: &Parser) -> bool {
     p.at(T![*]) && (p.nth_at(1, T![,]) || p.nth_at(1, T![')']))
 }
 
-/// Where a parameter list is, for the rules on what comes after what: after
-/// a `*` or a positional rest, the parameters are keyword-only, and a named
-/// rest comes last.
+/// Whether a `/` alone, after positional-only parameters, is here.
+pub(crate) fn at_positional_marker(p: &Parser) -> bool {
+    p.at_op("/") && (p.nth_at(1, T![,]) || p.nth_at(1, T![')']))
+}
+
+/// Where a parameter list is, for the rules on what comes after what: the
+/// parameters before a `/` are positional-only, after a `*` or a positional
+/// rest they're keyword-only, and a named rest comes last.
 #[derive(Default)]
 pub(crate) struct ParamOrder {
     /// After a `*` or `*args`: the parameters are keyword-only.
     pub(crate) keyword: bool,
     /// After `**opts`, which comes last.
     done: bool,
+    /// How many parameters came before, and whether a `/` did.
+    count: usize,
+    slash: bool,
 }
 
 impl ParamOrder {
@@ -90,7 +98,20 @@ impl ParamOrder {
         if self.done {
             p.error("`**` takes the other keyword arguments, so it comes last");
         }
-        if p.at(T![*]) {
+        let first = self.count == 0;
+        self.count += 1;
+        if at_positional_marker(p) {
+            if self.slash {
+                p.error("there's already a `/` before this");
+            } else if self.keyword {
+                p.error(
+                    "`/` comes after the positional-only parameters, so before a `*` or `*args`",
+                );
+            } else if first {
+                p.error("`/` comes after the positional-only parameters, so it can't be first");
+            }
+            self.slash = true;
+        } else if p.at(T![*]) {
             if self.keyword {
                 p.error("there's already a `*` or `*args` before this");
             }
