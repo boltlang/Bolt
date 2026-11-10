@@ -1157,94 +1157,102 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
                 Ty::Never
             }
-            Expr::Lambda { params, param_types, ret_type, effects, body: lambda_body, .. } => {
-                let (hint_params, hint_names, hint_ret) =
-                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                        // A lambda only has positional parameters for now.
-                        Some(Ty::Fn(ps, r, _, _))
-                            if ps.is_positional() && ps.positional.len() == params.len() =>
-                        {
-                            (Some(ps.positional), Some(ps.names), Some(*r))
-                        }
-                        _ => (None, None, None),
-                    };
-                // The names of the parameters are those of the function type
-                // it's checked against, or else those of its patterns.
-                let names = hint_names.map(|n| n.into_vec()).unwrap_or_else(|| {
-                    let body = self.body;
-                    params
-                        .iter()
-                        .map(|&p| match &body[p] {
-                            Pat::Bind { id, subpat: None } => {
-                                Ty::ParamName(Some(body[*id].name.clone()))
-                            }
-                            _ => Ty::ParamName(None),
-                        })
-                        .collect()
-                });
-                self.closures.push(ClosureFrame::default());
-                let mut param_tys = Vec::new();
-                for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
-                    let ty = match (type_ref, &hint_params) {
-                        (Some(type_ref), _) => self.lower_ty(expr, *type_ref),
-                        (None, Some(hints)) => hints[i].clone(),
-                        (None, None) => self.new_var(),
-                    };
-                    self.check_pat(pat, &ty);
-                    param_tys.push(ty);
-                }
-                let ret = match (ret_type, hint_ret) {
-                    (Some(type_ref), _) => self.lower_ty(expr, *type_ref),
-                    (None, Some(hint)) => hint,
-                    (None, None) => self.new_var(),
-                };
-                // The effects that aren't written are inferred from what the
-                // body calls, which adds to the closure's effects, not to
-                // those of the code around it.
-                let effects = match effects {
-                    Some(terms) => self.lower_row(expr, terms),
-                    None => self.solver.new_var(VarKind::Effect),
-                };
-                let ret_reason = ret_type.map_or(Reason::None, Reason::Annotation);
-                let outer_return = std::mem::replace(&mut self.return_ty, ret.clone());
-                let outer_reason = std::mem::replace(&mut self.return_reason, ret_reason);
-                let outer_breakables = std::mem::take(&mut self.breakables);
-                let outer_effects = std::mem::replace(&mut self.effects, effects.clone());
-                self.check_expr_because(*lambda_body, &ret, ret_reason);
-                self.effects = outer_effects;
-                self.breakables = outer_breakables;
-                self.return_reason = outer_reason;
-                self.return_ty = outer_return;
-                let frame = self.closures.pop().unwrap();
-                let body = self.body;
-                let closure = Ty::Fn(
-                    Box::new(Params::positional(param_tys).with_names(names)),
-                    Box::new(ret),
-                    Box::new(self.new_mutability()),
-                    Box::new(effects),
-                );
-                // What the closure captured is at most its mutability, and a
-                // `let mut` variable it shares makes it `mut`.
-                let Ty::Fn(_, _, own, _) = &closure else { unreachable!() };
-                let origin = self.origin(expr);
-                if frame.captured.iter().any(|&b| body[b].mutable) {
-                    self.solver.equal(own, &Ty::Mutability(Mutability::Mut), origin);
-                }
-                for &b in &frame.captured {
-                    let constraint = AtMostConstraint {
-                        held: Held::Type(self.result.binding_ty(b).clone()),
-                        bound: (**own).clone(),
-                    };
-                    self.solver.add(Constraint::AtMost {
-                        constraint,
-                        source: AtMostSource::Closure(closure.clone()),
-                        origin,
-                    });
-                }
-                closure
-            }
+            Expr::Lambda { .. } => self.infer_lambda(expr, expected),
             Expr::MacroCall { .. } => Ty::Error,
         }
+    }
+
+    /// A closure or an anonymous function, like `fn (x) = x + 1`. Its
+    /// parameter types come from what it's written with, or else from
+    /// the function type it's expected to have.
+    fn infer_lambda(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+        let Expr::Lambda { params, param_types, ret_type, effects, body: lambda_body, .. } =
+            &self.body[expr]
+        else {
+            unreachable!("only called for a lambda")
+        };
+        let (hint_params, hint_names, hint_ret) =
+            match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
+                // A lambda only has positional parameters for now.
+                Some(Ty::Fn(ps, r, _, _))
+                    if ps.is_positional() && ps.positional.len() == params.len() =>
+                {
+                    (Some(ps.positional), Some(ps.names), Some(*r))
+                }
+                _ => (None, None, None),
+            };
+        // The names of the parameters are those of the function type
+        // it's checked against, or else those of its patterns.
+        let names = hint_names.map(|n| n.into_vec()).unwrap_or_else(|| {
+            let body = self.body;
+            params
+                .iter()
+                .map(|&p| match &body[p] {
+                    Pat::Bind { id, subpat: None } => Ty::ParamName(Some(body[*id].name.clone())),
+                    _ => Ty::ParamName(None),
+                })
+                .collect()
+        });
+        self.closures.push(ClosureFrame::default());
+        let mut param_tys = Vec::new();
+        for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
+            let ty = match (type_ref, &hint_params) {
+                (Some(type_ref), _) => self.lower_ty(expr, *type_ref),
+                (None, Some(hints)) => hints[i].clone(),
+                (None, None) => self.new_var(),
+            };
+            self.check_pat(pat, &ty);
+            param_tys.push(ty);
+        }
+        let ret = match (ret_type, hint_ret) {
+            (Some(type_ref), _) => self.lower_ty(expr, *type_ref),
+            (None, Some(hint)) => hint,
+            (None, None) => self.new_var(),
+        };
+        // The effects that aren't written are inferred from what the
+        // body calls, which adds to the closure's effects, not to
+        // those of the code around it.
+        let effects = match effects {
+            Some(terms) => self.lower_row(expr, terms),
+            None => self.solver.new_var(VarKind::Effect),
+        };
+        let ret_reason = ret_type.map_or(Reason::None, Reason::Annotation);
+        let outer_return = std::mem::replace(&mut self.return_ty, ret.clone());
+        let outer_reason = std::mem::replace(&mut self.return_reason, ret_reason);
+        let outer_breakables = std::mem::take(&mut self.breakables);
+        let outer_effects = std::mem::replace(&mut self.effects, effects.clone());
+        self.check_expr_because(*lambda_body, &ret, ret_reason);
+        self.effects = outer_effects;
+        self.breakables = outer_breakables;
+        self.return_reason = outer_reason;
+        self.return_ty = outer_return;
+        let frame = self.closures.pop().unwrap();
+        let body = self.body;
+        let closure = Ty::Fn(
+            Box::new(Params::positional(param_tys).with_names(names)),
+            Box::new(ret),
+            Box::new(self.new_mutability()),
+            Box::new(effects),
+        );
+        // What the closure captured is at most its mutability, and a
+        // `let mut` variable it shares makes it `mut`.
+        let Ty::Fn(_, _, own, _) = &closure else { unreachable!() };
+        let origin = self.origin(expr);
+        if frame.captured.iter().any(|&b| body[b].mutable) {
+            self.solver.equal(own, &Ty::Mutability(Mutability::Mut), origin);
+        }
+        for &b in &frame.captured {
+            let constraint = AtMostConstraint {
+                held: Held::Type(self.result.binding_ty(b).clone()),
+                bound: (**own).clone(),
+            };
+            self.solver.add(Constraint::AtMost {
+                constraint,
+                source: AtMostSource::Closure(closure.clone()),
+                origin,
+            });
+        }
+        closure
     }
 
     fn infer_block(
