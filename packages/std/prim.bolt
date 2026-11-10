@@ -252,3 +252,35 @@
 #[builtin] pub(package) fn f64_le(a: f64, b: f64) -> Bool;
 #[builtin] pub(package) fn f64_gt(a: f64, b: f64) -> Bool;
 #[builtin] pub(package) fn f64_ge(a: f64, b: f64) -> Bool;
+
+// Numbers in the bytes of an array, little-endian, at any alignment: for
+// the structs a host writes, like those of WASI. A load or store stops the
+// program unless every byte it needs is in the array.
+#[builtin] pub(package) fn i8_load(bytes: [u8], at: i32) -> i8;
+#[builtin] pub(package) fn i8_store(bytes: mut [u8], at: i32, n: i8);
+#[builtin] pub(package) fn i16_load(bytes: [u8], at: i32) -> i16;
+#[builtin] pub(package) fn i16_store(bytes: mut [u8], at: i32, n: i16);
+#[builtin] pub(package) fn i32_load(bytes: [u8], at: i32) -> i32;
+#[builtin] pub(package) fn i32_store(bytes: mut [u8], at: i32, n: i32);
+#[builtin] pub(package) fn i64_load(bytes: [u8], at: i32) -> i64;
+#[builtin] pub(package) fn i64_store(bytes: mut [u8], at: i32, n: i64);
+#[builtin] pub(package) fn i128_load(bytes: [u8], at: i32) -> i128;
+#[builtin] pub(package) fn i128_store(bytes: mut [u8], at: i32, n: i128);
+#[builtin] pub(package) fn isize_load(bytes: [u8], at: i32) -> isize;
+#[builtin] pub(package) fn isize_store(bytes: mut [u8], at: i32, n: isize);
+#[builtin] pub(package) fn u8_load(bytes: [u8], at: i32) -> u8;
+#[builtin] pub(package) fn u8_store(bytes: mut [u8], at: i32, n: u8);
+#[builtin] pub(package) fn u16_load(bytes: [u8], at: i32) -> u16;
+#[builtin] pub(package) fn u16_store(bytes: mut [u8], at: i32, n: u16);
+#[builtin] pub(package) fn u32_load(bytes: [u8], at: i32) -> u32;
+#[builtin] pub(package) fn u32_store(bytes: mut [u8], at: i32, n: u32);
+#[builtin] pub(package) fn u64_load(bytes: [u8], at: i32) -> u64;
+#[builtin] pub(package) fn u64_store(bytes: mut [u8], at: i32, n: u64);
+#[builtin] pub(package) fn u128_load(bytes: [u8], at: i32) -> u128;
+#[builtin] pub(package) fn u128_store(bytes: mut [u8], at: i32, n: u128);
+#[builtin] pub(package) fn usize_load(bytes: [u8], at: i32) -> usize;
+#[builtin] pub(package) fn usize_store(bytes: mut [u8], at: i32, n: usize);
+#[builtin] pub(package) fn f32_load(bytes: [u8], at: i32) -> f32;
+#[builtin] pub(package) fn f32_store(bytes: mut [u8], at: i32, n: f32);
+#[builtin] pub(package) fn f64_load(bytes: [u8], at: i32) -> f64;
+#[builtin] pub(package) fn f64_store(bytes: mut [u8], at: i32, n: f64);

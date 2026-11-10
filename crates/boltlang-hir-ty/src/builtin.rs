@@ -15,7 +15,8 @@
 //!
 //! Each operation of a primitive type is a builtin too, named after the
 //! type and the operation, like `i32_add`, `f64_lt` or `bool_not`
-//! ([`PrimOp`]): what the operators do on that type, as a function.
+//! ([`PrimOp`]): what the operators do on that type, as a function, and
+//! reading or writing a number in the bytes of an array, like `u32_load`.
 
 use std::sync::OnceLock;
 
@@ -106,8 +107,9 @@ pub enum Builtin {
     Prim(PrimOp, BuiltinType),
 }
 
-/// An operation of a primitive type, as the operators do it: the name of a
-/// builtin is the type's and the operation's, like `i32_add`.
+/// An operation of a primitive type, as the operators do it, or a load or
+/// store of one in bytes: the name of a builtin is the type's and the
+/// operation's, like `i32_add` or `u32_load`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum PrimOp {
     Add,
@@ -129,6 +131,13 @@ pub enum PrimOp {
     Le,
     Gt,
     Ge,
+    /// `fn u32_load(bytes: [u8], at: i32) -> u32`: the number in the bytes
+    /// from `at`, little-endian, at any alignment. Stops the program unless
+    /// every byte is in the array.
+    Load,
+    /// `fn u32_store(bytes: mut [u8], at: i32, n: u32)`: write the number to
+    /// the bytes from `at`, as `Load` reads it.
+    Store,
 }
 
 impl PrimOp {
@@ -151,6 +160,8 @@ impl PrimOp {
         PrimOp::Le,
         PrimOp::Gt,
         PrimOp::Ge,
+        PrimOp::Load,
+        PrimOp::Store,
     ];
 
     pub fn name(self) -> &'static str {
@@ -173,16 +184,21 @@ impl PrimOp {
             PrimOp::Le => "le",
             PrimOp::Gt => "gt",
             PrimOp::Ge => "ge",
+            PrimOp::Load => "load",
+            PrimOp::Store => "store",
         }
     }
 
     /// Whether `ty` has the operation, as it has the operator: integers
     /// all but `!`, and `-` only when they're signed; floats arithmetic,
     /// `-` and comparisons; and `Bool` the bitwise ones, `!` and
-    /// comparisons.
+    /// comparisons. Numbers can be loaded and stored, `Bool` can't.
     pub fn applies_to(self, ty: BuiltinType) -> bool {
         use PrimOp::*;
         let cmp = matches!(self, Eq | Ne | Lt | Le | Gt | Ge);
+        if matches!(self, Load | Store) {
+            return ty != BuiltinType::Bool;
+        }
         match ty {
             BuiltinType::Int(_) => self != Not,
             BuiltinType::Uint(_) => !matches!(self, Neg | Not),
@@ -330,7 +346,12 @@ impl Builtin {
             }
             Builtin::Prim(op, ty) => {
                 let t = Ty::Builtin(ty);
+                let bytes = |m| Ty::array(m, Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)));
                 match op {
+                    PrimOp::Load => Ty::func([bytes(Ty::Bound(0)), i32_ty], t),
+                    PrimOp::Store => {
+                        Ty::func([bytes(Ty::Mutability(Mutability::Mut)), i32_ty, t], Ty::unit())
+                    }
                     PrimOp::Neg | PrimOp::Not => Ty::func([t.clone()], t),
                     PrimOp::Shl | PrimOp::Shr => {
                         Ty::func([t.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], t)
@@ -433,6 +454,10 @@ mod tests {
         assert_eq!(Builtin::by_name("u8_neg"), None);
         assert_eq!(Builtin::by_name("i32_not"), None);
         assert_eq!(Builtin::by_name("char_add"), None);
+        // Numbers can be loaded from bytes, `Bool` can't.
+        let u16_ty = BuiltinType::Uint(BuiltinUint::U16);
+        assert_eq!(Builtin::by_name("u16_load"), Some(Builtin::Prim(PrimOp::Load, u16_ty)));
+        assert_eq!(Builtin::by_name("bool_store"), None);
         let db = boltlang_base_db::TestDb::new();
         let file = db.file("/main.bolt", "");
         let shl = Builtin::by_name("i64_shl").unwrap().signature(&db, file);

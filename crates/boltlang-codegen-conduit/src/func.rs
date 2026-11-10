@@ -1249,6 +1249,16 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let sign = if s.signed() { Sign::Signed } else { Sign::Unsigned };
         let float = matches!(s, Scalar::F32 | Scalar::F64);
         let p = match op {
+            // In the bytes of an `[i8]`, as Conduit reads and writes them:
+            // `u16` and `i16` are both an `i16`.
+            PrimOp::Load => {
+                let vs = self.b.op_as(Op::ArrayLoad, args, vec![s.ty()]);
+                return Ok(vs.first().map(|&v| Atom::Var(v)));
+            }
+            PrimOp::Store => {
+                self.b.op(Op::ArrayStore, args);
+                return Ok(None);
+            }
             PrimOp::Add => Prim::Add,
             PrimOp::Sub => Prim::Sub,
             PrimOp::Mul => Prim::Mul,
