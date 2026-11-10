@@ -4,6 +4,7 @@ use std::fmt;
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
+    Name,
     body::{DefWithBody, DefWithBodyId},
     hir::Mutability,
     ids::{ConstId, FunctionId, ItemContainerId},
@@ -194,55 +195,51 @@ struct DisplayInstance<'db> {
 impl fmt::Display for DisplayInstance<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let db = self.db;
-        let def = match self.instance.def(db) {
-            InstanceDef::Body(body) => body.def(db),
+        let name = match self.instance.def(db) {
+            InstanceDef::Body(body) => match body.def(db) {
+                DefWithBody::File(_) => "<file>".to_string(),
+                DefWithBody::Function(id) => fn_name(db, id),
+                DefWithBody::Const(id) => {
+                    item_name(db, id.container(db), id.item(db).name.as_ref())
+                }
+                DefWithBody::Variant(_) => "<discriminant>".to_string(),
+            },
             // `f[i32]::default1`
             InstanceDef::Default(body, param) => {
                 let DefWithBody::Function(id) = body.def(db) else { return write!(f, "?") };
-                write!(f, "{}", container_prefix(db, id.container(db)))?;
-                let name = id.item(db).display_name();
-                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
+                write!(f, "{}", fn_name(db, id))?;
                 self.args(f)?;
                 return write!(f, "::default{param}");
             }
-            InstanceDef::Shim(Shim::Ctor(ctor)) => {
-                let name = match ctor {
-                    Ctor::Struct(s) => s.item(db).name.clone(),
-                    Ctor::Variant(v) => {
-                        let parent = v.parent.item(db).name.as_ref().map_or("?", |n| n.as_str());
-                        Some(boltlang_hir_def::Name::new(format!("{parent}.{}", v.name(db))))
-                    }
-                    Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) => None,
-                };
-                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
-                return self.args(f);
-            }
+            InstanceDef::Shim(Shim::Ctor(ctor)) => match ctor {
+                Ctor::Struct(s) => name_or(s.item(db).name.as_ref()).to_string(),
+                Ctor::Variant(v) => {
+                    format!("{}.{}", name_or(v.parent.item(db).name.as_ref()), v.name(db))
+                }
+                Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) => "?".to_string(),
+            },
             InstanceDef::Shim(Shim::ImmDeep(t)) => {
                 return write!(f, "imm_deep[{}]", t.display(db));
             }
-            InstanceDef::Shim(Shim::Op(op)) => {
-                write!(f, "{}", container_prefix(db, op.container(db)))?;
-                let name = op.item(db).display_name();
-                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
-                return self.args(f);
-            }
+            InstanceDef::Shim(Shim::Op(op)) => fn_name(db, *op),
         };
-        match def {
-            DefWithBody::File(_) => write!(f, "<file>")?,
-            DefWithBody::Function(id) => {
-                write!(f, "{}", container_prefix(db, id.container(db)))?;
-                let name = id.item(db).display_name();
-                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
-            }
-            DefWithBody::Const(id) => {
-                write!(f, "{}", container_prefix(db, id.container(db)))?;
-                let name = id.item(db).name.clone();
-                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
-            }
-            DefWithBody::Variant(_) => write!(f, "<discriminant>")?,
-        }
+        write!(f, "{name}")?;
         self.args(f)
     }
+}
+
+/// A function's name, after its class, impl or effect, like `Show.show`.
+fn fn_name(db: &dyn Db, f: FunctionId<'_>) -> String {
+    item_name(db, f.container(db), f.item(db).display_name().as_ref())
+}
+
+/// An item's name, after its container's prefix.
+fn item_name(db: &dyn Db, container: ItemContainerId<'_>, name: Option<&Name>) -> String {
+    format!("{}{}", container_prefix(db, container), name_or(name))
+}
+
+fn name_or(name: Option<&Name>) -> &str {
+    name.map_or("?", |n| n.as_str())
 }
 
 impl DisplayInstance<'_> {
