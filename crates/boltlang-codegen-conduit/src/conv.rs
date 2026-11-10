@@ -371,7 +371,7 @@ impl<'db> Convs<'db> {
             let v = Atom::Var(b.op(Op::HostUnwrap, [x])[0]);
             let v = self.emit(cx, b, Some(v), &f, &t)?;
             let ctor = CtorId { data: tid, index: some };
-            let obj = b.new_object_full(ctor, m, margs, rows, v.into_iter().collect::<Vec<_>>());
+            let obj = b.new_object_full(ctor, m, margs, rows, Vec::from_iter(v));
             b.ret(vec![Atom::Var(obj)]);
         } else {
             let Some(Ty::Data(fid, ..)) = cx.value(from)? else {
@@ -385,7 +385,7 @@ impl<'db> Convs<'db> {
             let ctor = CtorId { data: fid, index: some };
             let v = Atom::Var(b.get(ctor, 0, x));
             let v = self.emit(cx, b, Some(v), &f, &t)?;
-            b.ret(v.into_iter().collect::<Vec<_>>());
+            b.ret(Vec::from_iter(v));
         }
         Ok(())
     }
@@ -459,7 +459,7 @@ impl<'db> Convs<'db> {
         let results = b.apply(f, args);
         let result = results.first().map(|&v| Atom::Var(v));
         let result = self.emit(cx, &mut b, result, r, s)?;
-        b.ret(result.into_iter().collect::<Vec<_>>());
+        b.ret(Vec::from_iter(result));
         finish(b)
     }
 }

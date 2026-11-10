@@ -276,7 +276,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             // has one.
             match self.lcx.instance.body(db).map(|body| body.def(db)) {
                 Some(DefWithBody::File(_)) if !self.is_lambda => self.b.ret(()),
-                _ => self.b.ret(result.into_iter().collect::<Vec<_>>()),
+                _ => self.b.ret(Vec::from_iter(result)),
             }
         }
         Ok(())
@@ -396,7 +396,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let mut next = 0;
         let ret = |l: &mut Self, v: Val| {
             if !l.ended() {
-                l.b.ret(v.into_iter().collect::<Vec<_>>());
+                l.b.ret(Vec::from_iter(v));
             }
         };
         match which {
@@ -661,7 +661,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                         let f = self.cx.funcs[&instance];
                         let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
                         let rows = self.rows(&rows);
-                        let args = v.into_iter().collect::<Vec<_>>();
+                        let args = Vec::from_iter(v);
                         let results = self.b.call_with(f, margs, rows, args);
                         Ok(first(&results))
                     }
@@ -693,7 +693,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 }
                 let target = self.targets.pop().unwrap();
                 if !self.ended() {
-                    self.b.jump(&target.exit, v.into_iter().collect::<Vec<_>>());
+                    self.b.jump(&target.exit, Vec::from_iter(v));
                 }
                 self.b.switch_to(target.exit.block());
                 Ok(first(target.exit.params()))
@@ -789,7 +789,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 };
                 let i = self.target(*label, false)?;
                 let exit = &self.targets[i].exit;
-                self.b.jump(exit, v.into_iter().collect::<Vec<_>>());
+                self.b.jump(exit, Vec::from_iter(v));
                 Ok(None)
             }
             ExprKind::Continue { label } => {
@@ -803,7 +803,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     Some(x) => val!(self.expr(*x)),
                     None => None,
                 };
-                self.b.ret(v.into_iter().collect::<Vec<_>>());
+                self.b.ret(Vec::from_iter(v));
                 Ok(None)
             }
             ExprKind::Assign { place, op, value } => {
@@ -1360,7 +1360,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 None => None,
             };
             if !l.ended() {
-                l.b.jump(&k, v.into_iter().collect::<Vec<_>>());
+                l.b.jump(&k, Vec::from_iter(v));
             }
             Ok(())
         };
@@ -1390,7 +1390,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         self.decide(d, v, t, false, guards, &mut |l, arm| {
             let v = l.expr(bodies[arm as usize])?;
             if !l.ended() {
-                l.b.jump(&k, v.into_iter().collect::<Vec<_>>());
+                l.b.jump(&k, Vec::from_iter(v));
             }
             Ok(())
         })?;
