@@ -1094,35 +1094,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.breakables.pop();
                 Ty::unit()
             }
-            Expr::Break { expr: value, label } => {
-                let target = match label {
-                    Some(name) => {
-                        let scopes = expr_scopes(self.db, self.def);
-                        let id = scopes
-                            .scope_for(expr)
-                            .and_then(|s| scopes.resolve_label(s, Some(name)));
-                        self.breakables.iter().rposition(|b| b.label.is_some() && b.label == id)
-                    }
-                    None => self.breakables.iter().rposition(|b| b.is_loop),
-                };
-                match target {
-                    Some(i) => {
-                        self.breakables[i].broken = true;
-                        let ty = self.breakables[i].ty.clone().unwrap_or_else(Ty::unit);
-                        match value {
-                            Some(value) => self.check_expr(*value, &ty),
-                            None => self.solver.equal(&ty, &Ty::unit(), self.origin(expr)),
-                        }
-                    }
-                    None => {
-                        if let Some(value) = value {
-                            self.infer_expr(*value);
-                        }
-                        self.result.diagnostics.push(InferenceDiagnostic::BreakOutside { expr });
-                    }
-                }
-                Ty::Never
-            }
+            Expr::Break { .. } => self.infer_break(expr),
             Expr::Continue { .. } => Ty::Never,
             Expr::Return { expr: value } => {
                 let ret = self.return_ty.clone();
@@ -1262,6 +1234,39 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.check_effect_arms(expr, effect_arms, inner, &ty);
         }
         if arms.is_empty() { Ty::Never } else { ty }
+    }
+
+    /// A `break`, out of the loop or labelled block it names, or else out
+    /// of the innermost loop. Its value has the type that one gives.
+    fn infer_break(&mut self, expr: ExprId) -> Ty<'db> {
+        let Expr::Break { expr: value, label } = &self.body[expr] else {
+            unreachable!("only called for a break")
+        };
+        let target = match label {
+            Some(name) => {
+                let scopes = expr_scopes(self.db, self.def);
+                let id = scopes.scope_for(expr).and_then(|s| scopes.resolve_label(s, Some(name)));
+                self.breakables.iter().rposition(|b| b.label.is_some() && b.label == id)
+            }
+            None => self.breakables.iter().rposition(|b| b.is_loop),
+        };
+        match target {
+            Some(i) => {
+                self.breakables[i].broken = true;
+                let ty = self.breakables[i].ty.clone().unwrap_or_else(Ty::unit);
+                match value {
+                    Some(value) => self.check_expr(*value, &ty),
+                    None => self.solver.equal(&ty, &Ty::unit(), self.origin(expr)),
+                }
+            }
+            None => {
+                if let Some(value) = value {
+                    self.infer_expr(*value);
+                }
+                self.result.diagnostics.push(InferenceDiagnostic::BreakOutside { expr });
+            }
+        }
+        Ty::Never
     }
 
     fn infer_block(
