@@ -171,7 +171,7 @@ impl Host for Emu {
                         Ok(at) => ok(at as i64),
                         Err(e) => err(Errno::from(&e)),
                     },
-                    None => vec![Errno::BadFd as i64, 0],
+                    None => err(Errno::BadFd),
                 }
             }
             "file_size" => match self.files.get(&int(0)) {
@@ -179,7 +179,7 @@ impl Host for Emu {
                     Ok(m) => ok(m.len() as i64),
                     Err(e) => err(Errno::from(&e)),
                 },
-                None => vec![Errno::BadFd as i64, 0],
+                None => err(Errno::BadFd),
             },
             "remove" => single(fs::remove_file(path(arrays, 0))),
             "rename" => single(fs::rename(path(arrays, 0), path(arrays, 1))),
