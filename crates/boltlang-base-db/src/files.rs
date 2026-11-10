@@ -107,7 +107,7 @@ fn new_file(db: &dyn Db, path: FilePath, metadata: std::io::Result<Metadata>) ->
     builder.new(db)
 }
 
-/// A file that's either stored on the host system's file system or in the vendored file system.
+/// A file of the host system, at a real or a virtual path.
 ///
 /// # Ordering
 ///
@@ -164,13 +164,7 @@ impl File {
         let path = self.path(db).clone();
 
         match path {
-            FilePath::System(system) => {
-                // Files::touch_root(db, &system);
-                Self::sync_system_path(db, &system, Some(self));
-            }
-            // FilePath::Vendored(_) => {
-            //     // Readonly, can never be out of date.
-            // }
+            FilePath::System(system) => Self::sync_system_path(db, &system, Some(self)),
             FilePath::SystemVirtual(_) => {
                 tracing::debug!("Updating the revision of `{:?}`", self.path(db));
                 let current_revision = *self.revision(db);
@@ -179,10 +173,8 @@ impl File {
         }
     }
 
-    /// Private method providing the implementation for [`Self::sync_path`] and [`Self::sync`] for
-    /// system paths.
-    ///
-    /// Takes in the resolved file handle if any. Otherwise resolves the file using the system.
+    /// Syncs the file at the system path `path`: `file`, or the one
+    /// [`Files::try_resolve`] finds.
     fn sync_system_path(db: &mut dyn Db, path: &SystemPath, file: Option<File>) {
         let Some(file) = file.or_else(|| db.files().try_resolve(db, path)) else {
             return;
@@ -232,21 +224,13 @@ mod private {
     }
 }
 
-/// Path to a file.
-///
-/// The path abstracts that files in Ruff can come from different sources:
-///
-/// * a file stored on the [host system](crate::system::System).
-/// * a virtual file stored on the [host system](crate::system::System).
-/// * a vendored file stored in the [vendored file system](crate::vendored::VendoredFileSystem).
+/// The path of a file, on the [host system](crate::system::System) or virtual.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum FilePath {
     /// Path to a file on the [host system](crate::system::System).
     System(SystemPathBuf),
     /// Path to a virtual file on the [host system](crate::system::System).
     SystemVirtual(SystemVirtualPathBuf),
-    // /// Path to a file vendored as part of Ruff. Stored in the [vendored file system](crate::vendored::VendoredFileSystem).
-    // Vendored(VendoredPathBuf),
 }
 
 impl FilePath {
