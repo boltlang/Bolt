@@ -622,6 +622,13 @@ impl<'db> Solver<'db> {
         })
     }
 
+    /// Report `error`, unless it's reported already.
+    fn report_once(&mut self, error: TypeError<'db>) {
+        if !self.errors.contains(&error) {
+            self.errors.push(error);
+        }
+    }
+
     pub fn add(&mut self, constraint: Constraint<'db>) {
         match constraint {
             Constraint::Equal { expected, actual, origin } => {
@@ -644,9 +651,7 @@ impl<'db> Solver<'db> {
                     };
                     // The arguments of an effect can be compared more than
                     // once, as its row is settled and then checked.
-                    if !self.errors.contains(&error) {
-                        self.errors.push(error);
-                    }
+                    self.report_once(error);
                 }
             }
             Constraint::Class { constraint, origin } => self.pending.push((constraint, origin)),
@@ -1276,18 +1281,14 @@ impl<'db> Solver<'db> {
                     expected: self.unifier.resolve(closure),
                     actual: self.unifier.resolve(&mutable),
                 };
-                if !self.errors.contains(&error) {
-                    self.errors.push(error);
-                }
+                self.report_once(error);
             }
             AtMostSource::Needed(needed) => {
                 let error = TypeError::NotAtMost {
                     origin,
                     constraint: needed.map(|t| self.unifier.resolve(t)),
                 };
-                if !self.errors.contains(&error) {
-                    self.errors.push(error);
-                }
+                self.report_once(error);
             }
         }
     }
@@ -1450,9 +1451,7 @@ impl<'db> Solver<'db> {
             }
             None => {
                 let error = TypeError::NoInstance { origin, constraint: goal };
-                if !self.errors.contains(&error) {
-                    self.errors.push(error);
-                }
+                self.report_once(error);
                 Ty::Error
             }
         };
@@ -1768,9 +1767,7 @@ impl<'db> Solver<'db> {
                         // An associated type of the same class may have
                         // reported it already.
                         let error = TypeError::NoInstance { origin, constraint };
-                        if !self.errors.contains(&error) {
-                            self.errors.push(error);
-                        }
+                        self.report_once(error);
                     }
                     Step::Wait => self.pending.push((constraint, origin)),
                 }
