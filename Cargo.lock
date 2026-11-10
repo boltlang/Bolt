@@ -160,6 +160,7 @@ dependencies = [
  "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "boltlang-ide-diagnostics",
  "boltlang-mir",
  "boltlang-mir-build",
  "boltlang-mir-mono",

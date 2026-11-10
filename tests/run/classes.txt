@@ -8,7 +8,7 @@ class Twice[T] {
 impl Twice[i32] {
   fn twice(x) = x * 2;
 }
-twice(21);
+print(show(twice(21)));
 --------------------------------------------------------------------------------
 42
 
@@ -19,9 +19,9 @@ The impl is chosen by the type of the argument
 class Describe[T] { fn describe(x: T) -> String; }
 impl Describe[i32] { fn describe(x) = "a number"; }
 impl Describe[Bool] { fn describe(x) = "a boolean"; }
-(describe(1), describe(True));
+print(show((describe(1), describe(True))));
 --------------------------------------------------------------------------------
-("a number", "a boolean")
+(a number, a boolean)
 
 ================================================================================
 A generic function chooses the impl when it runs
@@ -32,13 +32,12 @@ impl Describe[i32] { fn describe(x) = "a number"; }
 impl Describe[Bool] { fn describe(x) = "a boolean"; }
 fn shout(x) = describe(x);
 fn twice[T](x: T) -> (String, String) where Describe[T] = (describe(x), describe(x));
-(shout(1), shout(True), twice(False));
+print(show((shout(1), shout(True), twice(False))));
 --------------------------------------------------------------------------------
-("a number", "a boolean", ("a boolean", "a boolean"))
+(a number, a boolean, (a boolean, a boolean))
 
 ================================================================================
 A generic impl calls the impl of its parameter
-:todo wasm
 :test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
@@ -49,9 +48,9 @@ impl[T] Describe[Option[T]] where Describe[T] {
   fn describe(x) = match x { Some(y) => describe(y), None => "nothing" };
 }
 let nothing: Option[i32] = None;
-(describe(Some(1)), describe(nothing));
+print(show((describe(Some(1)), describe(nothing))));
 --------------------------------------------------------------------------------
-("a number", "nothing")
+(a number, nothing)
 
 ================================================================================
 A class method with a default
@@ -66,9 +65,9 @@ impl Describe[Bool] {
   fn describe(x) = "a boolean";
   fn describe_twice(x) = ("yes", "no");
 }
-(describe_twice(1), describe_twice(True));
+print(show((describe_twice(1), describe_twice(True))));
 --------------------------------------------------------------------------------
-(("a number", "a number"), ("yes", "no"))
+((a number, a number), (yes, no))
 
 ================================================================================
 Method call syntax with a class method
@@ -76,13 +75,12 @@ Method call syntax with a class method
 ================================================================================
 class Twice[T] { fn twice(x: T) -> T; }
 impl Twice[i32] { fn twice(x) = x * 2; }
-21.twice();
+print(show(21.twice()));
 --------------------------------------------------------------------------------
 42
 
 ================================================================================
 Class constants
-:todo wasm
 :test-prelude
 ================================================================================
 class Zero[T] { const ZERO: T; }
@@ -90,12 +88,13 @@ impl Zero[i32] { const ZERO: i32 = 0; }
 impl Zero[String] { const ZERO: String = ""; }
 let a: i32 = ZERO;
 let b: String = ZERO;
-(a, b);
+print(show((a, b == "")));
 --------------------------------------------------------------------------------
-(0, "")
+(0, True)
 
 ================================================================================
 An associated type
+:test-prelude
 ================================================================================
 class Get[C] {
   type Item;
@@ -107,13 +106,12 @@ impl[T] Get[Box[T]] {
   fn get(b) = b.item;
 }
 fn first[C](c: C) -> C.Item where Get[C] = get(c);
-(get(Box { item: True }), first(Box { item: 1 }));
+print(show((get(Box { item: True }), first(Box { item: 1 }))));
 --------------------------------------------------------------------------------
 (True, 1)
 
 ================================================================================
 Looping over a type with its own iterator
-:todo wasm
 :test-prelude
 ================================================================================
 struct Countdown { from: i32 }
@@ -136,20 +134,19 @@ let mut digits = 0;
 for n in countdown {
   digits = digits * 10 + n;
 }
-digits;
+print(show(digits));
 --------------------------------------------------------------------------------
 321
 
 ================================================================================
 A bound that says what an associated type is
-:todo wasm
 :test-prelude
 ================================================================================
 fn total[I: Iterator[Item = i32]](it: I) -> i32 = match next(it) {
   Some(x) => x + total(it),
   None => 0,
 };
-total(iter([1, 2, 3]));
+print(show(total(iter([1, 2, 3]))));
 --------------------------------------------------------------------------------
 6
 
@@ -161,7 +158,7 @@ class Describe[T] { fn describe(x: T) -> i32; }
 impl Describe[i32] { fn describe(x) = 1; }
 impl Describe[i64] { fn describe(x) = 2; }
 fn shout(x) = describe(x);
-shout(1) * 10 + shout(2i64);
+print(show(shout(1) * 10 + shout(2i64)));
 --------------------------------------------------------------------------------
 12
 
@@ -172,7 +169,7 @@ A default method calls the impl's methods
 class Greet[T] { fn name(x: T) -> i32; fn greet(x: T) -> i32 = name(x) + 100; }
 impl Greet[i32] { fn name(x) = x; }
 impl Greet[Bool] { fn name(x) = 0; fn greet(x) = 7; }
-greet(5) + greet(True);
+print(show(greet(5) + greet(True)));
 --------------------------------------------------------------------------------
 112
 
@@ -181,13 +178,13 @@ Generic code with a bound over numbers
 :prelude
 ================================================================================
 fn twice[T: Add](x: T) -> T.Output = add(x, x);
-twice(21);
+print(show(twice(21)));
 --------------------------------------------------------------------------------
 42
 
 ================================================================================
 A class constant in generic code
-:todo wasm
+:test-prelude
 ================================================================================
 class Zero[T] { const ZERO: T; }
 impl Zero[i32] { const ZERO: i32 = 0; }
@@ -195,20 +192,21 @@ impl Zero[Bool] { const ZERO: Bool = False; }
 fn zero[T]() -> T where Zero[T] = ZERO;
 let n: i32 = zero();
 let b: Bool = zero();
-(n, b);
+print(show((n, b)));
 --------------------------------------------------------------------------------
 (0, False)
 
 ================================================================================
 An impl with a bound uses the impl of its type's argument
 :prelude
-:todo wasm
 ================================================================================
 class Name[T] { fn name(x: T) -> String; }
 impl Name[i32] { fn name(x) = "i32"; }
 impl Name[i64] { fn name(x) = "i64"; }
 impl[T] Name[Option[T]] where Name[T] { fn name(x) = match x { Some(y) => "Some " <> name(y), None => "None" }; }
 fn later(x) = || name(x);
-(later(Some(1))(), later(Some(2i64))());
+print(later(Some(1))());
+print(later(Some(2i64))());
 --------------------------------------------------------------------------------
-("Some i32", "Some i64")
+Some i32
+Some i64

@@ -1,30 +1,42 @@
 ================================================================================
 A variant
+:test-prelude
 ================================================================================
 enum Color { Red, Green, Blue }
-Color.Blue;
+impl Show[Color] {
+  fn show(c) = match c { Color.Red => "Red", Color.Green => "Green", Color.Blue => "Blue" };
+}
+print(show(Color.Blue));
 --------------------------------------------------------------------------------
 Blue
 
 ================================================================================
 A variant in a variable
+:test-prelude
 ================================================================================
 enum Color { Red, Green, Blue }
+impl Show[Color] {
+  fn show(c) = match c { Color.Red => "Red", Color.Green => "Green", Color.Blue => "Blue" };
+}
 let c = Color.Green;
-c;
+print(show(c));
 --------------------------------------------------------------------------------
 Green
 
 ================================================================================
 Enums in parameters, results and matches
+:test-prelude
 ================================================================================
 enum Color { Red, Green, Blue }
-fn next(c: Color) -> Color = match c {
+impl Show[Color] {
+  fn show(c) = match c { Color.Red => "Red", Color.Green => "Green", Color.Blue => "Blue" };
+}
+fn rotate(c: Color) -> Color = match c {
   Color.Red => Color.Green,
   Color.Green => Color.Blue,
   Color.Blue => Color.Red,
 };
-next(next(Color.Red));
+print(show(rotate(rotate(Color.Red))));
 --------------------------------------------------------------------------------
 Blue
 
@@ -37,7 +49,7 @@ import Color.*;
 fn code(c) = match c { Red => 1, Green => 2, Blue => 3 };
 fn warm(c: Color) -> Bool = match c { Red | Green => True, _ => False };
 print(if warm(Green) && !warm(Blue) { "warm" } else { "cold" });
-code(Blue) * 10 + code(Red);
+print(show(code(Blue) * 10 + code(Red)));
 --------------------------------------------------------------------------------
 warm
 31
@@ -53,17 +65,21 @@ impl Eq[Color] {
     _ => False,
   };
 }
-Color.Red == Color.Red && Color.Red != Color.Blue;
+print(show(Color.Red == Color.Red && Color.Red != Color.Blue));
 --------------------------------------------------------------------------------
 True
 
 ================================================================================
 A variable that changes
+:test-prelude
 ================================================================================
 enum Color { Red, Green, Blue }
+impl Show[Color] {
+  fn show(c) = match c { Color.Red => "Red", Color.Green => "Green", Color.Blue => "Blue" };
+}
 let mut c = Color.Red;
 if let Color.Red = c { c = Color.Blue; }
-c;
+print(show(c));
 --------------------------------------------------------------------------------
 Blue
 
@@ -72,18 +88,22 @@ Generic enums without fields
 :test-prelude
 ================================================================================
 enum Tag[T] { A, B }
+impl[T] Show[Tag[T]] {
+  fn show(t) = match t { Tag.A => "A", Tag.B => "B" };
+}
 fn tag(x: i32) -> Tag[i32] = if x > 0 { Tag.B } else { Tag.A };
-tag(5);
+print(show(tag(5)));
 --------------------------------------------------------------------------------
 B
 
 ================================================================================
 A const variant in a pattern
+:test-prelude
 ================================================================================
 enum Color { Red, Green, Blue }
 const FAVORITE: Color = Color.Green;
 fn is_favorite(c: Color) -> Bool = match c { FAVORITE => True, _ => False };
-is_favorite(Color.Green);
+print(show(is_favorite(Color.Green)));
 --------------------------------------------------------------------------------
 True
 
@@ -96,7 +116,7 @@ fn area(s: Shape) -> f64 = match s {
   Shape.Circle(r) => 3.0 * r * r,
   Shape.Square(w) => w * w,
 };
-area(Shape.Square(2.0)) + area(Shape.Circle(1.0));
+print(show(area(Shape.Square(2.0)) + area(Shape.Circle(1.0))));
 --------------------------------------------------------------------------------
 7.0
 
@@ -110,9 +130,9 @@ fn area(s: Shape) -> f64 = match s {
   Shape.Rect { w, h } => w * h,
   Shape.Empty => 0.0,
 };
-(area(Shape.Circle(2.0)), area(Shape.Rect { w: 2.0, h: 3.0 }), area(Shape.Empty), Shape.Rect { w: 1.0, h: 2.0 });
+print(show((area(Shape.Circle(2.0)), area(Shape.Rect { w: 2.0, h: 3.0 }), area(Shape.Empty))));
 --------------------------------------------------------------------------------
-(12.0, 6.0, 0.0, Rect { w: 1.0, h: 2.0 })
+(12.0, 6.0, 0.0)
 
 ================================================================================
 Nested patterns only look at the fields of the variant they match
@@ -123,7 +143,7 @@ fn f(o: Option[Option[i32]]) -> i32 = match o {
   Some(None) => 0,
   None => -1,
 };
-(f(Some(Some(3))), f(Some(None)), f(None), Some(Some(True)));
+print(show((f(Some(Some(3))), f(Some(None)), f(None), Some(Some(True)))));
 --------------------------------------------------------------------------------
 (3, 0, -1, Some(Some(True)))
 
@@ -136,7 +156,7 @@ fn sum(l: List) -> i32 = match l {
   List.Nil => 0,
   List.Cons(x, rest) => x + sum(rest),
 };
-sum(List.Cons(1, List.Cons(2, List.Cons(3, List.Nil))));
+print(show(sum(List.Cons(1, List.Cons(2, List.Cons(3, List.Nil))))));
 --------------------------------------------------------------------------------
 6
 
@@ -144,6 +164,14 @@ sum(List.Cons(1, List.Cons(2, List.Cons(3, List.Nil))));
 Comparing options and ordering values
 :prelude
 ================================================================================
-(Some(1) == Some(1), Some(1) == None, [Some(1)] == [Some(1)], "a" < "b", (1, 2) < (1, 3));
+print(show(Some(1) == Some(1)));
+print(show(Some(1) == None));
+print(show([Some(1)] == [Some(1)]));
+print(show("a" < "b"));
+print(show((1, 2) < (1, 3)));
 --------------------------------------------------------------------------------
-(True, False, True, True, True)
+True
+False
+True
+True
+True

@@ -1,26 +1,25 @@
 ================================================================================
 Getting past the end
-:todo wasm
 :prelude
 ================================================================================
 let v = Vec.from_array([1, 2]);
 v.get(2);
 --------------------------------------------------------------------------------
-error: panicked: index out of bounds
+index out of bounds
+error: the program stopped with an error
 
 ================================================================================
 Indexing a Vec past its end
-:todo wasm
 :prelude
 ================================================================================
 let v = Vec.from_array([1]);
 v[1];
 --------------------------------------------------------------------------------
-error: panicked: index out of bounds
+index out of bounds
+error: the program stopped with an error
 
 ================================================================================
 Copying a range of an array
-:todo wasm
 :test-prelude
 ================================================================================
 #[builtin] fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32);
@@ -28,17 +27,16 @@ let xs = mut [1, 2, 3, 4, 5];
 array_copy(xs, 1, xs, 0, 4);
 let ys = mut [0, 0];
 array_copy(ys, 0, xs, 3, 2);
-(xs, ys);
+print(show(mut (xs, ys)));
 --------------------------------------------------------------------------------
 ([1, 1, 2, 3, 4], [3, 4])
 
 ================================================================================
 Copying a range that doesn't fit
-:todo wasm
 :test-prelude
 ================================================================================
 #[builtin] fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32);
 let xs = mut [1, 2, 3];
 array_copy(xs, 2, xs, 0, 2);
 --------------------------------------------------------------------------------
-error: the range 2..4 is out of bounds for length 3
+error: index 4 is out of bounds for length 3 (in <file>)
