@@ -475,20 +475,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         if let TypeNs::Struct(_) = resolution.ty {
             type_args.retain(|&t| !matches!(self.store[t], TypeRef::Mutability(_)));
         }
-        if type_args.len() > param_kinds.len() {
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
-                type_ref: id,
-                expected: param_kinds.len(),
-                found: type_args.len(),
-            });
-            for &arg in &type_args {
-                self.lower_ty_kinded(arg);
-            }
-            return (Ty::Error, None);
-        }
         let param_kinds: Vec<Kind> = param_kinds.into_iter().cloned().collect();
-        let tys: Vec<Ty<'db>> =
-            type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
+        let Some(tys) = self.lower_args_of_kinds(id, &type_args, &param_kinds) else {
+            return (Ty::Error, None);
+        };
         let result = kind.apply(tys.len()).cloned();
         (Ty::app(head, tys), result)
     }
@@ -505,23 +495,37 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         let kind = def_kind(self.db, GenericDefId::Effect(effect));
         let param_kinds: Vec<Kind> = kind.split().0.into_iter().cloned().collect();
         let type_args = self.type_args(id, args);
-        if type_args.len() > param_kinds.len() {
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
-                type_ref: id,
-                expected: param_kinds.len(),
-                found: type_args.len(),
-            });
-            for &arg in &type_args {
-                self.lower_ty_kinded(arg);
-            }
+        let Some(tys) = self.lower_args_of_kinds(id, &type_args, &param_kinds) else {
             return (Ty::Error, None);
-        }
-        let tys: Vec<Ty<'db>> =
-            type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
+        };
         if tys.len() < param_kinds.len() {
             return (Ty::Error, kind.apply(tys.len()).cloned());
         }
         (Ty::row([EffectTy { effect, args: tys.into() }]), Some(Kind::Effect))
+    }
+
+    /// The type arguments `type_args` of something with parameters of
+    /// `kinds`, each lowered as its parameter's kind. There can be fewer,
+    /// for a constructor like `Either[String]`, but not more: then they're
+    /// only lowered for their diagnostics, and it's `None`.
+    fn lower_args_of_kinds(
+        &mut self,
+        id: TypeRefId,
+        type_args: &[TypeRefId],
+        kinds: &[Kind],
+    ) -> Option<Vec<Ty<'db>>> {
+        if type_args.len() > kinds.len() {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: kinds.len(),
+                found: type_args.len(),
+            });
+            for &arg in type_args {
+                self.lower_ty_kinded(arg);
+            }
+            return None;
+        }
+        Some(type_args.iter().zip(kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect())
     }
 
     /// The row of the effects after `does`, like `Log + State[i32]`. An
