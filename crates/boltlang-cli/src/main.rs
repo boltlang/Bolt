@@ -295,12 +295,9 @@ impl Exec for RunCommand {
             anyhow::bail!("only the evaluator gives a program arguments, not `--wasm`, for now");
         }
         let result = if self.wasm {
-            let bytes = match boltlang_codegen_conduit::wasm::build(&program, true) {
-                Ok(bytes) => bytes,
-                Err(error) => {
-                    eprintln!("error: {error}");
-                    return Ok(false);
-                }
+            let Some(bytes) = ok_or_print(boltlang_codegen_conduit::wasm::build(&program, true))
+            else {
+                return Ok(false);
             };
             let host = node_host("bolt run --wasm")?;
             let module = host.dir.join("main.wasm");
@@ -310,13 +307,7 @@ impl Exec for RunCommand {
             run_with_args(&program, program.entry, self.fuel, self.args.clone())
                 .map_err(|e| e.to_string())
         };
-        match result {
-            Ok(()) => Ok(true),
-            Err(error) => {
-                eprintln!("error: {error}");
-                Ok(false)
-            }
-        }
+        Ok(ok_or_print(result).is_some())
     }
 }
 
@@ -360,24 +351,20 @@ impl Exec for TestCommand {
             let module = match &wasm {
                 Some(wasm) => {
                     let exports: Vec<_> = tests.iter().map(|(n, f)| (*f, n.as_str())).collect();
-                    match boltlang_codegen_conduit::wasm::build_exporting(&program, true, &exports)
-                    {
-                        Ok(bytes) => {
-                            let path = wasm.dir.join(format!("{index}.wasm"));
-                            std::fs::write(&path, bytes)?;
-                            Some(path)
-                        }
-                        Err(error) => {
-                            eprintln!("error: {error}");
-                            println!(
-                                "{}: not run, since it can't be compiled",
-                                display_path(&db, file)
-                            );
-                            skipped += count;
-                            ok = false;
-                            continue;
-                        }
-                    }
+                    let built =
+                        boltlang_codegen_conduit::wasm::build_exporting(&program, true, &exports);
+                    let Some(bytes) = ok_or_print(built) else {
+                        println!(
+                            "{}: not run, since it can't be compiled",
+                            display_path(&db, file)
+                        );
+                        skipped += count;
+                        ok = false;
+                        continue;
+                    };
+                    let path = wasm.dir.join(format!("{index}.wasm"));
+                    std::fs::write(&path, bytes)?;
+                    Some(path)
                 }
                 None => None,
             };
@@ -408,6 +395,11 @@ impl Exec for TestCommand {
         println!("test result: {result}. {passed} passed; {failed} failed{skipped}");
         Ok(ok && failed == 0)
     }
+}
+
+/// What `result` holds, or `None` after printing its error.
+fn ok_or_print<T>(result: Result<T, impl std::fmt::Display>) -> Option<T> {
+    result.map_err(|error| eprintln!("error: {error}")).ok()
 }
 
 /// `file` and what it uses, lowered to Conduit, or `None` after saying why
@@ -456,12 +448,10 @@ impl Exec for BuildCommand {
             return Ok(false);
         }
         let Some(program) = lowered(&db, file) else { return Ok(false) };
-        let bytes = match boltlang_codegen_conduit::wasm::build(&program, !self.no_opt) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                eprintln!("error: {error}");
-                return Ok(false);
-            }
+        let Some(bytes) =
+            ok_or_print(boltlang_codegen_conduit::wasm::build(&program, !self.no_opt))
+        else {
+            return Ok(false);
         };
         let output = match &self.output {
             Some(path) => path.clone(),
