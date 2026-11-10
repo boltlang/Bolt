@@ -5,7 +5,6 @@ use filetime::FileTime;
 use rustc_hash::FxHashMap;
 
 use crate::system::{
-    SystemVirtualPath,
     common::{file_not_found, other_error},
     file_time_now,
 };
@@ -19,7 +18,6 @@ pub struct MemoryFs {
 
 pub struct MemoryFsInner {
     by_path: RwLock<FxHashMap<PathBuf, Entry>>,
-    virtual_by_path: RwLock<FxHashMap<PathBuf, Entry>>,
     cwd: PathBuf,
 }
 
@@ -30,13 +28,7 @@ impl MemoryFs {
 
     pub fn with_cwd(cwd: impl Into<PathBuf>) -> Self {
         let cwd = cwd.into();
-        Self {
-            inner: Arc::new(MemoryFsInner {
-                by_path: RwLock::new(FxHashMap::default()),
-                virtual_by_path: RwLock::new(FxHashMap::default()),
-                cwd,
-            }),
-        }
+        Self { inner: Arc::new(MemoryFsInner { by_path: RwLock::new(FxHashMap::default()), cwd }) }
     }
 }
 
@@ -203,18 +195,6 @@ impl MemoryFs {
             Some(Entry::Directory(_)) => Err(is_a_dir()),
             None => Err(file_not_found()),
         }
-    }
-
-    pub fn write_file_bytes_virtual(
-        &self,
-        path: &SystemVirtualPath,
-        content: impl AsRef<[u8]>,
-    ) -> std::io::Result<()> {
-        let content = content.as_ref();
-        // Not `canonicalize`, which fails if the file doesn't exist yet.
-        let path = self.normalize_path(path);
-        let mut lock = self.inner.virtual_by_path.write().map_err(other_error)?;
-        write_entry(&mut lock, path, content)
     }
 }
 

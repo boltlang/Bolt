@@ -11,9 +11,7 @@ use std::{
     },
 };
 
-use boltlang_base_db::{
-    FileRevision, FileType, Metadata, System, SystemPath, SystemPathBuf, SystemVirtualPath,
-};
+use boltlang_base_db::{FileRevision, FileType, Metadata, System, SystemPath, SystemPathBuf};
 
 /// The text of an open document, and a revision that changes with each
 /// edit, so that Salsa notices it.
@@ -63,10 +61,6 @@ impl System for LspSystem {
         }
     }
 
-    fn read_virtual_path_to_string(&self, path: &SystemVirtualPath) -> Result<String> {
-        self.disk.read_virtual_path_to_string(path)
-    }
-
     fn path_metadata(&self, path: &SystemPath) -> Result<Metadata> {
         match self.open.read().unwrap().get(path) {
             Some(document) => {
@@ -74,10 +68,6 @@ impl System for LspSystem {
             }
             None => self.disk.path_metadata(path),
         }
-    }
-
-    fn virtual_path_metadata(&self, path: &SystemVirtualPath) -> Result<Metadata> {
-        self.disk.virtual_path_metadata(path)
     }
 
     fn current_directory(&self) -> Result<SystemPathBuf> {

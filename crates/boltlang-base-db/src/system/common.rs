@@ -1,8 +1,5 @@
 use crate::{
-    system::{
-        SystemPathBuf,
-        path::{SystemPath, SystemVirtualPath},
-    },
+    system::{SystemPathBuf, path::SystemPath},
     vfs::Metadata,
 };
 
@@ -19,9 +16,7 @@ pub(crate) fn other_error(error: impl std::fmt::Display) -> std::io::Error {
 /// All interactions in the Salsa database with the broader world should be provided by this trait.
 pub trait System: Send + Sync {
     fn read_to_string(&self, path: &SystemPath) -> Result<String>;
-    fn read_virtual_path_to_string(&self, path: &SystemVirtualPath) -> Result<String>;
     fn path_metadata(&self, path: &SystemPath) -> Result<Metadata>;
-    fn virtual_path_metadata(&self, path: &SystemVirtualPath) -> Result<Metadata>;
     fn current_directory(&self) -> Result<SystemPathBuf>;
     fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf>;
     /// The paths of what's in the directory at `path`, under `path`.
@@ -30,7 +25,6 @@ pub trait System: Send + Sync {
 
 pub trait WritableSystem: System {
     fn write_file_bytes(&self, path: &SystemPath, contents: &[u8]) -> Result<()>;
-    fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, contents: &[u8]) -> Result<()>;
 }
 
 use filetime::FileTime;

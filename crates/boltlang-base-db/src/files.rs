@@ -4,7 +4,7 @@ use salsa::{Durability, Setter};
 
 use crate::{
     Db, FxDashMap,
-    system::{SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf},
+    system::{SystemPath, SystemPathBuf},
     vfs::{FileRevision, Metadata},
 };
 
@@ -18,17 +18,11 @@ pub struct Files {
 #[derive(Default)]
 struct FilesInner {
     system_by_path: FxDashMap<SystemPathBuf, File>,
-    virtual_system_by_path: FxDashMap<SystemPathBuf, File>,
 }
 
 impl Files {
     pub fn new() -> Self {
-        Self {
-            inner: Arc::new(FilesInner {
-                system_by_path: FxDashMap::default(),
-                virtual_system_by_path: FxDashMap::default(),
-            }),
-        }
+        Self { inner: Arc::new(FilesInner { system_by_path: FxDashMap::default() }) }
     }
 
     pub fn try_resolve(&self, db: &dyn Db, path: &SystemPath) -> Option<File> {
@@ -74,24 +68,6 @@ impl Files {
         }
         file
     }
-
-    /// Looks up a file by its virtual `path`.
-    ///
-    /// For a non-existing file, creates a new salsa [`File`] ingredient and stores it for future lookups.
-    ///
-    /// The operation always succeeds even if the path doesn't exist on disk, isn't accessible or if the path points to a directory.
-    /// In these cases, a file with status [`FileStatus::NotFound`] is returned.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the current working directory could not be retreived, which should never happen in practical scenarios.
-    pub fn resolve_virtual(&self, db: &dyn Db, path: &SystemVirtualPath) -> File {
-        let absolute = SystemPath::absolute(path, db.system().current_directory().unwrap());
-        *self.inner.virtual_system_by_path.entry(absolute.clone()).or_insert_with(|| {
-            let metadata = db.system().virtual_path_metadata(path);
-            new_file(db, FilePath::System(absolute), metadata)
-        })
-    }
 }
 
 /// A new [`File`] at `path`, whose status and revision come from `metadata`.
@@ -107,7 +83,7 @@ fn new_file(db: &dyn Db, path: FilePath, metadata: std::io::Result<Metadata>) ->
     builder.new(db)
 }
 
-/// A file of the host system, at a real or a virtual path.
+/// A file of the host system.
 ///
 /// # Ordering
 ///
@@ -155,7 +131,6 @@ impl File {
         let _ = self.revision(db);
         match self.path(db) {
             FilePath::System(path) => db.system().read_to_string(path),
-            FilePath::SystemVirtual(path) => db.system().read_virtual_path_to_string(path),
         }
     }
 
@@ -165,11 +140,6 @@ impl File {
 
         match path {
             FilePath::System(system) => Self::sync_system_path(db, &system, Some(self)),
-            FilePath::SystemVirtual(_) => {
-                tracing::debug!("Updating the revision of `{:?}`", self.path(db));
-                let current_revision = *self.revision(db);
-                self.set_revision(db).to(FileRevision::new(current_revision.as_u128() + 1));
-            }
         }
     }
 
@@ -224,27 +194,17 @@ mod private {
     }
 }
 
-/// The path of a file, on the [host system](crate::system::System) or virtual.
+/// The path of a file, on the [host system](crate::system::System).
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum FilePath {
     /// Path to a file on the [host system](crate::system::System).
     System(SystemPathBuf),
-    /// Path to a virtual file on the [host system](crate::system::System).
-    SystemVirtual(SystemVirtualPathBuf),
 }
 
 impl FilePath {
     pub fn as_system_path_buf(&self) -> Option<&SystemPathBuf> {
         match self {
             FilePath::System(pb) => Some(pb),
-            _ => None,
-        }
-    }
-
-    pub fn to_system_virtual_path_buf(&self) -> Option<&SystemVirtualPathBuf> {
-        match self {
-            FilePath::SystemVirtual(pb) => Some(pb),
-            _ => None,
         }
     }
 }
@@ -252,11 +212,5 @@ impl FilePath {
 impl From<SystemPathBuf> for FilePath {
     fn from(value: SystemPathBuf) -> Self {
         FilePath::System(value)
-    }
-}
-
-impl From<SystemVirtualPathBuf> for FilePath {
-    fn from(value: SystemVirtualPathBuf) -> Self {
-        FilePath::SystemVirtual(value)
     }
 }

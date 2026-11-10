@@ -8,8 +8,8 @@ use filetime::FileTime;
 use crate::vfs::FileType;
 use crate::{
     system::{
-        System, SystemPath, SystemPathBuf, SystemVirtualPath,
-        common::{Result, file_not_found, other_error},
+        System, SystemPath, SystemPathBuf,
+        common::{Result, other_error},
     },
     vfs::Metadata,
 };
@@ -34,10 +34,6 @@ impl OsSystem {
 impl System for OsSystem {
     fn read_to_string(&self, path: &SystemPath) -> Result<String> {
         std::fs::read_to_string(path.as_std_path())
-    }
-
-    fn read_virtual_path_to_string(&self, _path: &SystemVirtualPath) -> Result<String> {
-        Err(file_not_found())
     }
 
     fn current_directory(&self) -> Result<SystemPathBuf> {
@@ -85,9 +81,5 @@ impl System for OsSystem {
             permissions,
             file_type,
         ))
-    }
-
-    fn virtual_path_metadata(&self, _path: &SystemVirtualPath) -> Result<Metadata> {
-        Err(file_not_found())
     }
 }

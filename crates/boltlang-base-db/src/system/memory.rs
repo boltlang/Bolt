@@ -1,9 +1,6 @@
 use crate::{
     System, SystemPath, WritableSystem,
-    system::{
-        SystemPathBuf, SystemVirtualPath,
-        common::{Result, file_not_found},
-    },
+    system::{SystemPathBuf, common::Result},
     vfs::{MemoryFs, Metadata},
 };
 
@@ -58,25 +55,13 @@ impl System for InMemorySystem {
         self.fs.metadata(path)
     }
 
-    fn virtual_path_metadata(&self, _path: &SystemVirtualPath) -> Result<Metadata> {
-        Err(file_not_found())
-    }
-
     fn read_to_string(&self, path: &SystemPath) -> Result<String> {
         self.fs.read_to_string(path)
-    }
-
-    fn read_virtual_path_to_string(&self, _path: &SystemVirtualPath) -> Result<String> {
-        Err(file_not_found())
     }
 }
 
 impl WritableSystem for InMemorySystem {
     fn write_file_bytes(&self, path: &SystemPath, content: &[u8]) -> Result<()> {
         self.fs.write_file_bytes(path, content)
-    }
-
-    fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, content: &[u8]) -> Result<()> {
-        self.fs.write_file_bytes_virtual(path, content)
     }
 }

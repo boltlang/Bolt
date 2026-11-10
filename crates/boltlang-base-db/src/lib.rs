@@ -36,10 +36,7 @@ pub use {
     files::{File, FilePath, Files},
     parse::{Parse, parse_file},
     settings::{DEFAULT_PRELUDE, Settings},
-    system::{
-        InMemorySystem, System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf,
-        WritableSystem,
-    },
+    system::{InMemorySystem, System, SystemPath, SystemPathBuf, WritableSystem},
     target::{Arch, Endian, Host, Target},
     text::source_text,
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},

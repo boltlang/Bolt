@@ -570,7 +570,6 @@ fn display_path(db: &dyn Db, file: File) -> String {
             let relative = cwd.as_ref().and_then(|cwd| path.strip_prefix(cwd.as_std_path()).ok());
             relative.unwrap_or(path).display().to_string()
         }
-        FilePath::SystemVirtual(path) => path.clone(),
     }
 }
 

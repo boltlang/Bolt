@@ -88,7 +88,6 @@ impl Workspace {
     fn uri_of(&self, file: File) -> Option<Uri> {
         match file.path(&self.db) {
             FilePath::System(path) => file_uri(self.opened.get(path).unwrap_or(path)),
-            FilePath::SystemVirtual(_) => None,
         }
     }
 
