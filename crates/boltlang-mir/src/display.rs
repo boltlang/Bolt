@@ -449,7 +449,7 @@ fn const_name(db: &dyn Db, c: ConstId<'_>) -> String {
 
 /// `Show[i32].` for an item of an impl, `Show.` for one of a class, and
 /// `State.` for an operation of an effect.
-fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
+pub fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
     match container {
         ItemContainerId::Impl(imp) => match &impl_header(db, imp).class {
             Some(c) => {

@@ -11,12 +11,12 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     GenericParamId, Ty, function_scheme,
-    lower::{ClassConstraint, const_ty, identity_args, impl_header},
+    lower::{ClassConstraint, const_ty, identity_args},
     scheme::generic_param_ids,
     ty::is_hidden_param,
 };
 
-use boltlang_mir::Shim;
+use boltlang_mir::{Shim, display::container_prefix};
 use boltlang_mir_transform::ctor_sig;
 use boltlang_pattern::decision::Ctor;
 
@@ -260,26 +260,6 @@ impl DisplayInstance<'_> {
             write!(f, "]")?;
         }
         Ok(())
-    }
-}
-
-/// `Show[i32].` for an item of an impl, `Show.` for one of a class, and
-/// `State.` for an operation of an effect.
-fn container_prefix(db: &dyn Db, container: ItemContainerId<'_>) -> String {
-    match container {
-        ItemContainerId::Impl(imp) => match &impl_header(db, imp).class {
-            Some(c) => {
-                let args: Vec<String> = c.args.iter().map(|t| t.display(db).to_string()).collect();
-                format!("{}[{}].", class_name(db, c.class), args.join(", "))
-            }
-            None => "impl.".to_string(),
-        },
-        ItemContainerId::Class(class) => format!("{}.", class_name(db, class)),
-        ItemContainerId::Effect(effect) => match &effect.item(db).name {
-            Some(name) => format!("{name}."),
-            None => String::new(),
-        },
-        ItemContainerId::File(_) => String::new(),
     }
 }
 
