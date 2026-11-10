@@ -127,7 +127,8 @@ impl<'db> MonoRow<'db> {
         row
     }
 
-    fn any_ty(&self, f: &mut dyn FnMut(&MonoTy<'db>) -> bool) -> bool {
+    /// Whether `f` holds for a type in the arguments of the row's effects.
+    pub(crate) fn any_ty(&self, f: &mut dyn FnMut(&MonoTy<'db>) -> bool) -> bool {
         self.effects.iter().flat_map(|e| e.args.iter()).any(f)
     }
 }
