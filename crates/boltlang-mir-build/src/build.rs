@@ -236,6 +236,18 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         true
     }
 
+    /// What a `let` or a `for` with the pattern `pat` binds: a local, or
+    /// the decision of a pattern that can fail. `None` when the decision
+    /// couldn't be made.
+    fn pattern(&mut self, pat: PatId) -> Option<Pattern<'db>> {
+        if let Some(local) = self.simple_pattern(pat) {
+            return Some(Pattern::Local(local));
+        }
+        let decision = self.let_decision(pat)?;
+        self.declare_in(&[pat]);
+        Some(Pattern::Decision(Box::new(decision)))
+    }
+
     fn let_decision(&self, pat: PatId) -> Option<Decision<'db>> {
         let (_, found) = self.cx.decisions.lets.iter().find(|(p, _)| *p == pat)?;
         found.as_ref().ok().cloned()
@@ -1150,18 +1162,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     fn stmt(&mut self, s: &Statement) -> Option<Stmt<'db>> {
         Some(match s {
             Statement::Let { pat, initializer, else_branch, .. } => {
-                let pattern = match self.simple_pattern(*pat) {
-                    Some(local) => Pattern::Local(local),
-                    None => match self.let_decision(*pat) {
-                        Some(d) => {
-                            self.declare_in(&[*pat]);
-                            Pattern::Decision(Box::new(d))
-                        }
-                        None => {
-                            let at = initializer.unwrap_or(self.cx.hir.body_expr);
-                            return Some(Stmt::Expr(self.unsupported(at, "this pattern")));
-                        }
-                    },
+                let Some(pattern) = self.pattern(*pat) else {
+                    let at = initializer.unwrap_or(self.cx.hir.body_expr);
+                    return Some(Stmt::Expr(self.unsupported(at, "this pattern")));
                 };
                 let init = initializer.map(|i| self.expr(i));
                 let else_ = else_branch.map(|x| self.expr(x));
@@ -1204,15 +1207,8 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         let db = self.db;
         // `for x in ..`, or a pattern like `(x, y)`, which matches each item
         // as a `let` does.
-        let pattern = match self.simple_pattern(pat) {
-            Some(local) => Pattern::Local(local),
-            None => match self.let_decision(pat) {
-                Some(d) => {
-                    self.declare_in(&[pat]);
-                    Pattern::Decision(Box::new(d))
-                }
-                None => return self.unsupported(e, "this pattern here"),
-            },
+        let Some(pattern) = self.pattern(pat) else {
+            return self.unsupported(e, "this pattern here");
         };
         let iterable_ty = self.ty(iterable);
         let found = (|| {
