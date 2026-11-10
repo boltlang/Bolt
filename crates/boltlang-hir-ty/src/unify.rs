@@ -5,9 +5,10 @@
 //! The variables are a union-find table: a variable is either unbound, or
 //! bound to a type, which may be another variable.
 
-use boltlang_hir_def::builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType};
-
-use boltlang_hir_def::Name;
+use boltlang_hir_def::{
+    Name,
+    builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType},
+};
 
 use crate::ty::{Mutability, NumberKind, PackHalf, TupleParts, Ty, TyVar, VarKind};
 
@@ -474,8 +475,7 @@ impl<'db> Unifier<'db> {
         }
         let only_y: Vec<_> =
             y.named.iter().filter(|(n, _)| !x.named.iter().any(|(m, _)| m == n)).cloned().collect();
-        let fields = |solver: &Self, fields: Vec<(Name, Ty<'db>)>, rests: &[Ty<'db>]| {
-            let _ = solver;
+        let fields = |fields: Vec<(Name, Ty<'db>)>, rests: &[Ty<'db>]| {
             let rests = rests.iter().map(|r| Ty::Spread(PackHalf::Named, Box::new(r.clone())));
             Ty::record(rests.collect(), fields, Ty::Mutability(Mutability::Imm))
         };
@@ -483,11 +483,11 @@ impl<'db> Unifier<'db> {
         match (&x.rests[..], &y.rests[..]) {
             ([], []) if only_x.is_empty() && only_y.is_empty() => Ok(()),
             ([r], []) if is_var(self, r) && only_x.is_empty() => {
-                let pack = fields(self, only_y, &[]);
+                let pack = fields(only_y, &[]);
                 self.unify(r, &pack)
             }
             ([], [r]) if is_var(self, r) && only_y.is_empty() => {
-                let pack = fields(self, only_x, &[]);
+                let pack = fields(only_x, &[]);
                 self.unify(r, &pack)
             }
             ([r], [s]) if self.shallow_resolve(r) == self.shallow_resolve(s) => {
@@ -495,17 +495,17 @@ impl<'db> Unifier<'db> {
             }
             ([r], [s]) if is_var(self, r) && is_var(self, s) => {
                 let rest = self.new_var(VarKind::NamedPack);
-                let to_r = fields(self, only_y, std::slice::from_ref(&rest));
-                let to_s = fields(self, only_x, std::slice::from_ref(&rest));
+                let to_r = fields(only_y, std::slice::from_ref(&rest));
+                let to_s = fields(only_x, std::slice::from_ref(&rest));
                 self.unify(r, &to_r)?;
                 self.unify(s, &to_s)
             }
             ([r], [s]) if is_var(self, r) && only_x.is_empty() => {
-                let pack = fields(self, only_y, std::slice::from_ref(s));
+                let pack = fields(only_y, std::slice::from_ref(s));
                 self.unify(r, &pack)
             }
             ([r], [s]) if is_var(self, s) && only_y.is_empty() => {
-                let pack = fields(self, only_x, std::slice::from_ref(r));
+                let pack = fields(only_x, std::slice::from_ref(r));
                 self.unify(s, &pack)
             }
             _ => Err(mismatch()),

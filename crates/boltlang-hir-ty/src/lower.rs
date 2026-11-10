@@ -244,10 +244,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             return None;
         }
         match held {
-            Held::Type(ty) => {
-                let kind = None;
-                self.lower_class_constraint(bound, Some((ty, kind)))
-            }
+            Held::Type(ty) => self.lower_class_constraint(bound, Some((ty, None))),
             // A mutability has no classes.
             Held::Mutability(_) => {
                 self.diagnostics.push(LowerDiagnostic::NotAClass(bound));
