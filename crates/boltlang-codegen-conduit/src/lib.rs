@@ -15,9 +15,9 @@
 //! - The host functions, with `#[link(wasm, ..)]`, are Conduit externs, in the
 //!   module the block names, like std's `print` calls WASI's `fd_write`. A
 //!   `match` that no arm takes calls the prelude's `panic`, if there is
-//!   one, and traps. `abort` is a `trap`. An `unreachable` is only where Bolt can promise
-//!   that nothing gets, like after a call of a function that never
-//!   returns.
+//!   one, and traps. `abort` is a `trap`. An `unreachable` is only where
+//!   Bolt can promise that nothing gets, like after a call of a function
+//!   that never returns.
 //!
 //! - A lambda is lifted to a function of its own, which takes what it
 //!   captures first, as `boltlang-mir-mono` finds it, then its parameters. A
@@ -56,7 +56,6 @@ pub mod run;
 mod ty;
 pub mod wasm;
 
-use boltlang_hir_def::item_tree::LinkKind;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
@@ -67,7 +66,7 @@ use boltlang_hir_def::{
     body::{DefWithBody, body_with_source_map},
     hir::ExprId,
     ids::{EffectId, FunctionId, ItemContainerId},
-    item_tree::AssocItem,
+    item_tree::{AssocItem, LinkKind},
 };
 use boltlang_mir_build::{
     lambda::{Lambda, body_lambdas},
@@ -79,9 +78,7 @@ use boltlang_mir_mono::{
 use boltlang_mir_transform::shim_body;
 use conduit_ir::{Extern, ExternId, Func, FuncId, HandlerId, Module, MutParams, Row, Sig};
 
-use crate::func::Part;
-
-use crate::ty::Types;
+use crate::{func::Part, ty::Types};
 
 /// A program in Conduit.
 #[derive(Debug, Clone)]
@@ -590,11 +587,9 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     if let Some(instance) = boltlang_mir_mono::panic_instance(db, entry)
         && let Some(&id) = cx.funcs.get(&instance)
     {
-        let string = sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| {
-            let sig: &Sig = sig;
-            sig.params.first().cloned()
-        });
-        cx.panic = string.map(|t| (id, t));
+        let string =
+            sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| sig.params.first());
+        cx.panic = string.map(|t| (id, t.clone()));
     }
     module.data = types.decls.clone();
     for (id, (sig, mut_params, effect_params)) in &sigs {
