@@ -1041,13 +1041,7 @@ impl<'db> Collector<'db> {
         // their bounds.
         for (alias, constraint) in unmet_assoc_bounds(db, imp) {
             let Some(name) = alias.item(db).name.clone() else { continue };
-            let own = AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
-                .into_iter()
-                .find(|item| {
-                    matches!(item, AssocItemDef::TypeAlias(_))
-                        && item.name(db).as_ref() == Some(&name)
-                });
-            let range = own.map(|item| self.item_range(item.ast_id(db)));
+            let range = self.impl_type_range(imp, &name);
             self.push(
                 range,
                 DiagnosticKind::UnmetAssocBound { name, class, constraint: constraint.clone() },
@@ -1058,13 +1052,7 @@ impl<'db> Collector<'db> {
             else {
                 continue;
             };
-            let own = AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
-                .into_iter()
-                .find(|item| {
-                    matches!(item, AssocItemDef::TypeAlias(_))
-                        && item.name(db).as_ref() == Some(&name)
-                });
-            let range = own.map(|item| self.item_range(item.ast_id(db)));
+            let range = self.impl_type_range(imp, &name);
             let (expected, actual) = (expected.clone(), actual.clone());
             self.push(
                 range,
@@ -1083,6 +1071,18 @@ impl<'db> Collector<'db> {
             let range = map.type_syntax(sig.class).map(ptr_range);
             self.push(range, DiagnosticKind::MissingItems { items: missing, class });
         }
+    }
+
+    /// The name of the associated type `name` that `imp` defines, if it
+    /// defines it.
+    fn impl_type_range(&self, imp: ImplId<'db>, name: &Name) -> Option<TextRange> {
+        let db = self.db;
+        AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
+            .into_iter()
+            .find(|item| {
+                matches!(item, AssocItemDef::TypeAlias(_)) && item.name(db).as_ref() == Some(name)
+            })
+            .map(|item| self.item_range(item.ast_id(db)))
     }
 
     /// Check that a const of an impl has the type its class declares, in
