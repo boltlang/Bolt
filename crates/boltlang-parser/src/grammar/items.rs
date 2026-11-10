@@ -38,61 +38,29 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
         return Ok(());
     }
     let has_visibility = opt_visibility(p);
-    if at_fn(p) {
-        fn_item(p, m);
-        return Ok(());
-    }
     match p.current() {
-        T![struct] => {
-            struct_item(p, m);
-            return Ok(());
-        }
+        _ if at_fn(p) => fn_item(p, m),
+        T![struct] => struct_item(p, m),
         // `imm struct String([u8]);`: a struct whose values are all `imm`.
         T![imm] if p.nth_at(1, T![struct]) => {
             p.bump(T![imm]);
             struct_item(p, m);
-            return Ok(());
         }
-        T![enum] => {
-            enum_item(p, m);
-            return Ok(());
+        T![enum] => enum_item(p, m),
+        T![const] if p.nth_at(1, IDENT) => const_item(p, m),
+        T![type] => type_alias(p, m),
+        T![class] => class_item(p, m),
+        T![effect] => effect_item(p, m),
+        T![impl] => impl_item(p, m),
+        T![extern] => extern_block(p, m),
+        T![import] => import_item(p, m),
+        _ if has_visibility => {
+            p.error("expected an item after the visibility");
+            m.complete(p, ERROR);
         }
-        T![const] if p.nth_at(1, IDENT) => {
-            const_item(p, m);
-            return Ok(());
-        }
-        T![type] => {
-            type_alias(p, m);
-            return Ok(());
-        }
-        T![class] => {
-            class_item(p, m);
-            return Ok(());
-        }
-        T![effect] => {
-            effect_item(p, m);
-            return Ok(());
-        }
-        T![impl] => {
-            impl_item(p, m);
-            return Ok(());
-        }
-        T![extern] => {
-            extern_block(p, m);
-            return Ok(());
-        }
-        T![import] => {
-            import_item(p, m);
-            return Ok(());
-        }
-        _ => {}
+        _ => return Err(m),
     }
-    if has_visibility {
-        p.error("expected an item after the visibility");
-        m.complete(p, ERROR);
-        return Ok(());
-    }
-    Err(m)
+    Ok(())
 }
 
 /// Whether a named function starts here, possibly after modifiers like
