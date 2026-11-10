@@ -274,42 +274,52 @@ pub fn trials(
     mut updated: impl FnMut(&Case) -> Option<Vec<String>>,
     mut trial: impl FnMut(String, Case) -> Result<Trial, String>,
 ) -> Vec<Trial> {
+    data_files(root)
+        .iter()
+        .flat_map(|path| file_trials(root, path, max_sections, &mut updated, &mut trial))
+        .collect()
+}
+
+/// The tests of the cases of the data file `path` of `root`, as [`trials`]
+/// makes them, for a harness that treats its files differently.
+pub fn file_trials(
+    root: &Path,
+    path: &Path,
+    max_sections: usize,
+    mut updated: impl FnMut(&Case) -> Option<Vec<String>>,
+    mut trial: impl FnMut(String, Case) -> Result<Trial, String>,
+) -> Vec<Trial> {
     let fail = |name: String, message: String| Trial::test(name, move || Err(message.into()));
-    let mut trials = Vec::new();
-    for path in data_files(root) {
-        let stem = data_name(root, &path);
-        let mut text = std::fs::read_to_string(&path).unwrap();
-        if updating()
-            && let Ok(cases) = parse_cases(&text, max_sections)
-        {
-            let new = update(&text, &cases, &mut updated);
-            if new != text {
-                std::fs::write(&path, &new).unwrap();
-                text = new;
-            }
+    let stem = data_name(root, path);
+    let mut text = std::fs::read_to_string(path).unwrap();
+    if updating()
+        && let Ok(cases) = parse_cases(&text, max_sections)
+    {
+        let new = update(&text, &cases, &mut updated);
+        if new != text {
+            std::fs::write(path, &new).unwrap();
+            text = new;
         }
-        let cases = match parse_cases(&text, max_sections) {
-            Ok(cases) => cases,
-            Err(error) => {
-                trials.push(fail(stem, format!("{}: {error}", path.display())));
-                continue;
-            }
-        };
-        let mut seen = Vec::new();
-        for case in cases {
-            let name = format!("{stem}::{}", slug(&case.title));
-            if seen.contains(&name) {
-                trials.push(fail(
-                    format!("{name}_again"),
-                    format!("{}: two cases are called `{}`", path.display(), case.title),
-                ));
-                continue;
-            }
-            seen.push(name.clone());
-            match trial(name.clone(), case) {
-                Ok(t) => trials.push(t),
-                Err(error) => trials.push(fail(name, format!("{}: {error}", path.display()))),
-            }
+    }
+    let cases = match parse_cases(&text, max_sections) {
+        Ok(cases) => cases,
+        Err(error) => return vec![fail(stem, format!("{}: {error}", path.display()))],
+    };
+    let mut trials = Vec::new();
+    let mut seen = Vec::new();
+    for case in cases {
+        let name = format!("{stem}::{}", slug(&case.title));
+        if seen.contains(&name) {
+            trials.push(fail(
+                format!("{name}_again"),
+                format!("{}: two cases are called `{}`", path.display(), case.title),
+            ));
+            continue;
+        }
+        seen.push(name.clone());
+        match trial(name.clone(), case) {
+            Ok(t) => trials.push(t),
+            Err(error) => trials.push(fail(name, format!("{}: {error}", path.display()))),
         }
     }
     trials
