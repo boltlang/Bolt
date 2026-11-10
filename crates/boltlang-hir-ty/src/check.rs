@@ -30,8 +30,8 @@ use crate::{
     },
     solve::{
         AssocConstraint, AtMostConstraint, Constraint, ConstraintSource, ExprOrPat,
-        FieldConstraint, Origin, Solver, TypeError, normalize_assoc, prune_implied_errors,
-        resolve_error, unsolved_error, vars_in, visible_impls,
+        FieldConstraint, Origin, Solver, TypeError, has_vars, normalize_assoc,
+        prune_implied_errors, resolve_error, unsolved_error, vars_in, visible_impls,
     },
     ty::{Mutability, Ty, TyVar, VarKind},
     unify::Unifier,
@@ -198,9 +198,7 @@ pub fn unmet_assoc_equalities<'db>(
         for (equality, _) in assoc_type_bounds(db, alias).equalities.iter() {
             let expected = own(&equality.ty);
             let args: Box<[Ty<'db>]> = equality.args.iter().map(&own).collect();
-            if expected.any(&mut |t| *t == Ty::Error)
-                || args.iter().any(|t| t.any(&mut |t| *t == Ty::Error))
-            {
+            if expected.has_error() || args.iter().any(Ty::has_error) {
                 continue;
             }
             let mut solver = assuming.clone();
@@ -325,10 +323,7 @@ fn implied_assumptions<'db>(
             split(db, arg, &mutable, &mut out);
         }
     }
-    out.retain(|a| {
-        !a.held.ty().any(&mut |t| matches!(t, Ty::Var(_)))
-            && !a.bound.any(&mut |t| matches!(t, Ty::Var(_)))
-    });
+    out.retain(|a| !has_vars(a.held.ty()) && !has_vars(&a.bound));
     out
 }
 
@@ -688,7 +683,7 @@ impl<'db> Solved<'_, 'db> {
                 if !predicates.iter().any(|(p, _)| *p == predicate) {
                     predicates.push((predicate, Some(source_in_body(origin))));
                 }
-            } else if !constraint.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+            } else if !constraint.args.iter().any(Ty::has_error) {
                 // Not about a type that's unknown because of an error, which
                 // is reported already.
                 let assumed: Vec<_> = predicates.iter().map(|(p, _)| p.clone()).collect();

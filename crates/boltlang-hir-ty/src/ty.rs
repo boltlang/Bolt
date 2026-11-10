@@ -844,6 +844,12 @@ impl<'db> Ty<'db> {
         found
     }
 
+    /// Whether the error type is in this type, which means an error about
+    /// it was already reported.
+    pub(crate) fn has_error(&self) -> bool {
+        self.any(&mut |t| *t == Ty::Error)
+    }
+
     /// A value that shows this type as Bolt code. Types still being
     /// inferred are shown as `?0`, `?1`, ...; see [`Ty::display_with`] for
     /// readable names.

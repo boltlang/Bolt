@@ -1757,7 +1757,7 @@ pub fn impl_header<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplHeader<'db> {
 pub fn unused_impl_params<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<u32> {
     let def = GenericDefId::Impl(imp);
     let Some(class) = &impl_header(db, imp).class else { return Vec::new() };
-    if class.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+    if class.args.iter().any(Ty::has_error) {
         return Vec::new();
     }
     let count = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();

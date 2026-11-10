@@ -48,8 +48,7 @@ pub fn impls_overlap<'db>(db: &'db dyn Db, a: ImplId<'db>, b: ImplId<'db>) -> bo
         return false;
     }
     // An instance with an error is reported on its own, and would fit anything.
-    let has_error =
-        |c: &ClassConstraint<'db>| c.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error));
+    let has_error = |c: &ClassConstraint<'db>| c.args.iter().any(Ty::has_error);
     if has_error(x) || has_error(y) {
         return false;
     }
@@ -114,7 +113,7 @@ pub fn functions_overlap<'db>(db: &'db dyn Db, a: FunctionId<'db>, b: FunctionId
     let y = y.probe_with(&mut || unifier.new_var(VarKind::General));
     let (Ty::Fn(xs, _, _, _), Ty::Fn(ys, _, _, _)) = (&x, &y) else { return false };
     // A type with an error is reported on its own, and would fit anything.
-    if xs.tys().chain(ys.tys()).any(|t| t.any(&mut |t| *t == Ty::Error)) {
+    if xs.tys().chain(ys.tys()).any(Ty::has_error) {
         return false;
     }
     // A call fits both when their parameters unify, by position and by

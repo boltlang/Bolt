@@ -1397,7 +1397,7 @@ impl<'db> Solver<'db> {
     /// enough. Returns `false` if it has to wait.
     fn solve_assoc(&mut self, constraint: &AssocConstraint<'db>, origin: Origin<'db>) -> bool {
         let goal = constraint.class(self.db).map(|t| self.unifier.resolve(t));
-        if goal.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+        if goal.args.iter().any(Ty::has_error) {
             self.unifier.set_error(&constraint.ty);
             return true;
         }
@@ -1901,7 +1901,7 @@ impl<'db> Solver<'db> {
 
     fn try_solve(&self, goal: &ClassConstraint<'db>) -> Step<'db> {
         // An error type somewhere means an error was already reported.
-        if goal.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+        if goal.args.iter().any(Ty::has_error) {
             return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
         if self.assumptions.contains(goal) {
