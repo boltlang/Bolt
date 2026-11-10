@@ -286,37 +286,16 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         // ref.
         if self.is_lambda {
             for c in self.mir.captures.clone() {
-                let local = match self.cty(&self.local_ty(c.local)?)? {
-                    Some(_) => {
-                        next += 1;
-                        let p = self.b.param(next - 1);
-                        if let Some(name) = self.local_name(c.local) {
-                            self.var_names.entry(p).or_insert(name);
-                        }
-                        if c.by_ref {
-                            LocalVal::Ref(p)
-                        } else {
-                            LocalVal::Value(Some(Atom::Var(p)))
-                        }
-                    }
-                    None => LocalVal::Value(None),
-                };
-                self.locals.insert(c.local, local);
+                self.bind_param(c.local, c.by_ref, &mut next)?;
             }
         }
         // The parameters: each of a type with values is one of Conduit's.
         if !self.mir.param_kinds.is_empty() {
-            self.bind_params(next)?;
+            self.bind_params(&mut next)?;
         } else {
             for local in self.mir.params.clone() {
-                let value = match self.cty(&self.local_ty(local)?)? {
-                    Some(_) => {
-                        next += 1;
-                        Some(Atom::Var(self.b.param(next - 1)))
-                    }
-                    None => None,
-                };
-                self.bind(local, value)?;
+                let p = self.next_param(&self.local_ty(local)?, &mut next)?;
+                self.bind(local, p.map(Atom::Var))?;
             }
         }
         let result = self.expr(self.mir.root)?;
@@ -335,23 +314,16 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     /// `*args` or `**opts` to what it's given, laid out flat as its function
     /// type is: the positional ones, then the arguments `*args` takes, then
     /// the keyword ones in the order of their names, of which `**opts`
-    /// takes those that aren't parameters of their own. `first` is the
-    /// first of Conduit's parameters.
-    fn bind_params(&mut self, first: usize) -> R<()> {
+    /// takes those that aren't parameters of their own. `next` is the
+    /// next of Conduit's parameters.
+    fn bind_params(&mut self, next: &mut usize) -> R<()> {
         use boltlang_hir_def::hir::ParamKind;
         let MonoTy::Fn(flat, names, ..) = self.lcx.instance_ty()? else {
             return Err(ErrorKind::unsupported("a function whose type isn't a function"));
         };
-        let mut next = first;
         let mut given = Vec::new();
         for t in flat.iter() {
-            given.push(match self.cty(t)? {
-                Some(_) => {
-                    next += 1;
-                    Some(Atom::Var(self.b.param(next - 1)))
-                }
-                None => None,
-            });
+            given.push(self.next_param(t, next)?.map(Atom::Var));
         }
         let split = flat.len() - names.len();
         let kinds = self.mir.param_kinds.clone();
@@ -409,20 +381,35 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
     fn bind_given(&mut self, locals: &[Local], next: &mut usize) -> R<()> {
         for &local in locals {
             let mutable = self.mir.local(local).is_some_and(|d| d.mutable);
-            let slot = match self.cty(&self.local_ty(local)?)? {
-                Some(_) => {
-                    *next += 1;
-                    let p = self.b.param(*next - 1);
-                    if let Some(name) = self.local_name(local) {
-                        self.var_names.entry(p).or_insert(name);
-                    }
-                    if mutable { LocalVal::Ref(p) } else { LocalVal::Value(Some(Atom::Var(p))) }
-                }
-                None => LocalVal::Value(None),
-            };
-            self.locals.insert(local, slot);
+            self.bind_param(local, mutable, next)?;
         }
         Ok(())
+    }
+
+    /// Bind `local` to the next of Conduit's parameters, if its type has
+    /// values, as its ref if `by_ref`.
+    fn bind_param(&mut self, local: Local, by_ref: bool, next: &mut usize) -> R<()> {
+        let slot = match self.next_param(&self.local_ty(local)?, next)? {
+            Some(p) => {
+                if let Some(name) = self.local_name(local) {
+                    self.var_names.entry(p).or_insert(name);
+                }
+                if by_ref { LocalVal::Ref(p) } else { LocalVal::Value(Some(Atom::Var(p))) }
+            }
+            None => LocalVal::Value(None),
+        };
+        self.locals.insert(local, slot);
+        Ok(())
+    }
+
+    /// The parameter `next` of Conduit's, which is then the one after it,
+    /// for a value of type `t`, or none if `t` has no values.
+    fn next_param(&mut self, t: &MonoTy<'db>, next: &mut usize) -> R<Option<conduit_ir::Var>> {
+        if self.cty(t)?.is_none() {
+            return Ok(None);
+        }
+        *next += 1;
+        Ok(Some(self.b.param(*next - 1)))
     }
 
     /// A function of the handler of the `match` with effect arms `e`: its
@@ -477,10 +464,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 let (tys, _) = crate::op_params(db, self.cx.root, key, op)?;
                 let mut args = Vec::new();
                 for t in &tys {
-                    if self.cty(t)?.is_some() {
-                        args.push(Atom::Var(self.b.param(next)));
-                        next += 1;
-                    }
+                    args.extend(self.next_param(t, &mut next)?.map(Atom::Var));
                 }
                 let k = Atom::Var(self.b.param(next));
                 let t = crate::op_args_tuple(&tys);
