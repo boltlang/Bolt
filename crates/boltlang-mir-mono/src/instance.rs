@@ -396,12 +396,13 @@ pub fn instance_generics<'db>(
             };
             Ok(Generics { params: sig.params, kinds, predicates, ty: sig.ty })
         }
-        // `fn(T) -> imm T` for the type `T` it copies, whose bound variables
-        // are the mutabilities of the code that copies.
+        // The operation's.
         InstanceDef::Shim(Shim::Op(op)) => {
             let body = DefWithBodyId::new(db, DefWithBody::Function(*op));
             generics(db, body).clone()
         }
+        // `fn(T) -> imm T` for the type `T` it copies, whose bound variables
+        // are the mutabilities of the code that copies.
         InstanceDef::Shim(Shim::ImmDeep(ty)) => {
             let mut bound = 0;
             ty.any(&mut |t| {
