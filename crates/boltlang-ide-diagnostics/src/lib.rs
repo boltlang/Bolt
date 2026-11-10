@@ -289,34 +289,7 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
             {
                 names = TyNames::explicit(db, &types_in(&d.kind));
             }
-            let mut labels = match &d.kind {
-                // Where in `bolt.toml` the error is.
-                DiagnosticKind::BadManifest { manifest, message, range } => vec![Label {
-                    file: *manifest,
-                    range: range.unwrap_or_default(),
-                    message: message.clone(),
-                }],
-                DiagnosticKind::OverlappingImpl { other_file, other_range, .. } => vec![Label {
-                    file: *other_file,
-                    range: *other_range,
-                    message: "the impl it overlaps".to_string(),
-                }],
-                DiagnosticKind::OverlappingFunction { other_file, other_range, .. } => {
-                    vec![Label {
-                        file: *other_file,
-                        range: *other_range,
-                        message: "the function it overlaps".to_string(),
-                    }]
-                }
-                DiagnosticKind::TypeMismatch { because: Some(because), .. }
-                | DiagnosticKind::NoInstance { because: Some(because), .. }
-                | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
-                | DiagnosticKind::NoSuchField { because: Some(because), .. }
-                | DiagnosticKind::NotAtMost { because: Some(because), .. } => {
-                    vec![because_label(db, &names, because)]
-                }
-                _ => Vec::new(),
-            };
+            let mut labels = labels(db, &names, &d.kind);
             let (code, mut message) = describe(
                 db,
                 &names,
@@ -345,6 +318,39 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
             }
         })
         .collect()
+}
+
+/// The labels of a diagnostic that its kind gives, like where a type was
+/// expected.
+fn labels(db: &dyn Db, names: &TyNames, kind: &DiagnosticKind<'_>) -> Vec<Label> {
+    match kind {
+        // Where in `bolt.toml` the error is.
+        DiagnosticKind::BadManifest { manifest, message, range } => vec![Label {
+            file: *manifest,
+            range: range.unwrap_or_default(),
+            message: message.clone(),
+        }],
+        DiagnosticKind::OverlappingImpl { other_file, other_range, .. } => vec![Label {
+            file: *other_file,
+            range: *other_range,
+            message: "the impl it overlaps".to_string(),
+        }],
+        DiagnosticKind::OverlappingFunction { other_file, other_range, .. } => {
+            vec![Label {
+                file: *other_file,
+                range: *other_range,
+                message: "the function it overlaps".to_string(),
+            }]
+        }
+        DiagnosticKind::TypeMismatch { because: Some(because), .. }
+        | DiagnosticKind::NoInstance { because: Some(because), .. }
+        | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
+        | DiagnosticKind::NoSuchField { because: Some(because), .. }
+        | DiagnosticKind::NotAtMost { because: Some(because), .. } => {
+            vec![because_label(db, names, because)]
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// The diagnostics of a `bolt.toml`, in it: that it can't be read, and
