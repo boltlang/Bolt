@@ -687,6 +687,17 @@ pub enum Slot<'db> {
     Row(MonoRow<'db>),
 }
 
+/// Where the slot of `t` is, in the slots of a scheme whose parameters
+/// are `params`, if `t` is one of them or a bound variable, whose slots
+/// come after theirs.
+pub(crate) fn slot_index(params: &[GenericParamId<'_>], t: &Ty<'_>) -> Option<usize> {
+    match t {
+        Ty::Param(p) => params.iter().position(|q| q == p),
+        Ty::Bound(i) => Some(params.len() + *i as usize),
+        _ => None,
+    }
+}
+
 /// The parameters of a function type laid out flat, with the names of the
 /// keyword ones at the end, as [`MonoTy::Fn`] has them.
 type FlatParams<'db> = (Box<[MonoTy<'db>]>, Box<[Name]>);
@@ -713,11 +724,7 @@ pub(crate) struct Subst<'a, 'db> {
 
 impl<'db> Subst<'_, 'db> {
     fn slot(&self, ty: &Ty<'db>) -> Option<&Slot<'db>> {
-        match ty {
-            Ty::Param(p) => self.params.iter().position(|q| q == p).and_then(|i| self.slots.get(i)),
-            Ty::Bound(i) => self.slots.get(self.params.len() + *i as usize),
-            _ => None,
-        }
+        self.slots.get(slot_index(self.params, ty)?)
     }
 
     /// A tuple type, with the packs spread in it spliced in: a positional

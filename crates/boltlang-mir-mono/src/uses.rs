@@ -47,7 +47,7 @@ use crate::{
         Generics, GenericsError, Instance, InstanceDef, Kind, MonoConstraint, generics,
         instance_generics,
     },
-    ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError},
+    ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError, slot_index},
 };
 
 /// What a use of a function or constant is in an instance.
@@ -829,13 +829,8 @@ pub(crate) fn bind<'db>(
     ty: &MonoTy<'db>,
     found: &mut [Option<Slot<'db>>],
 ) {
-    let index = |t: &Ty<'db>| match t {
-        Ty::Param(p) => params.iter().position(|q| q == p),
-        Ty::Bound(i) => Some(params.len() + *i as usize),
-        _ => None,
-    };
     let bind_mut = |p: &Ty<'db>, m: MonoMut, found: &mut [Option<Slot<'db>>]| {
-        if let Some(slot) = index(p).and_then(|i| found.get_mut(i)) {
+        if let Some(slot) = slot_index(params, p).and_then(|i| found.get_mut(i)) {
             slot.get_or_insert(Slot::Mut(m));
         }
     };
@@ -849,7 +844,7 @@ pub(crate) fn bind<'db>(
         bind_row(params, pattern, row, found);
         return;
     }
-    if let Some(i) = index(pattern) {
+    if let Some(i) = slot_index(params, pattern) {
         if let Some(slot) = found.get_mut(i) {
             slot.get_or_insert_with(|| Slot::Ty(ty.clone()));
         }
@@ -928,12 +923,7 @@ fn bind_tuple<'db>(
         _ => return,
     };
     let set = |pack: &Ty<'db>, value: MonoTy<'db>, found: &mut [Option<Slot<'db>>]| {
-        let i = match pack {
-            Ty::Param(p) => params.iter().position(|q| q == p),
-            Ty::Bound(i) => Some(params.len() + *i as usize),
-            _ => None,
-        };
-        if let Some(slot) = i.and_then(|i| found.get_mut(i)) {
+        if let Some(slot) = slot_index(params, pack).and_then(|i| found.get_mut(i)) {
             slot.get_or_insert(Slot::Ty(value));
         }
     };
@@ -973,12 +963,7 @@ fn bind_tuple<'db>(
         };
         set(pack, value, found);
     }
-    if let Some(i) = match &parts.mutability {
-        Ty::Param(p) => params.iter().position(|q| q == p),
-        Ty::Bound(i) => Some(params.len() + *i as usize),
-        _ => None,
-    } && let Some(slot) = found.get_mut(i)
-    {
+    if let Some(slot) = slot_index(params, &parts.mutability).and_then(|i| found.get_mut(i)) {
         slot.get_or_insert(Slot::Mut(own));
     }
 }
@@ -1000,12 +985,9 @@ fn bind_row<'db>(
         left = left.without(e.effect);
     }
     for part in rest {
-        let i = match part {
-            Ty::Param(p) => params.iter().position(|q| *q == p),
-            Ty::Bound(i) => Some(params.len() + i as usize),
-            _ => None,
+        let Some(slot) = slot_index(params, &part).and_then(|i| found.get_mut(i)) else {
+            continue;
         };
-        let Some(slot) = i.and_then(|i| found.get_mut(i)) else { continue };
         *slot = Some(match slot.take() {
             Some(Slot::Row(had)) => Slot::Row(had.union(&left)),
             _ => Slot::Row(left.clone()),
