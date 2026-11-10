@@ -300,7 +300,9 @@ impl<'a, 'db> Cx<'a, 'db> {
                     return Err(UseError::UnknownType);
                 };
                 let args = match (class_args, item) {
-                    (Some(given), _) => self.mono_args(given.iter())?,
+                    (Some(given), _) => {
+                        given.iter().map(|t| self.ty(t)).collect::<Result<_, _>>()?
+                    }
                     (None, ClassItem::Function(f)) => self.class_args_of_use(class, use_ty, *f)?,
                     (None, ClassItem::Const(_)) => return Err(UseError::UnknownType),
                 };
@@ -414,16 +416,6 @@ impl<'a, 'db> Cx<'a, 'db> {
             .filter(|&&p| !is_hidden_param(self.db, p))
             .map(|p| found_ty(callee, &found, p))
             .collect()
-    }
-
-    fn mono_args<'t>(
-        &self,
-        tys: impl Iterator<Item = &'t Ty<'db>>,
-    ) -> Result<Vec<MonoTy<'db>>, UseError>
-    where
-        'db: 't,
-    {
-        tys.map(|t| self.ty(t)).collect()
     }
 
     /// The use of a body in the source with the type `use_ty`.
@@ -562,7 +554,6 @@ impl<'a, 'db> Cx<'a, 'db> {
         let def = GenericDefId::Impl(imp);
         let params = generic_param_ids(db, [def]);
         let slots = fill_slots(db, &params, found);
-        let erased_slots: Vec<Slot<'db>> = slots.clone();
         let mut subs = Vec::new();
         let generics = Generics {
             params: params.clone(),
@@ -570,8 +561,9 @@ impl<'a, 'db> Cx<'a, 'db> {
             predicates: Box::new([]),
             ty: Ty::unit(),
         };
+        // The impl isn't erased further: its types are what `c` gives.
         for p in generic_predicates(db, def).predicates.iter() {
-            self.push_dict(&generics, p, &slots, &erased_slots, &mut subs)?;
+            self.push_dict(&generics, p, &slots, &slots, &mut subs)?;
         }
         let args = slots
             .into_iter()
