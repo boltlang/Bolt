@@ -889,7 +889,7 @@ impl<'db> Collector<'db> {
             // One that never returns, like one that always panics, is fine:
             // its result is `!`, or, when inferred, any type.
             && !matches!(**ret, Ty::Never | Ty::Bound(_))
-            && !ret.any(&mut |t| *t == Ty::Error)
+            && !has_error(ret)
         {
             self.push(range, DiagnosticKind::BadTest { reason: BadTest::Result });
         }
@@ -1187,16 +1187,10 @@ impl<'db> Collector<'db> {
             _ => false,
         };
         let bytes = |t: &Ty<'db>| {
+            use boltlang_hir_def::builtin_type::{BuiltinInt, BuiltinType, BuiltinUint};
             matches!(
                 t,
-                Ty::Builtin(boltlang_hir_def::builtin_type::BuiltinType::Uint(
-                    boltlang_hir_def::builtin_type::BuiltinUint::U8
-                ))
-            ) || matches!(
-                t,
-                Ty::Builtin(boltlang_hir_def::builtin_type::BuiltinType::Int(
-                    boltlang_hir_def::builtin_type::BuiltinInt::I8
-                ))
+                Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8) | BuiltinType::Int(BuiltinInt::I8))
             )
         };
         for (i, ty) in sig.params.iter().enumerate() {
@@ -1968,10 +1962,7 @@ impl<'db> Collector<'db> {
             }
             Reason::RequiredBy(ConstraintSource::Body { body, node }) => {
                 let (_, map) = body_with_source_map(db, body);
-                let ptr = match node {
-                    ExprOrPat::Expr(e) => map.expr_syntax(e)?,
-                    ExprOrPat::Pat(p) => map.pat_syntax(p)?,
-                };
+                let ptr = node_ptr(map, node)?;
                 let function = match body.def(db) {
                     DefWithBody::Function(f) => f.item(db).display_name(),
                     _ => None,
