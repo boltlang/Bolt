@@ -979,27 +979,19 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
 /// Other items can't name any.
 #[salsa::tracked(returns(ref))]
 pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[Name]> {
-    let declared = || def.generic_params(db).mutability_params.iter().map(|p| p.name.clone());
     let store = match def {
-        GenericDefId::Function(id) => &function_signature(db, id).store,
-        GenericDefId::Impl(id) => &impl_signature(db, id).store,
-        GenericDefId::Struct(_) => {
-            let mut names: Vec<Name> = Vec::new();
-            for name in declared() {
-                if !names.contains(&name) {
-                    names.push(name);
-                }
-            }
-            return names.into();
-        }
+        GenericDefId::Function(id) => Some(&function_signature(db, id).store),
+        GenericDefId::Impl(id) => Some(&impl_signature(db, id).store),
+        GenericDefId::Struct(_) => None,
         _ => return Box::new([]),
     };
     let mut names: Vec<Name> = Vec::new();
-    for name in declared() {
-        if !names.contains(&name) {
-            names.push(name);
+    for param in def.generic_params(db).mutability_params.iter() {
+        if !names.contains(&param.name) {
+            names.push(param.name.clone());
         }
     }
+    let Some(store) = store else { return names.into() };
     for (_, type_ref) in store.types.iter() {
         if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. }
         | TypeRef::Mutability(MutabilityRef::Named(name)) = type_ref
@@ -1626,8 +1618,7 @@ pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes
 /// which [`struct_args`] gives the value of.
 pub fn struct_mutability<'db>(db: &'db dyn Db, id: StructId<'db>) -> Ty<'db> {
     let def = GenericDefId::Struct(id);
-    let index = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();
-    Ty::Param(GenericParamId { def, index: index as u32 })
+    Ty::Param(GenericParamId { def, index: first_hidden(db, def) })
 }
 
 /// The arguments to substitute in the field types of a struct of type
@@ -1764,7 +1755,7 @@ pub fn unused_impl_params<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<u32> {
     if class.args.iter().any(Ty::has_error) {
         return Vec::new();
     }
-    let count = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();
+    let count = first_hidden(db, def) as usize;
     let mut used = vec![false; count];
     for arg in class.args.iter() {
         arg.any(&mut |t| {
