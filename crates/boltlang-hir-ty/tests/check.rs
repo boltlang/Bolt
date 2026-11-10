@@ -63,9 +63,7 @@
 use std::path::Path;
 
 use boltlang_base_db::{Settings, SystemPathBuf, TestDb, source_text};
-use boltlang_corpus::{
-    Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
-};
+use boltlang_corpus::{Case, case_trial, catch, split_files, trials};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
@@ -90,7 +88,7 @@ use boltlang_hir_ty::{
     overlap::{overlapped_functions, overlapped_impls},
     solve::{ExprOrPat, Held, TypeError},
 };
-use libtest_mimic::{Arguments, Failed, Trial};
+use libtest_mimic::{Arguments, Failed};
 
 /// The attributes of a case, like `:todo`.
 #[derive(Default)]
@@ -718,55 +716,10 @@ fn updated(case: &Case) -> Option<Vec<String>> {
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/checker");
-    let mut trials = Vec::new();
-    for path in data_files(&root) {
-        let stem = data_name(&root, &path);
-        let mut text = std::fs::read_to_string(&path).unwrap();
-        if updating()
-            && let Ok(cases) = parse_cases(&text, 2)
-        {
-            let new = update(&text, &cases, updated);
-            if new != text {
-                std::fs::write(&path, &new).unwrap();
-                text = new;
-            }
-        }
-        let cases = match parse_cases(&text, 2) {
-            Ok(cases) => cases,
-            Err(error) => {
-                let message = format!("{}: {error}", path.display());
-                trials.push(Trial::test(stem, move || Err(message.into())));
-                continue;
-            }
-        };
-        let mut seen = Vec::new();
-        for case in cases {
-            let name = format!("{stem}::{}", slug(&case.title));
-            if seen.contains(&name) {
-                let message = format!("{}: two cases are called `{}`", path.display(), case.title);
-                trials.push(Trial::test(format!("{name}_again"), move || Err(message.into())));
-                continue;
-            }
-            seen.push(name.clone());
-            let attributes = match Attributes::parse(&case) {
-                Ok(attributes) => attributes,
-                Err(error) => {
-                    let message = format!("{}: {error}", path.display());
-                    trials.push(Trial::test(name, move || Err(message.into())));
-                    continue;
-                }
-            };
-            let manual = attributes.manual();
-            let trial = if attributes.skip {
-                // Never run, even with `--ignored`, since it may hang.
-                Trial::test(name, || Ok(())).with_kind("skip")
-            } else if attributes.todo {
-                Trial::test(name, move || run(&case, &attributes)).with_kind("todo")
-            } else {
-                Trial::test(name, move || run(&case, &attributes))
-            };
-            trials.push(trial.with_ignored_flag(manual));
-        }
-    }
+    let trials = trials(&root, 2, updated, |name, case| {
+        let attributes = Attributes::parse(&case)?;
+        let (skip, todo) = (attributes.skip, attributes.todo);
+        Ok(case_trial(name, skip, todo, move || run(&case, &attributes)))
+    });
     libtest_mimic::run(&args, trials).exit();
 }
