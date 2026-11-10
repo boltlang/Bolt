@@ -11,12 +11,13 @@
 //!    couldn't be lowered, as lines starting with `error`.
 //! 2. What running it does, in Conduit's evaluator: the entry file's
 //!    top-level statements, then each test. Every call of a host function
-//!    is a line, like `env.log(3)`, and a test that fails, or a run that
-//!    stops with an error, says so. The host functions give nothing back.
+//!    is a line, like `log(3)`, and a test that fails, or a run that
+//!    stops with an error, says so. The host functions give nothing back,
+//!    but `write` and one with `abi = flat`: see [`Log`].
 //!
-//! Host functions come from `extern` blocks, in the module the block
-//! names, like `extern "env" { fn log(x: i32); }`. The IR must pass
-//! Conduit's verifier, or the case fails.
+//! Host functions are functions without a body, with `#[link(emu)]`, like
+//! `#[link(emu)] fn log(x: i32);`. The IR must pass Conduit's verifier, or
+//! the case fails.
 //!
 //! A case can have several files, each starting with a line like
 //! `//- /lib.bolt`, with `/main.bolt` as the entry. Files get no prelude,
