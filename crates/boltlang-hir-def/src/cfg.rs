@@ -175,9 +175,6 @@ fn unknown_key(key: &str) -> CfgError {
 
 /// `key = value`, with `value` a token of kind `kind`.
 fn key_value(key: &str, kind: SyntaxKind, value: &str) -> Result<Cfg, CfgError> {
-    let names = |all: &mut dyn Iterator<Item = &'static str>| -> Vec<String> {
-        all.map(|n| format!("\"{n}\"")).collect()
-    };
     let string = (kind == STRING).then(|| crate::expr_store::unquote(value));
     let unknown = |key: &'static str, expected: Vec<String>| CfgError::UnknownValue {
         key,
@@ -186,12 +183,12 @@ fn key_value(key: &str, kind: SyntaxKind, value: &str) -> Result<Cfg, CfgError> 
     };
     match key {
         "host" => {
-            let expected = names(&mut Host::ALL.iter().map(|h| h.name()));
+            let expected = quoted(Host::ALL.iter().map(|h| h.name()));
             let found = string.and_then(|s| Host::ALL.iter().copied().find(|h| h.name() == s));
             found.map(Cfg::Host).ok_or_else(|| unknown("host", expected))
         }
         "arch" => {
-            let expected = names(&mut Arch::ALL.iter().map(|a| a.name()));
+            let expected = quoted(Arch::ALL.iter().map(|a| a.name()));
             string
                 .and_then(|s| Arch::by_name(&s))
                 .map(Cfg::Arch)
@@ -207,12 +204,17 @@ fn key_value(key: &str, kind: SyntaxKind, value: &str) -> Result<Cfg, CfgError> 
         }
         "endian" => {
             let all = [Endian::Little, Endian::Big];
-            let expected = names(&mut all.iter().map(|e| e.name()));
+            let expected = quoted(all.iter().map(|e| e.name()));
             let found = string.and_then(|s| all.iter().copied().find(|e| e.name() == s));
             found.map(Cfg::Endian).ok_or_else(|| unknown("endian", expected))
         }
         _ => Err(unknown_key(key)),
     }
+}
+
+/// The names of the values of a key, each in quotes, as they're written.
+fn quoted(names: impl Iterator<Item = &'static str>) -> Vec<String> {
+    names.map(|n| format!("\"{n}\"")).collect()
 }
 
 #[cfg(test)]
