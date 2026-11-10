@@ -341,6 +341,14 @@ pub enum TypeError<'db> {
         origin: Origin<'db>,
         name: Name,
     },
+    /// A named argument for no parameter, like `x` in `g(x: 1)` for a
+    /// `g: fn(i32)`. `unnamed` says that positional parameters without
+    /// names are left, which can only be passed by position.
+    UnknownArgument {
+        origin: Origin<'db>,
+        name: Name,
+        unnamed: bool,
+    },
     /// A spread of something that isn't a tuple, of type `ty`.
     NotSpreadable {
         origin: Origin<'db>,
@@ -401,6 +409,7 @@ impl<'db> TypeError<'db> {
             | TypeError::NoSuchField { origin, .. }
             | TypeError::DuplicateField { origin, .. }
             | TypeError::DuplicateArgument { origin, .. }
+            | TypeError::UnknownArgument { origin, .. }
             | TypeError::NotSpreadable { origin, .. }
             | TypeError::PrivateField { origin, .. }
             | TypeError::CannotChange { origin, .. }
@@ -436,7 +445,8 @@ impl<'db> TypeError<'db> {
             TypeError::TypeNeeded { .. }
             | TypeError::PrivateField { .. }
             | TypeError::DuplicateField { .. }
-            | TypeError::DuplicateArgument { .. } => {}
+            | TypeError::DuplicateArgument { .. }
+            | TypeError::UnknownArgument { .. } => {}
         }
     }
 }

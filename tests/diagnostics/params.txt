@@ -26,3 +26,14 @@ fn f(a: i32, b: Bool = 3) -> i32 = a;
                      //^ error: expected `Bool`, found an integer
 class Size[T] { fn size(x: T, scale: i32 = True) -> i32; }
                                          //^^^^ error: expected `i32`, found `Bool`
+
+================================================================================
+An argument by a name no parameter has
+================================================================================
+fn f(x: i32, y: i32) -> i32 = x;
+let g: fn(i32, i32) -> i32 = f;
+let a = g(x: 1, y: 2);
+           //^ error: no parameter is named `x`; the positional parameters that are left have no names, so they're passed by position
+                 //^ error: no parameter is named `y`; the positional parameters that are left have no names, so they're passed by position
+let b = f(1, z: 2);
+              //^ error: no parameter is named `z`

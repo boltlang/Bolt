@@ -113,7 +113,7 @@ let a = split(1, at: 1, by: 2);
 split: fn(s: i32, *, at: i32) -> i32
 let a: i32
 --------------------------------------------------------------------------------
-error at `split(1, at: 1, by: 2)`: expected (i32, at: i32), found ({integer}, at: {integer}, by: {integer})
+error at `2`: no parameter by
 
 ================================================================================
 Positional parameters can be passed by name
@@ -176,7 +176,8 @@ f: fn(x: i32, y: i32) -> i32
 let g: fn(i32, i32) -> i32
 let a: i32
 --------------------------------------------------------------------------------
-error at `g(x: 1, y: 2)`: expected (i32, i32), found (x: {integer}, y: {integer})
+error at `1`: no parameter x, unnamed ones left
+error at `2`: no parameter y, unnamed ones left
 
 ================================================================================
 Inside a parameter's function type, names are asked for the other way
@@ -210,7 +211,7 @@ g: fn(x: i32, z: i32) -> i32
 pick: fn(c: Bool) -> fn(x: i32, i32) -> i32
 let b: i32
 --------------------------------------------------------------------------------
-error at `pick(True)(1, y: 2)`: expected (i32, i32), found ({integer}, y: {integer})
+error at `2`: no parameter y, unnamed ones left
 
 ================================================================================
 A positional parameter given twice
@@ -250,7 +251,7 @@ Size[Bool].size: fn(b: Bool) -> i32
 let a: i32
 let b: i32
 --------------------------------------------------------------------------------
-error at `size(b: True)`: expected (a,), found (b: Bool)
+error at `True`: no parameter b
 error at `size`: ambiguous
 
 ================================================================================
@@ -265,7 +266,8 @@ f: fn(i32, y: i32) -> i32
 let a: i32
 let b: i32
 --------------------------------------------------------------------------------
-error at `f(x: 1, y: 2)`: expected (i32, i32), found (x: {integer}, y: {integer})
+error at `1`: no parameter x, unnamed ones left
+error at `2`: no parameter y, unnamed ones left
 
 ================================================================================
 A parameter's type can come from its default

@@ -217,6 +217,11 @@ pub enum DiagnosticKind<'db> {
     DuplicateArgument {
         name: Name,
     },
+    /// A named argument for no parameter of the function.
+    UnknownArgument {
+        name: Name,
+        unnamed: bool,
+    },
     /// A spread, like `*e` or `**e`, of something that isn't a tuple of
     /// its kind.
     NotSpreadable {
@@ -1672,6 +1677,9 @@ impl<'db> Collector<'db> {
                         }
                         TypeError::DuplicateArgument { origin, name } => {
                             (origin, DiagnosticKind::DuplicateArgument { name })
+                        }
+                        TypeError::UnknownArgument { origin, name, unnamed } => {
+                            (origin, DiagnosticKind::UnknownArgument { name, unnamed })
                         }
                         TypeError::NotSpreadable { origin, ty } => {
                             if has_error(&ty) {

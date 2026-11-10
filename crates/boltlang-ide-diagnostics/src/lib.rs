@@ -136,6 +136,7 @@ impl DiagnosticCode {
     pub const DUPLICATE_ARGUMENT: Self = Self("E0259");
     pub const DEFAULT_MISSING: Self = Self("E0260");
     pub const DEFAULT_IN_IMPL: Self = Self("E0261");
+    pub const UNKNOWN_ARGUMENT: Self = Self("E0262");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -719,6 +720,16 @@ fn describe(
         K::DuplicateArgument { name } => {
             (C::DUPLICATE_ARGUMENT, format!("the argument `{name}` is given more than once"))
         }
+        K::UnknownArgument { name, unnamed: false } => {
+            (C::UNKNOWN_ARGUMENT, format!("no parameter is named `{name}`"))
+        }
+        K::UnknownArgument { name, unnamed: true } => (
+            C::UNKNOWN_ARGUMENT,
+            format!(
+                "no parameter is named `{name}`; the positional parameters that are left have no \
+                 names, so they're passed by position"
+            ),
+        ),
         K::DefaultMissing => (
             C::DEFAULT_MISSING,
             "this parameter needs a default, since a positional parameter before it has one".into(),

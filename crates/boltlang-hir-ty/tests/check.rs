@@ -424,6 +424,14 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::Type(TypeError::DuplicateArgument { origin, name }) => {
                         format!("error at `{}`: argument {name} is given twice", at(origin.node))
                     }
+                    InferenceDiagnostic::Type(TypeError::UnknownArgument {
+                        origin,
+                        name,
+                        unnamed,
+                    }) => {
+                        let unnamed = if *unnamed { ", unnamed ones left" } else { "" };
+                        format!("error at `{}`: no parameter {name}{unnamed}", at(origin.node))
+                    }
                     InferenceDiagnostic::Type(TypeError::DuplicateField { origin, name }) => {
                         format!("error at `{}`: {name} is given twice", at(origin.node))
                     }

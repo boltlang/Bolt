@@ -2019,8 +2019,21 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let no_spread = !items.iter().any(|i| matches!(i, TupleItem::Spread(..)));
         let keyword_defaulted: Vec<&(Name, u32)> =
             defaults.keyword.iter().filter(|(n, _)| no_spread && !given(n)).collect();
-        // An argument given twice is reported on its own.
+        // An argument given twice is reported on its own, and so is one by a
+        // name that no parameter has.
         let twice = places.contains(&ArgPlace::Twice);
+        let unknown = |name: &Name| {
+            params.keyword_rest.is_none() && !params.keyword.iter().any(|(n, _)| n == name)
+        };
+        // The positional parameters that no argument is for, by position or
+        // by name, and that have no name.
+        let given = first + items.iter().filter(|i| matches!(i, TupleItem::Positional(_))).count();
+        let unnamed = (given..params.positional.len()).any(|i| {
+            names[i].is_none()
+                && !defaulted.contains(&i)
+                && !places.contains(&ArgPlace::Positional(i))
+        });
+        let mut unknowns = false;
         let mut placed = Vec::new();
         for (item, &place) in items.iter().zip(&places) {
             match (item, place) {
@@ -2036,6 +2049,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     let origin = self.origin(*e);
                     let error = TypeError::DuplicateArgument { origin, name: name.clone() };
                     self.solver.errors.push(error);
+                    continue;
+                }
+                (TupleItem::Named(name, e), ArgPlace::Written) if unknown(name) => {
+                    self.infer_expr(*e);
+                    let origin = self.origin(*e);
+                    let error = TypeError::UnknownArgument { origin, name: name.clone(), unnamed };
+                    self.solver.errors.push(error);
+                    unknowns = true;
                     continue;
                 }
                 _ => {}
@@ -2060,7 +2081,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
         }
-        if twice {
+        if twice || unknowns {
             return ret;
         }
         placed.sort_by_key(|(i, _)| *i);
