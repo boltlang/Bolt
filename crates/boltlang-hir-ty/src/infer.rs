@@ -1010,25 +1010,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             | Expr::Record { .. }
             | Expr::Tuple { .. }
             | Expr::NamedTuple { .. } => self.infer_literal(expr, expr, expected, false),
-            Expr::If { condition, then_branch, else_branch } => {
-                self.check_expr(*condition, &Ty::bool());
-                match else_branch {
-                    Some(else_branch) => {
-                        let ty = self.expected_or_var(expected);
-                        self.check_expr_because(*then_branch, &ty, reason);
-                        self.check_expr_because(
-                            *else_branch,
-                            &ty,
-                            reason_for_nth(reason, *then_branch, 1),
-                        );
-                        ty
-                    }
-                    None => {
-                        self.check_expr(*then_branch, &Ty::unit());
-                        Ty::unit()
-                    }
-                }
-            }
+            Expr::If { .. } => self.infer_if(expr, expected),
             Expr::Let { pat, expr: value } => {
                 let ty = self.infer_expr(*value);
                 self.check_pat(*pat, &ty);
@@ -1189,6 +1171,28 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             });
         }
         closure
+    }
+
+    /// An `if`: with an `else`, both branches give the same type; without
+    /// one, the branch gives `()`.
+    fn infer_if(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+        let Expr::If { condition, then_branch, else_branch } = &self.body[expr] else {
+            unreachable!("only called for an if")
+        };
+        let reason = expected.map_or(Reason::None, |e| e.reason);
+        self.check_expr(*condition, &Ty::bool());
+        match else_branch {
+            Some(else_branch) => {
+                let ty = self.expected_or_var(expected);
+                self.check_expr_because(*then_branch, &ty, reason);
+                self.check_expr_because(*else_branch, &ty, reason_for_nth(reason, *then_branch, 1));
+                ty
+            }
+            None => {
+                self.check_expr(*then_branch, &Ty::unit());
+                Ty::unit()
+            }
+        }
     }
 
     /// A `match`: each arm's pattern is checked against the scrutinee, and
