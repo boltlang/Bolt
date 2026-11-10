@@ -266,11 +266,7 @@ pub fn decide_args<'db>(
             return Err(DecisionError::Unknown(*op));
         };
         // The checker reports the wrong number of arguments.
-        let fits = match rest {
-            None => args.len() == arity,
-            Some(_) => args.len() <= arity,
-        };
-        if !fits {
+        if !fits(args.len(), *rest, arity) {
             return Err(DecisionError::Unknown(*op));
         }
         let cols = positional(args, *rest, arity)
@@ -590,11 +586,7 @@ impl<'a, 'db> Builder<'a, 'db> {
                 let VariantDef::Variant(v) = self.variant(pat, path)? else { return Err(unknown) };
                 let count = field_types(self.db, VariantDef::Variant(v)).fields.len();
                 // The checker reports the wrong number of fields (#365).
-                let fits = match rest {
-                    None => args.len() == count,
-                    Some(_) => args.len() <= count,
-                };
-                if !fits {
+                if !fits(args.len(), *rest, count) {
                     return Err(unknown);
                 }
                 let mut fields = vec![None; count];
@@ -821,6 +813,15 @@ impl<'a, 'db> Builder<'a, 'db> {
             }
             Test::Case(..) => unreachable!("a switch"),
         }))
+    }
+}
+
+/// Whether `given` positional patterns, with a `..` at `rest`, fit `count`
+/// fields: all of them, or with `..`, no more than them.
+fn fits(given: usize, rest: Option<u32>, count: usize) -> bool {
+    match rest {
+        None => given == count,
+        Some(_) => given <= count,
     }
 }
 
