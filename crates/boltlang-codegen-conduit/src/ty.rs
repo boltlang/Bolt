@@ -437,7 +437,6 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
     (out, extracted)
 }
 
-/// How many parameters [`abstract_muts`] makes in types.
 /// `tys` with each row in them, like that of the closure in
 /// `Option[fn() does Log]`, replaced by a parameter, numbered from 0, and
 /// the rows that were replaced, in order.
@@ -456,12 +455,11 @@ fn count_rows(tys: &[MonoTy<'_>]) -> u32 {
     found.iter().map(|&i| i + 1).max().unwrap_or(0)
 }
 
+/// How many parameters [`abstract_muts`] makes in `tys`.
 fn count_params(tys: &[MonoTy<'_>]) -> u32 {
     abstract_muts(tys, 0).1.len() as u32
 }
 
-/// The mutability of an enum that holds values with these
-/// mutabilities: the most any of them can be.
 /// The mutability in Conduit of an object of mutability `m` that holds
 /// values of the types `held`: `mut` if an operation's type parameter is
 /// somewhere in them. Such a value is a `readonly any`, which only a `mut`
@@ -471,6 +469,8 @@ fn holding_any(held: &[MonoTy<'_>], m: Mutability) -> Mutability {
     if held.iter().any(MonoTy::has_any) { Mutability::Mut } else { m }
 }
 
+/// The mutability of an enum that holds values with these
+/// mutabilities: the most any of them can be.
 fn held_mutability(held: &[MonoMut]) -> Result<Mutability, ErrorKind> {
     if held.contains(&MonoMut::Mut) {
         return Ok(Mutability::Mut);
