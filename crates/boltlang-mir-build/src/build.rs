@@ -1076,11 +1076,15 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         let scrutinee = self.expr(scrutinee);
         let pats: Vec<PatId> = arms.iter().map(|a| a.pat).collect();
         self.declare_in(&pats);
-        let arms = arms
-            .iter()
-            .map(|a| Arm { guard: a.guard.map(|g| self.expr(g)), body: self.expr(a.expr) })
-            .collect();
+        let arms = self.arms(arms);
         self.node(e, ExprKind::Match { scrutinee, decision, arms })
+    }
+
+    /// The guards and bodies of the arms of a `match`.
+    fn arms(&mut self, arms: &[MatchArm]) -> Box<[Arm]> {
+        arms.iter()
+            .map(|a| Arm { guard: a.guard.map(|g| self.expr(g)), body: self.expr(a.expr) })
+            .collect()
     }
 
     /// A `match` with `effect` arms: a handler of the one effect its arms
@@ -1107,10 +1111,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             pats.extend(arm.pats());
         }
         self.declare_in(&pats);
-        let arms: Box<[Arm]> = arms
-            .iter()
-            .map(|a| Arm { guard: a.guard.map(|g| self.expr(g)), body: self.expr(a.expr) })
-            .collect();
+        let arms = self.arms(arms);
         // Each effect arm, once, with its continuation.
         let mut built: HashMap<usize, (Arm, Option<Local>)> = HashMap::new();
         let mut ops = Vec::new();
