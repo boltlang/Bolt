@@ -303,28 +303,9 @@ fn inside(old: &[MonoTy<'_>], new: &[MonoTy<'_>]) -> bool {
         && old.iter().zip(new).any(|(a, b)| a != b)
 }
 
+/// Whether `a` is `b` or somewhere inside it.
 fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
-    if a == b {
-        return true;
-    }
-    match b {
-        MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::Record(args, ..) => {
-            args.iter().any(|t| occurs(a, t))
-        }
-        MonoTy::Array(_, elem) => occurs(a, elem),
-        MonoTy::Fn(params, _, ret, _, row) => {
-            params.iter().any(|t| occurs(a, t))
-                || occurs(a, ret)
-                || row.any_ty(&mut |t| occurs(a, t))
-        }
-        MonoTy::Row(row) => row.any_ty(&mut |t| occurs(a, t)),
-        MonoTy::ErasedAssoc(_, args) => args.iter().any(|t| occurs(a, t)),
-        MonoTy::Builtin(_)
-        | MonoTy::Never
-        | MonoTy::Erased(_)
-        | MonoTy::Any(_)
-        | MonoTy::Host(_) => false,
-    }
+    a == b || b.any_child(&mut |t| occurs(a, t))
 }
 
 /// The uses in an instance's MIR, of its body and its lambdas, and those

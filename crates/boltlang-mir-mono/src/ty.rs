@@ -214,18 +214,7 @@ impl<'db> MonoTy<'db> {
     pub fn has_any(&self) -> bool {
         match self {
             MonoTy::Any(_) => true,
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Erased(_) | MonoTy::Host(_) => false,
-            MonoTy::Adt(_, args, ..)
-            | MonoTy::Tuple(args, _)
-            | MonoTy::Record(args, ..)
-            | MonoTy::ErasedAssoc(_, args) => args.iter().any(MonoTy::has_any),
-            MonoTy::Array(_, elem) => elem.has_any(),
-            MonoTy::Fn(params, _, ret, _, row) => {
-                params.iter().any(MonoTy::has_any)
-                    || ret.has_any()
-                    || row.any_ty(&mut MonoTy::has_any)
-            }
-            MonoTy::Row(row) => row.any_ty(&mut MonoTy::has_any),
+            _ => self.any_child(&mut MonoTy::has_any),
         }
     }
 
