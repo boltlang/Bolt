@@ -139,11 +139,10 @@ impl DiagnosticCode {
     pub const DEFAULT_IN_IMPL: Self = Self("E0261");
     pub const UNKNOWN_ARGUMENT: Self = Self("E0262");
 
-    /// An error while running a program, like a division by zero.
-    pub const RUNTIME_ERROR: Self = Self("E0301");
-
-    /// Code that the code generator can't compile.
-    pub const CODEGEN_ERROR: Self = Self("E0401");
+    // E0301 was for errors while running a program, and E0401 for code
+    // that the code generator couldn't compile. Nothing gives them since
+    // the evaluator and the old Wasm backend were removed. Don't use them
+    // for anything else.
 
     pub const UNSUPPORTED: Self = Self("W0001");
     pub const NO_VALUES: Self = Self("W0002");
