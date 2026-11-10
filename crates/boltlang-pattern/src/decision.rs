@@ -238,16 +238,7 @@ pub fn decide<'db>(
     body: &Body,
     arms: &[(PatId, Option<ExprId>)],
 ) -> Result<Decision<'db>, DecisionError> {
-    let mut b = Builder {
-        db,
-        def,
-        body,
-        arms,
-        places: vec![Place::Scrutinee],
-        place_ids: HashMap::new(),
-        nodes: Vec::new(),
-        memo: HashMap::new(),
-    };
+    let mut b = Builder::new(db, def, body, arms);
     let mut rows = Vec::new();
     for (arm, (pat, _)) in arms.iter().enumerate() {
         let row = Row { cols: vec![(0, *pat)], arm: arm as u32, bindings: Vec::new() };
@@ -267,16 +258,7 @@ pub fn decide_args<'db>(
     arity: usize,
     arms: &[(PatId, Option<ExprId>)],
 ) -> Result<Decision<'db>, DecisionError> {
-    let mut b = Builder {
-        db,
-        def,
-        body,
-        arms,
-        places: vec![Place::Scrutinee],
-        place_ids: HashMap::new(),
-        nodes: Vec::new(),
-        memo: HashMap::new(),
-    };
+    let mut b = Builder::new(db, def, body, arms);
     let ctor = Ctor::Tuple(arity as u32);
     let mut rows = Vec::new();
     for (arm, (op, _)) in arms.iter().enumerate() {
@@ -330,7 +312,25 @@ struct Builder<'a, 'db> {
     memo: HashMap<Vec<Row>, NodeId>,
 }
 
-impl<'db> Builder<'_, 'db> {
+impl<'a, 'db> Builder<'a, 'db> {
+    fn new(
+        db: &'db dyn Db,
+        def: DefWithBodyId<'db>,
+        body: &'a Body,
+        arms: &'a [(PatId, Option<ExprId>)],
+    ) -> Self {
+        Builder {
+            db,
+            def,
+            body,
+            arms,
+            places: vec![Place::Scrutinee],
+            place_ids: HashMap::new(),
+            nodes: Vec::new(),
+            memo: HashMap::new(),
+        }
+    }
+
     fn place(&mut self, place: Place<'db>) -> PlaceId {
         if let Some(&id) = self.place_ids.get(&place) {
             return id;
