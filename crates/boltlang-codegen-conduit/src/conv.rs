@@ -30,7 +30,7 @@ use conduit_ir::{
 };
 
 use crate::{
-    ErrorKind,
+    ErrorKind, finish,
     ty::{PLACEHOLDER, Types, is_nullable_host, none_index, placeholder},
 };
 
@@ -469,10 +469,4 @@ fn builder(module: &Module, id: FuncId) -> FuncBuilder<'_, Module> {
     let mut b = FuncBuilder::new(module, sig.sig().params, sig.results.clone());
     b.set_row(sig.row.clone());
     b
-}
-
-fn finish(b: FuncBuilder<'_, Module>) -> Result<Func, ErrorKind> {
-    b.finish().map_err(|es| {
-        ErrorKind::Invalid(es.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "))
-    })
 }

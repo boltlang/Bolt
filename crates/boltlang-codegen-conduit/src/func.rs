@@ -177,11 +177,7 @@ pub(crate) fn lower_body<'db>(
         return Err(Error { at: l.at.map(|e| l.snippet(e)), ..error(kind) });
     }
     let var_names = std::mem::take(&mut l.var_names);
-    let mut f = l.b.finish().map_err(|es| {
-        error(ErrorKind::Invalid(
-            es.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "),
-        ))
-    })?;
+    let mut f = crate::finish(l.b).map_err(error)?;
     f.debug.vars.extend(var_names.into_iter().map(|(v, n)| (v, n.into())));
     Ok(f)
 }

@@ -1026,6 +1026,13 @@ fn declare_extern<'db>(
     Ok(())
 }
 
+/// The function `b` built, or why Conduit's builder rejected it.
+pub(crate) fn finish(b: conduit_ir::build::FuncBuilder<'_, Module>) -> Result<Func, ErrorKind> {
+    b.finish().map_err(|es| {
+        ErrorKind::Invalid(es.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "))
+    })
+}
+
 /// A name of Bolt's, like `Mul[i32].mul` or `*[i32]`, as an identifier,
 /// which is what Conduit's text format can name things by: `Mul_i32_mul`
 /// and `star_i32`. The code of a file, `<file>`, is `file`, and so its
