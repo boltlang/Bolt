@@ -4,8 +4,8 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use super::{
-    BlockLike, Restrictions, at_expr_start, expr, expr_block_contents, expr_bp, expr_no_struct,
-    expr_stmt,
+    BlockLike, Restrictions, at_expr_start, at_optional_expr, expr, expr_block_contents, expr_bp,
+    expr_no_struct, expr_stmt,
 };
 use crate::{
     grammar::{
@@ -429,10 +429,9 @@ fn continue_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, CONTINUE_EXPR)
 }
 
-/// The optional value of `break` or `return`. In a condition, a
-/// `{` starts the body, not the value: `if x { break } {`.
+/// The optional value of `break` or `return`.
 fn opt_value(p: &mut Parser, r: Restrictions) {
-    if at_expr_start(p) && !(r.forbid_structs && p.at(T!['{'])) {
+    if at_optional_expr(p, r) {
         expr(p);
     }
 }

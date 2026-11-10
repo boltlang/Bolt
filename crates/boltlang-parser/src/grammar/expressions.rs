@@ -259,7 +259,7 @@ fn expr_bp(
         p.bump(op);
         if is_range {
             // `a..` has no end.
-            if !at_range_end(p, r) {
+            if !at_optional_expr(p, r) {
                 lhs = m.complete(p, RANGE_EXPR);
                 break;
             }
@@ -277,9 +277,10 @@ fn expr_bp(
     Some((lhs, BlockLike::NotBlock))
 }
 
-/// Whether an expression follows that can end a range. In a condition, `{`
-/// starts the body: `for i in 0.. {`.
-fn at_range_end(p: &Parser, r: Restrictions) -> bool {
+/// Whether an expression follows that can end a range or be the value of
+/// `break` or `return`. In a condition, `{` starts the body instead:
+/// `for i in 0.. {` or `if x { break } {`.
+fn at_optional_expr(p: &Parser, r: Restrictions) -> bool {
     at_expr_start(p) && !(r.forbid_structs && p.at(T!['{']))
 }
 
@@ -290,7 +291,7 @@ fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> 
     if p.at(T![..]) || p.at(T![..=]) {
         let m = p.start();
         p.bump_any();
-        if at_range_end(p, r) {
+        if at_optional_expr(p, r) {
             expr_bp(p, None, r.nested(), 3);
         }
         return Some((m.complete(p, RANGE_EXPR), BlockLike::NotBlock));
