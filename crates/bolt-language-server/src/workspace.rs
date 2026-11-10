@@ -426,18 +426,8 @@ mod tests {
         let (mut workspace, disk) = workspace();
         workspace.set_std_dir(Some(SystemPathBuf::from("/toolchain/std")));
         let prelude = SystemPath::new("/toolchain/std/__prelude__/lib.bolt");
-        disk.write_file_bytes(
-            prelude,
-            b"pub fn id(x: i32) -> i32 = True;
-",
-        )
-        .unwrap();
-        workspace.set_text(
-            SystemPath::new(MAIN),
-            "id(1);
-"
-            .into(),
-        );
+        disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = True;\n").unwrap();
+        workspace.set_text(SystemPath::new(MAIN), "id(1);\n".into());
         // Not in the document that uses it...
         assert!(messages(&workspace, MAIN).is_empty());
         // ...but in the prelude's file, and once in a notice.
@@ -453,21 +443,11 @@ mod tests {
         );
         assert!(workspace.notices().is_empty());
         // Fixed, the report clears it, and breaking it again gives a new notice.
-        disk.write_file_bytes(
-            prelude,
-            b"pub fn id(x: i32) -> i32 = x;
-",
-        )
-        .unwrap();
+        disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = x;\n").unwrap();
         workspace.file_changed(prelude);
         assert_eq!(workspace_messages(&mut workspace), [("lib.bolt".to_string(), vec![])]);
         assert!(workspace.notices().is_empty());
-        disk.write_file_bytes(
-            prelude,
-            b"pub fn id(x: i32) -> i32 = True;
-",
-        )
-        .unwrap();
+        disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = True;\n").unwrap();
         workspace.file_changed(prelude);
         assert_eq!(workspace.notices().len(), 1);
         // Once no open document uses it, it's cleared one last time, then left out.
@@ -541,12 +521,7 @@ mod tests {
     #[test]
     fn an_open_file_isn_t_in_the_workspace_report() {
         let (mut workspace, _) = workspace();
-        workspace.set_text(
-            SystemPath::new(LIB),
-            "pub fn negate(x: Bool) -> Bool = 1;
-"
-            .into(),
-        );
+        workspace.set_text(SystemPath::new(LIB), "pub fn negate(x: Bool) -> Bool = 1;\n".into());
         workspace
             .set_text(SystemPath::new(MAIN), "import \"./lib\" (negate);\nnegate(True);\n".into());
         // Its errors are in its own document's diagnostics.
