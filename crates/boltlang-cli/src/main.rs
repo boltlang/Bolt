@@ -196,7 +196,7 @@ impl Exec for CheckCommand {
         for &file in &files {
             let found = checked(&db, file, &files);
             report(&db, &found)?;
-            ok &= found.iter().all(|d| d.severity != Severity::Error);
+            ok &= !has_errors(&found);
         }
         Ok(ok)
     }
@@ -287,7 +287,7 @@ impl Exec for RunCommand {
         let found =
             if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
         report(&db, &found)?;
-        if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
+        if !self.no_check && has_errors(&found) {
             return Ok(false);
         }
         let Some(program) = lowered(&db, file) else { return Ok(false) };
@@ -347,11 +347,7 @@ impl Exec for TestCommand {
             // A file with errors, or that can't be compiled yet, isn't run.
             let found = checked(&db, file, &files);
             report(&db, &found)?;
-            let program = if found.iter().any(|d| d.severity == Severity::Error) {
-                None
-            } else {
-                lowered(&db, file)
-            };
+            let program = if has_errors(&found) { None } else { lowered(&db, file) };
             let Some(program) = program else {
                 println!("{}: not run, since it has errors", display_path(&db, file));
                 skipped += count;
@@ -456,7 +452,7 @@ impl Exec for BuildCommand {
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
         let found = checked(&db, file, &[file]);
         report(&db, &found)?;
-        if found.iter().any(|d| d.severity == Severity::Error) {
+        if has_errors(&found) {
             return Ok(false);
         }
         let Some(program) = lowered(&db, file) else { return Ok(false) };
@@ -489,6 +485,10 @@ fn checked(db: &dyn Db, file: File, reported: &[File]) -> Vec<Diagnostic> {
         broken.into_iter().filter(|d| !d.labels.iter().any(|l| reported.contains(&l.file))),
     );
     found
+}
+
+fn has_errors(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics.iter().any(|d| d.severity == Severity::Error)
 }
 
 fn current_dir() -> anyhow::Result<SystemPathBuf> {
