@@ -73,7 +73,7 @@ use boltlang_mir_build::{
     mir_bodies,
 };
 use boltlang_mir_mono::{
-    Cx, Instance, InstanceDef, MonoRow, MonoTy, Site, Use, UseError, closed_ty, program,
+    Cx, Instance, InstanceDef, MonoRow, MonoTy, Program, Site, Use, UseError, closed_ty, program,
 };
 use boltlang_mir_transform::shim_body;
 use conduit_ir::{Extern, ExternId, Func, FuncId, HandlerId, Module, MutParams, Row, Sig};
@@ -312,43 +312,7 @@ fn plan_perform<'db>(
 /// The program of `entry` and its tests, in Conduit.
 pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     let p = program(db, entry);
-    let snippet = |instance: Instance<'_>, site: Option<&Site<'_>>| -> Option<String> {
-        let def = instance.source_body(db)?;
-        let (_, map) = body_with_source_map(db, def);
-        let ptr = map.expr_syntax(site?.origin(db, def)?)?;
-        let text = source_text(db, def.def(db).file(db));
-        Some(text[ptr.start as usize..ptr.end as usize].to_string())
-    };
-    let mut errors: Vec<Error> = p
-        .errors
-        .iter()
-        .map(|(i, site, e)| Error {
-            instance: i.display(db).to_string(),
-            at: snippet(*i, site.as_ref()),
-            kind: ErrorKind::Use(e.clone()),
-        })
-        .collect();
-    for f in &p.erased {
-        let name = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
-        errors.push(Error {
-            instance: name,
-            at: None,
-            kind: ErrorKind::unsupported("a function whose types are erased"),
-        });
-    }
-    // Operations have no body: a call of one is a `perform`, so none should be
-    // an instance.
-    for iu in &p.instances {
-        if let Some(DefWithBody::Function(f)) = iu.instance.body(db).map(|b| b.def(db))
-            && let ItemContainerId::Effect(_) = f.container(db)
-        {
-            errors.push(Error {
-                instance: iu.instance.display(db).to_string(),
-                at: None,
-                kind: ErrorKind::unsupported("calling an operation of an effect"),
-            });
-        }
-    }
+    let mut errors = program_errors(db, &p);
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -381,119 +345,10 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     let mut module = Module::default();
     let mut types = Types::default();
-    // The effects that the program performs or handles, with their
-    // arguments, from their operations.
-    let mut effects: Vec<EffectKey<'_>> = Vec::new();
-    for iu in &p.instances {
-        for (_, u) in &iu.uses {
-            if let Use::Op { op, effect_args } = u
-                && let ItemContainerId::Effect(e) = op.container(db)
-                && !effects.contains(&(e, effect_args.clone()))
-            {
-                effects.push((e, effect_args.clone()));
-            }
-        }
-        let Some(body) = iu.instance.body(db) else { continue };
-        let Ok(lcx) = Cx::new(db, iu.instance, &p.erased) else { continue };
-        let bodies = mir_bodies(db, body);
-        for mir in std::iter::once(&bodies.body).chain(&bodies.lambdas) {
-            for (_, node) in mir.exprs() {
-                if let boltlang_mir::ExprKind::Handle { ops: handled, .. } = &node.kind {
-                    match handled_effects(&lcx, handled) {
-                        Ok(keys) => {
-                            for key in keys {
-                                if !effects.contains(&key) {
-                                    effects.push(key);
-                                }
-                            }
-                        }
-                        Err(kind) => errors.push(Error {
-                            instance: iu.instance.display(db).to_string(),
-                            at: None,
-                            kind,
-                        }),
-                    }
-                }
-            }
-        }
-    }
+    let effects = used_effects(db, &p, &mut errors);
     declare_effects(&mut cx, &mut module, &mut types, effects, &mut errors);
     // The functions of each handler, after the lambdas.
-    for iu in &p.instances {
-        let Some(body) = iu.instance.body(db) else { continue };
-        let Ok(lcx) = Cx::new(db, iu.instance, &p.erased) else { continue };
-        let bodies = mir_bodies(db, body);
-        let instance = iu.instance.display(db).to_string();
-        let mut n = 0;
-        for (index, mir) in std::iter::once(&bodies.body).chain(&bodies.lambdas).enumerate() {
-            for (e, node) in mir.exprs() {
-                let boltlang_mir::ExprKind::Handle { body: scrutinee, arms, ops, .. } = &node.kind
-                else {
-                    continue;
-                };
-                let mut fresh = |name: String| new_func(&mut names, name);
-                let Ok(handled) = handled_effects(&lcx, ops) else { continue };
-                let body_fn = fresh(format!("{instance}::handle{n}"));
-                let ret = fresh(format!("{instance}::handle{n}_return"));
-                let op_name = |op: FunctionId<'_>| {
-                    op.item(db).name.as_ref().map(|n| n.name().to_string()).unwrap_or_default()
-                };
-                let all_ops: Vec<(EffectKey<'_>, Vec<FunctionId<'_>>)> = handled
-                    .into_iter()
-                    .map(|effect| {
-                        let ops = cx.effects.get(&effect).map(|(_, ops)| ops.clone());
-                        (effect, ops.unwrap_or_default())
-                    })
-                    .collect();
-                // A clause is named after its operation, and also its effect
-                // when another effect it handles has an operation of that
-                // name, like `Reader.get` and `State.get`.
-                let shared = |name: &str| {
-                    all_ops
-                        .iter()
-                        .filter(|(_, ops)| ops.iter().any(|&o| op_name(o) == name))
-                        .count()
-                        > 1
-                };
-                let effects = all_ops
-                    .iter()
-                    .map(|(effect, effect_ops)| {
-                        let clauses = effect_ops
-                            .iter()
-                            .map(|&op| {
-                                let name = op_name(op);
-                                let name = if shared(&name) {
-                                    format!("{}_{name}", effect_name(db, effect.0))
-                                } else {
-                                    name
-                                };
-                                fresh(format!("{instance}::handle{n}_{name}"))
-                            })
-                            .collect();
-                        (effect.clone(), clauses)
-                    })
-                    .collect();
-                let mut code: Vec<boltlang_mir::ExprId> = Vec::new();
-                for arm in arms.iter().chain(ops.iter().flat_map(|o| o.arms.iter())) {
-                    code.extend(arm.guard);
-                    code.push(arm.body);
-                }
-                let handler = HandlerId(cx.handles.len() as u64);
-                cx.handles.insert(
-                    (iu.instance, index as u32, e),
-                    HandleFns {
-                        handler,
-                        body: body_fn,
-                        ret,
-                        effects,
-                        env: mir.free_locals(&code, &mir.handle_bindings(e)),
-                        captures: mir.free_locals(&[*scrutinee], &[]),
-                    },
-                );
-                n += 1;
-            }
-        }
-    }
+    plan_handles(&mut cx, &p, &mut names);
     // Every type a body has, so that the data types are all declared before
     // the bodies are built. An error is reported where the type is used.
     let mut sigs = Vec::new();
@@ -670,6 +525,173 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         })
         .collect();
     Ok(Lowered { module, entry: cx.funcs[&p.roots[0]], tests, names })
+}
+
+/// What in `p` can't be lowered, before anything is.
+fn program_errors<'db>(db: &'db dyn Db, p: &Program<'db>) -> Vec<Error> {
+    let snippet = |instance: Instance<'_>, site: Option<&Site<'_>>| -> Option<String> {
+        let def = instance.source_body(db)?;
+        let (_, map) = body_with_source_map(db, def);
+        let ptr = map.expr_syntax(site?.origin(db, def)?)?;
+        let text = source_text(db, def.def(db).file(db));
+        Some(text[ptr.start as usize..ptr.end as usize].to_string())
+    };
+    let mut errors: Vec<Error> = p
+        .errors
+        .iter()
+        .map(|(i, site, e)| Error {
+            instance: i.display(db).to_string(),
+            at: snippet(*i, site.as_ref()),
+            kind: ErrorKind::Use(e.clone()),
+        })
+        .collect();
+    for f in &p.erased {
+        let name = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
+        errors.push(Error {
+            instance: name,
+            at: None,
+            kind: ErrorKind::unsupported("a function whose types are erased"),
+        });
+    }
+    // Operations have no body: a call of one is a `perform`, so none should be
+    // an instance.
+    for iu in &p.instances {
+        if let Some(DefWithBody::Function(f)) = iu.instance.body(db).map(|b| b.def(db))
+            && let ItemContainerId::Effect(_) = f.container(db)
+        {
+            errors.push(Error {
+                instance: iu.instance.display(db).to_string(),
+                at: None,
+                kind: ErrorKind::unsupported("calling an operation of an effect"),
+            });
+        }
+    }
+    errors
+}
+
+/// The effects that the program performs or handles, with their
+/// arguments, from their operations, each once.
+fn used_effects<'db>(
+    db: &'db dyn Db,
+    p: &Program<'db>,
+    errors: &mut Vec<Error>,
+) -> Vec<EffectKey<'db>> {
+    let mut effects: Vec<EffectKey<'_>> = Vec::new();
+    for iu in &p.instances {
+        for (_, u) in &iu.uses {
+            if let Use::Op { op, effect_args } = u
+                && let ItemContainerId::Effect(e) = op.container(db)
+                && !effects.contains(&(e, effect_args.clone()))
+            {
+                effects.push((e, effect_args.clone()));
+            }
+        }
+        let Some(body) = iu.instance.body(db) else { continue };
+        let Ok(lcx) = Cx::new(db, iu.instance, &p.erased) else { continue };
+        let bodies = mir_bodies(db, body);
+        for mir in std::iter::once(&bodies.body).chain(&bodies.lambdas) {
+            for (_, node) in mir.exprs() {
+                if let boltlang_mir::ExprKind::Handle { ops: handled, .. } = &node.kind {
+                    match handled_effects(&lcx, handled) {
+                        Ok(keys) => {
+                            for key in keys {
+                                if !effects.contains(&key) {
+                                    effects.push(key);
+                                }
+                            }
+                        }
+                        Err(kind) => errors.push(Error {
+                            instance: iu.instance.display(db).to_string(),
+                            at: None,
+                            kind,
+                        }),
+                    }
+                }
+            }
+        }
+    }
+    effects
+}
+
+/// Number and name the functions that each `match` with effect arms is
+/// lowered to, and find the locals they share.
+fn plan_handles<'db>(cx: &mut Ctx<'db>, p: &Program<'db>, names: &mut BTreeMap<FuncId, String>) {
+    let db = cx.db;
+    for iu in &p.instances {
+        let Some(body) = iu.instance.body(db) else { continue };
+        let Ok(lcx) = Cx::new(db, iu.instance, &p.erased) else { continue };
+        let bodies = mir_bodies(db, body);
+        let instance = iu.instance.display(db).to_string();
+        let mut n = 0;
+        for (index, mir) in std::iter::once(&bodies.body).chain(&bodies.lambdas).enumerate() {
+            for (e, node) in mir.exprs() {
+                let boltlang_mir::ExprKind::Handle { body: scrutinee, arms, ops, .. } = &node.kind
+                else {
+                    continue;
+                };
+                let mut fresh = |name: String| new_func(names, name);
+                let Ok(handled) = handled_effects(&lcx, ops) else { continue };
+                let body_fn = fresh(format!("{instance}::handle{n}"));
+                let ret = fresh(format!("{instance}::handle{n}_return"));
+                let op_name = |op: FunctionId<'_>| {
+                    op.item(db).name.as_ref().map(|n| n.name().to_string()).unwrap_or_default()
+                };
+                let all_ops: Vec<(EffectKey<'_>, Vec<FunctionId<'_>>)> = handled
+                    .into_iter()
+                    .map(|effect| {
+                        let ops = cx.effects.get(&effect).map(|(_, ops)| ops.clone());
+                        (effect, ops.unwrap_or_default())
+                    })
+                    .collect();
+                // A clause is named after its operation, and also its effect
+                // when another effect it handles has an operation of that
+                // name, like `Reader.get` and `State.get`.
+                let shared = |name: &str| {
+                    all_ops
+                        .iter()
+                        .filter(|(_, ops)| ops.iter().any(|&o| op_name(o) == name))
+                        .count()
+                        > 1
+                };
+                let effects = all_ops
+                    .iter()
+                    .map(|(effect, effect_ops)| {
+                        let clauses = effect_ops
+                            .iter()
+                            .map(|&op| {
+                                let name = op_name(op);
+                                let name = if shared(&name) {
+                                    format!("{}_{name}", effect_name(db, effect.0))
+                                } else {
+                                    name
+                                };
+                                fresh(format!("{instance}::handle{n}_{name}"))
+                            })
+                            .collect();
+                        (effect.clone(), clauses)
+                    })
+                    .collect();
+                let mut code: Vec<boltlang_mir::ExprId> = Vec::new();
+                for arm in arms.iter().chain(ops.iter().flat_map(|o| o.arms.iter())) {
+                    code.extend(arm.guard);
+                    code.push(arm.body);
+                }
+                let handler = HandlerId(cx.handles.len() as u64);
+                cx.handles.insert(
+                    (iu.instance, index as u32, e),
+                    HandleFns {
+                        handler,
+                        body: body_fn,
+                        ret,
+                        effects,
+                        env: mir.free_locals(&code, &mir.handle_bindings(e)),
+                        captures: mir.free_locals(&[*scrutinee], &[]),
+                    },
+                );
+                n += 1;
+            }
+        }
+    }
 }
 
 /// The Conduit signature of an instance, its mutability parameters and how
