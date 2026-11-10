@@ -5,9 +5,9 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        LITERAL_FIRST, PathMode, TYPE_FIRST, delimited, name_ref, parse_block_expr,
-        parse_literal_expr, path_for_qualifier, path_type_after_path, trait_bounds, type_,
-        type_no_bounds,
+        LITERAL_FIRST, PathMode, TYPE_FIRST, at_signed_literal, delimited, name_ref,
+        parse_block_expr, path_for_qualifier, path_type_after_path, signed_literal_expr,
+        trait_bounds, type_, type_no_bounds,
     },
     parser::Parser,
     token_set::TokenSet,
@@ -40,15 +40,8 @@ fn generic_arg(p: &mut Parser) -> bool {
             parse_block_expr(p);
             CONST_ARG
         }
-        T![-] if p.nth_at_ts(1, LITERAL_FIRST) => {
-            let lit = p.start();
-            p.bump(T![-]);
-            parse_literal_expr(p);
-            lit.complete(p, PREFIX_EXPR);
-            CONST_ARG
-        }
-        k if LITERAL_FIRST.contains(k) => {
-            parse_literal_expr(p);
+        _ if at_signed_literal(p) => {
+            signed_literal_expr(p);
             CONST_ARG
         }
         // `Item = T` or `Item[A] = T`. Otherwise it's an ordinary path type

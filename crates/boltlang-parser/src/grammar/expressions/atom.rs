@@ -56,6 +56,23 @@ pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
     Some(m.complete(p, LIT_EXPR))
 }
 
+/// Whether a literal starts here, or a negative one like `-1`.
+pub(crate) fn at_signed_literal(p: &Parser) -> bool {
+    p.at_ts(LITERAL_FIRST) || (p.at(T![-]) && p.nth_at_ts(1, LITERAL_FIRST))
+}
+
+/// A literal, or a negative one like `-1`, which is a `PREFIX_EXPR`.
+pub(crate) fn signed_literal_expr(p: &mut Parser) {
+    if p.at(T![-]) {
+        let m = p.start();
+        p.bump(T![-]);
+        parse_literal_expr(p);
+        m.complete(p, PREFIX_EXPR);
+    } else {
+        parse_literal_expr(p);
+    }
+}
+
 pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> {
     if let Some(m) = parse_literal_expr(p) {
         return Some((m, BlockLike::NotBlock));

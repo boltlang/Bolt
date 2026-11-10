@@ -5,8 +5,8 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        LITERAL_FIRST, at_spread, delimited, name, outer_attrs, parse_block_expr,
-        parse_literal_expr, spread, trait_bounds, type_,
+        at_signed_literal, at_spread, delimited, expr_path, name, outer_attrs, parse_block_expr,
+        signed_literal_expr, spread, trait_bounds, type_,
     },
     parser::Parser,
     token_set::TokenSet,
@@ -104,20 +104,12 @@ fn const_param(p: &mut Parser) {
             T!['{'] => {
                 parse_block_expr(p);
             }
-            T![-] if p.nth_at_ts(1, LITERAL_FIRST) => {
-                let neg = p.start();
-                p.bump(T![-]);
-                parse_literal_expr(p);
-                neg.complete(p, PREFIX_EXPR);
-            }
             IDENT => {
                 let path = p.start();
-                crate::grammar::expr_path(p);
+                expr_path(p);
                 path.complete(p, PATH_EXPR);
             }
-            k if LITERAL_FIRST.contains(k) => {
-                parse_literal_expr(p);
-            }
+            _ if at_signed_literal(p) => signed_literal_expr(p),
             _ => p.error("expected a block, a name or a literal"),
         }
     }
