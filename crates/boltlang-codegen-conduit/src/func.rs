@@ -1557,8 +1557,8 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             let ty = match place {
                 Place::Scrutinee => t.clone(),
                 Place::Field { of, ctor, index } => {
-                    let of_ty = place_tys[*of as usize].clone();
-                    field_ty(l, &of_ty, *ctor, *index)?
+                    let of_ty = &place_tys[*of as usize];
+                    field_ty(l, of_ty, *ctor, *index)?
                 }
             };
             place_tys.push(ty);
@@ -1609,7 +1609,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             let mut tys = Vec::new();
             let mut kept = Vec::new();
             for &p in &params {
-                if let Some(t) = l.cty(&self.place_tys[p as usize].clone())? {
+                if let Some(t) = l.cty(&self.place_tys[p as usize])? {
                     tys.push(t);
                     kept.push(p);
                 }
@@ -1691,16 +1691,16 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
             Place::Scrutinee => self.scrut.clone(),
             Place::Field { of, ctor, index } => {
                 let obj = self.place(l, of, env)?;
-                let of_ty = self.place_tys[of as usize].clone();
-                let (ctor, index) = tuple_field(l.cx.db, &of_ty, ctor, index)?;
+                let of_ty = &self.place_tys[of as usize];
+                let (ctor, index) = tuple_field(l.cx.db, of_ty, ctor, index)?;
                 // The `x` of a `Some(x)` that's a `nullable host`.
-                if l.nullable_host(&of_ty) {
+                if l.nullable_host(of_ty) {
                     let obj = obj.ok_or_else(|| ErrorKind::unsupported("this host value"))?;
                     let v = Some(l.host_unwrap(obj));
                     env.insert(p, v.clone());
                     return Ok(v);
                 }
-                let Some(Ty::Data(id, ..)) = l.cty(&of_ty)? else {
+                let Some(Ty::Data(id, ..)) = l.cty(of_ty)? else {
                     return Err(ErrorKind::unsupported("a field of this type"));
                 };
                 let c = match ctor {
@@ -1708,7 +1708,7 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                     Ctor::Tuple(_) | Ctor::TupleEnd | Ctor::TupleNamed(_) | Ctor::Struct(_) => 0,
                 };
                 // A field of a type with no values is none.
-                match (obj, l.cty(&self.place_tys[p as usize].clone())?) {
+                match (obj, l.cty(&self.place_tys[p as usize])?) {
                     (Some(obj), Some(_)) => {
                         Some(Atom::Var(l.b.get(CtorId { data: id, index: c }, index, obj)))
                     }
@@ -1747,14 +1747,14 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
     ) -> R<()> {
         match &self.d.nodes[n as usize] {
             Node::Switch { place, cases, default } => {
-                let t = self.place_tys[*place as usize].clone();
+                let t = &self.place_tys[*place as usize];
                 let v = self
                     .place(l, *place, env)?
                     .ok_or_else(|| ErrorKind::unsupported("this match"))?;
                 // A `Char` is tested by its code point.
                 let v = match (&t, cases.first()) {
                     (MonoTy::Adt(..), Some((Case::Char(_), _))) => {
-                        let Some(Ty::Data(id, ..)) = l.cty(&t)? else {
+                        let Some(Ty::Data(id, ..)) = l.cty(t)? else {
                             return Err(ErrorKind::unsupported("this match"));
                         };
                         Atom::Var(l.b.get(CtorId { data: id, index: 0 }, 0, v))
@@ -1764,15 +1764,15 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                 // Conduit's `case` is on an `i32`, so an 8- or 16-bit integer
                 // is widened, by its sign, and its tags are its values.
                 // A `nullable host` is tested by whether it's null, `None`.
-                let nullable = l.nullable_host(&t);
+                let nullable = l.nullable_host(t);
                 let v = if nullable { l.host_is_null(v) } else { v };
-                let v = match Scalar::of(&t)? {
+                let v = match Scalar::of(t)? {
                     Some(sc @ Scalar::Int { bits: 8 | 16, .. }) => {
                         Atom::Var(l.b.convert(Ty::I32, sc.sign(), v))
                     }
                     _ => v,
                 };
-                let data = match l.cty(&t)? {
+                let data = match l.cty(t)? {
                     Some(Ty::Data(id, ..))
                         if !matches!(cases.first(), Some((Case::Char(_), _))) && !nullable =>
                     {
@@ -1834,15 +1834,15 @@ impl<'d, 'db> DecisionLower<'d, 'db> {
                 self.branch(l, Atom::Var(c), *then, *otherwise, env, arm)
             }
             Node::Range { place, start, end, inclusive, then, otherwise } => {
-                let t = self.place_tys[*place as usize].clone();
+                let t = &self.place_tys[*place as usize];
                 let mut v = self
                     .place(l, *place, env)?
                     .ok_or_else(|| ErrorKind::unsupported("this match"))?;
-                let s = match Scalar::of(&t)? {
+                let s = match Scalar::of(t)? {
                     Some(s) => s,
                     None => {
                         // A `Char`, by its code point.
-                        let Some(Ty::Data(id, ..)) = l.cty(&t)? else {
+                        let Some(Ty::Data(id, ..)) = l.cty(t)? else {
                             return Err(ErrorKind::unsupported("this pattern"));
                         };
                         v = Atom::Var(l.b.get(CtorId { data: id, index: 0 }, 0, v));
