@@ -117,15 +117,8 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
                 // The fields the pattern names must be visible; `..` can
                 // stand for private ones.
-                let split = rest.map_or(args.len(), |r| r as usize);
-                let after = args.len() - split;
                 for (i, &arg) in args.iter().enumerate() {
-                    let index = if i < split {
-                        Some(i)
-                    } else {
-                        field_tys.len().checked_sub(after - (i - split))
-                    };
-                    if let Some(index) = index.filter(|&i| i < field_tys.len()) {
+                    if let Some(index) = list_index(i, args.len(), *rest, field_tys.len()) {
                         self.check_field_visible(ExprOrPat::Pat(arg), def, index);
                     }
                 }
@@ -246,12 +239,9 @@ impl<'db> InferenceContext<'_, 'db> {
     /// Check the patterns of a tuple or tuple struct, where `..` at `rest`
     /// stands for the elements not matched.
     pub(super) fn check_pat_list(&mut self, args: &[PatId], rest: Option<u32>, elems: &[Ty<'db>]) {
-        let split = rest.map_or(args.len(), |r| r as usize);
-        let after = args.len() - split;
         for (i, &arg) in args.iter().enumerate() {
-            let index =
-                if i < split { Some(i) } else { elems.len().checked_sub(after - (i - split)) };
-            let ty = index.and_then(|i| elems.get(i)).cloned().unwrap_or(Ty::Error);
+            let index = list_index(i, args.len(), rest, elems.len());
+            let ty = index.map_or(Ty::Error, |i| elems[i].clone());
             self.check_pat(arg, &ty);
         }
     }
@@ -340,4 +330,13 @@ impl<'db> InferenceContext<'_, 'db> {
         let mutability = self.new_mutability();
         self.fresh_adt(def, mutability).0
     }
+}
+
+/// Which of `len` elements the `i`th of `count` patterns of a tuple or
+/// tuple struct matches, where `..` at `rest` stands for the elements not
+/// matched: those after it match from the end.
+fn list_index(i: usize, count: usize, rest: Option<u32>, len: usize) -> Option<usize> {
+    let split = rest.map_or(count, |r| r as usize);
+    let index = if i < split { Some(i) } else { len.checked_sub(count - i) };
+    index.filter(|&index| index < len)
 }
