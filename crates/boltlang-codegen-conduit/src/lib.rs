@@ -723,8 +723,13 @@ fn instance_sig<'db>(
             return Err(ErrorKind::unsupported("the value of a variant"));
         }
     }
-    let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
-    Ok((sig, mut_params, lcx.instance.row_params(db) as u32))
+    Ok((sig, own_mut_params(db, lcx.instance), lcx.instance.row_params(db) as u32))
+}
+
+/// The mutability parameters of a function with those of `instance`, as
+/// the instance's own function and its lambdas have.
+fn own_mut_params(db: &dyn Db, instance: Instance<'_>) -> MutParams {
+    MutParams { count: instance.mut_params(db) as u32, assumes: Vec::new() }
 }
 
 /// The row of effects of a MIR body of the instance of `lcx`: that of its
@@ -771,8 +776,7 @@ fn lambda_sig<'db>(
     }
     sig.results.extend(types.value(db, root, &ret)?);
     sig.row = types.row(&row);
-    let mut_params = MutParams { count: lcx.instance.mut_params(db) as u32, assumes: Vec::new() };
-    Ok((sig, mut_params, lcx.instance.row_params(db) as u32))
+    Ok((sig, own_mut_params(db, lcx.instance), lcx.instance.row_params(db) as u32))
 }
 
 /// The signatures of the functions of the handlers in the instance of
@@ -865,7 +869,7 @@ fn handler_sigs<'db>(
         // The body is a closure, like a lambda's, which has the instance's
         // mutability parameters. It can perform the handled effects, and
         // what the handler can.
-        let own = MutParams { count: instance.mut_params(db) as u32, assumes: Vec::new() };
+        let own = own_mut_params(db, instance);
         let mut body_sig = Sig::new(captures, body_results.clone());
         body_sig.row = handled.iter().fold(row.clone(), |r, (e, _)| r.union(&Row::one(*e)));
         sigs.push((fns.body, (body_sig, own, effect_params)));

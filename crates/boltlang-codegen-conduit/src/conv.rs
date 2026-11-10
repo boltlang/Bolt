@@ -192,8 +192,7 @@ impl<'db> Convs<'db> {
         let id = fresh(name.clone());
         self.funcs.insert(key.clone(), id);
         self.order.push(key.clone());
-        let none = || MutParams { count: 0, assumes: Vec::new() };
-        sigs.push((id, (Sig::new(vec![ft.clone()], vec![tt]), none(), 0)));
+        sigs.push((id, (Sig::new(vec![ft.clone()], vec![tt]), MutParams::default(), 0)));
         match (from, to) {
             (MonoTy::Fn(ps, _, r, _, _), MonoTy::Fn(qs, _, s, _, row)) => {
                 let wrapper = fresh(format!("{name}::closure"));
@@ -204,7 +203,7 @@ impl<'db> Convs<'db> {
                 }
                 sig.results.extend(cx.value(s)?);
                 sig.row = cx.types.row(row);
-                sigs.push((wrapper, (sig, none(), 0)));
+                sigs.push((wrapper, (sig, MutParams::default(), 0)));
                 // Its arguments go the other way.
                 for (p, q) in ps.iter().zip(qs.iter()) {
                     self.plan(cx, q, p, names, sigs)?;
