@@ -1049,28 +1049,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_pat(*pat, &ty);
                 Ty::bool()
             }
-            Expr::Match { expr: scrutinee, arms, effect_arms } => {
-                // With effect arms, the match handles what its scrutinee does:
-                // that runs with effects of its own.
-                let inner = (!effect_arms.is_empty()).then(|| self.solver.new_var(VarKind::Effect));
-                let outer = inner.clone().map(|inner| std::mem::replace(&mut self.effects, inner));
-                let scrutinee_ty = self.infer_expr(*scrutinee);
-                if let Some(outer) = outer {
-                    self.effects = outer;
-                }
-                let ty = self.expected_or_var(expected);
-                for (i, arm) in arms.iter().enumerate() {
-                    self.check_pat(arm.pat, &scrutinee_ty);
-                    if let Some(guard) = arm.guard {
-                        self.check_expr(guard, &Ty::bool());
-                    }
-                    self.check_expr_because(arm.expr, &ty, reason_for_nth(reason, arms[0].expr, i));
-                }
-                if let Some(inner) = inner {
-                    self.check_effect_arms(expr, effect_arms, inner, &ty);
-                }
-                if arms.is_empty() { Ty::Never } else { ty }
-            }
+            Expr::Match { .. } => self.infer_match(expr, expected),
             Expr::While { condition, body: loop_body, label } => {
                 self.breakables.push(Breakable {
                     label: *label,
@@ -1253,6 +1232,36 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             });
         }
         closure
+    }
+
+    /// A `match`: each arm's pattern is checked against the scrutinee, and
+    /// the arms all give the same type. Effect arms handle what the
+    /// scrutinee does.
+    fn infer_match(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+        let Expr::Match { expr: scrutinee, arms, effect_arms } = &self.body[expr] else {
+            unreachable!("only called for a match")
+        };
+        let reason = expected.map_or(Reason::None, |e| e.reason);
+        // With effect arms, the match handles what its scrutinee does:
+        // that runs with effects of its own.
+        let inner = (!effect_arms.is_empty()).then(|| self.solver.new_var(VarKind::Effect));
+        let outer = inner.clone().map(|inner| std::mem::replace(&mut self.effects, inner));
+        let scrutinee_ty = self.infer_expr(*scrutinee);
+        if let Some(outer) = outer {
+            self.effects = outer;
+        }
+        let ty = self.expected_or_var(expected);
+        for (i, arm) in arms.iter().enumerate() {
+            self.check_pat(arm.pat, &scrutinee_ty);
+            if let Some(guard) = arm.guard {
+                self.check_expr(guard, &Ty::bool());
+            }
+            self.check_expr_because(arm.expr, &ty, reason_for_nth(reason, arms[0].expr, i));
+        }
+        if let Some(inner) = inner {
+            self.check_effect_arms(expr, effect_arms, inner, &ty);
+        }
+        if arms.is_empty() { Ty::Never } else { ty }
     }
 
     fn infer_block(
