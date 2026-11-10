@@ -6,23 +6,24 @@
 //! desugared: that's for passes. What isn't supported yet becomes an
 //! [`ExprKind::Unsupported`] node, and the rest of the body is built.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
-    body::{Body as HirBody, DefWithBodyId, body},
+    body::{Body as HirBody, DefWithBody, DefWithBodyId, body},
     builtin_type::{BuiltinInt, BuiltinType, BuiltinValue},
     hir::{
         self, BinaryOp, EffectArm, Expr, MatchArm, Pat, PatId, Path, PathSegment, Spread,
         Statement, TupleItem,
     },
-    ids::{ConstId, FunctionId, ItemContainerId},
+    ids::{ConstId, EnumVariantId, FunctionId, ItemContainerId},
     resolver::{GenericDefId, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
+    signatures::{enum_signature, function_signature},
 };
 use boltlang_hir_ty::{
     AdtId, InferenceResult, Ty,
-    builtin::builtin,
+    builtin::{builtin, link},
     function_scheme, infer_body,
     instances::class_args,
     lang::LangClass,
@@ -95,8 +96,8 @@ pub fn mir_bodies<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> MirBodies<'d
     let mut lambdas = Vec::new();
     let b = Builder::new(&cx, BodyOwner::Def(def), &mut lambdas);
     let mut body = b.finish(&hir.params, hir.body_expr, "patterns in parameters");
-    if let boltlang_hir_def::body::DefWithBody::Function(f) = def.def(db) {
-        let params = &boltlang_hir_def::signatures::function_signature(db, f).params;
+    if let DefWithBody::Function(f) = def.def(db) {
+        let params = &function_signature(db, f).params;
         if params.iter().any(|p| p.kind != hir::ParamKind::Positional) {
             body.param_kinds = params.iter().map(|p| (p.kind, p.name.clone())).collect();
         }
@@ -290,7 +291,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         if let Some(b) = builtin(db, f) {
             return ItemRef::Builtin(b);
         }
-        if boltlang_hir_ty::builtin::link(db, f).is_some() {
+        if link(db, f).is_some() {
             return ItemRef::Extern(f);
         }
         match f.container(db) {
@@ -799,7 +800,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     ) -> Option<Vec<ExprId>> {
         let of = self.ty(callee);
         let Ty::Fn(params, ..) = &of else { return None };
-        let decl = &boltlang_hir_def::signatures::function_signature(self.db, f).params;
+        let decl = &function_signature(self.db, f).params;
         let tys = declared_param_tys(self.db, f, params);
         let mut given = values.into_iter();
         let mut positional: Vec<Option<ExprId>> = (0..params.positional.len())
@@ -1024,10 +1025,10 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             TryKind::Option(id) => (id, "Some", "None", false),
             TryKind::Result(id) => (id, "Ok", "Err", true),
         };
-        let variants = &boltlang_hir_def::signatures::enum_signature(self.db, parent).variants;
+        let variants = &enum_signature(self.db, parent).variants;
         let variant = |name: &str| {
             let index = variants.iter().position(|v| v.name.as_str() == name)?;
-            Some(boltlang_hir_def::ids::EnumVariantId { parent, index: index as u32 })
+            Some(EnumVariantId { parent, index: index as u32 })
         };
         let (Some(good), Some(bad)) = (variant(good), variant(bad)) else {
             return self.unsupported(e, "`e?`");
@@ -1125,7 +1126,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 let Some(i) = effect_arms.iter().position(|a| a.ops.contains(pat)) else {
                     return self.unsupported(e, "this effect arm");
                 };
-                if let std::collections::hash_map::Entry::Vacant(slot) = built.entry(i) {
+                if let Entry::Vacant(slot) = built.entry(i) {
                     let arm = &effect_arms[i];
                     let Some(k) = self.simple_pattern(arm.cont) else {
                         return self.unsupported(e, "this pattern of a continuation");
