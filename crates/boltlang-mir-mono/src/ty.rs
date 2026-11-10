@@ -180,21 +180,33 @@ impl<'db> MonoTy<'db> {
         MonoTy::Tuple(Box::new([]), MonoMut::Imm)
     }
 
+    /// Whether `f` holds for one of the types right inside this one: its
+    /// type arguments, elements, parameters and result, and the arguments
+    /// of the effects in its row.
+    pub(crate) fn any_child(&self, f: &mut dyn FnMut(&MonoTy<'db>) -> bool) -> bool {
+        match self {
+            MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Erased(_)
+            | MonoTy::Any(_)
+            | MonoTy::Host(_) => false,
+            MonoTy::Adt(_, args, ..)
+            | MonoTy::Tuple(args, _)
+            | MonoTy::Record(args, ..)
+            | MonoTy::ErasedAssoc(_, args) => args.iter().any(f),
+            MonoTy::Array(_, elem) => f(elem),
+            MonoTy::Fn(params, _, ret, _, row) => {
+                params.iter().any(&mut *f) || f(ret) || row.any_ty(f)
+            }
+            MonoTy::Row(row) => row.any_ty(f),
+        }
+    }
+
     /// Whether an erased type is somewhere in the type.
     pub fn has_erased(&self) -> bool {
         match self {
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => true,
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Host(_) => false,
-            MonoTy::Adt(_, args, ..) | MonoTy::Tuple(args, _) | MonoTy::Record(args, ..) => {
-                args.iter().any(MonoTy::has_erased)
-            }
-            MonoTy::Array(_, elem) => elem.has_erased(),
-            MonoTy::Fn(params, _, ret, _, row) => {
-                params.iter().any(MonoTy::has_erased)
-                    || ret.has_erased()
-                    || row.any_ty(&mut MonoTy::has_erased)
-            }
-            MonoTy::Row(row) => row.any_ty(&mut MonoTy::has_erased),
+            _ => self.any_child(&mut MonoTy::has_erased),
         }
     }
 
