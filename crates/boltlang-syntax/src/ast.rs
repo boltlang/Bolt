@@ -197,14 +197,10 @@ pub enum TupleTypeItem {
 impl TupleType {
     /// The positional types, named fields and rests, in order.
     pub fn items(&self) -> impl Iterator<Item = TupleTypeItem> {
-        self.0.children().filter_map(|n| {
-            if let Some(f) = TupleTypeField::cast(n.clone()) {
-                Some(TupleTypeItem::Named(f))
-            } else if let Some(r) = TupleTypeRest::cast(n.clone()) {
-                Some(TupleTypeItem::Rest(r))
-            } else {
-                Type::cast(n).map(TupleTypeItem::Positional)
-            }
+        self.0.children().filter_map(|node| match node.kind() {
+            TUPLE_TYPE_FIELD => Some(TupleTypeItem::Named(TupleTypeField(node))),
+            TUPLE_TYPE_REST => Some(TupleTypeItem::Rest(TupleTypeRest(node))),
+            _ => Type::cast(node).map(TupleTypeItem::Positional),
         })
     }
 }
@@ -1322,15 +1318,7 @@ impl TupleExpr {
     }
     /// The positional elements, named fields and spreads, in order.
     pub fn items(&self) -> impl Iterator<Item = TupleExprItem> {
-        self.0.children().filter_map(|n| {
-            if let Some(f) = TupleExprField::cast(n.clone()) {
-                Some(TupleExprItem::Named(f))
-            } else if let Some(s) = TupleExprSpread::cast(n.clone()) {
-                Some(TupleExprItem::Spread(s))
-            } else {
-                Expr::cast(n).map(TupleExprItem::Positional)
-            }
-        })
+        self.0.children().filter_map(TupleExprItem::cast)
     }
 }
 
@@ -1339,6 +1327,16 @@ pub enum TupleExprItem {
     Positional(Expr),
     Named(TupleExprField),
     Spread(TupleExprSpread),
+}
+
+impl TupleExprItem {
+    fn cast(node: SyntaxNode) -> Option<Self> {
+        match node.kind() {
+            TUPLE_EXPR_FIELD => Some(TupleExprItem::Named(TupleExprField(node))),
+            TUPLE_EXPR_SPREAD => Some(TupleExprItem::Spread(TupleExprSpread(node))),
+            _ => Expr::cast(node).map(TupleExprItem::Positional),
+        }
+    }
 }
 
 /// `x: e` in a tuple expression
@@ -1505,29 +1503,20 @@ impl CallExpr {
     }
     /// The positional arguments, leaving out named ones and spreads.
     pub fn args(&self) -> impl Iterator<Item = Expr> {
-        self.0
-            .children()
-            .find(|node| node.kind() == ARG_LIST)
-            .into_iter()
-            .flat_map(|list| list.children().filter_map(Expr::cast))
+        self.arg_nodes().filter_map(Expr::cast)
     }
     /// The arguments, with named ones like `sep: ","` and spreads like
     /// `*xs`, in order.
     pub fn arg_items(&self) -> impl Iterator<Item = TupleExprItem> {
+        self.arg_nodes().filter_map(TupleExprItem::cast)
+    }
+    /// The nodes in the argument list.
+    fn arg_nodes(&self) -> impl Iterator<Item = SyntaxNode> {
         self.0
             .children()
             .find(|node| node.kind() == ARG_LIST)
             .into_iter()
             .flat_map(|list| list.children())
-            .filter_map(|n| {
-                if let Some(f) = TupleExprField::cast(n.clone()) {
-                    Some(TupleExprItem::Named(f))
-                } else if let Some(s) = TupleExprSpread::cast(n.clone()) {
-                    Some(TupleExprItem::Spread(s))
-                } else {
-                    Expr::cast(n).map(TupleExprItem::Positional)
-                }
-            })
     }
 }
 
