@@ -1144,11 +1144,7 @@ fn item_list(items: &[(ClassItemKind, impl fmt::Display)]) -> String {
                 .then(|| format!("{} {}", item_noun(kind, names.len()), names.join(", ")))
         })
         .collect();
-    match groups.split_last() {
-        Some((last, [])) => last.clone(),
-        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
-        None => String::new(),
-    }
+    join_list(&groups, "and")
 }
 
 /// The name of `class`, or `?` for a class without one.
@@ -1173,21 +1169,25 @@ mod tests;
 /// Types as text in a sentence: `` `a` ``, `` `a` and `b` `` or
 /// `` `a`, `b` and `c` ``.
 fn list_types(tys: &[String]) -> String {
-    let quoted: Vec<String> = tys.iter().map(|t| format!("`{t}`")).collect();
-    match quoted.split_last() {
-        None => String::new(),
-        Some((last, [])) => last.clone(),
-        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
-    }
+    join_list(&quoted(tys), "and")
 }
 
 /// `a`, `b` or `c`.
 fn either(items: &[String]) -> String {
-    let quoted: Vec<String> = items.iter().map(|t| format!("`{t}`")).collect();
-    match quoted.split_last() {
+    join_list(&quoted(items), "or")
+}
+
+fn quoted(items: &[String]) -> Vec<String> {
+    items.iter().map(|t| format!("`{t}`")).collect()
+}
+
+/// The items with commas between them, and `conjunction` before the last,
+/// like "a, b and c".
+fn join_list(items: &[String], conjunction: &str) -> String {
+    match items.split_last() {
         None => String::new(),
         Some((last, [])) => last.clone(),
-        Some((last, rest)) => format!("{} or {last}", rest.join(", ")),
+        Some((last, rest)) => format!("{} {conjunction} {last}", rest.join(", ")),
     }
 }
 
