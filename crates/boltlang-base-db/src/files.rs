@@ -5,7 +5,7 @@ use salsa::{Durability, Setter};
 use crate::{
     Db, FxDashMap,
     system::{SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf},
-    vfs::FileRevision,
+    vfs::{FileRevision, Metadata},
 };
 
 use self::private::FileStatus;
@@ -67,21 +67,7 @@ impl Files {
         };
         let file = *self.inner.system_by_path.entry(real.clone()).or_insert_with(|| {
             let metadata = db.system().path_metadata(&real);
-            let durability = Durability::default();
-            let builder =
-                File::builder(FilePath::System(real.clone())).path_durability(Durability::HIGH);
-            let builder = match metadata {
-                Ok(metadata) if metadata.file_type().is_file() => {
-                    builder.revision(metadata.revision())
-                }
-                Ok(metadata) if metadata.file_type().is_directory() => {
-                    builder.status(FileStatus::IsADirectory)
-                }
-                _ => builder
-                    .status(FileStatus::NotFound)
-                    .status_durability(Durability::MEDIUM.max(durability)),
-            };
-            builder.new(db)
+            new_file(db, FilePath::System(real.clone()), metadata)
         });
         if real != absolute {
             self.inner.system_by_path.insert(absolute, file);
@@ -103,23 +89,22 @@ impl Files {
         let absolute = SystemPath::absolute(path, db.system().current_directory().unwrap());
         *self.inner.virtual_system_by_path.entry(absolute.clone()).or_insert_with(|| {
             let metadata = db.system().virtual_path_metadata(path);
-            let durability = Durability::default();
-            let builder =
-                File::builder(FilePath::System(absolute)).path_durability(Durability::HIGH);
-            let builder = match metadata {
-                Ok(metadata) if metadata.file_type().is_file() => {
-                    builder.revision(metadata.revision())
-                }
-                Ok(metadata) if metadata.file_type().is_directory() => {
-                    builder.status(FileStatus::IsADirectory)
-                }
-                _ => builder
-                    .status(FileStatus::NotFound)
-                    .status_durability(Durability::MEDIUM.max(durability)),
-            };
-            builder.new(db)
+            new_file(db, FilePath::System(absolute), metadata)
         })
     }
+}
+
+/// A new [`File`] at `path`, whose status and revision come from `metadata`.
+fn new_file(db: &dyn Db, path: FilePath, metadata: std::io::Result<Metadata>) -> File {
+    let builder = File::builder(path).path_durability(Durability::HIGH);
+    let builder = match metadata {
+        Ok(metadata) if metadata.file_type().is_file() => builder.revision(metadata.revision()),
+        Ok(metadata) if metadata.file_type().is_directory() => {
+            builder.status(FileStatus::IsADirectory)
+        }
+        _ => builder.status(FileStatus::NotFound).status_durability(Durability::MEDIUM),
+    };
+    builder.new(db)
 }
 
 /// A file that's either stored on the host system's file system or in the vendored file system.
