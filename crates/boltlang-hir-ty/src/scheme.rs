@@ -345,15 +345,24 @@ pub fn assumptions_with_sources<'db>(
             None,
         ));
     }
-    for def in generic_chain(db, f) {
-        if !matches!(def, GenericDefId::Class(_)) {
-            let predicates = generic_predicates(db, def);
-            out.extend(predicates.predicates.iter().zip(predicates.sources.iter()).map(
-                |(c, &type_ref)| (c.clone(), Some(ConstraintSource::Declared { def, type_ref })),
-            ));
-        }
+    for def in declaring_defs(db, f) {
+        let predicates = generic_predicates(db, def);
+        out.extend(
+            predicates.predicates.iter().zip(predicates.sources.iter()).map(|(c, &type_ref)| {
+                (c.clone(), Some(ConstraintSource::Declared { def, type_ref }))
+            }),
+        );
     }
     out
+}
+
+/// The items of [`generic_chain`] whose bounds and `where` clauses hold in
+/// `f`: all but a class, whose own instance stands for them.
+fn declaring_defs<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> impl Iterator<Item = GenericDefId<'db>> {
+    generic_chain(db, f).into_iter().filter(|def| !matches!(def, GenericDefId::Class(_)))
 }
 
 /// What `f` assumes is at most a mutability: its bounds and `where`
@@ -363,13 +372,10 @@ pub fn at_most_assumptions<'db>(
     f: FunctionId<'db>,
 ) -> Vec<(AtMostConstraint<'db>, Option<ConstraintSource<'db>>)> {
     let mut out = Vec::new();
-    for def in generic_chain(db, f) {
-        if !matches!(def, GenericDefId::Class(_)) {
-            let predicates = generic_predicates(db, def);
-            out.extend(predicates.at_most.iter().map(|(c, type_ref)| {
-                (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))
-            }));
-        }
+    for def in declaring_defs(db, f) {
+        out.extend(generic_predicates(db, def).at_most.iter().map(|(c, type_ref)| {
+            (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))
+        }));
     }
     out
 }
@@ -382,13 +388,10 @@ pub fn equality_assumptions<'db>(
     f: FunctionId<'db>,
 ) -> Vec<(AssocConstraint<'db>, Option<ConstraintSource<'db>>)> {
     let mut out = Vec::new();
-    for def in generic_chain(db, f) {
-        if !matches!(def, GenericDefId::Class(_)) {
-            let predicates = generic_predicates(db, def);
-            out.extend(predicates.equalities.iter().map(|(c, type_ref)| {
-                (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))
-            }));
-        }
+    for def in declaring_defs(db, f) {
+        out.extend(generic_predicates(db, def).equalities.iter().map(|(c, type_ref)| {
+            (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))
+        }));
     }
     out
 }
