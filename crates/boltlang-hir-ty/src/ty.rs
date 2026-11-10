@@ -7,6 +7,7 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{
     Name,
     builtin_type::BuiltinType,
+    hir::TupleItem,
     ids::{EffectId, EnumId, ItemContainerId, StructId, TypeAliasId},
     resolver::GenericDefId,
 };
@@ -179,6 +180,57 @@ impl<'db> Params<'db> {
             self.keyword_rest.as_deref().map(&mut f),
         )
     }
+}
+
+/// Where an argument of a call goes, as [`place_args`] finds it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArgPlace {
+    /// Where it's written: a positional one in its place, and a named one
+    /// by its name, as a keyword argument.
+    Written,
+    /// A named argument for the positional parameter with its name.
+    Positional(usize),
+    /// A named argument for a positional parameter that an argument before
+    /// it is for already.
+    Twice,
+}
+
+/// Where each of the arguments `items` of a call goes, after `first`
+/// arguments that come before them, like the receiver of `x.f(y)`, for a
+/// function with `count` positional parameters, whose names `name` gives.
+/// A named argument goes to the positional parameter with its name, if the
+/// arguments before it fill the parameters before that one: `f(1, z: 3)`
+/// passes `z` by name when `f(x, y, z)`. With a spread, the places aren't
+/// known, so every argument goes where it's written.
+pub fn place_args<T>(
+    count: usize,
+    name: impl Fn(usize) -> Option<Name>,
+    first: usize,
+    items: &[TupleItem<T>],
+) -> Vec<ArgPlace> {
+    let mut places = vec![ArgPlace::Written; items.len()];
+    if items.iter().any(|i| matches!(i, TupleItem::Spread(..))) {
+        return places;
+    }
+    let given = first + items.iter().filter(|i| matches!(i, TupleItem::Positional(_))).count();
+    let names: Vec<Option<Name>> = (0..count).map(name).collect();
+    for (item, place) in items.iter().zip(&mut places) {
+        if let TupleItem::Named(n, _) = item
+            && names[..given.min(count)].iter().any(|m| m.as_ref() == Some(n))
+        {
+            *place = ArgPlace::Twice;
+        }
+    }
+    for (i, name) in names.iter().enumerate().skip(given) {
+        let found = items
+            .iter()
+            .position(|item| matches!(item, TupleItem::Named(n, _) if name.as_ref() == Some(n)));
+        match found {
+            Some(j) if places[j] == ArgPlace::Written => places[j] = ArgPlace::Positional(i),
+            _ => break,
+        }
+    }
+    places
 }
 
 /// Which fields of a tuple a [`Ty::Spread`] stands for.

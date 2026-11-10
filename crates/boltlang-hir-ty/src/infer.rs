@@ -42,7 +42,7 @@ use crate::{
         Held, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, SpreadConstraint,
         TuplePart, TypeError,
     },
-    ty::{AdtId, Mutability, Params, Ty, VarKind},
+    ty::{AdtId, ArgPlace, Mutability, Params, Ty, VarKind, place_args},
 };
 
 /// The arguments of a call: only positional ones, or with named ones and
@@ -1977,14 +1977,39 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let constraint = RowConstraint::contains(effects, self.effects.clone());
         self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
         // The arguments, as a tuple: a positional one is checked against its
-        // parameter while its place is known, before a spread.
+        // parameter while its place is known, before a spread. A named one
+        // for a positional parameter comes after the positional ones, in
+        // the order of the parameters.
         let mut parts = Vec::new();
         let mut position: Option<usize> = Some(0);
         if let Some((_, receiver_ty, _)) = receiver {
             parts.push(TuplePart::Positional(receiver_ty.clone()));
             position = Some(1);
         }
-        for item in items {
+        let names = self.solver.unifier.names_now(&params.names);
+        let first = receiver.is_some() as usize;
+        let places = place_args(params.positional.len(), |i| names[i].clone(), first, items);
+        // An argument given twice is reported on its own.
+        let twice = places.contains(&ArgPlace::Twice);
+        let mut placed = Vec::new();
+        for (item, place) in items.iter().zip(places) {
+            match (item, place) {
+                (TupleItem::Named(name, e), ArgPlace::Positional(i)) => {
+                    let hint = Expectation { ty: &params.positional[i], reason: Reason::None };
+                    let ty = self.infer_expr_expect(*e, Some(hint));
+                    self.solver.unifier.require_name(&params.names[i], name);
+                    placed.push((i, ty));
+                    continue;
+                }
+                (TupleItem::Named(name, e), ArgPlace::Twice) => {
+                    self.infer_expr(*e);
+                    let origin = self.origin(*e);
+                    let error = TypeError::DuplicateArgument { origin, name: name.clone() };
+                    self.solver.errors.push(error);
+                    continue;
+                }
+                _ => {}
+            }
             match item {
                 TupleItem::Positional(e) => {
                     let hint = position.and_then(|i| params.positional.get(i));
@@ -2005,6 +2030,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
         }
+        if twice {
+            return ret;
+        }
+        placed.sort_by_key(|(i, _)| *i);
+        parts.extend(placed.into_iter().map(|(_, ty)| TuplePart::Positional(ty)));
         let args = self.new_var();
         let constraint = SpreadConstraint {
             parts,

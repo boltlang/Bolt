@@ -222,9 +222,50 @@ evaluating them into temporaries in the order they're written. A function
 with keyword parameters or rests binds its parameters from the flat ones
 (`bind_params` in the code generator), building `args` and `opts`.
 
-What's left: naming a positional parameter in a call, `/`, default values,
-lambdas with keyword parameters, and passing a pack on, like
-`f(*args)` in a generic body (#405).
+### Names of positional parameters
+
+A positional parameter can be passed by name too: `f(y: 2, x: 1)` for
+`fn f(x: i32, y: i32)`. The names are in the function's type, as
+`fn(x: i32, y: i32)`, and a function type can be written with them. Each
+positional parameter in `Params` has a name in `Params::names`: a
+`Ty::ParamName`, which is `None` for one without a name, like a pattern
+that isn't a name, or a variable of kind `VarKind::Name` while it's
+inferred.
+
+Names aren't types. A written type is a requirement, so a function with
+names fits where fewer are asked for: `fn(x: i32)` fits `fn(i32)`, but
+`fn(i32)` doesn't fit `fn(x: i32)`, which would let a call pass `x` by
+name. So names are never unified. Where the unifier meets two function
+types, it relates their names one way, the expected one at most the other
+(`NameEdge`): no name, or the same one. Inside the parameters of a
+function type, the other way around, since a function there is given, not
+taken. At runtime nothing changes: a name only decides a position, which
+the checker and MIR find the same way (`place_args`).
+
+A variable that's bound to a function type gets new name variables, which
+the names it was bound to bound from above when the variable is on the
+expected side, and from below otherwise. So a variable that two functions
+meet in, like the type of `if c { f } else { g }`, has the names they share:
+with `f(x, y)` and `g(x, z)`, it's `fn(x: i32, i32)`. Unifying the names
+instead would make the first function decide them for the second, and
+copying them would make the second an error.
+
+The solver tags each name relation with the equality that made it, and
+settles the names before generalizing (`Solver::settle_names`): a name
+that's at least a name, because a call passes it by that name, is that
+name, and otherwise it's the greatest name that the names above it allow,
+which is no name when they differ or when nothing says. A relation that
+doesn't hold then is reported as a mismatch at its equality. A call with a
+named argument looks at the names the callee would have now
+(`Unifier::names_now`), and a name it uses becomes a lower bound.
+
+A lambda's parameters have the names of the function type it's checked
+against, or else those of its patterns. A method of a class impl can name
+its parameters otherwise than the class: calls through the class use the
+class's names.
+
+What's left: `/`, default values, lambdas with keyword parameters, and
+passing a pack on, like `f(*args)` in a generic body (#405).
 
 ## References
 

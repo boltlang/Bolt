@@ -28,6 +28,7 @@ use boltlang_hir_ty::{
     lang::LangClass,
     lower::{VariantDef, field_types},
     scheme::generic_param_ids,
+    ty::{ArgPlace, place_args},
 };
 use boltlang_mir::{
     Arm, Body, BodyOwner, Callee, Capture, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local,
@@ -561,7 +562,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     /// gives the fields of its temporary.
     fn named_tuple(&mut self, e: hir::ExprId, items: &[TupleItem<hir::ExprId>]) -> ExprId {
         let mut stmts = Vec::new();
-        let Some((mut positional, named)) = self.parts_in_temps(items, &mut stmts) else {
+        let Some((mut positional, named)) = self.parts_in_temps(items, &[], &mut stmts) else {
             return self.unsupported(e, "a spread of a tuple with a pack in it");
         };
         positional.extend(named.into_iter().map(|(_, v)| v));
@@ -577,16 +578,20 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     /// in `stmts`: the positional values, and the named ones in the order
     /// of their names. A spread gives the fields of its temporary. `None`
     /// for a spread of a tuple with a pack in it, whose fields aren't known
-    /// before monomorphization.
+    /// before monomorphization. A named argument that `places` puts at a
+    /// position comes after the positional ones, in the order of the
+    /// positions.
     #[allow(clippy::type_complexity)]
     fn parts_in_temps(
         &mut self,
         items: &[TupleItem<hir::ExprId>],
+        places: &[ArgPlace],
         stmts: &mut Vec<Stmt<'db>>,
     ) -> Option<(Vec<ExprId>, Vec<(Name, ExprId)>)> {
         let mut positional = Vec::new();
         let mut named: Vec<(Name, ExprId)> = Vec::new();
-        for item in items {
+        let mut placed = Vec::new();
+        for (i, item) in items.iter().enumerate() {
             let x = item.value();
             let ty = self.ty(x);
             if matches!(item, TupleItem::Spread(..)) && ty.has_spread() {
@@ -602,6 +607,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             let local = |b: &mut Self| b.mir.alloc(ExprKind::Local(temp), ty.clone(), Some(x));
             match item {
                 TupleItem::Positional(_) => positional.push(local(self)),
+                TupleItem::Named(_, _) if let Some(&ArgPlace::Positional(at)) = places.get(i) => {
+                    placed.push((at, local(self)));
+                }
                 TupleItem::Named(name, _) => named.push((name.clone(), local(self))),
                 TupleItem::Spread(spread, _) => {
                     let (tys, fields): (&[Ty<'db>], &[(Name, Ty<'db>)]) = match &ty {
@@ -631,14 +639,17 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             }
         }
         named.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+        placed.sort_by_key(|(at, _)| *at);
+        positional.extend(placed.into_iter().map(|(_, v)| v));
         Some((positional, named))
     }
 
     /// A call with named arguments or spreads, like `f(1, sep: ",")`: its
     /// arguments are evaluated in the order they're written, and passed as
     /// the function's type lays them out: the positional ones, then the
-    /// keyword ones in the order of their names. The function's packs must
-    /// be known here.
+    /// keyword ones in the order of their names. A named one for a
+    /// positional parameter goes where the checker put it, by
+    /// [`place_args`]. The function's packs must be known here.
     fn call_with(
         &mut self,
         e: hir::ExprId,
@@ -663,7 +674,15 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             all.push(TupleItem::Positional(*receiver));
         }
         all.extend_from_slice(items);
-        let Some((mut values, named)) = self.parts_in_temps(&all, &mut stmts) else {
+        let first = method.is_some() as usize;
+        let mut places = vec![ArgPlace::Written; first];
+        places.extend(place_args(
+            params.positional.len(),
+            |i| params.name(i).cloned(),
+            first,
+            items,
+        ));
+        let Some((mut values, named)) = self.parts_in_temps(&all, &places, &mut stmts) else {
             return self.unsupported(e, "a spread of a tuple with a pack in it");
         };
         values.extend(named.into_iter().map(|(_, v)| v));
