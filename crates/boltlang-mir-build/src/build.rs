@@ -341,6 +341,15 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         Some(self.fn_ref(at, f))
     }
 
+    /// A call of the operator `name` at `e`, like `a + b` or `-a`.
+    fn operator_call(&mut self, e: hir::ExprId, name: &Name, operands: &[hir::ExprId]) -> ExprId {
+        let Some(item) = self.operator_ref(e, name) else {
+            return self.unsupported(e, "an operator the checker didn't resolve");
+        };
+        let args = operands.iter().map(|&x| self.expr(x)).collect();
+        self.call(e, e, item, args)
+    }
+
     /// The method of a class of the prelude that syntax calls, like `index`
     /// for `xs[i]`, for the class argument `arg`.
     fn lang_ref(&self, at: hir::ExprId, lang: LangClass, arg: Ty<'db>) -> Option<ItemRef<'db>> {
@@ -420,19 +429,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 self.assign(e, op.as_ref(), *lhs, *rhs)
             }
             Expr::Binary { op: BinaryOp::Operator(name), lhs, rhs } => {
-                let Some(item) = self.operator_ref(e, name) else {
-                    return self.unsupported(e, "an operator the checker didn't resolve");
-                };
-                let args = vec![self.expr(*lhs), self.expr(*rhs)];
-                self.call(e, e, item, args)
+                self.operator_call(e, name, &[*lhs, *rhs])
             }
-            Expr::Prefix { op, expr: inner } => {
-                let Some(item) = self.operator_ref(e, op) else {
-                    return self.unsupported(e, "an operator the checker didn't resolve");
-                };
-                let args = vec![self.expr(*inner)];
-                self.call(e, e, item, args)
-            }
+            Expr::Prefix { op, expr: inner } => self.operator_call(e, op, &[*inner]),
             Expr::Index { base, index } => {
                 let Some(item) = self.lang_ref(e, LangClass::Index, self.ty(*base)) else {
                     return self.unsupported(e, "an index without the prelude's `Index`");
