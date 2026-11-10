@@ -24,6 +24,7 @@ pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
 /// The files a file uses, through its prelude and its imports.
 pub use boltlang_hir_def::nameres::files_used_by;
 use boltlang_hir_def::{
+    ids::ClassId,
     item_tree::{ModItem, item_tree},
     manifest::manifest_problems,
     nameres::{package_of, prelude_file, resolve_import_path},
@@ -819,7 +820,7 @@ fn describe(
             format!("`{source}` is ambiguous: several classes of its type parameter declare it"),
         ),
         K::UnmetAssocBound { name, class, constraint } => {
-            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let class = class_name(db, class);
             let instance = constraint_display(db, names, &constraint);
             (
                 C::UNMET_ASSOC_BOUND,
@@ -906,7 +907,7 @@ fn describe(
             .to_string(),
         ),
         K::UnmetAssocEquality { name, item, class, expected, actual } => {
-            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let class = class_name(db, class);
             (
                 C::UNMET_ASSOC_EQUALITY,
                 format!(
@@ -1038,11 +1039,11 @@ fn describe(
             (C::NOT_A_PLACE, "cannot assign to this; only a variable, a field or an element can be assigned to".into())
         }
         K::NotInClass { kind, name, class } => {
-            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let class = class_name(db, class);
             (C::NOT_IN_CLASS, format!("`{name}` is not a {} of class `{class}`", item_noun(kind, 1)))
         }
         K::MissingItems { items, class } => {
-            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let class = class_name(db, class);
             (C::MISSING_ITEMS, format!("missing {} of class `{class}`", item_list(&items)))
         }
 
@@ -1110,7 +1111,7 @@ fn because_label(db: &dyn Db, names: &TyNames, because: &Because<'_>) -> Label {
         BecauseKind::Field { name } => format!("expected because of the type of field `{name}`"),
         BecauseKind::SameAs { ty } => format!("this has type `{}`", ty.display_with(db, names)),
         BecauseKind::ClassItem { class } => {
-            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let class = class_name(db, *class);
             format!("expected because of the declaration in class `{class}`")
         }
         BecauseKind::UseIn { function: Some(name) } => format!("needed by this use in `{name}`"),
@@ -1150,8 +1151,13 @@ fn item_list(items: &[(ClassItemKind, impl fmt::Display)]) -> String {
     }
 }
 
+/// The name of `class`, or `?` for a class without one.
+fn class_name<'db>(db: &'db dyn Db, class: ClassId<'db>) -> &'db str {
+    class.item(db).name.as_ref().map_or("?", |n| n.as_str())
+}
+
 fn constraint_display(db: &dyn Db, names: &TyNames, constraint: &ClassConstraint<'_>) -> String {
-    let name = constraint.class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+    let name = class_name(db, constraint.class);
     let args: Vec<_> =
         constraint.args.iter().map(|t| t.display_with(db, names).to_string()).collect();
     format!("{name}[{}]", args.join(", "))
