@@ -2,7 +2,10 @@
 //! grammar's `attribute_item` and `inner_attribute_item`, and the token
 //! trees they and macros take as arguments.
 
-use boltlang_syntax::{SyntaxKind::*, T};
+use boltlang_syntax::{
+    SyntaxKind::{self, *},
+    T,
+};
 
 use crate::{
     grammar::{dotted_path, expr},
@@ -64,12 +67,8 @@ fn meta(p: &mut Parser) {
 /// `delim_token_tree`.
 pub(crate) fn token_tree(p: &mut Parser) {
     let m = p.start();
-    let close = match p.current() {
-        T!['('] => T![')'],
-        T!['['] => T![']'],
-        T!['{'] => T!['}'],
-        _ => unreachable!("token_tree called without an opening delimiter"),
-    };
+    let close =
+        closing_delimiter(p.current()).expect("token_tree called without an opening delimiter");
     p.bump_any();
     while !p.at(EOF) && !p.at(close) {
         match p.current() {
@@ -82,4 +81,14 @@ pub(crate) fn token_tree(p: &mut Parser) {
     }
     p.expect(close);
     m.complete(p, TOKEN_TREE);
+}
+
+/// The delimiter that closes `open`, if it's `(`, `[` or `{`.
+pub(crate) fn closing_delimiter(open: SyntaxKind) -> Option<SyntaxKind> {
+    match open {
+        T!['('] => Some(T![')']),
+        T!['['] => Some(T![']']),
+        T!['{'] => Some(T!['}']),
+        _ => None,
+    }
 }

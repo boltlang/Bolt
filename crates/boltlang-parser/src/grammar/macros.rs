@@ -5,7 +5,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{name, name_ref, token_tree},
+    grammar::{closing_delimiter, name, name_ref, token_tree},
     parser::{CompletedMarker, Marker, Parser},
 };
 
@@ -37,15 +37,10 @@ pub(crate) fn macro_rules(p: &mut Parser, m: Marker) {
     p.bump_remap(T![macro_rules]);
     p.bump(T![!]);
     name(p);
-    let close = match p.current() {
-        T!['('] => T![')'],
-        T!['['] => T![']'],
-        T!['{'] => T!['}'],
-        _ => {
-            p.error("expected '{', '(' or '['");
-            m.complete(p, MACRO_RULES);
-            return;
-        }
+    let Some(close) = closing_delimiter(p.current()) else {
+        p.error("expected '{', '(' or '['");
+        m.complete(p, MACRO_RULES);
+        return;
     };
     p.bump_any();
     while !p.at(EOF) && !p.at(close) {
@@ -83,11 +78,7 @@ fn macro_rule(p: &mut Parser) {
 /// TOKEN_BINDING nodes.
 fn macro_token_tree(p: &mut Parser, is_pattern: bool) {
     let m = p.start();
-    let close = match p.current() {
-        T!['('] => T![')'],
-        T!['['] => T![']'],
-        _ => T!['}'],
-    };
+    let close = closing_delimiter(p.current()).unwrap_or(T!['}']);
     p.bump_any();
     while !p.at(EOF) && !p.at(close) {
         match p.current() {
