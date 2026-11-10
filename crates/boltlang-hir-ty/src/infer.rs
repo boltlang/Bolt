@@ -990,29 +990,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.solver.add(Constraint::Imm { constraint, origin: self.origin(expr) });
                 to
             }
-            // `mut [1]`, `mut Point { x: 1 }` and `mut Wrapper(1)` make an
-            // array or struct `mut`. `mut` before anything else is an error:
-            // a copy is `to_mut(e)` or `to_mut_deep(e)`.
-            Expr::Mut { expr: inner } => {
-                let literal = match &body[*inner] {
-                    Expr::Array { .. }
-                    | Expr::ArrayRepeat { .. }
-                    | Expr::Record { .. }
-                    | Expr::Tuple { .. }
-                    | Expr::NamedTuple { .. } => true,
-                    Expr::Call { callee, .. } => self.constructs_struct(*callee),
-                    _ => false,
-                };
-                if literal {
-                    self.result.mut_literals.push((expr, *inner));
-                    let ty = self.infer_literal(expr, *inner, expected, true);
-                    self.result.expr_types.insert(*inner, ty.clone());
-                    ty
-                } else {
-                    self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
-                    self.infer_expr(*inner)
-                }
-            }
+            Expr::Mut { .. } => self.infer_mut(expr, expected),
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
             // `a..b` is the prelude's `Range { start: a, end: b }`, and `a..=b`
             // its `RangeInclusive`. The other ranges have no types in std
@@ -1615,6 +1593,32 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         };
         self.solver.add(Constraint::Field { constraint, origin: self.origin(expr) });
         field
+    }
+
+    /// `mut [1]`, `mut Point { x: 1 }` and `mut Wrapper(1)` make an array
+    /// or struct `mut`. `mut` before anything else is an error: a copy is
+    /// `to_mut(e)` or `to_mut_deep(e)`.
+    fn infer_mut(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+        let body = self.body;
+        let Expr::Mut { expr: inner } = &body[expr] else { unreachable!("only called for a mut") };
+        let literal = match &body[*inner] {
+            Expr::Array { .. }
+            | Expr::ArrayRepeat { .. }
+            | Expr::Record { .. }
+            | Expr::Tuple { .. }
+            | Expr::NamedTuple { .. } => true,
+            Expr::Call { callee, .. } => self.constructs_struct(*callee),
+            _ => false,
+        };
+        if literal {
+            self.result.mut_literals.push((expr, *inner));
+            let ty = self.infer_literal(expr, *inner, expected, true);
+            self.result.expr_types.insert(*inner, ty.clone());
+            ty
+        } else {
+            self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
+            self.infer_expr(*inner)
+        }
     }
 
     /// The array, tuple, struct literal or call `literal`, made `mut` with
