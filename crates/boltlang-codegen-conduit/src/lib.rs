@@ -364,17 +364,28 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         return Err(errors);
     }
     module.data = types.decls.clone();
-    if let Err(es) = conduit_ir::verify::verify_module(&module) {
-        return Err(es
-            .into_iter()
+    verify(&module)?;
+    let tests = test_funcs(&cx, p);
+    Ok(Lowered { module, entry: cx.funcs[&p.roots[0]], tests, names })
+}
+
+/// Check the module with Conduit's verifier.
+fn verify(module: &Module) -> Result<(), Vec<Error>> {
+    conduit_ir::verify::verify_module(module).map_err(|es| {
+        es.into_iter()
             .map(|e| Error {
                 instance: "the module".into(),
                 at: None,
                 kind: ErrorKind::Invalid(e.to_string()),
             })
-            .collect());
-    }
-    let tests = p.roots[1..]
+            .collect()
+    })
+}
+
+/// The function of each test, with its name.
+fn test_funcs<'db>(cx: &Ctx<'db>, p: &Program<'db>) -> Vec<(String, FuncId)> {
+    let db = cx.db;
+    p.roots[1..]
         .iter()
         .map(|i| {
             let name = i
@@ -383,8 +394,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 .unwrap_or_default();
             (name, cx.funcs[i])
         })
-        .collect();
-    Ok(Lowered { module, entry: cx.funcs[&p.roots[0]], tests, names })
+        .collect()
 }
 
 /// What in `p` can't be lowered, before anything is.
