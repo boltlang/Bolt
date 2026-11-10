@@ -67,22 +67,20 @@ pub(crate) enum Part<'a> {
     Body,
     /// That of one of its lambdas, lifted.
     Lambda(&'a Lambda),
-    /// The scrutinee of a `match` with effect arms, in the MIR body of that
-    /// index, as the closure the handler runs.
-    HandleBody(u32, ExprId),
-    /// Its value arms, as the handler's return clause.
-    HandleRet(u32, ExprId),
-    /// The arms of the `j`th operation of the `i`th effect it handles, as
-    /// its clause.
-    HandleClause(u32, ExprId, usize, usize),
+    /// One of the functions of a `match` with effect arms, in the MIR body
+    /// of that index.
+    Handle(u32, ExprId, HandlePart),
 }
 
 /// What a function of a handler is.
 #[derive(Clone, Copy)]
-enum HandlePart {
+pub(crate) enum HandlePart {
+    /// The scrutinee, as the closure the handler runs.
     Body,
+    /// The value arms, as the handler's return clause.
     Ret,
-    /// The clause of an effect it handles, by index, and an operation of it.
+    /// The arms of the `j`th operation of the `i`th effect it handles, as
+    /// its clause.
     Clause(usize, usize),
 }
 
@@ -123,9 +121,7 @@ pub(crate) fn lower_body<'db>(
             });
             (at.map_or(0, |i| i as u32 + 1), None)
         }
-        Part::HandleBody(i, e) => (i, Some((e, HandlePart::Body))),
-        Part::HandleRet(i, e) => (i, Some((e, HandlePart::Ret))),
-        Part::HandleClause(i, e, effect, op) => (i, Some((e, HandlePart::Clause(effect, op)))),
+        Part::Handle(i, e, which) => (i, Some((e, which))),
     };
     let (id, mir) = match (bodies, &shim) {
         (_, Some(shim)) => (cx.funcs[&iu.instance], shim),

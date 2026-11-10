@@ -79,7 +79,10 @@ use boltlang_mir_mono::{
 use boltlang_mir_transform::shim_body;
 use conduit_ir::{Extern, ExternId, Func, FuncId, HandlerId, Module, MutParams, Row, Sig};
 
-use crate::{func::Part, ty::Types};
+use crate::{
+    func::{HandlePart, Part},
+    ty::Types,
+};
 
 /// A program in Conduit.
 #[derive(Debug, Clone)]
@@ -469,12 +472,12 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         let iu = p.instances.iter().find(|iu| iu.instance == key.0).unwrap();
         let fns = &cx.handles[key];
         let mut parts = vec![
-            (fns.body, Part::HandleBody(key.1, key.2)),
-            (fns.ret, Part::HandleRet(key.1, key.2)),
+            (fns.body, Part::Handle(key.1, key.2, HandlePart::Body)),
+            (fns.ret, Part::Handle(key.1, key.2, HandlePart::Ret)),
         ];
         for (effect, (_, clauses)) in fns.effects.iter().enumerate() {
             for (op, &clause) in clauses.iter().enumerate() {
-                parts.push((clause, Part::HandleClause(key.1, key.2, effect, op)));
+                parts.push((clause, Part::Handle(key.1, key.2, HandlePart::Clause(effect, op))));
             }
         }
         for (id, part) in parts {
