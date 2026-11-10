@@ -1042,25 +1042,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 // A loop that's never left doesn't give a value.
                 if breakable.broken { ty } else { Ty::Never }
             }
-            Expr::For { pat, iterable, body: loop_body, label } => {
-                // Through the impl of `Iterable` for the type, arrays too,
-                // whose iterator gives the items with `Iterator`.
-                let iterable_ty = self.infer_expr(*iterable);
-                let elem = self
-                    .lang_assoc(LangClass::Iterable, &iterable_ty, *iterable)
-                    .and_then(|iter| self.lang_assoc(LangClass::Iterator, &iter, expr))
-                    .unwrap_or(Ty::Error);
-                self.check_pat(*pat, &elem);
-                self.breakables.push(Breakable {
-                    label: *label,
-                    is_loop: true,
-                    ty: None,
-                    broken: false,
-                });
-                self.check_expr(*loop_body, &Ty::unit());
-                self.breakables.pop();
-                Ty::unit()
-            }
+            Expr::For { .. } => self.infer_for(expr),
             Expr::Break { .. } => self.infer_break(expr),
             Expr::Continue { .. } => Ty::Never,
             Expr::Return { expr: value } => {
@@ -1223,6 +1205,26 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.check_effect_arms(expr, effect_arms, inner, &ty);
         }
         if arms.is_empty() { Ty::Never } else { ty }
+    }
+
+    /// A `for` loop, over anything with an impl of `Iterable`. Its pattern
+    /// is checked against the items the iterator gives.
+    fn infer_for(&mut self, expr: ExprId) -> Ty<'db> {
+        let Expr::For { pat, iterable, body: loop_body, label } = &self.body[expr] else {
+            unreachable!("only called for a for loop")
+        };
+        // Through the impl of `Iterable` for the type, arrays too,
+        // whose iterator gives the items with `Iterator`.
+        let iterable_ty = self.infer_expr(*iterable);
+        let elem = self
+            .lang_assoc(LangClass::Iterable, &iterable_ty, *iterable)
+            .and_then(|iter| self.lang_assoc(LangClass::Iterator, &iter, expr))
+            .unwrap_or(Ty::Error);
+        self.check_pat(*pat, &elem);
+        self.breakables.push(Breakable { label: *label, is_loop: true, ty: None, broken: false });
+        self.check_expr(*loop_body, &Ty::unit());
+        self.breakables.pop();
+        Ty::unit()
     }
 
     /// A `break`, out of the loop or labelled block it names, or else out
