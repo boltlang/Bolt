@@ -664,12 +664,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 return None;
             }
             let value = self.expr(x);
-            let temp = self.mir.new_temp(None, ty.clone());
-            stmts.push(Stmt::Let {
-                pat: Pattern::Local(Some(temp)),
-                init: Some(value),
-                else_: None,
-            });
+            let temp = self.let_temp(value, ty.clone(), stmts);
             let local = |b: &mut Self| b.mir.alloc(ExprKind::Local(temp), ty.clone(), Some(x));
             match item {
                 TupleItem::Positional(_) => positional.push(local(self)),
@@ -708,6 +703,14 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         placed.sort_by_key(|(at, _)| *at);
         positional.extend(placed.into_iter().map(|(_, v)| v));
         Some((positional, named))
+    }
+
+    /// A new temporary of type `ty`, with a `let` in `stmts` that gives it
+    /// `value`.
+    fn let_temp(&mut self, value: ExprId, ty: Ty<'db>, stmts: &mut Vec<Stmt<'db>>) -> Local {
+        let temp = self.mir.new_temp(None, ty);
+        stmts.push(Stmt::Let { pat: Pattern::Local(Some(temp)), init: Some(value), else_: None });
+        temp
     }
 
     /// A call with named arguments or spreads, like `f(1, sep: ",")`: its
@@ -848,12 +851,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                     let fn_ty = Ty::func(tys[..i].to_vec(), ty.clone());
                     let callee = self.mir.alloc(ExprKind::Item(item), fn_ty, Some(callee));
                     let call = self.mir.alloc(ExprKind::Call { callee, args }, ty.clone(), Some(e));
-                    let temp = self.mir.new_temp(None, ty.clone());
-                    stmts.push(Stmt::Let {
-                        pat: Pattern::Local(Some(temp)),
-                        init: Some(call),
-                        else_: None,
-                    });
+                    let temp = self.let_temp(call, ty.clone(), stmts);
                     let value = self.mir.alloc(ExprKind::Local(temp), ty, Some(e));
                     match (slot, p.kind) {
                         (Some(slot), _) => *slot = Some(value),
