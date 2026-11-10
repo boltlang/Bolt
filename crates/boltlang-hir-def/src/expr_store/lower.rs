@@ -76,11 +76,13 @@ impl ExprCollector {
             TypeRef::Mutability(MutabilityRef::Named(name.clone())),
             Some(param.syntax()),
         );
-        let bounds = param
-            .bounds()
-            .map(|b| b.bounds().map(|t| self.lower_type(t)).collect())
-            .unwrap_or_default();
+        let bounds = self.lower_bounds(param.bounds());
         Some((name, type_ref, bounds))
+    }
+
+    /// The bounds after a `:`, like `Show + Eq` in `T: Show + Eq`.
+    pub(crate) fn lower_bounds(&mut self, bounds: Option<ast::TraitBounds>) -> Box<[TypeRefId]> {
+        bounds.map(|b| b.bounds().map(|t| self.lower_type(t)).collect()).unwrap_or_default()
     }
 
     pub fn lower_type(&mut self, ty: ast::Type) -> TypeRefId {
@@ -279,10 +281,7 @@ impl ExprCollector {
             .map(|arg| match arg {
                 ast::GenericArg::Type(arg) => {
                     let type_ref = self.lower_opt_type(arg.ty());
-                    let bounds = arg
-                        .bounds()
-                        .map(|b| b.bounds().map(|t| self.lower_type(t)).collect())
-                        .unwrap_or_default();
+                    let bounds = self.lower_bounds(arg.bounds());
                     GenericArg::Type { type_ref, bounds }
                 }
                 ast::GenericArg::AssocType(arg) => GenericArg::AssocType {

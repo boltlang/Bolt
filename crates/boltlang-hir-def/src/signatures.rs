@@ -542,15 +542,12 @@ fn lower_type_alias<'db>(
     let node = item_node::<ast::TypeAlias>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
     let mut generic_params = GenericParams::default();
-    let mut bounds = Vec::new();
+    let mut bounds = Box::default();
     let mut type_ref = None;
     if let Some(node) = &node {
         generic_params =
             lower_generic_params(&mut c, false, node.generic_param_list(), node.where_clauses());
-        bounds = node
-            .bounds()
-            .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
-            .unwrap_or_default();
+        bounds = c.lower_bounds(node.bounds());
         type_ref = node.ty().map(|t| c.lower_type(t));
     }
     let (store, source_map) = c.finish();
@@ -558,7 +555,7 @@ fn lower_type_alias<'db>(
         name: item.name.clone(),
         visibility: item.visibility,
         generic_params,
-        bounds: bounds.into(),
+        bounds,
         type_ref,
         store,
     };
@@ -587,10 +584,7 @@ fn lower_generic_params(
                         }
                     }
                 };
-                let bounds = p
-                    .bounds()
-                    .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
-                    .unwrap_or_default();
+                let bounds = c.lower_bounds(p.bounds());
                 let default = p.default_type().map(|t| c.lower_type(t));
                 type_params.push(TypeParamData { name, bounds, default, pack: None });
             }
@@ -635,10 +629,7 @@ fn lower_generic_params(
     for clause in where_clauses {
         for pred in clause.predicates() {
             let target = c.lower_opt_type(pred.ty());
-            let bounds = pred
-                .bounds()
-                .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
-                .unwrap_or_default();
+            let bounds = c.lower_bounds(pred.bounds());
             where_predicates.push(WherePredicate { target, bounds });
         }
     }
