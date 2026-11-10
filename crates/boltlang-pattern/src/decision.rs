@@ -967,34 +967,34 @@ impl<'db> Decision<'db> {
     /// patterns, if there are some.
     pub fn missing_args(&self, db: &'db dyn Db, arity: usize) -> Option<Vec<String>> {
         let known = self.missing_steps()?;
-        let ctor = Ctor::Tuple(arity as u32);
-        let args = (0..arity as u32)
+        Some(self.show_fields(db, 0, Ctor::Tuple(arity as u32), arity, &known))
+    }
+
+    /// The patterns for the `count` fields of `place`, a value that `ctor`
+    /// made: `_` for a field that nothing tested.
+    fn show_fields(
+        &self,
+        db: &'db dyn Db,
+        place: PlaceId,
+        ctor: Ctor<'db>,
+        count: usize,
+        known: &HashMap<PlaceId, Step<'db>>,
+    ) -> Vec<String> {
+        (0..count as u32)
             .map(|index| {
-                match self.places.iter().position(|p| *p == Place::Field { of: 0, ctor, index }) {
-                    Some(at) => self.show(db, at as PlaceId, &known),
+                let field = Place::Field { of: place, ctor, index };
+                match self.places.iter().position(|p| *p == field) {
+                    Some(at) => self.show(db, at as PlaceId, known),
                     None => "_".to_string(),
                 }
             })
-            .collect();
-        Some(args)
+            .collect()
     }
 
     /// The pattern for `place`, from what's known of the places.
     fn show(&self, db: &'db dyn Db, place: PlaceId, known: &HashMap<PlaceId, Step<'db>>) -> String {
-        let fields = |ctor: Ctor<'db>, count: usize| -> Vec<String> {
-            (0..count)
-                .map(|index| {
-                    let at = self
-                        .places
-                        .iter()
-                        .position(|p| *p == Place::Field { of: place, ctor, index: index as u32 });
-                    match at {
-                        Some(at) => self.show(db, at as PlaceId, known),
-                        None => "_".to_string(),
-                    }
-                })
-                .collect()
-        };
+        let fields =
+            |ctor: Ctor<'db>, count: usize| self.show_fields(db, place, ctor, count, known);
         let variant = |v: EnumVariantId<'db>| -> String {
             let name = format!(
                 "{}.{}",
