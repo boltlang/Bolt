@@ -675,51 +675,54 @@ fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
         [(L_PAREN, _), inner @ .., (R_PAREN, _)] => inner,
         _ => &[][..],
     };
-    let mut parts = inner.split(|(k, _)| *k == COMMA).filter(|p| !p.is_empty());
-    link.error = (|| {
-        match parts.next() {
-            Some([(IDENT, target)]) if target == "wasm" => {}
-            Some([(IDENT, target)]) if target == "emu" => link.kind = LinkKind::Emu,
-            Some([(IDENT, target)]) if target == "c" => return Some(LinkError::NoNativeTarget),
-            Some([(IDENT, target)]) => return Some(LinkError::UnknownTarget(target.clone())),
-            _ => return Some(LinkError::NoTarget),
-        }
-        let mut abi = false;
-        for part in parts {
-            if let [(IDENT, key), (EQUALS, _), (IDENT, value)] = part
-                && key == "abi"
-            {
-                if abi {
-                    return Some(LinkError::Repeated(key.clone()));
-                }
-                abi = true;
-                match value.as_str() {
-                    "flat" => link.abi = LinkAbi::Flat,
-                    _ => return Some(LinkError::UnknownAbi(value.clone())),
-                }
-                continue;
-            }
-            let [(IDENT, key), (EQUALS, _), (STRING, value)] = part else {
-                return Some(LinkError::Malformed);
-            };
-            let slot = match key.as_str() {
-                "module" => &mut link.module,
-                "name" => &mut link.name,
-                _ => return Some(LinkError::UnknownKey(key.clone())),
-            };
-            if slot.is_some() {
-                return Some(LinkError::Repeated(key.clone()));
-            }
-            *slot = Some(unquote(value));
-        }
-        match link.kind {
-            LinkKind::Wasm if link.module.is_none() => return Some(LinkError::NoModule),
-            LinkKind::Emu if link.module.is_some() => return Some(LinkError::ModuleForEmu),
-            _ => {}
-        }
-        None
-    })();
+    link.error = read_link(&mut link, inner).err();
     Some(link)
+}
+
+/// Fill in `link` from `tokens`, the tokens between the parentheses of
+/// `#[link(..)]`, up to the first problem.
+fn read_link(link: &mut Link, tokens: &[(SyntaxKind, String)]) -> Result<(), LinkError> {
+    let mut parts = tokens.split(|(k, _)| *k == COMMA).filter(|p| !p.is_empty());
+    match parts.next() {
+        Some([(IDENT, target)]) if target == "wasm" => {}
+        Some([(IDENT, target)]) if target == "emu" => link.kind = LinkKind::Emu,
+        Some([(IDENT, target)]) if target == "c" => return Err(LinkError::NoNativeTarget),
+        Some([(IDENT, target)]) => return Err(LinkError::UnknownTarget(target.clone())),
+        _ => return Err(LinkError::NoTarget),
+    }
+    let mut abi = false;
+    for part in parts {
+        if let [(IDENT, key), (EQUALS, _), (IDENT, value)] = part
+            && key == "abi"
+        {
+            if abi {
+                return Err(LinkError::Repeated(key.clone()));
+            }
+            abi = true;
+            match value.as_str() {
+                "flat" => link.abi = LinkAbi::Flat,
+                _ => return Err(LinkError::UnknownAbi(value.clone())),
+            }
+            continue;
+        }
+        let [(IDENT, key), (EQUALS, _), (STRING, value)] = part else {
+            return Err(LinkError::Malformed);
+        };
+        let slot = match key.as_str() {
+            "module" => &mut link.module,
+            "name" => &mut link.name,
+            _ => return Err(LinkError::UnknownKey(key.clone())),
+        };
+        if slot.is_some() {
+            return Err(LinkError::Repeated(key.clone()));
+        }
+        *slot = Some(unquote(value));
+    }
+    match link.kind {
+        LinkKind::Wasm if link.module.is_none() => Err(LinkError::NoModule),
+        LinkKind::Emu if link.module.is_some() => Err(LinkError::ModuleForEmu),
+        _ => Ok(()),
+    }
 }
 
 fn name(name: Option<ast::Name>) -> Option<Name> {
