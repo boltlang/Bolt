@@ -607,20 +607,17 @@ fn lower_generic_params(
             // as unsupported.
             ast::GenericParam::Pack(p) if packs => {
                 let Some(name) = p.name() else { continue };
-                let name = Name::from_ident(&name.text());
-                let param = |pack| TypeParamData {
-                    name: name.clone(),
+                // `...A`, which the parser reports, is positional.
+                let pack = match p.spread() {
+                    Some(ast::Spread::Named) => PackKind::Named,
+                    Some(ast::Spread::Positional) | None => PackKind::Positional,
+                };
+                type_params.push(TypeParamData {
+                    name: Name::from_ident(&name.text()),
                     bounds: Box::new([]),
                     default: None,
                     pack: Some(pack),
-                };
-                // `...A`, which the parser reports, is positional.
-                match p.spread() {
-                    Some(ast::Spread::Named) => type_params.push(param(PackKind::Named)),
-                    Some(ast::Spread::Positional) | None => {
-                        type_params.push(param(PackKind::Positional))
-                    }
-                }
+                });
             }
             ast::GenericParam::Pack(_) => {}
         }
@@ -642,7 +639,6 @@ fn lower_generic_params(
 }
 
 fn lower_field_list(c: &mut ExprCollector, list: Option<ast::FieldList>) -> FieldList {
-    let visibility = RawVisibility::from_ast;
     match list {
         None => FieldList::Unit,
         Some(ast::FieldList::Record(list)) => FieldList::Record(
@@ -651,7 +647,7 @@ fn lower_field_list(c: &mut ExprCollector, list: Option<ast::FieldList>) -> Fiel
                     let name = Name::from_ident(&f.name()?.text());
                     Some(FieldData {
                         name,
-                        visibility: visibility(f.visibility()),
+                        visibility: RawVisibility::from_ast(f.visibility()),
                         type_ref: c.lower_opt_type(f.ty()),
                     })
                 })
@@ -662,7 +658,7 @@ fn lower_field_list(c: &mut ExprCollector, list: Option<ast::FieldList>) -> Fiel
                 .enumerate()
                 .map(|(i, f)| FieldData {
                     name: Name::new(i.to_string()),
-                    visibility: visibility(f.visibility()),
+                    visibility: RawVisibility::from_ast(f.visibility()),
                     type_ref: c.lower_opt_type(f.ty()),
                 })
                 .collect(),
