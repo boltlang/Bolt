@@ -222,6 +222,48 @@ impl<'db> MonoTy<'db> {
         args.iter().copied().chain(own)
     }
 
+    /// The type with the parts right inside it replaced by what `parts`
+    /// gives for them: the types [`MonoTy::any_child`] visits, the
+    /// mutabilities [`MonoTy::muts`] gives, and the rows. The parts are
+    /// visited in the order the variant has them, so an array's mutability
+    /// comes before its element.
+    fn map_children(&self, parts: &mut impl MapParts<'db>) -> Self {
+        match self {
+            MonoTy::Builtin(_)
+            | MonoTy::Never
+            | MonoTy::Erased(_)
+            | MonoTy::Any(_)
+            | MonoTy::Host(_) => self.clone(),
+            MonoTy::Adt(adt, args, ms, own) => {
+                let args = args.iter().map(|t| parts.ty(t)).collect();
+                let ms = ms.iter().map(|&m| parts.mutability(m)).collect();
+                MonoTy::Adt(*adt, args, ms, parts.mutability(*own))
+            }
+            MonoTy::Tuple(args, own) => {
+                let args = args.iter().map(|t| parts.ty(t)).collect();
+                MonoTy::Tuple(args, parts.mutability(*own))
+            }
+            MonoTy::Record(args, names, own) => {
+                let args = args.iter().map(|t| parts.ty(t)).collect();
+                MonoTy::Record(args, names.clone(), parts.mutability(*own))
+            }
+            MonoTy::Array(own, elem) => {
+                let own = parts.mutability(*own);
+                MonoTy::Array(own, Box::new(parts.ty(elem)))
+            }
+            MonoTy::Fn(params, names, ret, own, row) => {
+                let params = params.iter().map(|t| parts.ty(t)).collect();
+                let ret = Box::new(parts.ty(ret));
+                let own = parts.mutability(*own);
+                MonoTy::Fn(params, names.clone(), ret, own, parts.row(row))
+            }
+            MonoTy::Row(row) => MonoTy::Row(parts.row(row)),
+            MonoTy::ErasedAssoc(alias, args) => {
+                MonoTy::ErasedAssoc(*alias, args.iter().map(|t| parts.ty(t)).collect())
+            }
+        }
+    }
+
     /// Whether an erased type is somewhere in the type.
     pub fn has_erased(&self) -> bool {
         match self {
@@ -241,9 +283,6 @@ impl<'db> MonoTy<'db> {
     /// The type with its erased types numbered in the order they appear,
     /// from `next`, with `map` keeping what each one became.
     pub(crate) fn renumber(&self, map: &mut Vec<(u32, u32)>, next: &mut u32) -> Self {
-        let all = |tys: &[MonoTy<'db>], map: &mut Vec<(u32, u32)>, next: &mut u32| {
-            tys.iter().map(|t| t.renumber(map, next)).collect()
-        };
         match self {
             MonoTy::Erased(i) => match map.iter().find(|(old, _)| old == i) {
                 Some((_, new)) => MonoTy::Erased(*new),
@@ -253,25 +292,7 @@ impl<'db> MonoTy<'db> {
                     MonoTy::Erased(*next - 1)
                 }
             },
-            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, map, next)),
-            MonoTy::Builtin(_) | MonoTy::Never | MonoTy::Any(_) | MonoTy::Host(_) => self.clone(),
-            MonoTy::Adt(adt, args, ms, own) => {
-                MonoTy::Adt(*adt, all(args, map, next), ms.clone(), *own)
-            }
-            MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, map, next), *own),
-            MonoTy::Record(args, names, own) => {
-                MonoTy::Record(all(args, map, next), names.clone(), *own)
-            }
-            MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.renumber(map, next))),
-            MonoTy::Fn(params, names, ret, own, row) => {
-                let params = all(params, map, next);
-                let ret = Box::new(ret.renumber(map, next));
-                let row = row.map(&mut MonoRow::param, &mut |t| t.renumber(map, next));
-                MonoTy::Fn(params, names.clone(), ret, *own, row)
-            }
-            MonoTy::Row(row) => {
-                MonoTy::Row(row.map(&mut MonoRow::param, &mut |t| t.renumber(map, next)))
-            }
+            _ => self.map_children(&mut |t: &MonoTy<'db>| t.renumber(map, next)),
         }
     }
 
@@ -572,6 +593,28 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
             }
             MonoTy::Row(row) => write!(f, "{}", row.display(db)),
         }
+    }
+}
+
+/// What [`MonoTy::map_children`] does with each part of a type. By
+/// default, a mutability stays as it is, and a row keeps its parameters
+/// and gets [`MapParts::ty`] on the arguments of its effects.
+trait MapParts<'db> {
+    fn ty(&mut self, t: &MonoTy<'db>) -> MonoTy<'db>;
+
+    fn mutability(&mut self, m: MonoMut) -> MonoMut {
+        m
+    }
+
+    fn row(&mut self, r: &MonoRow<'db>) -> MonoRow<'db> {
+        r.map(&mut MonoRow::param, &mut |t| self.ty(t))
+    }
+}
+
+/// A function on types changes only the types.
+impl<'db, F: FnMut(&MonoTy<'db>) -> MonoTy<'db>> MapParts<'db> for F {
+    fn ty(&mut self, t: &MonoTy<'db>) -> MonoTy<'db> {
+        self(t)
     }
 }
 
