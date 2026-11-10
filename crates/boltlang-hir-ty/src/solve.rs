@@ -1696,68 +1696,43 @@ impl<'db> Solver<'db> {
         }
     }
 
+    /// Try the constraints in the list that `pending` gives again with
+    /// `solve`, keeping those it can't solve yet. Returns whether it solved
+    /// any.
+    fn retry<C>(
+        &mut self,
+        pending: fn(&mut Self) -> &mut Vec<C>,
+        mut solve: impl FnMut(&mut Self, &C) -> bool,
+    ) -> bool {
+        let mut progress = false;
+        for c in std::mem::take(pending(self)) {
+            if solve(self, &c) {
+                progress = true;
+            } else {
+                pending(self).push(c);
+            }
+        }
+        progress
+    }
+
     /// Solve the class and field constraints that can be solved now.
     /// Returns whether any were.
     pub fn solve(&mut self) -> bool {
         let mut progress_ever = false;
         loop {
             let mut progress = false;
-            for (constraint, origin) in std::mem::take(&mut self.pending_fields) {
-                if self.solve_field(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_fields.push((constraint, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_spreads) {
-                if self.solve_spread(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_spreads.push((constraint, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_tuple_pats) {
-                if self.solve_tuple_pat(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_tuple_pats.push((constraint, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_lacks) {
-                if self.solve_lacks(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_lacks.push((constraint, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {
-                if self.solve_assoc(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_assoc.push((constraint, origin));
-                }
-            }
-            for (constraint, source, origin) in std::mem::take(&mut self.pending_at_most) {
-                if self.solve_at_most(&constraint, &source, origin) {
-                    progress = true;
-                } else {
-                    self.pending_at_most.push((constraint, source, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_imm) {
-                if self.solve_imm(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_imm.push((constraint, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_rows) {
-                if self.solve_row(&constraint, origin) {
-                    progress = true;
-                } else {
-                    self.pending_rows.push((constraint, origin));
-                }
-            }
+            progress |= self.retry(|s| &mut s.pending_fields, |s, (c, o)| s.solve_field(c, *o));
+            progress |= self.retry(|s| &mut s.pending_spreads, |s, (c, o)| s.solve_spread(c, *o));
+            progress |=
+                self.retry(|s| &mut s.pending_tuple_pats, |s, (c, o)| s.solve_tuple_pat(c, *o));
+            progress |= self.retry(|s| &mut s.pending_lacks, |s, (c, o)| s.solve_lacks(c, *o));
+            progress |= self.retry(|s| &mut s.pending_assoc, |s, (c, o)| s.solve_assoc(c, *o));
+            progress |= self.retry(
+                |s| &mut s.pending_at_most,
+                |s, (c, source, o)| s.solve_at_most(c, source, *o),
+            );
+            progress |= self.retry(|s| &mut s.pending_imm, |s, (c, o)| s.solve_imm(c, *o));
+            progress |= self.retry(|s| &mut s.pending_rows, |s, (c, o)| s.solve_row(c, *o));
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
