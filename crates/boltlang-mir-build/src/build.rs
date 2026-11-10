@@ -18,7 +18,7 @@ use boltlang_hir_def::{
         Statement, TupleItem,
     },
     ids::{ConstId, FunctionId, ItemContainerId},
-    resolver::{GenericDefId, Resolver, TypeNs, ValueNs, ValueResolution},
+    resolver::{GenericDefId, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
 };
 use boltlang_hir_ty::{
     AdtId, InferenceResult, Ty,
@@ -485,10 +485,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 }
                 let def = match path.as_ref().and_then(|p| self.resolve(e, p)) {
                     Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
-                    Some(ValueResolution::Type(r)) if matches!(r.ty, TypeNs::Variant(_)) => {
-                        let TypeNs::Variant(v) = r.ty else { unreachable!() };
-                        VariantDef::Variant(v)
-                    }
+                    Some(ValueResolution::Type(TypeResolution {
+                        ty: TypeNs::Variant(v), ..
+                    })) => VariantDef::Variant(v),
                     _ => match self.literal_ty(e) {
                         Ty::Adt(AdtId::Struct(s), ..) => VariantDef::Struct(s),
                         _ => return self.unsupported(e, "this struct literal"),
