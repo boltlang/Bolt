@@ -378,13 +378,8 @@ impl<'db> Solver<'db> {
                     for p in parts.into_iter().filter(|p| p.row_parts().is_some()) {
                         rows.push((p, below[0].1));
                     }
-                    let rows: Vec<(Ty<'db>, Origin<'db>)> = rows
-                        .into_iter()
-                        .map(|(t, origin)| match t {
-                            Ty::Var(_) => (Ty::Row(Box::new([]), Box::new([t])), origin),
-                            t => (t, origin),
-                        })
-                        .collect();
+                    let rows: Vec<(Ty<'db>, Origin<'db>)> =
+                        rows.into_iter().map(|(t, origin)| (var_as_row(t), origin)).collect();
                     let solution = self.union(&rows);
                     self.equal(&Ty::Var(var), &solution, below[0].1);
                     progress = true;
@@ -398,15 +393,8 @@ impl<'db> Solver<'db> {
                 if !all_settled {
                     continue;
                 }
-                let rows: Vec<(Ty<'db>, Origin<'db>)> = below
-                    .iter()
-                    .map(|(t, origin)| match t {
-                        // A variable that stays one is a part of the row, as
-                        // a parameter is.
-                        Ty::Var(_) => (Ty::Row(Box::new([]), Box::new([t.clone()])), *origin),
-                        t => (t.clone(), *origin),
-                    })
-                    .collect();
+                let rows: Vec<(Ty<'db>, Origin<'db>)> =
+                    below.iter().map(|(t, origin)| (var_as_row(t.clone()), *origin)).collect();
                 match below.first().map(|(_, o)| *o) {
                     Some(origin) => {
                         let solution = self.union(&rows);
@@ -543,6 +531,15 @@ impl<'db> Solver<'db> {
             });
             self.solve_row(&c, origin);
         }
+    }
+}
+
+/// `row`, or the row made of it if it's a variable: a variable that stays
+/// one is a part of the row, as a parameter is.
+fn var_as_row(row: Ty<'_>) -> Ty<'_> {
+    match row {
+        Ty::Var(_) => Ty::Row(Box::new([]), Box::new([row])),
+        row => row,
     }
 }
 
