@@ -564,7 +564,7 @@ impl SyntaxKind {
             ARG_LIST => "the argument list",
             ASSIGNMENT => "an assignment operator",
             BIN_EXPR => "an infix-expression",
-            BLOCK => "a block of statement",
+            BLOCK => "a block of statements",
             BLOCK_COMMENT => "a block comment",
             BLOCK_EXPR => "a block expression",
             BYTE => "a single byte (like b'a')",
