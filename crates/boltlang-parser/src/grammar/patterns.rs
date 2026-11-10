@@ -178,7 +178,7 @@ fn path_or_struct_pattern(p: &mut Parser) -> CompletedMarker {
 fn tuple_pattern(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     let mut kind = TupleKind::default();
-    delimited(p, T!['('], T![')'], T![,], "expected a pattern", PATTERN_FIRST, |p| {
+    delimited(p, T!['('], T![')'], "expected a pattern", PATTERN_FIRST, |p| {
         // `x: pattern`, a named field.
         if at_named_field(p) {
             kind.next(p, TupleSide::Named);
@@ -213,7 +213,7 @@ fn pattern_list(
     bra: boltlang_syntax::SyntaxKind,
     ket: boltlang_syntax::SyntaxKind,
 ) {
-    delimited(p, bra, ket, T![,], "expected a pattern", PATTERN_FIRST, |p| {
+    delimited(p, bra, ket, "expected a pattern", PATTERN_FIRST, |p| {
         if !p.at_ts(PATTERN_FIRST) {
             return false;
         }
@@ -228,7 +228,6 @@ fn field_pattern_list(p: &mut Parser) {
         p,
         T!['{'],
         T!['}'],
-        T![,],
         "expected a field",
         TokenSet::new(&[IDENT, T![mut], T![..]]),
         |p| {

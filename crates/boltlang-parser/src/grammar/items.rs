@@ -329,7 +329,7 @@ const TUPLE_FIELD_FIRST: TokenSet = TYPE_FIRST.union(TokenSet::new(&[T![pub], T!
 
 fn variant_list(p: &mut Parser) {
     let m = p.start();
-    delimited(p, T!['{'], T!['}'], T![,], "expected a variant", NAMED_MEMBER_FIRST, |p| {
+    delimited(p, T!['{'], T!['}'], "expected a variant", NAMED_MEMBER_FIRST, |p| {
         if !p.at_ts(NAMED_MEMBER_FIRST) {
             return false;
         }
@@ -359,7 +359,7 @@ fn variant(p: &mut Parser) {
 /// `{ x: i32, pub y: i32 }`
 pub(crate) fn record_field_list(p: &mut Parser) {
     let m = p.start();
-    delimited(p, T!['{'], T!['}'], T![,], "expected a field", NAMED_MEMBER_FIRST, |p| {
+    delimited(p, T!['{'], T!['}'], "expected a field", NAMED_MEMBER_FIRST, |p| {
         if !p.at_ts(NAMED_MEMBER_FIRST) {
             return false;
         }
@@ -378,7 +378,7 @@ pub(crate) fn record_field_list(p: &mut Parser) {
 /// `(i32, pub String)`
 pub(crate) fn tuple_field_list(p: &mut Parser) {
     let m = p.start();
-    delimited(p, T!['('], T![')'], T![,], "expected a type", TUPLE_FIELD_FIRST, |p| {
+    delimited(p, T!['('], T![')'], "expected a type", TUPLE_FIELD_FIRST, |p| {
         if !p.at_ts(TUPLE_FIELD_FIRST) {
             return false;
         }
@@ -594,7 +594,6 @@ fn import_list(p: &mut Parser) {
         p,
         T!['('],
         T![')'],
-        T![,],
         "expected a name or an operator",
         TokenSet::new(&[IDENT, OPERATOR, VBAR, LT, GT, STAR, PLUS, MINUS, EXCL]),
         |p| {

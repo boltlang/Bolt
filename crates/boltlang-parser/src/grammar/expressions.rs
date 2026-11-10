@@ -376,7 +376,7 @@ fn tuple_expr_spread(p: &mut Parser) {
 pub(super) fn arg_list(p: &mut Parser) {
     let m = p.start();
     let mut named = false;
-    delimited(p, T!['('], T![')'], T![,], "expected an expression", EXPR_FIRST, |p| {
+    delimited(p, T!['('], T![')'], "expected an expression", EXPR_FIRST, |p| {
         let positional =
             !at_named_field(p) && !(at_spread(p) && spread_side(p) == TupleSide::Named);
         if positional && named {

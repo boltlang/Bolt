@@ -19,15 +19,7 @@ const GENERIC_ARG_FIRST: TokenSet =
 /// `[A, B]`
 pub(crate) fn generic_arg_list(p: &mut Parser) {
     let m = p.start();
-    delimited(
-        p,
-        T!['['],
-        T![']'],
-        T![,],
-        "expected a generic argument",
-        GENERIC_ARG_FIRST,
-        generic_arg,
-    );
+    delimited(p, T!['['], T![']'], "expected a generic argument", GENERIC_ARG_FIRST, generic_arg);
     m.complete(p, GENERIC_ARG_LIST);
 }
 

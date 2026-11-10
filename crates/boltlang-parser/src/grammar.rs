@@ -171,37 +171,36 @@ pub(crate) fn name_ref(p: &mut Parser) {
     }
 }
 
-/// A list like `(a, b, c)`: `bra`, elements separated by `delim`, and
-/// `ket`. `parser` parses one element. It returns `false` if no element
-/// starts here, which ends the list, and must consume a token if it returns
-/// `true`. `missing_message` is the error for a missing element, like in
+/// A list like `(a, b, c)`: `bra`, elements separated by commas, and `ket`.
+/// `parser` parses one element. It returns `false` if no element starts
+/// here, which ends the list, and must consume a token if it returns `true`.
+/// `missing_message` is the error for a missing element, like in
 /// `(a, , b)`, and `first_set` holds the tokens that start an element.
 fn delimited(
     p: &mut Parser<'_>,
     bra: SyntaxKind,
     ket: SyntaxKind,
-    delim: SyntaxKind,
     missing_message: &str,
     first_set: TokenSet,
     mut parser: impl FnMut(&mut Parser<'_>) -> bool,
 ) {
     p.bump(bra);
     while !p.at(ket) && !p.at(EOF) {
-        if p.at(delim) {
-            // An element is missing, as in `(a, , b)`. The delimiter goes in
-            // an error node.
+        if p.at(T![,]) {
+            // An element is missing, as in `(a, , b)`. The comma goes in an
+            // error node.
             let m = p.start();
             p.error(missing_message);
-            p.bump(delim);
+            p.bump(T![,]);
             m.complete(p, ERROR);
             continue;
         }
         if !parser(p) {
             break;
         }
-        if !p.eat(delim) {
+        if !p.eat(T![,]) {
             if p.at_ts(first_set) {
-                p.error(format!("expected {}", delim.pretty()));
+                p.error("expected ','");
             } else {
                 break;
             }

@@ -189,7 +189,7 @@ const FN_TYPE_PARAM_FIRST: TokenSet =
 fn fn_type_param_list(p: &mut Parser) {
     let m = p.start();
     let mut order = ParamOrder::default();
-    delimited(p, T!['('], T![')'], T![,], "expected a parameter", FN_TYPE_PARAM_FIRST, |p| {
+    delimited(p, T!['('], T![')'], "expected a parameter", FN_TYPE_PARAM_FIRST, |p| {
         // A function type says a parameter has no name by leaving it
         // out, so it has no `/`.
         if at_positional_marker(p) {
