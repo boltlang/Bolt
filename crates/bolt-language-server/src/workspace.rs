@@ -87,7 +87,7 @@ impl Workspace {
     /// open through a symbolic link.
     fn uri_of(&self, file: File) -> Option<Uri> {
         match file.path(&self.db) {
-            FilePath::System(path) => file_uri(self.opened.get(path).map_or(path, |opened| opened)),
+            FilePath::System(path) => file_uri(self.opened.get(path).unwrap_or(path)),
             FilePath::SystemVirtual(_) => None,
         }
     }
@@ -118,17 +118,13 @@ impl Workspace {
                 used.push(file);
             }
         };
-        for &document in open.iter().filter(|&&f| !is_manifest(db, f)) {
+        let documents: Vec<File> = open.iter().copied().filter(|&f| !is_manifest(db, f)).collect();
+        for &document in &documents {
             for &file in files_used_by(db, document) {
                 add(file, &mut used);
             }
         }
-        let bolt_files: Vec<File> = open
-            .iter()
-            .copied()
-            .filter(|&f| !is_manifest(db, f))
-            .chain(used.iter().copied())
-            .collect();
+        let bolt_files: Vec<File> = documents.into_iter().chain(used.iter().copied()).collect();
         for file in bolt_files {
             if let Some(manifest) = package_manifest(db, file) {
                 add(manifest, &mut used);
