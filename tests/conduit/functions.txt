@@ -431,7 +431,7 @@ extern log(i32) -> ()
 
 #[link(emu)]
 #[abi(flat)]
-extern fill(#[nolen] mut [i8], i32) -> (i16)
+extern fill(#[addr] mut [i8], i32) -> (i16)
 
 fn file() -> () {
   let %0: imm [i8] = array_new(104i8, 105i8)

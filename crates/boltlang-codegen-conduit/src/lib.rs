@@ -1017,7 +1017,7 @@ fn declare_extern<'db>(
     if flat {
         ext.abi = conduit_ir::Abi::Flat;
         if nolen.contains(&true) {
-            ext.nolen = nolen;
+            ext.addr = nolen;
         }
     }
     module.externs.insert(id, ext);
