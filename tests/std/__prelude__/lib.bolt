@@ -5,8 +5,10 @@
 // `Char`, the types of string and character literals, `Debug`, which the
 // evaluator shows characters with, `ToImmDeep`, which `imm e` copies with,
 // `Cont` and `resume` for handlers, `print` and `eprint` on the
-// evaluator's `write`, and a few functions the compiler provides. It's a copy of what `packages/std` has of them, so that a case
-// that only needs these doesn't change when `std` does.
+// evaluator's `write`, and a few functions the compiler provides. It's a
+// copy of what `packages/std` has of them, so that a case that only needs
+// these doesn't change when `std` does. At the end are `<>` for strings and
+// a simpler `Show`, which the cases of `tests/run` print their results with.
 
 /// Write `bytes` to the file `fd`, as `std`'s `sys/emu.bolt` does: an error
 /// number, and how many bytes it wrote.
@@ -887,7 +889,7 @@ pub enum Option[T] {
 pub import Option.*;
 
 impl[T] Eq[Option[T]] where Eq[T] {
-  fn eq(a, b) = match (a, b) {
+  fn eq(a, b) = match mut (a, b) {
     (Some(x), Some(y)) => x == y,
     (None, None) => True,
     _ => False,
@@ -1015,3 +1017,149 @@ pub imm struct Cont[B, U, R] {
 }
 
 #[builtin] pub fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R;
+
+/// Joining with `a <> b`, as `std`'s `Semigroup`.
+pub class Semigroup[T] {
+  fn concat(a: T, b: T) -> T;
+}
+
+pub fn[T] (a: T) <> (b: T) -> T where Semigroup[T] = concat(a, b);
+
+impl Semigroup[String] {
+  fn concat(a, b) {
+    let n = array_len(a.0);
+    let bytes = array_alloc(n + array_len(b.0));
+    let mut i = 0;
+    for byte in a.0 {
+      array_set(bytes, i, byte);
+      i += 1;
+    }
+    for byte in b.0 {
+      array_set(bytes, i, byte);
+      i += 1;
+    }
+    String(array_freeze(bytes))
+  }
+}
+
+/// How values look to people, like `std`'s `Show`, but giving a `String`,
+/// as `Debug` here does. The cases of `tests/run` print their results with
+/// it. Unlike `std`, it has impls for floats, arrays, tuples and `Option`.
+pub class Show[T] {
+  fn show(x: T) -> String;
+}
+
+fn show_u64(n: u64) -> String {
+  let digit = String([(0x30 + n % 10) as u8]);
+  if n >= 10 { show_u64(n / 10) <> digit } else { digit }
+}
+
+fn show_i64(n: i64) -> String {
+  // Not `-n`, which overflows for the smallest `i64`.
+  if n < 0 { "-" <> show_u64(((-(n + 1)) as u64) + 1) } else { show_u64(n as u64) }
+}
+
+fn show_u128(n: u128) -> String {
+  let digit = String([(0x30 + n % 10) as u8]);
+  if n >= 10 { show_u128(n / 10) <> digit } else { digit }
+}
+
+fn show_i128(n: i128) -> String {
+  if n < 0 { "-" <> show_u128(((-(n + 1)) as u128) + 1) } else { show_u128(n as u128) }
+}
+
+/// Like `2.75` and `-3.0`: the whole part, then the digits after the
+/// point until there are no more, or 17 of them. That's exact for floats
+/// with a short binary fraction, like those of the tests, but `0.1` shows
+/// more digits than Rust's `0.1`.
+fn show_f64(x: f64) -> String {
+  if x != x {
+    return "NaN";
+  }
+  if x < 0.0 {
+    return "-" <> show_f64(-x);
+  }
+  let whole = x as u64;
+  let mut fraction = x - whole as f64;
+  let mut out = show_u64(whole) <> ".";
+  let mut digits = 0;
+  loop {
+    fraction = fraction * 10.0;
+    let digit = fraction as u64;
+    out = out <> show_u64(digit);
+    fraction = fraction - digit as f64;
+    digits += 1;
+    if fraction == 0.0 || digits == 17 {
+      break;
+    }
+  }
+  out
+}
+
+impl Show[i8] { fn show(n) = show_i64(n as i64); }
+impl Show[i16] { fn show(n) = show_i64(n as i64); }
+impl Show[i32] { fn show(n) = show_i64(n as i64); }
+impl Show[i64] { fn show(n) = show_i64(n); }
+impl Show[i128] { fn show(n) = show_i128(n); }
+impl Show[isize] { fn show(n) = show_i64(n as i64); }
+impl Show[u8] { fn show(n) = show_u64(n as u64); }
+impl Show[u16] { fn show(n) = show_u64(n as u64); }
+impl Show[u32] { fn show(n) = show_u64(n as u64); }
+impl Show[u64] { fn show(n) = show_u64(n); }
+impl Show[u128] { fn show(n) = show_u128(n); }
+impl Show[usize] { fn show(n) = show_u64(n as u64); }
+impl Show[f32] { fn show(x) = show_f64(x as f64); }
+impl Show[f64] { fn show(x) = show_f64(x); }
+
+impl Show[Bool] {
+  fn show(b) = if b { "True" } else { "False" };
+}
+
+/// Only ASCII characters, which is what the tests show.
+impl Show[Char] {
+  fn show(c) = String([c.0 as u8]);
+}
+
+impl Show[String] {
+  fn show(s) = s;
+}
+
+impl Show[()] {
+  fn show(_) = "()";
+}
+
+/// Like `[1, 2]`.
+impl[T] Show[[T]] where Show[T] {
+  fn show(xs) {
+    let mut out = "[";
+    let mut first = True;
+    for x in xs {
+      if !first {
+        out = out <> ", ";
+      }
+      out = out <> show(x);
+      first = False;
+    }
+    out <> "]"
+  }
+}
+
+impl[A, B] Show[(A, B)] where Show[A], Show[B] {
+  fn show(t) = "(" <> show(t.0) <> ", " <> show(t.1) <> ")";
+}
+
+impl[A, B, C] Show[(A, B, C)] where Show[A], Show[B], Show[C] {
+  fn show(t) = "(" <> show(t.0) <> ", " <> show(t.1) <> ", " <> show(t.2) <> ")";
+}
+
+impl[A, B, C, D] Show[(A, B, C, D)] where Show[A], Show[B], Show[C], Show[D] {
+  fn show(t) =
+    "(" <> show(t.0) <> ", " <> show(t.1) <> ", " <> show(t.2) <> ", " <> show(t.3) <> ")";
+}
+
+impl[T] Show[Option[T]] where Show[T] {
+  fn show(o) = match o {
+    Some(x) => "Some(" <> show(x) <> ")",
+    None => "None",
+  };
+}

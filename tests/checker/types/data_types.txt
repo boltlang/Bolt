@@ -335,20 +335,20 @@ error at `second`: imm (i32,) has no field 1
 Methods of fields
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
-fn f(p) = p.x.show();
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
+fn f(p) = p.x.display();
 struct P { x: i32 }
 struct Q { x: Bool }
 f(P { x: 1 });
 f(Q { x: True });
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-f: forall a b. Show[b] => a.x: b => fn(p: a) -> String
+Display[i32].display: fn(x: i32) -> String
+f: forall a b. Display[b] => a.x: b => fn(p: a) -> String
 f(P { x: 1 }): String
 f(Q { x: True }): String
 --------------------------------------------------------------------------------
-error at `f`: no instance Show[Bool]
+error at `f`: no instance Display[Bool]
 
 ================================================================================
 A field of a value has one type

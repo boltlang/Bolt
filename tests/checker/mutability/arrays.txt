@@ -707,16 +707,16 @@ name([1]): String
 A class constraint on an array
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "i32"; }
-impl[T] Show[[T]] where T: Show { fn show(x) = "array"; }
-show([1]);
-show(mut [mut [1]]);
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "i32"; }
+impl[T] Display[[T]] where T: Display { fn display(x) = "array"; }
+display([1]);
+display(mut [mut [1]]);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-Show[[T]].show: forall T. Show[T] => fn(x: [T]) -> String
-show([1]): String
-show(mut [mut [1]]): String
+Display[i32].display: fn(x: i32) -> String
+Display[[T]].display: forall T. Display[T] => fn(x: [T]) -> String
+display([1]): String
+display(mut [mut [1]]): String
 
 ================================================================================
 Method calls pass the array itself

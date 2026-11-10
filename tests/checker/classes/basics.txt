@@ -2,18 +2,18 @@
 Class constraints are inferred and solved
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
-fn twice(x) = (show(x), show(x));
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
+fn twice(x) = (display(x), display(x));
 twice(1);
 twice(True);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-twice: forall a. Show[a] => fn(x: a) -> imm (String, String)
+Display[i32].display: fn(x: i32) -> String
+twice: forall a. Display[a] => fn(x: a) -> imm (String, String)
 twice(1): imm (String, String)
 twice(True): imm (String, String)
 --------------------------------------------------------------------------------
-error at `twice`: no instance Show[Bool]
+error at `twice`: no instance Display[Bool]
 
 ================================================================================
 Where clauses are assumed
@@ -47,19 +47,19 @@ error at `convert`: no instance Convert[i32, Bool]
 Generic impls
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
+class Display[T] { fn display(x: T) -> String; }
 enum Option[T] { Some(T), None }
-impl Show[i32] { fn show(x) = "int"; }
-impl[T] Show[Option[T]] where Show[T] { fn show(x) = "option"; }
-show(Option.Some(1));
-show(Option.Some(True));
+impl Display[i32] { fn display(x) = "int"; }
+impl[T] Display[Option[T]] where Display[T] { fn display(x) = "option"; }
+display(Option.Some(1));
+display(Option.Some(True));
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-Show[Option[T]].show: forall T. Show[T] => fn(x: Option[T]) -> String
-show(Option.Some(1)): String
-show(Option.Some(True)): String
+Display[i32].display: fn(x: i32) -> String
+Display[Option[T]].display: forall T. Display[T] => fn(x: Option[T]) -> String
+display(Option.Some(1)): String
+display(Option.Some(True)): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[Bool]
+error at `display`: no instance Display[Bool]
 
 ================================================================================
 Superclasses are assumed
@@ -74,11 +74,11 @@ max: forall T. Ord[T] => fn(a: T, b: T) -> T
 Constraints are inferred from several methods
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
+class Display[T] { fn display(x: T) -> String; }
 class Same[T] { fn same(a: T, b: T) -> Bool; }
-fn show_if_same(a, b) = if same(a, b) { show(a) } else { "different" };
+fn display_if_same(a, b) = if same(a, b) { display(a) } else { "different" };
 --------------------------------------------------------------------------------
-show_if_same: forall a. Same[a] => Show[a] => fn(a: a, b: a) -> String
+display_if_same: forall a. Same[a] => Display[a] => fn(a: a, b: a) -> String
 
 ================================================================================
 A constraint on a type that is never known is ambiguous
@@ -140,16 +140,16 @@ error at `ZERO`: ambiguous
 Method call syntax with class methods
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
-1.show();
-True.show();
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
+1.display();
+True.display();
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-1.show(): String
-True.show(): String
+Display[i32].display: fn(x: i32) -> String
+1.display(): String
+True.display(): String
 --------------------------------------------------------------------------------
-error at `True.show`: no instance Show[Bool]
+error at `True.display`: no instance Display[Bool]
 
 ================================================================================
 Methods in an impl can call themselves without importing them
@@ -188,17 +188,17 @@ Two impls for the same type make uses ambiguous
 :error
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "one"; }
-impl Show[i32] { fn show(x) = "two"; }
-show(1);
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "one"; }
+impl Display[i32] { fn display(x) = "two"; }
+display(1);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-Show[i32].show: fn(x: i32) -> String
-show(1): String
+Display[i32].display: fn(x: i32) -> String
+Display[i32].display: fn(x: i32) -> String
+display(1): String
 --------------------------------------------------------------------------------
-error at `Show[i32]`: overlaps the impl for Show[i32]
-error at `show`: ambiguous
+error at `Display[i32]`: overlaps the impl for Display[i32]
+error at `display`: ambiguous
 
 ================================================================================
 Overlapping impls are reported where they're defined
@@ -218,17 +218,17 @@ A generic impl that overlaps a specific one
 :error
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl[T] Show[T] { fn show(x) = "any"; }
-impl Show[i32] { fn show(x) = "int"; }
-show(1);
+class Display[T] { fn display(x: T) -> String; }
+impl[T] Display[T] { fn display(x) = "any"; }
+impl Display[i32] { fn display(x) = "int"; }
+display(1);
 --------------------------------------------------------------------------------
-Show[T].show: forall T. fn(x: T) -> String
-Show[i32].show: fn(x: i32) -> String
-show(1): String
+Display[T].display: forall T. fn(x: T) -> String
+Display[i32].display: fn(x: i32) -> String
+display(1): String
 --------------------------------------------------------------------------------
-error at `Show[i32]`: overlaps the impl for Show[T]
-error at `show`: ambiguous
+error at `Display[i32]`: overlaps the impl for Display[T]
+error at `display`: ambiguous
 
 ================================================================================
 Impls whose instances no types fit both don't overlap
@@ -392,46 +392,46 @@ A where clause on a type without an impl
 :error
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-fn f() -> String where Show[Bool] = show(True);
+class Display[T] { fn display(x: T) -> String; }
+fn f() -> String where Display[Bool] = display(True);
 f();
 --------------------------------------------------------------------------------
-f: Show[Bool] => fn() -> String
+f: Display[Bool] => fn() -> String
 f(): String
 --------------------------------------------------------------------------------
-error at `f`: no instance Show[Bool]
+error at `f`: no instance Display[Bool]
 
 ================================================================================
 Class methods as values
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
 fn apply(f, x) = f(x);
-let s: fn(i32) -> String = show;
-apply(show, 1);
-apply(show, True);
+let s: fn(i32) -> String = display;
+apply(display, 1);
+apply(display, True);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
+Display[i32].display: fn(x: i32) -> String
 apply: forall a b e. fn(f: fn(a) -> b does e, x: a) -> b does e
 let s: fn(i32) -> String
-apply(show, 1): String
-apply(show, True): String
+apply(display, 1): String
+apply(display, True): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[Bool]
+error at `display`: no instance Display[Bool]
 
 ================================================================================
 Method call syntax on a constrained parameter
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-fn f[T](x: T) -> String where Show[T] = x.show();
-fn g[T](x: T) -> String = x.show();
+class Display[T] { fn display(x: T) -> String; }
+fn f[T](x: T) -> String where Display[T] = x.display();
+fn g[T](x: T) -> String = x.display();
 --------------------------------------------------------------------------------
-f: forall T. Show[T] => fn(x: T) -> String
+f: forall T. Display[T] => fn(x: T) -> String
 g: forall T. fn(x: T) -> String
 --------------------------------------------------------------------------------
-error at `x.show`: no instance Show[T]
+error at `x.display`: no instance Display[T]
 
 ================================================================================
 A multi-parameter class whose result is never known
@@ -451,32 +451,32 @@ error at `convert`: ambiguous
 Impls for function types and tuples
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[(i32, Bool)] { fn show(x) = "pair"; }
-impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
-show((1, True));
-show(|x: i32| x);
-show((True, 1));
+class Display[T] { fn display(x: T) -> String; }
+impl Display[(i32, Bool)] { fn display(x) = "pair"; }
+impl Display[fn(i32) -> i32] { fn display(x) = "function"; }
+display((1, True));
+display(|x: i32| x);
+display((True, 1));
 --------------------------------------------------------------------------------
-Show[(i32, Bool)].show: fn(x: (i32, Bool)) -> String
-Show[fn(i32) -> i32].show: fn(x: fn(i32) -> i32) -> String
-show((1, True)): String
-show(|x: i32| x): String
-show((True, 1)): String
+Display[(i32, Bool)].display: fn(x: (i32, Bool)) -> String
+Display[fn(i32) -> i32].display: fn(x: fn(i32) -> i32) -> String
+display((1, True)): String
+display(|x: i32| x): String
+display((True, 1)): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[imm (Bool, i32)]
+error at `display`: no instance Display[imm (Bool, i32)]
 
 ================================================================================
 An impl for a type alias
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
+class Display[T] { fn display(x: T) -> String; }
 type Int = i32;
-impl Show[Int] { fn show(x) = "int"; }
-show(1);
+impl Display[Int] { fn display(x) = "int"; }
+display(1);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-show(1): String
+Display[i32].display: fn(x: i32) -> String
+display(1): String
 
 ================================================================================
 Defaults of class methods
@@ -497,16 +497,16 @@ A constrained generic function called with a type without an impl
 :error
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
-fn twice[T](x: T) -> (String, String) where Show[T] = (show(x), show(x));
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
+fn twice[T](x: T) -> (String, String) where Display[T] = (display(x), display(x));
 fn call() = twice("a");
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-twice: forall T. Show[T] => fn(x: T) -> imm (String, String)
+Display[i32].display: fn(x: i32) -> String
+twice: forall T. Display[T] => fn(x: T) -> imm (String, String)
 call: fn() -> imm (String, String)
 --------------------------------------------------------------------------------
-error at `twice`: no instance Show[String]
+error at `twice`: no instance Display[String]
 
 ================================================================================
 A constraint that only a later use decides
@@ -527,16 +527,16 @@ f: fn() -> ()
 An impl for a function type and a closure whose types aren't known
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
-fn f() = show(|x| x);
-fn g() = show(|x| x + 1);
+class Display[T] { fn display(x: T) -> String; }
+impl Display[fn(i32) -> i32] { fn display(x) = "function"; }
+fn f() = display(|x| x);
+fn g() = display(|x| x + 1);
 --------------------------------------------------------------------------------
-Show[fn(i32) -> i32].show: fn(x: fn(i32) -> i32) -> String
+Display[fn(i32) -> i32].display: fn(x: fn(i32) -> i32) -> String
 f: fn() -> String
 g: fn() -> String
 --------------------------------------------------------------------------------
-error at `show`: ambiguous
+error at `display`: ambiguous
 
 ================================================================================
 An impl's parameters must be in its instance (#251)

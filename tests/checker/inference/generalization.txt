@@ -128,26 +128,26 @@ error at `1`: expected imm ({integer}, {integer}), found {integer}
 Class constraints in lambdas are inferred for their function
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-fn f(x) = (|y| show(y))(x);
-fn g(x) { let s = |y| show(y); s(x) }
+class Display[T] { fn display(x: T) -> String; }
+fn f(x) = (|y| display(y))(x);
+fn g(x) { let s = |y| display(y); s(x) }
 --------------------------------------------------------------------------------
-f: forall a. Show[a] => fn(x: a) -> String
-g: forall a. Show[a] => fn(x: a) -> String
+f: forall a. Display[a] => fn(x: a) -> String
+g: forall a. Display[a] => fn(x: a) -> String
 
 ================================================================================
 Generic functions used at several types in one function
 :test-prelude
 ================================================================================
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
-impl Show[Bool] { fn show(x) = "Bool"; }
-fn both() = (show(1), show(True));
-fn twice(x) = (show(x), show(x));
+class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
+impl Display[Bool] { fn display(x) = "Bool"; }
+fn both() = (display(1), display(True));
+fn twice(x) = (display(x), display(x));
 fn mixed(x) = (twice(x), twice(1));
 --------------------------------------------------------------------------------
-Show[i32].show: fn(x: i32) -> String
-Show[Bool].show: fn(x: Bool) -> String
+Display[i32].display: fn(x: i32) -> String
+Display[Bool].display: fn(x: Bool) -> String
 both: fn() -> imm (String, String)
-twice: forall a. Show[a] => fn(x: a) -> imm (String, String)
-mixed: forall a. Show[a] => fn(x: a) -> imm (imm (String, String), imm (String, String))
+twice: forall a. Display[a] => fn(x: a) -> imm (String, String)
+mixed: forall a. Display[a] => fn(x: a) -> imm (imm (String, String), imm (String, String))

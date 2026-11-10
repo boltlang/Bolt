@@ -150,9 +150,9 @@ let f = |x| x;
   if True { f } else { 1 };
         //^^^^^ label: this has type `fn(x: a) -> a`
                      //^ error: expected `fn(x: a) -> a`, found an integer
-class Show[T] { fn show(x: T) -> i32; }
-let s = show([]);
-      //^^^^ error: there is no instance `Show[imm [a]]`
+class Display[T] { fn display(x: T) -> i32; }
+let s = display([]);
+      //^^^^^^^ error: there is no instance `Display[imm [a]]`
 
 ================================================================================
 Unknown types skip the names of type parameters

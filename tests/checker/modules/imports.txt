@@ -68,19 +68,19 @@ p.x;
 Imported classes and their impls
 :test-prelude
 ================================================================================
-//- /show.bolt
-pub class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
+//- /display.bolt
+pub class Display[T] { fn display(x: T) -> String; }
+impl Display[i32] { fn display(x) = "int"; }
 //- /main.bolt
-import "./show" (Show, show);
-show(1);
-show(True);
+import "./display" (Display, display);
+display(1);
+display(True);
 --------------------------------------------------------------------------------
-/show.bolt: Show[i32].show: fn(x: i32) -> String
-/main.bolt: show(1): String
-/main.bolt: show(True): String
+/display.bolt: Display[i32].display: fn(x: i32) -> String
+/main.bolt: display(1): String
+/main.bolt: display(True): String
 --------------------------------------------------------------------------------
-/main.bolt: error at `show`: no instance Show[Bool]
+/main.bolt: error at `display`: no instance Display[Bool]
 
 ================================================================================
 Files imported with as
@@ -262,19 +262,19 @@ fn get(b: Box[i32]) -> i32 = b.value;
 An impl in a file that is not imported is not found
 :test-prelude
 ================================================================================
-//- /show.bolt
-pub class Show[T] { fn show(x: T) -> String; }
+//- /display.bolt
+pub class Display[T] { fn display(x: T) -> String; }
 //- /impls.bolt
-import "./show" (Show);
-impl Show[i32] { fn show(x) = "int"; }
+import "./display" (Display);
+impl Display[i32] { fn display(x) = "int"; }
 //- /main.bolt
-import "./show" (Show, show);
-show(1);
+import "./display" (Display, display);
+display(1);
 --------------------------------------------------------------------------------
-/impls.bolt: Show[i32].show: fn(x: i32) -> String
-/main.bolt: show(1): String
+/impls.bolt: Display[i32].display: fn(x: i32) -> String
+/main.bolt: display(1): String
 --------------------------------------------------------------------------------
-/main.bolt: error at `show`: no instance Show[i32]
+/main.bolt: error at `display`: no instance Display[i32]
 
 ================================================================================
 A type and a function with the same name from two files
@@ -349,14 +349,14 @@ Imported operators
 ================================================================================
 //- /ops.bolt
 pub struct V { pub x: i32 }
-pub fn (a: V) <> (b: V) = V { x: a.x + b.x };
+pub fn (a: V) <$> (b: V) = V { x: a.x + b.x };
 pub fn (a: V) <+> (b: V) = V { x: a.x * b.x };
 //- /main.bolt
-import "./ops" (V, <>);
-fn f(a: V, b: V) = a <> b;
+import "./ops" (V, <$>);
+fn f(a: V, b: V) = a <$> b;
 fn g(a: V, b: V) = a <+> b;
 --------------------------------------------------------------------------------
-/ops.bolt: <>: fn(a: V, b: V) -> imm V
+/ops.bolt: <$>: fn(a: V, b: V) -> imm V
 /ops.bolt: <+>: fn(a: V, b: V) -> imm V
 /main.bolt: f: fn(a: V, b: V) -> imm V
 /main.bolt: g: fn(a: V, b: V) -> {error}
