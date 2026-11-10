@@ -320,7 +320,7 @@ impl Exec for TestCommand {
         for root in &roots {
             bolt_files(root, &mut paths)?;
         }
-        let (files, mut ok) = open_all(&db, &paths);
+        let (files, opened) = open_all(&db, &paths);
         let selected = |name: &str| self.filter.as_ref().is_none_or(|f| name.contains(f.as_str()));
         let wasm = if self.wasm { Some(node_host("bolt test --wasm")?) } else { None };
         let (mut passed, mut failed, mut skipped) = (0, 0, 0);
@@ -342,7 +342,6 @@ impl Exec for TestCommand {
             let Some(program) = program else {
                 println!("{}: not run, since it has errors", display_path(&db, file));
                 skipped += count;
-                ok = false;
                 continue;
             };
             let tests: Vec<&(String, _)> =
@@ -359,7 +358,6 @@ impl Exec for TestCommand {
                             display_path(&db, file)
                         );
                         skipped += count;
-                        ok = false;
                         continue;
                     };
                     let path = wasm.dir.join(format!("{index}.wasm"));
@@ -390,10 +388,11 @@ impl Exec for TestCommand {
                 }
             }
         }
-        let result = if failed == 0 && ok { "ok" } else { "FAILED" };
+        let ok = opened && skipped == 0 && failed == 0;
+        let result = if ok { "ok" } else { "FAILED" };
         let skipped = if skipped > 0 { format!("; {skipped} not run") } else { String::new() };
         println!("test result: {result}. {passed} passed; {failed} failed{skipped}");
-        Ok(ok && failed == 0)
+        Ok(ok)
     }
 }
 
