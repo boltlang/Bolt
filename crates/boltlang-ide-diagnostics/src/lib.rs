@@ -1169,9 +1169,6 @@ fn count(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-#[cfg(test)]
-mod tests;
-
 /// Types as text in a sentence: `` `a` ``, `` `a` and `b` `` or
 /// `` `a`, `b` and `c` ``.
 fn list_types(tys: &[String]) -> String {
@@ -1253,3 +1250,6 @@ fn link_error(e: &boltlang_hir_def::item_tree::LinkError) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
