@@ -163,23 +163,14 @@ impl File {
         *self.status(db) == FileStatus::IsADirectory
     }
 
+    /// The text of the file, read again when its revision changes.
     pub fn read_to_string(&self, db: &dyn Db) -> std::io::Result<String> {
-        let path = self.path(db);
-
-        match path {
-            FilePath::System(system) => {
-                // Add a dependency on the revision to ensure the operation gets re-executed when the file changes.
-                let _ = self.revision(db);
-
-                db.system().read_to_string(system)
-            }
-            // FilePath::Vendored(vendored) => db.vendored().read_to_string(vendored),
-            FilePath::SystemVirtual(system_virtual) => {
-                // Add a dependency on the revision to ensure the operation gets re-executed when the file changes.
-                let _ = self.revision(db);
-
-                db.system().read_virtual_path_to_string(system_virtual)
-            }
+        // Reading the revision makes the queries that read the file depend
+        // on it, so that they run again when the file changes.
+        let _ = self.revision(db);
+        match self.path(db) {
+            FilePath::System(path) => db.system().read_to_string(path),
+            FilePath::SystemVirtual(path) => db.system().read_virtual_path_to_string(path),
         }
     }
 
