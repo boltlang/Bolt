@@ -4,7 +4,11 @@ use std::sync::{Arc, RwLock};
 use filetime::FileTime;
 use rustc_hash::FxHashMap;
 
-use crate::system::{SystemVirtualPath, file_time_now};
+use crate::system::{
+    SystemVirtualPath,
+    common::{file_not_found, other_error},
+    file_time_now,
+};
 
 use super::{FileType, Metadata, Path, PathBuf};
 
@@ -57,16 +61,8 @@ fn later_than(previous: FileTime) -> FileTime {
     }
 }
 
-fn file_not_found() -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::NotFound, "file not found")
-}
-
 fn is_a_dir() -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::IsADirectory, "file is a directory")
-}
-
-fn other_error<E: std::fmt::Display>(error: E) -> std::io::Error {
-    std::io::Error::other(format!("{}", error))
 }
 
 impl MemoryFs {

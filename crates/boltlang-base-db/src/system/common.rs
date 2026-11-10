@@ -8,6 +8,14 @@ use crate::{
 
 pub type Result<T> = std::io::Result<T>;
 
+pub(crate) fn file_not_found() -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::NotFound, "file not found")
+}
+
+pub(crate) fn other_error(error: impl std::fmt::Display) -> std::io::Error {
+    std::io::Error::other(error.to_string())
+}
+
 /// All interactions in the Salsa database with the broader world should be provided by this trait.
 pub trait System: Send + Sync {
     fn read_to_string(&self, path: &SystemPath) -> Result<String>;

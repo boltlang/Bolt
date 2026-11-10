@@ -7,13 +7,12 @@ use filetime::FileTime;
 
 use crate::vfs::FileType;
 use crate::{
-    system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, common::Result},
+    system::{
+        System, SystemPath, SystemPathBuf, SystemVirtualPath,
+        common::{Result, file_not_found, other_error},
+    },
     vfs::Metadata,
 };
-
-fn file_not_found() -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::NotFound, "file not found")
-}
 
 #[derive(Clone)]
 pub struct OsSystem {
@@ -22,10 +21,6 @@ pub struct OsSystem {
 
 struct OsSystemInner {
     cwd: SystemPathBuf,
-}
-
-fn other_error<E: std::fmt::Display>(error: E) -> std::io::Error {
-    std::io::Error::other(format!("{}", error))
 }
 
 impl OsSystem {

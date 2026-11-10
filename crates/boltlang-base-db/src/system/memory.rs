@@ -1,12 +1,11 @@
 use crate::{
     System, SystemPath, WritableSystem,
-    system::{SystemPathBuf, SystemVirtualPath, common::Result},
+    system::{
+        SystemPathBuf, SystemVirtualPath,
+        common::{Result, file_not_found},
+    },
     vfs::{MemoryFs, Metadata},
 };
-
-fn file_not_found() -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::NotFound, "file not found")
-}
 
 #[derive(Clone)]
 pub struct InMemorySystem {
