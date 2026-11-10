@@ -12,8 +12,9 @@
 //!   pass in Conduit makes it a variable again.
 //! - A `match`, and a `let` with a pattern, in a statement or a condition,
 //!   follow the decision that `boltlang-pattern` makes for them.
-//! - The host functions, with `#[link(wasm, ..)]`, are Conduit externs, in the
-//!   module the block names, like std's `print` calls WASI's `fd_write`. A
+//! - The host functions, with `#[link(wasm, ..)]` or `#[link(emu, ..)]`,
+//!   are Conduit externs, in the module `#[link]` names, like std's
+//!   `print` calls WASI's `fd_write`. A
 //!   `match` that no arm takes calls the prelude's `panic`, if there is
 //!   one, and traps. `abort` is a `trap`. An `unreachable` is only where
 //!   Bolt can promise that nothing gets, like after a call of a function
