@@ -33,12 +33,38 @@ pub fn run_with_args(
     fuel: Option<u64>,
     args: Vec<String>,
 ) -> Result<(), RunError> {
-    let mut machine = Machine::new(&program.module, Stdio(Emu::new(args)));
+    execute(program, f, fuel, Emu::new(args)).1
+}
+
+/// [`run`], but keeping what the program writes to stdout and stderr,
+/// together, instead of writing it to the process's, as tests do.
+pub fn run_captured(
+    program: &Lowered,
+    f: FuncId,
+    fuel: Option<u64>,
+) -> (String, Result<(), RunError>) {
+    let mut emu = Emu::new(Vec::new());
+    emu.captured = Some(Vec::new());
+    let (emu, result) = execute(program, f, fuel, emu);
+    let captured = emu.captured.unwrap_or_default();
+    (String::from_utf8_lossy(&captured).into_owned(), result)
+}
+
+/// Run `f` with `emu` as the host, which it gives back.
+fn execute(
+    program: &Lowered,
+    f: FuncId,
+    fuel: Option<u64>,
+    emu: Emu,
+) -> (Emu, Result<(), RunError>) {
+    let mut machine = Machine::new(&program.module, Stdio(emu));
     machine.fuel = fuel;
-    let Err(e) = machine.call(f, Vec::new()) else { return Ok(()) };
+    let result = machine.call(f, Vec::new());
+    let Stdio(emu) = machine.host;
+    let Err(e) = result else { return (emu, Ok(())) };
     let message = match &e.kind {
         // `exit(0)` ends the program as its end does.
-        ErrorKind::Exit(0) => return Ok(()),
+        ErrorKind::Exit(0) => return (emu, Ok(())),
         ErrorKind::Exit(code) => format!("the program exited with code {code}"),
         ErrorKind::Trap => "the program stopped with an error".to_string(),
         ErrorKind::OutOfFuel => "the program ran out of fuel".to_string(),
@@ -52,7 +78,7 @@ pub fn run_with_args(
             named.unwrap_or(text)
         }
     };
-    Err(RunError { message })
+    (emu, Err(RunError { message }))
 }
 
 /// The evaluator's host, [`Emu`].

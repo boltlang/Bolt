@@ -71,12 +71,22 @@ pub(crate) struct Emu {
     start: Instant,
     /// The state of the random bytes, a xorshift.
     random: u64,
+    /// What the program writes to stdout and stderr, together, when it's
+    /// kept instead of written to the process's, as tests do.
+    pub(crate) captured: Option<Vec<u8>>,
 }
 
 impl Emu {
     pub(crate) fn new(args: Vec<String>) -> Emu {
         let seed = SystemTime::now().duration_since(UNIX_EPOCH).map_or(1, |d| d.as_nanos() as u64);
-        Emu { args, files: HashMap::new(), next_fd: 3, start: Instant::now(), random: seed | 1 }
+        Emu {
+            args,
+            files: HashMap::new(),
+            next_fd: 3,
+            start: Instant::now(),
+            random: seed | 1,
+            captured: None,
+        }
     }
 
     /// Call the function `name`, declared as `decl`: its results, as the
@@ -236,16 +246,20 @@ impl Emu {
     }
 
     fn write(&mut self, fd: i64, data: &[u8]) -> Result<(), Errno> {
-        let result = match fd {
-            1 => {
+        let result = match (fd, &mut self.captured) {
+            (1 | 2, Some(captured)) => {
+                captured.extend_from_slice(data);
+                Ok(())
+            }
+            (1, None) => {
                 let mut out = io::stdout().lock();
                 out.write_all(data).and_then(|()| out.flush())
             }
-            2 => {
+            (2, None) => {
                 let mut err = io::stderr().lock();
                 err.write_all(data).and_then(|()| err.flush())
             }
-            fd => self.file(fd)?.write_all(data),
+            (fd, _) => self.file(fd)?.write_all(data),
         };
         result.map_err(|e| Errno::from(&e))
     }
