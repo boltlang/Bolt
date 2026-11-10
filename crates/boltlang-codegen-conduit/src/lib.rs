@@ -965,45 +965,38 @@ fn declare_extern<'db>(
     u: &Use<'db>,
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
-    let use_ty = |site: &Site<'db>| -> Result<MonoTy<'db>, ErrorKind> {
-        let ty = lcx
-            .instance
-            .source_body(db)
-            .and_then(|body| site.use_ty(db, body))
-            .ok_or_else(|| ErrorKind::unsupported("a use without a type"))?;
-        Ok(lcx.ty(&ty)?)
-    };
-    let (key, link, name, linked) = match u {
-        Use::Extern(f) => {
-            let own = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
-            // `#[link(wasm, module = "m", name = "n")]` or `#[link(emu, name = "n")]`.
-            let Some(link) = boltlang_hir_ty::builtin::link(db, *f) else {
-                return Err(ErrorKind::unsupported("a host function without `#[link]`"));
-            };
-            let name = link.name.clone().unwrap_or(own);
-            let link = match link.kind {
-                LinkKind::Wasm => conduit_ir::Link::Wasm {
-                    module: link.module.clone().unwrap_or_default().into(),
-                    name: name.as_str().into(),
-                },
-                LinkKind::Emu => conduit_ir::Link::Emu { name: name.as_str().into() },
-            };
-            (ExternKey::Function(*f), link, name, *f)
-        }
-        _ => return Ok(()),
-    };
+    let Use::Extern(f) = *u else { return Ok(()) };
+    let key = ExternKey::Function(f);
     if cx.externs.contains_key(&key) {
         return Ok(());
     }
-    let MonoTy::Fn(params, _, ret, ..) = use_ty(site)? else {
+    // `#[link(wasm, module = "m", name = "n")]` or `#[link(emu, name = "n")]`.
+    let Some(link) = boltlang_hir_ty::builtin::link(db, f) else {
+        return Err(ErrorKind::unsupported("a host function without `#[link]`"));
+    };
+    let own = f.item(db).display_name().map(|n| n.to_string()).unwrap_or_default();
+    let name = link.name.clone().unwrap_or(own);
+    // With `abi = flat`, each `#[addr]` array is passed as its address
+    // alone, without its length, and a tuple result is the extern's
+    // results: the first is what the host gives back, and the others it
+    // writes to memory.
+    let flat = link.abi == boltlang_hir_def::item_tree::LinkAbi::Flat;
+    let link = match link.kind {
+        LinkKind::Wasm => conduit_ir::Link::Wasm {
+            module: link.module.clone().unwrap_or_default().into(),
+            name: name.as_str().into(),
+        },
+        LinkKind::Emu => conduit_ir::Link::Emu { name: name.as_str().into() },
+    };
+    let use_ty = lcx
+        .instance
+        .source_body(db)
+        .and_then(|body| site.use_ty(db, body))
+        .ok_or_else(|| ErrorKind::unsupported("a use without a type"))?;
+    let MonoTy::Fn(params, _, ret, ..) = lcx.ty(&use_ty)? else {
         return Err(ErrorKind::unsupported("a host function whose type isn't a function"));
     };
-    // With `abi = flat`, each `#[addr]` array is passed as its address
-    // alone, without its length, and a tuple result is the extern's results: the first is what
-    // the host gives back, and the others it writes to memory.
-    let flat = boltlang_hir_ty::builtin::link(db, linked)
-        .is_some_and(|l| l.abi == boltlang_hir_def::item_tree::LinkAbi::Flat);
-    let declared = boltlang_hir_def::signatures::function_signature(db, linked);
+    let declared = boltlang_hir_def::signatures::function_signature(db, f);
     let mut sig = Sig::new(Vec::new(), Vec::new());
     let mut addr = Vec::new();
     for (i, t) in params.iter().enumerate() {
