@@ -83,22 +83,17 @@ pub fn body_with_source_map<'db>(
             let decl = id.item(db).ast_id.to_node(db, file, &root).and_then(ast::FuncDecl::cast);
             match decl {
                 Some(decl) => {
-                    if let Some(list) = decl.param_list() {
-                        // In the order of the signature's parameters.
-                        let items: Vec<_> = list
-                            .items()
-                            .filter_map(|item| match item {
-                                ast::ParamItem::Param(p) => Some((p.pattern(), p.default())),
-                                ast::ParamItem::Rest(r) => Some((r.pattern(), None)),
-                                ast::ParamItem::Marker
-                                | ast::ParamItem::PositionalMarker
-                                | ast::ParamItem::Pack(_) => None,
-                            })
-                            .collect();
-                        for (pattern, default) in items {
-                            params.push(collector.lower_opt_pat(pattern));
-                            defaults.push(default.map(|e| collector.lower_expr(e)));
-                        }
+                    // In the order of the signature's parameters.
+                    for item in decl.param_list().iter().flat_map(|list| list.items()) {
+                        let (pattern, default) = match item {
+                            ast::ParamItem::Param(p) => (p.pattern(), p.default()),
+                            ast::ParamItem::Rest(r) => (r.pattern(), None),
+                            ast::ParamItem::Marker
+                            | ast::ParamItem::PositionalMarker
+                            | ast::ParamItem::Pack(_) => continue,
+                        };
+                        params.push(collector.lower_opt_pat(pattern));
+                        defaults.push(default.map(|e| collector.lower_expr(e)));
                     }
                     collector.lower_opt_expr(decl.body())
                 }
