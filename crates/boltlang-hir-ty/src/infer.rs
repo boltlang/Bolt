@@ -456,8 +456,6 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
     found
 }
 
-/// The mutability of an array literal: `Mut` for `mut [a, b]`, and `Imm`
-/// for `[a, b]`.
 /// Whether the values of `def` are always `imm`: a variant, or an `imm
 /// struct`.
 fn is_always_imm<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> bool {
@@ -467,6 +465,8 @@ fn is_always_imm<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> bool {
     }
 }
 
+/// The mutability of an array literal: `Mut` for `mut [a, b]`, and `Imm`
+/// for `[a, b]`.
 fn literal_mutability<'db>(is_mut: bool) -> Ty<'db> {
     Ty::Mutability(if is_mut { Mutability::Mut } else { Mutability::Imm })
 }

@@ -81,12 +81,6 @@ pub enum ExprOrPat {
     Pat(PatId),
 }
 
-/// That `ty` has a field `name` of type `field`, like `x` in `p.x`. It's
-/// solved once `ty` is known, and a function whose argument's type isn't
-/// known keeps it as part of its type, like `forall a. a.x: i32 => fn(a)
-/// -> i32`, so that it works on any struct with that field. With `assign`,
-/// the field is assigned to, like in `p.x = 1`, so a struct must be `mut`:
-/// `forall a. mut a.x: i32 => fn(a) -> ()`.
 /// A part of a tuple being made: a positional field, a named one, or what
 /// a spread like `*e` or `**e` gives, which has `e`'s type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -140,6 +134,12 @@ pub struct TuplePatConstraint<'db> {
     pub rest: Option<u32>,
 }
 
+/// That `ty` has a field `name` of type `field`, like `x` in `p.x`. It's
+/// solved once `ty` is known, and a function whose argument's type isn't
+/// known keeps it as part of its type, like `forall a. a.x: i32 => fn(a)
+/// -> i32`, so that it works on any struct with that field. With `assign`,
+/// the field is assigned to, like in `p.x = 1`, so a struct must be `mut`:
+/// `forall a. mut a.x: i32 => fn(a) -> ()`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub struct FieldConstraint<'db> {
     pub ty: Ty<'db>,
@@ -1815,7 +1815,6 @@ impl<'db> Solver<'db> {
             .collect()
     }
 
-    /// The field constraints that couldn't be solved yet, resolved.
     /// Report each spread, and each tuple pattern with `..`, whose type is
     /// still unknown: a function's type can't say what they need. What
     /// they'd decide is the error type, so that it isn't generalized.
@@ -1832,6 +1831,7 @@ impl<'db> Solver<'db> {
         }
     }
 
+    /// The field constraints that couldn't be solved yet, resolved.
     pub fn take_pending_fields(&mut self) -> Vec<(FieldConstraint<'db>, Origin<'db>)> {
         std::mem::take(&mut self.pending_fields)
             .into_iter()

@@ -594,9 +594,6 @@ impl<'db> Solved<'_, 'db> {
         (out.into(), sources.into())
     }
 
-    /// The "at most" constraints that become part of the type of the
-    /// function with the body `def`: those about its type's variables and
-    /// its parameters, which its callers must meet.
     /// The containment constraints of rows that become part of the type of
     /// the function with the body `def`: those about its rows, which can make
     /// others about them, so this goes on until nothing changes. Their rows
@@ -640,6 +637,9 @@ impl<'db> Solved<'_, 'db> {
             .into()
     }
 
+    /// The "at most" constraints that become part of the type of the
+    /// function with the body `def`: those about its type's variables and
+    /// its parameters, which its callers must meet.
     fn function_bounds(
         &self,
         db: &'db dyn Db,

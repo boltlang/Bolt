@@ -112,8 +112,7 @@ impl<'db> Scheme<'db> {
     }
 
     /// The type with fresh variables for the parameters, adding the
-    /// predicates as constraints.
-    /// The types it gives the parameters and bound variables are kept, by
+    /// predicates as constraints. The types it gives the parameters and bound variables are kept, by
     /// `origin`, for the code generator and the evaluator.
     pub fn instantiate(&self, solver: &mut Solver<'db>, origin: Origin<'db>) -> Ty<'db> {
         let db = solver.db();
@@ -188,8 +187,9 @@ impl<'db> Scheme<'db> {
     }
 
     /// Show the scheme like `forall a. Show[a] => fn(a) -> a`, with fields
-    /// like `a.x: i32 => `, or `mut a.x: i32 => ` for one that's assigned. Mutabilities aren't shown: an array whose
-    /// mutability is generic is `[a]`.
+    /// like `a.x: i32 => `, or `mut a.x: i32 => ` for one that's assigned.
+    /// Mutabilities aren't shown: an array whose mutability is generic is
+    /// `[a]`.
     pub fn display(&self, db: &'db dyn Db) -> String {
         let mut tys = vec![&self.ty];
         for pred in self.predicates.iter() {
