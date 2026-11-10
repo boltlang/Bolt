@@ -225,13 +225,7 @@ impl<'db> Types<'db> {
                 Ty::Array(Box::new(elem), m)
             }
             MonoTy::Fn(params, _, ret, m, row) => {
-                let mut sig = Sig::new(Vec::new(), Vec::new());
-                for p in params {
-                    sig.params.extend(self.value(db, root, p)?);
-                }
-                sig.results.extend(self.value(db, root, ret)?);
-                sig.row = self.row(row);
-                Ty::Fn(Box::new(sig), mutability(*m))
+                Ty::Fn(Box::new(self.fn_sig(db, root, params, ret, row)?), mutability(*m))
             }
             MonoTy::Row(_) => return Err(ErrorKind::unsupported("a row of effects as a value")),
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => {
@@ -243,6 +237,24 @@ impl<'db> Types<'db> {
             // A value of the host, like a JavaScript string.
             MonoTy::Host(_) => Ty::Host,
         }))
+    }
+
+    /// The signature of a function of type `fn(params) -> ret does row`.
+    pub(crate) fn fn_sig(
+        &mut self,
+        db: &'db dyn Db,
+        root: File,
+        params: &[MonoTy<'db>],
+        ret: &MonoTy<'db>,
+        row: &MonoRow<'db>,
+    ) -> Result<Sig, ErrorKind> {
+        let mut sig = Sig::new(Vec::new(), Vec::new());
+        for p in params {
+            sig.params.extend(self.value(db, root, p)?);
+        }
+        sig.results.extend(self.value(db, root, ret)?);
+        sig.row = self.row(row);
+        Ok(sig)
     }
 
     /// The data type of `key`, declared if it's new.

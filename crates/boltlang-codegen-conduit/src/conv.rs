@@ -197,12 +197,9 @@ impl<'db> Convs<'db> {
             (MonoTy::Fn(ps, _, r, _, _), MonoTy::Fn(qs, _, s, _, row)) => {
                 let wrapper = fresh(format!("{name}::closure"));
                 self.wrappers.insert(key, wrapper);
-                let mut sig = Sig::new(vec![ft], Vec::new());
-                for q in qs.iter() {
-                    sig.params.extend(cx.value(q)?);
-                }
-                sig.results.extend(cx.value(s)?);
-                sig.row = cx.types.row(row);
+                // It takes the closure it converts first.
+                let mut sig = cx.types.fn_sig(cx.db, cx.root, qs, s, row)?;
+                sig.params.insert(0, ft);
                 sigs.push((wrapper, (sig, MutParams::default(), 0)));
                 // Its arguments go the other way.
                 for (p, q) in ps.iter().zip(qs.iter()) {

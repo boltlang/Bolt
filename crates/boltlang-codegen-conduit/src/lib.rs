@@ -697,32 +697,27 @@ fn instance_sig<'db>(
     root: File,
 ) -> Result<(Sig, MutParams, u32), ErrorKind> {
     let db = lcx.db;
-    let mut sig = Sig::new(Vec::new(), Vec::new());
     let def = match lcx.instance.def(db) {
         InstanceDef::Body(body) => Some(body.def(db)),
         // A default is a function of the parameters before it.
         InstanceDef::Default(..) | InstanceDef::Shim(_) => None,
     };
-    match def {
+    let sig = match def {
         // A shim is a function too.
         Some(DefWithBody::Function(_)) | None => {
             let MonoTy::Fn(params, _, ret, _, row) = lcx.instance_ty()? else {
                 return Err(ErrorKind::unsupported("a function whose type isn't a function"));
             };
-            for t in params.iter() {
-                sig.params.extend(types.value(db, root, t)?);
-            }
-            sig.results.extend(types.value(db, root, &ret)?);
-            sig.row = types.row(&row);
+            types.fn_sig(db, root, &params, &ret, &row)?
         }
         Some(DefWithBody::Const(_)) => {
-            sig.results.extend(types.value(db, root, &lcx.instance_ty()?)?)
+            Sig::new(Vec::new(), types.value(db, root, &lcx.instance_ty()?)?.into_iter().collect())
         }
-        Some(DefWithBody::File(_)) => {}
+        Some(DefWithBody::File(_)) => Sig::new(Vec::new(), Vec::new()),
         Some(DefWithBody::Variant(_)) => {
             return Err(ErrorKind::unsupported("the value of a variant"));
         }
-    }
+    };
     Ok((sig, own_mut_params(db, lcx.instance), lcx.instance.row_params(db) as u32))
 }
 
@@ -761,21 +756,18 @@ fn lambda_sig<'db>(
     else {
         return Err(ErrorKind::unsupported("a lambda without a body"));
     };
-    let mut sig = Sig::new(Vec::new(), Vec::new());
+    let mut captures = Vec::new();
     for c in &mir.captures {
         let Some(decl) = mir.local(c.local) else { continue };
         if let Some(t) = types.value(db, root, &lcx.ty(&decl.ty)?)? {
-            sig.params.push(if c.by_ref { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
+            captures.push(if c.by_ref { conduit_ir::Ty::Ref(Box::new(t)) } else { t });
         }
     }
     let MonoTy::Fn(params, _, ret, _, row) = lcx.expr_ty(lambda.expr)? else {
         return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
     };
-    for t in params.iter() {
-        sig.params.extend(types.value(db, root, t)?);
-    }
-    sig.results.extend(types.value(db, root, &ret)?);
-    sig.row = types.row(&row);
+    let mut sig = types.fn_sig(db, root, &params, &ret, &row)?;
+    sig.params.splice(0..0, captures);
     Ok((sig, own_mut_params(db, lcx.instance), lcx.instance.row_params(db) as u32))
 }
 
