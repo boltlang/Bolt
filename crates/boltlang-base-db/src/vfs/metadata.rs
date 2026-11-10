@@ -1,5 +1,3 @@
-use crate::system::file_time_now;
-
 /// A number representing the revision of a file.
 ///
 /// Two revisions that don't compare equal signify that the file has been modified.
@@ -15,10 +13,6 @@ pub struct FileRevision(u128);
 impl FileRevision {
     pub fn new(value: u128) -> Self {
         Self(value)
-    }
-
-    pub fn now() -> Self {
-        Self::from(file_time_now())
     }
 
     pub const fn zero() -> Self {

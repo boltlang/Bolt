@@ -22,12 +22,7 @@ pub use salsa;
 /// Re-export of the Rowan library that Bolt uses
 pub use boltlang_syntax::rowan;
 
-pub type OwnedUri = String;
-
-pub type BorrowedUri = str;
-
 pub type FxDashMap<K, V> = dashmap::DashMap<K, V, BuildHasherDefault<FxHasher>>;
-pub type FxDashSet<K> = dashmap::DashSet<K, BuildHasherDefault<FxHasher>>;
 
 pub use {
     db::Db,
@@ -42,5 +37,4 @@ pub use {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use crate::system::OsSystem;
-pub use crate::system::TestSystem;
 pub use crate::test_db::TestDb;

@@ -103,13 +103,6 @@ impl TestDb {
         f(self);
         self.executed.lock().unwrap().take().unwrap()
     }
-
-    #[cfg(test)]
-    #[allow(unused)]
-    pub fn take_logs(&mut self) -> Vec<String> {
-        let mut logs = self.executed.lock().unwrap();
-        if let Some(logs) = &mut *logs { std::mem::take(logs) } else { vec![] }
-    }
 }
 
 impl salsa::Database for TestDb {}
