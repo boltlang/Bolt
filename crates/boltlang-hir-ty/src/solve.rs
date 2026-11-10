@@ -983,12 +983,8 @@ impl<'db> Solver<'db> {
                 self.imm_unknown(&t, &c.to, origin);
                 true
             }
-            // A copy of `imm T` is an `imm T` too.
-            t @ Ty::Imm(_) => {
-                self.equal(&c.to, &t, origin);
-                true
-            }
-            // A value that holds nothing that can be changed.
+            // A copy of `imm T` is an `imm T` too, and a value that holds
+            // nothing that can be changed is itself.
             t => {
                 self.equal(&c.to, &t, origin);
                 true
