@@ -1870,25 +1870,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.solver.attach_overload_args(callee_ty, at);
                 (params, ret, effects)
             }
-            Ty::Error | Ty::Never => {
-                for &arg in args {
-                    self.infer_expr(arg);
-                }
-                return Ty::Error;
-            }
-            other => {
-                self.result
-                    .diagnostics
-                    .push(InferenceDiagnostic::NotAFunction { expr: callee, ty: other });
-                for &arg in args {
-                    self.infer_expr(arg);
-                }
-                return Ty::Error;
-            }
+            other => return self.not_callable(callee, other, args.iter().copied()),
         };
-        // The call does what the function does.
-        let constraint = RowConstraint::contains(effects, self.effects.clone());
-        self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
+        self.call_does(expr, effects);
         if params.len() != count {
             self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {
                 expr: ExprOrPat::Expr(expr),
@@ -1929,6 +1913,31 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         // `imm [i32]` of `to_imm(mut [1])`, which what follows should know.
         self.solver.solve_pending_assoc();
         ret
+    }
+
+    /// The callee of a call, of type `ty`, isn't a function: report it,
+    /// unless it's an error already, and infer the arguments `args` on
+    /// their own. The call is the error type.
+    fn not_callable(
+        &mut self,
+        callee: ExprId,
+        ty: Ty<'db>,
+        args: impl IntoIterator<Item = ExprId>,
+    ) -> Ty<'db> {
+        if !matches!(ty, Ty::Error | Ty::Never) {
+            self.result.diagnostics.push(InferenceDiagnostic::NotAFunction { expr: callee, ty });
+        }
+        for arg in args {
+            self.infer_expr(arg);
+        }
+        Ty::Error
+    }
+
+    /// The call `expr` does what the function it calls does, whose effects
+    /// are `effects`.
+    fn call_does(&mut self, expr: ExprId, effects: Ty<'db>) {
+        let constraint = RowConstraint::contains(effects, self.effects.clone());
+        self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
     }
 
     /// A call with named arguments or spreads, or of a function with
@@ -1983,21 +1992,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.solver.equal(&fn_ty, callee_ty, self.origin(callee));
                 (params, ret, effects)
             }
-            Ty::Error | Ty::Never => {
-                infer_all(self);
-                return Ty::Error;
-            }
-            other => {
-                self.result
-                    .diagnostics
-                    .push(InferenceDiagnostic::NotAFunction { expr: callee, ty: other });
-                infer_all(self);
-                return Ty::Error;
-            }
+            other => return self.not_callable(callee, other, items.iter().map(TupleItem::value)),
         };
-        // The call does what the function does.
-        let constraint = RowConstraint::contains(effects, self.effects.clone());
-        self.solver.add(Constraint::Row { constraint, origin: self.origin(expr) });
+        self.call_does(expr, effects);
         // The arguments, as a tuple: a positional one is checked against its
         // parameter while its place is known, before a spread. A named one
         // for a positional parameter comes after the positional ones, in
