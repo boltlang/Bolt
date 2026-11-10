@@ -234,14 +234,13 @@ impl<'db> Resolver<'db> {
     /// in `class Index[C] { type Item; fn get(c: C, i: i32) -> Item; }`.
     fn resolve_assoc_type(&self, db: &'db dyn Db, name: &Name) -> Option<TypeAliasId<'db>> {
         self.scopes.iter().rev().find_map(|scope| {
-            let container = match scope {
-                Scope::Generics(GenericDefId::Class(id), _) => ItemContainerId::Class(*id),
-                Scope::Generics(GenericDefId::Impl(id), _) => ItemContainerId::Impl(*id),
-                _ => return None,
-            };
-            let items = match container {
-                ItemContainerId::Class(id) => &id.item(db).items,
-                ItemContainerId::Impl(id) => &id.item(db).items,
+            let (container, items) = match *scope {
+                Scope::Generics(GenericDefId::Class(id), _) => {
+                    (ItemContainerId::Class(id), &id.item(db).items)
+                }
+                Scope::Generics(GenericDefId::Impl(id), _) => {
+                    (ItemContainerId::Impl(id), &id.item(db).items)
+                }
                 _ => return None,
             };
             items.iter().find_map(|item| match *item {
@@ -274,14 +273,14 @@ impl<'db> Resolver<'db> {
         let Some(def) = lookup(db, file, self.file, Namespace::Types, &segments.get(i)?.name)
         else {
             // `i32`, or `u8.MAX`, unless it's in another file, like `m.i32`.
-            if i == 0 && first.name.as_str() == "Nothing" {
-                return Some(TypeResolution { ty: TypeNs::Nothing, unresolved: rest(segments, 1) });
+            if i != 0 {
+                return None;
             }
-            let builtin = if i == 0 { BuiltinType::by_name(first.name.as_str()) } else { None };
-            return builtin.map(|ty| TypeResolution {
-                ty: TypeNs::Builtin(ty),
-                unresolved: rest(segments, 1),
-            });
+            let ty = match first.name.as_str() {
+                "Nothing" => TypeNs::Nothing,
+                name => TypeNs::Builtin(BuiltinType::by_name(name)?),
+            };
+            return Some(TypeResolution { ty, unresolved: rest(segments, 1) });
         };
         let ty = match def {
             ModuleDefId::Struct(id) => TypeNs::Struct(id),
