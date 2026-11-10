@@ -34,11 +34,6 @@ pub trait Node: Sized {
     fn find_node<N: Node>(&self) -> Option<N> {
         self.syntax().children().find_map(N::cast)
     }
-
-    fn rfind_node<N: Node>(&self) -> Option<N> {
-        // FIXME this could be optimised in Rowan
-        self.syntax().children().collect::<Vec<_>>().into_iter().rev().find_map(N::cast)
-    }
 }
 
 /// An iterator over `SyntaxNode` children of a particular AST type.
