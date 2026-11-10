@@ -641,22 +641,22 @@ fn import_kind(i: &ast::Import) -> ImportKind {
     }
 }
 
+/// Whether `meta` is that of an attribute called `name`, like `#[name]` or
+/// `#[name(..)]`.
+pub fn is_attr(meta: &ast::Meta, name: &str) -> bool {
+    meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == name)
+}
+
 /// Whether `node` has the attribute `#[name]`, without arguments.
 pub(crate) fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
-    node.attrs().any(|attr| {
-        attr.meta().is_some_and(|meta| {
-            meta.token_tree().is_none()
-                && meta.expr().is_none()
-                && meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == name)
-        })
-    })
+    node.attrs()
+        .filter_map(|attr| attr.meta())
+        .any(|meta| meta.token_tree().is_none() && meta.expr().is_none() && is_attr(&meta, name))
 }
 
 /// What the `#[link(..)]` of `node` says, if it has one.
 fn link_attr(node: &impl ast::HasAttrs) -> Option<Link> {
-    let meta = node.attrs().filter_map(|attr| attr.meta()).find(|meta| {
-        meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == "link")
-    })?;
+    let meta = node.attrs().filter_map(|attr| attr.meta()).find(|meta| is_attr(meta, "link"))?;
     let mut link =
         Link { kind: LinkKind::Wasm, module: None, name: None, abi: LinkAbi::Conduit, error: None };
     let Some(tree) = meta.token_tree() else {

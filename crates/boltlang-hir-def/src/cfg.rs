@@ -85,7 +85,7 @@ pub fn enabled(node: &SyntaxNode, target: Target) -> bool {
 
 /// Whether `meta` is that of a `#[cfg..]`.
 pub fn is_cfg(meta: &ast::Meta) -> bool {
-    meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == "cfg")
+    crate::item_tree::is_attr(meta, "cfg")
 }
 
 /// What the `#[cfg(..)]` of `meta` says.

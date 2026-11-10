@@ -20,7 +20,7 @@ use boltlang_hir_def::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         StructId, TypeAliasId,
     },
-    item_tree::{AssocItem, AstId, LinkAbi, LinkError, ModItem, RawVisibility, item_tree},
+    item_tree::{AssocItem, AstId, LinkAbi, LinkError, ModItem, RawVisibility, is_attr, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
@@ -719,10 +719,7 @@ impl<'db> Collector<'db> {
         let attrs: Vec<_> =
             self.root.descendants().filter_map(boltlang_syntax::ast::Attr::cast).collect();
         for attr in attrs {
-            let is_link = attr
-                .meta()
-                .and_then(|m| m.path())
-                .is_some_and(|path| path.syntax().text().to_string().trim() == "link");
+            let is_link = attr.meta().is_some_and(|meta| is_attr(&meta, "link"));
             let on_decl = attr.syntax().parent().is_some_and(|p| {
                 matches!(p.kind(), SyntaxKind::FUNC_DECL | SyntaxKind::TYPE_ALIAS)
             });
