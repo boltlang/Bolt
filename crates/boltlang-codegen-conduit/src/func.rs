@@ -29,7 +29,7 @@ use conduit_ir::{
 };
 
 use crate::{
-    Ctx, Error, ErrorKind, ExternKey,
+    Ctx, Error, ErrorKind,
     conv::ConvCx,
     ty::{Scalar, Types, is_fieldless, is_nullable_host, mutability, none_index, placeholder},
 };
@@ -1082,7 +1082,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 self.b.call_with(f, margs, rows, args)
             }
             Use::Extern(f) => {
-                let results = self.b.call_extern(self.cx.externs[&ExternKey::Function(f)], args);
+                let results = self.b.call_extern(self.cx.externs[&f], args);
                 // A host function can return although it's declared not to,
                 // and nothing in Bolt can promise it won't: stop then.
                 if matches!(result_ty, MonoTy::Never) {

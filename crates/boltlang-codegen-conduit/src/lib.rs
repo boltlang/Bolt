@@ -157,13 +157,6 @@ impl fmt::Display for Error {
     }
 }
 
-/// What a host function is, so that each one is declared once: a function
-/// with `#[link]`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum ExternKey<'db> {
-    Function(FunctionId<'db>),
-}
-
 /// What every body is lowered with.
 pub(crate) struct Ctx<'db> {
     pub db: &'db dyn Db,
@@ -171,7 +164,8 @@ pub(crate) struct Ctx<'db> {
     pub funcs: HashMap<Instance<'db>, FuncId>,
     /// The function each lambda of an instance is lifted to.
     pub lambdas: HashMap<(Instance<'db>, ExprId), FuncId>,
-    pub externs: HashMap<ExternKey<'db>, ExternId>,
+    /// The extern of each host function, a function with `#[link]`.
+    pub externs: HashMap<FunctionId<'db>, ExternId>,
     pub erased: Vec<FunctionId<'db>>,
     /// The prelude's `panic`, with the type of the `String` it takes, if
     /// a `match` that no arm takes calls it.
@@ -966,8 +960,7 @@ fn declare_extern<'db>(
 ) -> Result<(), ErrorKind> {
     let db = cx.db;
     let Use::Extern(f) = *u else { return Ok(()) };
-    let key = ExternKey::Function(f);
-    if cx.externs.contains_key(&key) {
+    if cx.externs.contains_key(&f) {
         return Ok(());
     }
     // `#[link(wasm, module = "m", name = "n")]` or `#[link(emu, name = "n")]`.
@@ -1023,7 +1016,7 @@ fn declare_extern<'db>(
         }
     }
     module.externs.insert(id, ext);
-    cx.externs.insert(key, id);
+    cx.externs.insert(f, id);
     Ok(())
 }
 
