@@ -338,7 +338,7 @@ fn fun_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     opt_ret_type(p);
     opt_effect_row(p);
     if p.eat(T![=]) {
-        expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 1);
+        expr_bp(p, None, r.nested(), 1);
     } else {
         p.error("expected '=' before the body of the function");
         if p.at(T!['{']) {
@@ -380,7 +380,7 @@ fn let_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     p.bump(T![let]);
     parse_pattern(p);
     p.expect(T![=]);
-    expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 5);
+    expr_bp(p, None, r.nested(), 5);
     m.complete(p, LET_EXPR)
 }
 
@@ -584,7 +584,7 @@ fn closure_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
             p.error("expected a block after the effects");
         }
     } else if !p.eat(T![_]) {
-        expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 1);
+        expr_bp(p, None, r.nested(), 1);
     }
     m.complete(p, CLOSURE_EXPR)
 }

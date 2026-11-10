@@ -41,6 +41,14 @@ pub(crate) struct Restrictions {
     prefer_stmt: bool,
 }
 
+impl Restrictions {
+    /// The restrictions for an expression inside this one, which is never a
+    /// statement itself.
+    fn nested(self) -> Restrictions {
+        Restrictions { prefer_stmt: false, ..self }
+    }
+}
+
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
 const LHS_FIRST: TokenSet =
@@ -255,7 +263,7 @@ fn expr_bp(
                 lhs = m.complete(p, RANGE_EXPR);
                 break;
             }
-            expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, op_bp + 1);
+            expr_bp(p, None, r.nested(), op_bp + 1);
             lhs = m.complete(p, RANGE_EXPR);
             continue;
         }
@@ -263,7 +271,7 @@ fn expr_bp(
             Associativity::Left => op_bp + 1,
             Associativity::Right => op_bp,
         };
-        expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, op_bp);
+        expr_bp(p, None, r.nested(), op_bp);
         lhs = m.complete(p, BIN_EXPR);
     }
     Some((lhs, BlockLike::NotBlock))
@@ -283,7 +291,7 @@ fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> 
         let m = p.start();
         p.bump_any();
         if at_range_end(p, r) {
-            expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 3);
+            expr_bp(p, None, r.nested(), 3);
         }
         return Some((m.complete(p, RANGE_EXPR), BlockLike::NotBlock));
     }
