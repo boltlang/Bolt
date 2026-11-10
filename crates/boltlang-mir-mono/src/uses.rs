@@ -258,9 +258,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         let ItemContainerId::Effect(effect) = op.container(db) else {
             return Err(UseError::UnknownType);
         };
-        let callee = generics(db, DefWithBodyId::new(db, DefWithBody::Function(op)))
-            .as_ref()
-            .map_err(|e| UseError::from(*e))?;
+        let callee = fn_generics(db, op)?;
         let mut found = vec![None; callee.kinds.len()];
         bind(&callee.params, &callee.ty, use_ty, &mut found);
         let params = generic_param_ids(db, [GenericDefId::Effect(effect)]);
@@ -379,9 +377,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         class: &MonoConstraint<'db>,
         use_ty: &MonoTy<'db>,
     ) -> Result<Box<[Dict<'db>]>, UseError> {
-        let callee = generics(self.db, DefWithBodyId::new(self.db, DefWithBody::Function(f)))
-            .as_ref()
-            .map_err(|e| UseError::from(*e))?;
+        let callee = fn_generics(self.db, f)?;
         let mut found = vec![None; callee.kinds.len()];
         let class_params = generic_param_ids(self.db, [GenericDefId::Class(class.class)]);
         for (p, t) in class_params.iter().zip(class.args.iter()) {
@@ -424,9 +420,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         use_ty: &MonoTy<'db>,
         f: FunctionId<'db>,
     ) -> Result<Vec<MonoTy<'db>>, UseError> {
-        let callee = generics(self.db, DefWithBodyId::new(self.db, DefWithBody::Function(f)))
-            .as_ref()
-            .map_err(|e| UseError::from(*e))?;
+        let callee = fn_generics(self.db, f)?;
         let mut found = vec![None; callee.kinds.len()];
         bind(&callee.params, &callee.ty, use_ty, &mut found);
         let class_params = generic_param_ids(self.db, [GenericDefId::Class(class)]);
@@ -665,6 +659,15 @@ impl<'a, 'db> Cx<'a, 'db> {
         }
         found
     }
+}
+
+/// What the function `f` is generic over.
+fn fn_generics<'db>(
+    db: &'db dyn boltlang_base_db::Db,
+    f: FunctionId<'db>,
+) -> Result<&'db Generics<'db>, UseError> {
+    let body = DefWithBodyId::new(db, DefWithBody::Function(f));
+    generics(db, body).as_ref().map_err(|e| UseError::from(*e))
 }
 
 /// The dictionary for `want` that `dict`, for `have`, gives: itself, or one
