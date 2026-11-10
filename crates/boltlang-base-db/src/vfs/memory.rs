@@ -125,10 +125,7 @@ impl MemoryFs {
         };
         let target = Path::absolute(target, &dir);
         let mut lock = self.inner.by_path.write().map_err(other_error)?;
-        for dir in link.as_std_path().ancestors().skip(1) {
-            lock.entry(PathBuf::from_std_path_buf(dir.to_path_buf()))
-                .or_insert_with(|| Entry::Directory(Directory { last_modified: file_time_now() }));
-        }
+        create_directories_of(&mut lock, &link);
         lock.insert(link, Entry::Symlink(target));
         Ok(())
     }
@@ -193,27 +190,8 @@ impl MemoryFs {
         // Writing through a link writes its target.
         let path = Self::resolve_links(&lock, &path)?;
         // Like on disk, the directories of a file exist.
-        for dir in path.as_std_path().ancestors().skip(1) {
-            lock.entry(PathBuf::from_std_path_buf(dir.to_path_buf()))
-                .or_insert_with(|| Entry::Directory(Directory { last_modified: file_time_now() }));
-        }
-        match lock.entry(path) {
-            HashMapEntry::Occupied(mut entry) => match entry.get_mut() {
-                Entry::File(file) => {
-                    file.content = content.into();
-                    file.last_modified = later_than(file.last_modified);
-                }
-                Entry::Directory(_) => return Err(is_a_dir()),
-                Entry::Symlink(_) => unreachable!("a resolved path isn't a link"),
-            },
-            HashMapEntry::Vacant(entry) => {
-                entry.insert(Entry::File(File {
-                    last_modified: file_time_now(),
-                    content: content.into(),
-                }));
-            }
-        }
-        Ok(())
+        create_directories_of(&mut lock, &path);
+        write_entry(&mut lock, path, content)
     }
 
     /// Remove the file at `path`. Its directories stay.
@@ -240,25 +218,44 @@ impl MemoryFs {
         // Not `canonicalize`, which fails if the file doesn't exist yet.
         let path = self.normalize_path(path);
         let mut lock = self.inner.virtual_by_path.write().map_err(other_error)?;
-        match lock.entry(path) {
-            HashMapEntry::Occupied(mut entry) => match entry.get_mut() {
-                Entry::File(file) => {
-                    file.content = content.into();
-                    file.last_modified = later_than(file.last_modified);
-                }
-                Entry::Directory(_) => return Err(is_a_dir()),
-                // Virtual paths have no links.
-                Entry::Symlink(_) => unreachable!("a virtual path isn't a link"),
-            },
-            HashMapEntry::Vacant(entry) => {
-                entry.insert(Entry::File(File {
-                    last_modified: file_time_now(),
-                    content: content.into(),
-                }));
-            }
-        }
-        Ok(())
+        write_entry(&mut lock, path, content)
     }
+}
+
+/// Add the directories that `path` is in to `entries`, if they aren't
+/// there yet.
+fn create_directories_of(entries: &mut FxHashMap<PathBuf, Entry>, path: &Path) {
+    for dir in path.as_std_path().ancestors().skip(1) {
+        entries
+            .entry(PathBuf::from_std_path_buf(dir.to_path_buf()))
+            .or_insert_with(|| Entry::Directory(Directory { last_modified: file_time_now() }));
+    }
+}
+
+/// Write `content` to the file at `path` in `entries`, a path without
+/// links, creating the file if it isn't there.
+fn write_entry(
+    entries: &mut FxHashMap<PathBuf, Entry>,
+    path: PathBuf,
+    content: &[u8],
+) -> std::io::Result<()> {
+    match entries.entry(path) {
+        HashMapEntry::Occupied(mut entry) => match entry.get_mut() {
+            Entry::File(file) => {
+                file.content = content.into();
+                file.last_modified = later_than(file.last_modified);
+            }
+            Entry::Directory(_) => return Err(is_a_dir()),
+            Entry::Symlink(_) => unreachable!("a path without links isn't a link"),
+        },
+        HashMapEntry::Vacant(entry) => {
+            entry.insert(Entry::File(File {
+                last_modified: file_time_now(),
+                content: content.into(),
+            }));
+        }
+    }
+    Ok(())
 }
 
 enum Entry {
