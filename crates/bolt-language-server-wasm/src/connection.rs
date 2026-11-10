@@ -57,9 +57,7 @@ impl Connection {
         let message: Value = match serde_json::from_str(message) {
             Ok(message) => message,
             Err(error) => {
-                return vec![
-                    error_response(Value::Null, PARSE_ERROR, error.to_string()).to_string(),
-                ];
+                return as_json(vec![error_response(Value::Null, PARSE_ERROR, error.to_string())]);
             }
         };
         let method = message.get("method").and_then(Value::as_str).map(str::to_string);
@@ -77,7 +75,7 @@ impl Connection {
                 "not a request or a notification",
             )],
         };
-        out.into_iter().map(|message| message.to_string()).collect()
+        as_json(out)
     }
 
     /// Use `text` for the file at `path`, which isn't open in the editor, like
@@ -99,7 +97,7 @@ impl Connection {
 
     fn file_changed(&mut self, path: &SystemPath) -> Vec<String> {
         self.server.file_changed(path);
-        self.after_change().into_iter().map(|message| message.to_string()).collect()
+        as_json(self.after_change())
     }
 
     /// After a change, a warning for each file that open documents use that
@@ -187,6 +185,11 @@ impl Connection {
         self.next_id += 1;
         Some(json!({ "jsonrpc": "2.0", "id": id, "method": "workspace/diagnostic/refresh" }))
     }
+}
+
+/// The messages as JSON text, to send to the client.
+fn as_json(messages: Vec<Value>) -> Vec<String> {
+    messages.into_iter().map(|message| message.to_string()).collect()
 }
 
 fn absolute(path: &str) -> Result<&SystemPath, String> {
