@@ -43,7 +43,7 @@ impl<'db> InferenceContext<'_, 'db> {
     ) {
         let db = self.db;
         let left = self.solver.new_var(VarKind::Effect);
-        let file = self.def.def(db).file(db);
+        let file = self.file();
         let cont = cont_struct(db, file);
         if cont.is_none() {
             self.result

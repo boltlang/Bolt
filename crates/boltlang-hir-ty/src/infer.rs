@@ -7,7 +7,7 @@ mod pat;
 
 use std::collections::HashMap;
 
-use boltlang_base_db::Db;
+use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     arena::ArenaMap,
@@ -566,6 +566,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
+    /// The file of the body being inferred.
+    pub(crate) fn file(&self) -> File {
+        self.def.def(self.db).file(self.db)
+    }
+
     fn origin(&self, expr: ExprId) -> Origin<'db> {
         Origin::new(self.def, ExprOrPat::Expr(expr))
     }
@@ -796,7 +801,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         error: BindingId,
     ) -> Ty<'db> {
         let db = self.db;
-        let file = self.def.def(db).file(db);
+        let file = self.file();
         let option = crate::lang::option_enum(db, file);
         let result = crate::lang::result_enum(db, file);
         let ty = self.infer_expr(inner);
@@ -1309,7 +1314,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Float))
             }
             Literal::Char(_) => {
-                let file = self.def.def(self.db).file(self.db);
+                let file = self.file();
                 char_ty(self.db, file).unwrap_or_else(|| {
                     self.result
                         .diagnostics
@@ -1319,7 +1324,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Literal::Byte(_) => Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
             Literal::String(_) | Literal::CString(_) => {
-                let file = self.def.def(self.db).file(self.db);
+                let file = self.file();
                 string_ty(self.db, file).unwrap_or_else(|| {
                     self.result
                         .diagnostics
@@ -1467,7 +1472,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             FieldsKind::Unit => adt_ty,
             FieldsKind::Tuple => {
                 // Making a tuple struct gives all of its fields.
-                let file = self.def.def(self.db).file(self.db);
+                let file = self.file();
                 if let (VariantDef::Struct(strukt), Some(name)) =
                     (def, private_field(self.db, def, file))
                 {
@@ -1496,7 +1501,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         def: VariantDef<'db>,
         index: usize,
     ) {
-        let file = self.def.def(self.db).file(self.db);
+        let file = self.file();
         if let VariantDef::Struct(strukt) = def
             && !field_visible(self.db, def, index, file)
         {
@@ -1514,7 +1519,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         end: ExprId,
         inclusive: bool,
     ) -> Ty<'db> {
-        let file = self.def.def(self.db).file(self.db);
+        let file = self.file();
         let (found, name) = match inclusive {
             false => (range_struct(self.db, file), "Range"),
             true => (range_inclusive_struct(self.db, file), "RangeInclusive"),
@@ -1726,7 +1731,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     // A private field isn't one here, so `x.f(y)` is `f(x, y)`.
                     Ty::Adt(AdtId::Struct(s), ..) => {
                         let def = VariantDef::Struct(s);
-                        let file = self.def.def(self.db).file(self.db);
+                        let file = self.file();
                         field_types(self.db, def)
                             .field(&name)
                             .is_some_and(|(i, _)| field_visible(self.db, def, i, file))
@@ -2348,7 +2353,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 return;
             }
         }
-        let file = self.def.def(self.db).file(self.db);
+        let file = self.file();
         // Without `Index`, reading the element already reported it.
         let Some(class) = LangClass::IndexMut.class(self.db, file) else { return };
         let constraint = ClassConstraint { class, args: Box::new([ty]) };
@@ -2359,7 +2364,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// uses, for `arg`, which must have an instance of it at `at`. Without a
     /// prelude that defines the class, that's reported, and it's `None`.
     fn lang_assoc(&mut self, lang: LangClass, arg: &Ty<'db>, at: ExprId) -> Option<Ty<'db>> {
-        let file = self.def.def(self.db).file(self.db);
+        let file = self.file();
         let Some((class, alias)) =
             lang.class(self.db, file).and_then(|c| Some((c, lang.assoc(self.db, c)?)))
         else {
@@ -2440,7 +2445,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // `mut` `l` would be an `imm Line` holding `l`'s `mut Point`.
             Some(spread) => {
                 // The fields not given are copied, so they must be visible.
-                let file = self.def.def(self.db).file(self.db);
+                let file = self.file();
                 let hidden = (0..field_tys.fields.len())
                     .find(|&i| !seen.contains(&i) && !field_visible(self.db, def, i, file));
                 if let Some(hidden) = hidden {
