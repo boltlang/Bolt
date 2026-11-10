@@ -142,13 +142,7 @@ impl Host for Log {
             }
             // Success, and how many bytes it wrote.
             let values = [0, bytes.len() as i64];
-            let results = decl.sig.results.iter().zip(values).map(|(t, n)| match t {
-                conduit_ir::Ty::I64 => Value::I64(n),
-                conduit_ir::Ty::I16 => Value::I16(n as i16),
-                conduit_ir::Ty::I8 => Value::I8(n as i8),
-                _ => Value::I32(n as i32),
-            });
-            return Ok(results.collect());
+            return Ok(decl.sig.results.iter().zip(values).map(|(t, n)| int(t, n)).collect());
         }
         // A flat extern's arrays are shown with their elements, like
         // `[1, 2]`, and its results are 1, 2 and so on, so that a test sees
@@ -158,18 +152,23 @@ impl Host for Log {
         let args: Vec<String> = args.iter().map(show).collect();
         self.lines.borrow_mut().push(format!("{name}({})", args.join(", ")));
         if flat {
-            let results = decl.sig.results.iter().enumerate().map(|(i, t)| match t {
-                conduit_ir::Ty::I64 => Value::I64(i as i64 + 1),
-                conduit_ir::Ty::I16 => Value::I16(i as i16 + 1),
-                conduit_ir::Ty::I8 => Value::I8(i as i8 + 1),
-                _ => Value::I32(i as i32 + 1),
-            });
+            let results = decl.sig.results.iter().enumerate().map(|(i, t)| int(t, i as i64 + 1));
             return Ok(results.collect());
         }
         if !decl.sig.results.is_empty() {
             return Err(format!("`{name}` gives a value, which the tests' host can't").into());
         }
         Ok(Vec::new())
+    }
+}
+
+/// `n` as a value of the integer type `t`.
+fn int(t: &conduit_ir::Ty, n: i64) -> Value {
+    match t {
+        conduit_ir::Ty::I64 => Value::I64(n),
+        conduit_ir::Ty::I16 => Value::I16(n as i16),
+        conduit_ir::Ty::I8 => Value::I8(n as i8),
+        _ => Value::I32(n as i32),
     }
 }
 
