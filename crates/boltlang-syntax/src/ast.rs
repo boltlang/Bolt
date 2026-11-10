@@ -1421,17 +1421,7 @@ impl RetExpr {
 
 pub struct BlockExpr(SyntaxNode);
 
-impl Node for BlockExpr {
-    fn kind() -> SyntaxKind {
-        BLOCK_EXPR
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        BlockExpr(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(BlockExpr, BLOCK_EXPR);
 
 impl BlockExpr {
     pub fn block(&self) -> Option<Block> {
@@ -1449,17 +1439,7 @@ impl BlockExpr {
 
 pub struct Block(SyntaxNode);
 
-impl Node for Block {
-    fn kind() -> SyntaxKind {
-        SyntaxKind::BLOCK
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        Block(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(Block, BLOCK);
 
 impl Block {
     /// The statements, leaving out the tail expression.
@@ -1474,6 +1454,8 @@ impl Block {
 }
 
 pub struct FunExpr(SyntaxNode);
+
+simple_node!(FunExpr, FUN_EXPR);
 
 impl FunExpr {
     pub fn param_list(&self) -> Option<ParamList> {
@@ -1493,19 +1475,9 @@ impl FunExpr {
     }
 }
 
-impl Node for FunExpr {
-    fn kind() -> SyntaxKind {
-        FUN_EXPR
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        FunExpr(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
-
 pub struct LitExpr(SyntaxNode);
+
+simple_node!(LitExpr, LIT_EXPR);
 
 impl LitExpr {
     pub fn value(&self) -> Option<SyntaxToken> {
@@ -1523,31 +1495,9 @@ impl LitExpr {
     }
 }
 
-impl Node for LitExpr {
-    fn kind() -> SyntaxKind {
-        LIT_EXPR
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        LitExpr(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
-
 pub struct CallExpr(SyntaxNode);
 
-impl Node for CallExpr {
-    fn kind() -> SyntaxKind {
-        CALL_EXPR
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        CallExpr(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(CallExpr, CALL_EXPR);
 
 impl CallExpr {
     pub fn operator(&self) -> Option<Expr> {
@@ -1583,17 +1533,7 @@ impl CallExpr {
 
 pub struct VarDecl(SyntaxNode);
 
-impl Node for VarDecl {
-    fn kind() -> SyntaxKind {
-        LET_STMT
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        VarDecl(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(VarDecl, LET_STMT);
 
 impl VarDecl {
     pub fn pattern(&self) -> Option<Pattern> {
@@ -1693,17 +1633,7 @@ impl VariadicParam {
 /// A parameter like `x`, `x: T` or `x: T = 1`.
 pub struct Param(SyntaxNode);
 
-impl Node for Param {
-    fn kind() -> SyntaxKind {
-        PARAM
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        Param(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(Param, PARAM);
 
 impl Param {
     pub fn pattern(&self) -> Option<Pattern> {
@@ -1721,17 +1651,7 @@ impl Param {
 
 pub struct FuncDecl(SyntaxNode);
 
-impl Node for FuncDecl {
-    fn kind() -> SyntaxKind {
-        FUNC_DECL
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        FuncDecl(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(FuncDecl, FUNC_DECL);
 
 impl FuncDecl {
     pub fn visibility(&self) -> Option<Visibility> {
@@ -2239,17 +2159,7 @@ impl ExprStmt {
 
 pub struct SourceFile(SyntaxNode);
 
-impl Node for SourceFile {
-    fn kind() -> SyntaxKind {
-        SOURCE_FILE
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        SourceFile(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
+simple_node!(SourceFile, SOURCE_FILE);
 
 impl SourceFile {
     pub fn elements(&self) -> ChildrenIter<SourceElement> {
