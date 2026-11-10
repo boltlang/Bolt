@@ -331,14 +331,22 @@ fn occurs<'db>(a: &MonoTy<'db>, b: &MonoTy<'db>) -> bool {
 pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
     let db = cx.db;
     let shim;
-    let all: Vec<&MirBody<'db>> = match cx.instance.def(db) {
+    // Each body, with its number in `MirBodies::all`.
+    let all: Vec<(u32, &MirBody<'db>)> = match cx.instance.def(db) {
         InstanceDef::Body(body) => {
             let bodies = mir_bodies(db, *body);
-            std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
+            std::iter::once(&bodies.body)
+                .chain(&bodies.lambdas)
+                .enumerate()
+                .map(|(i, b)| (i as u32, b))
+                .collect()
+        }
+        InstanceDef::Default(body, param) => {
+            mir_bodies(db, *body).default(*param).into_iter().collect()
         }
         InstanceDef::Shim(s) => {
             shim = shim_body(db, s, cx.instance.root(db));
-            vec![&shim]
+            vec![(0, &shim)]
         }
     };
     let mut uses = Vec::new();
@@ -347,8 +355,7 @@ pub fn scan<'db>(cx: &Cx<'_, 'db>) -> Scanned<'db> {
         Ok(u) => uses.push((site, u)),
         Err(e) => errors.push((site, e)),
     };
-    for (index, mir) in all.into_iter().enumerate() {
-        let body = index as u32;
+    for (body, mir) in all {
         // The nodes that are called, which an operation as anything else
         // isn't.
         let callees: HashSet<ExprId> = mir
@@ -446,12 +453,10 @@ fn consts_in<'db>(
 }
 
 impl<'db> Site<'db> {
-    /// The MIR body the use is in, of `def` or of one of its lambdas.
+    /// The MIR body the use is in, of `def`, of one of its lambdas, or of
+    /// one of its defaults.
     pub fn mir<'a>(&self, bodies: &'a MirBodies<'db>) -> Option<&'a MirBody<'db>> {
-        match self.body {
-            0 => Some(&bodies.body),
-            i => bodies.lambdas.get(i as usize - 1),
-        }
+        bodies.nth(self.body)
     }
 
     /// The HIR expression the use's node came from, for errors.

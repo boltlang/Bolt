@@ -270,7 +270,38 @@ against, or else those of its patterns. A method of a class impl can name
 its parameters otherwise than the class: calls through the class use the
 class's names.
 
-What's left: default values, lambdas with keyword parameters, and
+### Default values
+
+A parameter can have a default, like `fn f(a: i32, b: i32 = a * 2, *, c:
+i32 = 0)`. The defaults are part of the function's body (`Body::defaults`),
+each in a scope that has the parameters before it, and they're checked
+with the body, against their parameters' types, so `fn g(x = 1)` takes an
+`i32`. A default is evaluated where the function is called, so what it
+does, the function does: its effects are the function's. A positional
+parameter without a default after one with a default is E0260, and a
+default on a method of a class impl is E0261, since calls through the
+class use the class's defaults, as they use its names.
+
+Function types have no defaults (#408), so only a call that the checker
+knows the function of can leave parameters out: a call by its name, a
+method call, or one of a class method. `ParamDefaults` says which
+parameters have one, and `place_args` passes over the positional ones
+that no argument is for. The arguments are then checked against the
+parameters that are left, and `InferenceResult::defaults` has, for the
+call, the function and the declared parameters that get their defaults.
+
+In MIR, each default is a body of its own (`BodyOwner::Default`), a
+function of the parameters before it, after the lambdas in `MirBodies`. A
+call evaluates its arguments into temporaries in the order they're
+written, then calls the default of each parameter it leaves out, in the
+order of the parameters, with the values of those before it, through an
+`ItemRef::Default`. Its `of` is the type the call uses the function at,
+which decides the instance of the default: `InstanceDef::Default` is
+generic over what its function is, with the default's own type. A class
+method's defaults work the same way, since its declaration has a scheme.
+A default with a lambda or a handler in it isn't lowered yet.
+
+What's left: lambdas with keyword parameters, and
 passing a pack on, like `f(*args)` in a generic body (#405).
 
 ## References

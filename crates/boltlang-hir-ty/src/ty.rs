@@ -195,22 +195,35 @@ pub enum ArgPlace {
     Twice,
 }
 
+/// Where the arguments of a call go, as [`place_args`] finds it: a place
+/// for each argument, and the positional parameters that no argument is
+/// for, which get their defaults.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArgPlaces {
+    pub places: Vec<ArgPlace>,
+    pub defaulted: Vec<usize>,
+}
+
 /// Where each of the arguments `items` of a call goes, after `first`
 /// arguments that come before them, like the receiver of `x.f(y)`, for a
 /// function with `count` positional parameters, whose names `name` gives.
 /// A named argument goes to the positional parameter with its name, if the
-/// arguments before it fill the parameters before that one: `f(1, z: 3)`
-/// passes `z` by name when `f(x, y, z)`. With a spread, the places aren't
-/// known, so every argument goes where it's written.
+/// arguments before it fill the parameters before that one, or those have
+/// defaults, as `has_default` says: `f(1, z: 3)` passes `z` by name when
+/// `f(x, y = 2, z)`, and gives `y` its default. With a spread, the places
+/// aren't known, so every argument goes where it's written, and nothing
+/// gets a default.
 pub fn place_args<T>(
     count: usize,
     name: impl Fn(usize) -> Option<Name>,
+    has_default: impl Fn(usize) -> bool,
     first: usize,
     items: &[TupleItem<T>],
-) -> Vec<ArgPlace> {
+) -> ArgPlaces {
     let mut places = vec![ArgPlace::Written; items.len()];
+    let mut defaulted = Vec::new();
     if items.iter().any(|i| matches!(i, TupleItem::Spread(..))) {
-        return places;
+        return ArgPlaces { places, defaulted };
     }
     let given = first + items.iter().filter(|i| matches!(i, TupleItem::Positional(_))).count();
     let names: Vec<Option<Name>> = (0..count).map(name).collect();
@@ -227,10 +240,21 @@ pub fn place_args<T>(
             .position(|item| matches!(item, TupleItem::Named(n, _) if name.as_ref() == Some(n)));
         match found {
             Some(j) if places[j] == ArgPlace::Written => places[j] = ArgPlace::Positional(i),
+            _ if has_default(i) => defaulted.push(i),
             _ => break,
         }
     }
-    places
+    // A name given again, after the argument that went to its parameter.
+    for j in 0..items.len() {
+        let TupleItem::Named(n, _) = &items[j] else { continue };
+        let placed = items.iter().zip(&places).any(|(item, place)| {
+            matches!((item, place), (TupleItem::Named(m, _), ArgPlace::Positional(_)) if m == n)
+        });
+        if placed && places[j] == ArgPlace::Written {
+            places[j] = ArgPlace::Twice;
+        }
+    }
+    ArgPlaces { places, defaulted }
 }
 
 /// Which fields of a tuple a [`Ty::Spread`] stands for.

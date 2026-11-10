@@ -322,7 +322,7 @@ fn plan_perform<'db>(
 pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     let p = program(db, entry);
     let snippet = |instance: Instance<'_>, site: Option<&Site<'_>>| -> Option<String> {
-        let def = instance.body(db)?;
+        let def = instance.source_body(db)?;
         let (_, map) = body_with_source_map(db, def);
         let ptr = map.expr_syntax(site?.origin(db, def)?)?;
         let text = source_text(db, def.def(db).file(db));
@@ -538,6 +538,9 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                 let bodies = mir_bodies(db, *body);
                 std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
             }
+            InstanceDef::Default(body, param) => {
+                mir_bodies(db, *body).default(*param).into_iter().map(|(_, b)| b).collect()
+            }
             InstanceDef::Shim(s) => {
                 shim = shim_body(db, s, iu.instance.root(db));
                 vec![&shim]
@@ -710,7 +713,8 @@ fn instance_sig<'db>(
     let mut sig = Sig::new(Vec::new(), Vec::new());
     let def = match lcx.instance.def(db) {
         InstanceDef::Body(body) => Some(body.def(db)),
-        InstanceDef::Shim(_) => None,
+        // A default is a function of the parameters before it.
+        InstanceDef::Default(..) | InstanceDef::Shim(_) => None,
     };
     match def {
         // A shim is a function too.
@@ -801,10 +805,7 @@ fn handler_sigs<'db>(
     keys.sort_by_key(|k| cx.handles[*k].handler.0);
     for key in keys {
         let fns = &cx.handles[key];
-        let mir = match key.1 {
-            0 => &bodies.body,
-            i => &bodies.lambdas[i as usize - 1],
-        };
+        let Some(mir) = bodies.nth(key.1) else { continue };
         let boltlang_mir::ExprKind::Handle { body: scrutinee, .. } = &mir[key.2].kind else {
             continue;
         };
@@ -959,7 +960,7 @@ fn declare_extern<'db>(
     let use_ty = |site: &Site<'db>| -> Result<MonoTy<'db>, ErrorKind> {
         let ty = lcx
             .instance
-            .body(db)
+            .source_body(db)
             .and_then(|body| site.use_ty(db, body))
             .ok_or_else(|| ErrorKind::unsupported("a use without a type"))?;
         Ok(lcx.ty(&ty)?)

@@ -74,6 +74,10 @@ impl<'db> Printer<'_, 'db> {
                 DefWithBody::Variant(_) => "<discriminant>".to_string(),
             },
             BodyOwner::Lambda { expr, .. } => format!("lambda#{}", expr.index()),
+            BodyOwner::Default { parent, param } => match parent.def(db) {
+                DefWithBody::Function(f) => format!("default#{param} of fn {}", fn_name(db, f)),
+                _ => format!("default#{param}"),
+            },
             BodyOwner::Shim(Shim::ImmDeep(t)) => format!("shim imm_deep[{}]", self.ty(t)),
             BodyOwner::Shim(Shim::Ctor(c)) => format!("shim {}", ctor_name(db, *c)),
             BodyOwner::Shim(Shim::Op(f)) => format!("shim perform.{}", fn_name(db, *f)),
@@ -392,6 +396,9 @@ impl<'db> Printer<'_, 'db> {
             }
             ItemRef::Builtin(b) => format!("builtin.{}", b.name()),
             ItemRef::Extern(f) => format!("extern.{}", fn_name(db, *f)),
+            ItemRef::Default { function, param, .. } => {
+                format!("default#{param}.{}", fn_name(db, *function))
+            }
             ItemRef::Ctor(c) => ctor_name(db, *c),
             ItemRef::Op(f) => format!("perform.{}", fn_name(db, *f)),
         }

@@ -110,7 +110,7 @@ fn build(case: &Case) -> Result<String, String> {
             }
             for def in bodies(&db, *file) {
                 let bodies = mir_bodies(&db, def);
-                for b in std::iter::once(&bodies.body).chain(&bodies.lambdas) {
+                for b in bodies.all() {
                     if several {
                         out.push_str(&format!("{path}: "));
                     }

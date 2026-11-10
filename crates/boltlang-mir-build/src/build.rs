@@ -26,9 +26,9 @@ use boltlang_hir_ty::{
     function_scheme, infer_body,
     instances::class_args,
     lang::LangClass,
-    lower::{VariantDef, field_types},
+    lower::{ParamDefaults, VariantDef, declared_param_tys, field_types},
     scheme::generic_param_ids,
-    ty::{ArgPlace, place_args},
+    ty::{ArgPlace, ArgPlaces, place_args},
 };
 use boltlang_mir::{
     Arm, Body, BodyOwner, Callee, Capture, ClassItem, ExprId, ExprKind, ItemRef, LabelId, Local,
@@ -40,12 +40,13 @@ use boltlang_pattern::decision::{
 
 use crate::lambda::body_lambdas;
 
-/// The MIR of a body, and of each lambda in it, in the order they're
-/// written.
+/// The MIR of a body, of each lambda in it, in the order they're written,
+/// and of the default of each parameter that has one.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct MirBodies<'db> {
     pub body: Body<'db>,
     pub lambdas: Vec<Body<'db>>,
+    pub defaults: Vec<Body<'db>>,
 }
 
 impl<'db> MirBodies<'db> {
@@ -54,6 +55,27 @@ impl<'db> MirBodies<'db> {
         self.lambdas
             .iter()
             .find(|b| matches!(b.owner, BodyOwner::Lambda { expr: e, .. } if e == expr))
+    }
+
+    /// Every body, numbered as uses are found in them: 0 for the body, then
+    /// the lambdas, then the defaults.
+    pub fn all(&self) -> impl Iterator<Item = &Body<'db>> {
+        std::iter::once(&self.body).chain(&self.lambdas).chain(&self.defaults)
+    }
+
+    /// The body numbered `i`, as in [`MirBodies::all`].
+    pub fn nth(&self, i: u32) -> Option<&Body<'db>> {
+        self.all().nth(i as usize)
+    }
+
+    /// The body of the default of the `param`th declared parameter, and its
+    /// number, as in [`MirBodies::all`].
+    pub fn default(&self, param: u32) -> Option<(u32, &Body<'db>)> {
+        let i = self
+            .defaults
+            .iter()
+            .position(|b| matches!(b.owner, BodyOwner::Default { param: p, .. } if p == param))?;
+        Some(((1 + self.lambdas.len() + i) as u32, &self.defaults[i]))
     }
 }
 
@@ -85,7 +107,34 @@ pub fn mir_bodies<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> MirBodies<'d
             body.param_kinds = params.iter().map(|p| (p.kind, p.name.clone())).collect();
         }
     }
-    MirBodies { body, lambdas }
+    // Each default, as a function of the parameters before it.
+    let mut defaults = Vec::new();
+    for (i, default) in hir.defaults.iter().enumerate() {
+        let Some(default) = *default else { continue };
+        let owner = BodyOwner::Default { parent: def, param: i as u32 };
+        let mut inner = Vec::new();
+        let mut b = Builder::new(&cx, owner, &mut inner);
+        let root = if b.params(&hir.params[..i]) {
+            b.expr(default)
+        } else {
+            b.unsupported(default, "patterns in parameters")
+        };
+        let mut body = b.finish();
+        // A lambda's body would be part of the default's instance, and a
+        // handler's functions too, which codegen doesn't make yet.
+        let has_handler = body.exprs().any(|(_, n)| matches!(n.kind, ExprKind::Handle { .. }));
+        body.root = if !inner.is_empty() || has_handler {
+            body.alloc(
+                ExprKind::Unsupported("a lambda or handler in a default"),
+                cx.infer.expr_ty(default).clone(),
+                Some(default),
+            )
+        } else {
+            root
+        };
+        defaults.push(body);
+    }
+    MirBodies { body, lambdas, defaults }
 }
 
 /// What the builders of a body and its lambdas share.
@@ -342,6 +391,11 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                     self.scopes.pop();
                 }
                 self.node(e, ExprKind::Block { stmts, tail, label })
+            }
+            // A call that leaves out parameters gets their defaults.
+            Expr::Call { callee, args } if self.cx.infer.defaults.get(e).is_some() => {
+                let items: Vec<_> = args.iter().map(|&a| TupleItem::Positional(a)).collect();
+                self.call_with(e, *callee, &items)
             }
             Expr::Call { callee, args } => self.call_expr(e, *callee, args),
             Expr::Field { expr: base, name } => {
@@ -649,7 +703,9 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
     /// the function's type lays them out: the positional ones, then the
     /// keyword ones in the order of their names. A named one for a
     /// positional parameter goes where the checker put it, by
-    /// [`place_args`]. The function's packs must be known here.
+    /// [`place_args`]. A parameter the call leaves out gets its default,
+    /// evaluated after the arguments, in the order of the parameters, from
+    /// the parameters before it. The function's packs must be known here.
     fn call_with(
         &mut self,
         e: hir::ExprId,
@@ -675,17 +731,31 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         }
         all.extend_from_slice(items);
         let first = method.is_some() as usize;
+        let defaults = self.cx.infer.defaults.get(e).cloned();
+        let has =
+            defaults.as_ref().map(|(f, _)| ParamDefaults::of(self.db, *f)).unwrap_or_default();
         let mut places = vec![ArgPlace::Written; first];
-        places.extend(place_args(
+        let ArgPlaces { places: given, defaulted } = place_args(
             params.positional.len(),
             |i| params.name(i).cloned(),
+            |i| has.has_positional(i),
             first,
             items,
-        ));
-        let Some((mut values, named)) = self.parts_in_temps(&all, &places, &mut stmts) else {
+        );
+        places.extend(given);
+        let Some((values, named)) = self.parts_in_temps(&all, &places, &mut stmts) else {
             return self.unsupported(e, "a spread of a tuple with a pack in it");
         };
-        values.extend(named.into_iter().map(|(_, v)| v));
+        let values = match defaults {
+            Some((f, used)) => {
+                match self.with_defaults(e, callee, f, &used, &defaulted, values, named, &mut stmts)
+                {
+                    Some(values) => values,
+                    None => return self.unsupported(e, "this call that leaves out parameters"),
+                }
+            }
+            None => values.into_iter().chain(named.into_iter().map(|(_, v)| v)).collect(),
+        };
         let call = match method {
             Some(f) => {
                 let item = self.fn_ref(callee, f);
@@ -699,6 +769,96 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
         let block = ExprKind::Block { stmts: stmts.into(), tail: Some(call), label: None };
         let ty = self.ty(e);
         self.mir.alloc(block, ty, Some(e))
+    }
+
+    /// The arguments of a call `e` of `f` that leaves out the parameters
+    /// `used`, by their declared indices, of which those at the positions
+    /// `defaulted` are positional: `values` are the positional arguments
+    /// given, and `named` the keyword ones. Each default is called in a
+    /// `let` in `stmts`, in the order of the parameters, with the values of
+    /// the parameters before it. `None` if a parameter is a rest, or a value
+    /// isn't in a local.
+    #[allow(clippy::too_many_arguments)]
+    fn with_defaults(
+        &mut self,
+        e: hir::ExprId,
+        callee: hir::ExprId,
+        f: FunctionId<'db>,
+        used: &[u32],
+        defaulted: &[usize],
+        values: Vec<ExprId>,
+        named: Vec<(Name, ExprId)>,
+        stmts: &mut Vec<Stmt<'db>>,
+    ) -> Option<Vec<ExprId>> {
+        let of = self.ty(callee);
+        let Ty::Fn(params, ..) = &of else { return None };
+        let decl = &boltlang_hir_def::signatures::function_signature(self.db, f).params;
+        let tys = declared_param_tys(self.db, f, params);
+        let mut given = values.into_iter();
+        let mut positional: Vec<Option<ExprId>> = (0..params.positional.len())
+            .map(|i| if defaulted.contains(&i) { None } else { given.next() })
+            .collect();
+        let mut named = named;
+        // The value of each declared parameter, in order, as a local.
+        let mut locals: Vec<Local> = Vec::new();
+        let local_of = |b: &Self, v: ExprId| match b.mir[v].kind {
+            ExprKind::Local(l) => Some(l),
+            _ => None,
+        };
+        let mut k = 0;
+        for (i, p) in decl.iter().enumerate() {
+            let slot: Option<&mut Option<ExprId>> = match p.kind {
+                hir::ParamKind::Positional => {
+                    k += 1;
+                    positional.get_mut(k - 1)
+                }
+                hir::ParamKind::Keyword => None,
+                hir::ParamKind::Rest | hir::ParamKind::KeywordRest => return None,
+            };
+            let found = match (&slot, p.kind) {
+                (Some(Some(v)), _) => Some(*v),
+                (_, hir::ParamKind::Keyword) => {
+                    named.iter().find(|(n, _)| Some(n) == p.name.as_ref()).map(|(_, v)| *v)
+                }
+                _ => None,
+            };
+            let local = match found {
+                Some(v) => local_of(self, v)?,
+                None if used.contains(&(i as u32)) => {
+                    let ty = tys.get(i)?.clone();
+                    let args: Box<[ExprId]> = locals
+                        .iter()
+                        .zip(&tys)
+                        .map(|(&l, t)| self.mir.alloc(ExprKind::Local(l), t.clone(), Some(e)))
+                        .collect();
+                    let item =
+                        ItemRef::Default { function: f, param: i as u32, of: Box::new(of.clone()) };
+                    let fn_ty = Ty::func(tys[..i].to_vec(), ty.clone());
+                    let callee = self.mir.alloc(ExprKind::Item(item), fn_ty, Some(callee));
+                    let call = self.mir.alloc(ExprKind::Call { callee, args }, ty.clone(), Some(e));
+                    let temp = self.mir.new_temp(None, ty.clone());
+                    stmts.push(Stmt::Let {
+                        pat: Pattern::Local(Some(temp)),
+                        init: Some(call),
+                        else_: None,
+                    });
+                    let value = self.mir.alloc(ExprKind::Local(temp), ty, Some(e));
+                    match (slot, p.kind) {
+                        (Some(slot), _) => *slot = Some(value),
+                        (None, _) => {
+                            let name = p.name.clone()?;
+                            let at = named.partition_point(|(n, _)| n.as_str() < name.as_str());
+                            named.insert(at, (name, value));
+                        }
+                    }
+                    temp
+                }
+                None => return None,
+            };
+            locals.push(local);
+        }
+        let positional: Option<Vec<ExprId>> = positional.into_iter().collect();
+        Some(positional?.into_iter().chain(named.into_iter().map(|(_, v)| v)).collect())
     }
 
     /// The constructor and index of the field `name` of a value of type `t`.

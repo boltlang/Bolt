@@ -31,9 +31,9 @@ use crate::{
     holds::struct_atoms_of,
     lang::{LangClass, char_ty, range_inclusive_struct, range_struct, string_ty},
     lower::{
-        ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty,
-        field_types, field_visible, generic_predicates, identity_args, named_mutabilities,
-        private_field, struct_args, struct_mutability, subst_params,
+        ClassConstraint, FieldsKind, LowerDiagnostic, ParamDefaults, TyLoweringContext, VariantDef,
+        const_ty, field_types, field_visible, generic_predicates, identity_args,
+        named_mutabilities, private_field, struct_args, struct_mutability, subst_params,
     },
     rows::RowConstraint,
     scheme::{Scheme, generic_param_ids},
@@ -42,7 +42,7 @@ use crate::{
         Held, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, SpreadConstraint,
         TuplePart, TypeError,
     },
-    ty::{AdtId, ArgPlace, Mutability, Params, Ty, VarKind, place_args},
+    ty::{AdtId, ArgPlace, ArgPlaces, Mutability, Params, Ty, VarKind, place_args},
 };
 
 /// The arguments of a call: only positional ones, or with named ones and
@@ -64,6 +64,10 @@ pub struct InferenceResult<'db> {
     pub operations: ArenaMap<Pat, FunctionId<'db>>,
     /// The function a call like `x.f(y)` calls, when it's `f(x, y)`.
     pub method_calls: ArenaMap<Expr, FunctionId<'db>>,
+    /// The parameters a call of a function leaves out, which get their
+    /// defaults, by the call: the function, and the indices of its declared
+    /// parameters, in order.
+    pub defaults: ArenaMap<Expr, (FunctionId<'db>, Box<[u32]>)>,
     /// The impl that a use of a class method or constant uses, by the
     /// expression that names it and the class, when the types decide it.
     /// In a generic function, like `fn f(x) = show(x)`, they don't.
@@ -1822,16 +1826,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     ) -> Ty<'db> {
         // Named arguments, spreads, or a function with more than positional
         // parameters: the arguments are checked as a tuple.
+        // A function with defaults too, which the call may leave out.
         let resolved = self.solver.unifier.shallow_resolve(callee_ty);
-        let takes_more = matches!(&resolved, Ty::Fn(params, ..) if !params.is_positional());
+        let takes_more = matches!(&resolved, Ty::Fn(params, ..) if !params.is_positional())
+            || function.is_some_and(|f| !ParamDefaults::of(self.db, f).is_empty());
         let args = match args {
             CallArgs::Positional(args) if !takes_more => args,
             CallArgs::Items(items) => {
-                return self.apply_general(expr, callee, callee_ty, items, receiver);
+                return self.apply_general(expr, callee, callee_ty, function, items, receiver);
             }
             CallArgs::Positional(args) => {
                 let items: Vec<_> = args.iter().map(|&e| TupleItem::Positional(e)).collect();
-                return self.apply_general(expr, callee, callee_ty, &items, receiver);
+                return self.apply_general(expr, callee, callee_ty, function, &items, receiver);
             }
         };
         let count = args.len() + receiver.is_some() as usize;
@@ -1928,6 +1934,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         expr: ExprId,
         callee: ExprId,
         callee_ty: &Ty<'db>,
+        function: Option<FunctionId<'db>>,
         items: &[TupleItem<ExprId>],
         receiver: Option<(ExprId, &Ty<'db>, bool)>,
     ) -> Ty<'db> {
@@ -1997,11 +2004,25 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
         let names = self.solver.unifier.names_now(&params.names);
         let first = receiver.is_some() as usize;
-        let places = place_args(params.positional.len(), |i| names[i].clone(), first, items);
+        // The defaults of the function, if it's known: those of the
+        // parameters the call leaves out.
+        let defaults = function.map(|f| ParamDefaults::of(self.db, f)).unwrap_or_default();
+        let ArgPlaces { places, defaulted } = place_args(
+            params.positional.len(),
+            |i| names[i].clone(),
+            |i| defaults.has_positional(i),
+            first,
+            items,
+        );
+        let given =
+            |name: &Name| items.iter().any(|i| matches!(i, TupleItem::Named(n, _) if n == name));
+        let no_spread = !items.iter().any(|i| matches!(i, TupleItem::Spread(..)));
+        let keyword_defaulted: Vec<&(Name, u32)> =
+            defaults.keyword.iter().filter(|(n, _)| no_spread && !given(n)).collect();
         // An argument given twice is reported on its own.
         let twice = places.contains(&ArgPlace::Twice);
         let mut placed = Vec::new();
-        for (item, place) in items.iter().zip(places) {
+        for (item, &place) in items.iter().zip(&places) {
             match (item, place) {
                 (TupleItem::Named(name, e), ArgPlace::Positional(i)) => {
                     let hint = Expectation { ty: &params.positional[i], reason: Reason::None };
@@ -2044,6 +2065,35 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
         placed.sort_by_key(|(i, _)| *i);
         parts.extend(placed.into_iter().map(|(_, ty)| TuplePart::Positional(ty)));
+        // The arguments must be the parameters that the call doesn't leave
+        // out, and the others get their defaults.
+        let params = if defaulted.is_empty() && keyword_defaulted.is_empty() {
+            params
+        } else {
+            let mut used: Vec<u32> = defaulted
+                .iter()
+                .filter_map(|&i| defaults.positional[i])
+                .chain(keyword_defaulted.iter().map(|(_, i)| *i))
+                .collect();
+            used.sort();
+            if let Some(f) = function {
+                self.result.defaults.insert(expr, (f, used.into()));
+            }
+            let kept = |i: &usize| !defaulted.contains(i);
+            let (positional, names) = (0..params.positional.len())
+                .filter(kept)
+                .map(|i| (params.positional[i].clone(), params.names[i].clone()))
+                .unzip();
+            let keyword = params
+                .keyword
+                .iter()
+                .filter(|(n, _)| !keyword_defaulted.iter().any(|(m, _)| m == n))
+                .cloned()
+                .collect();
+            let rest = params.rest.map(|r| *r);
+            let keyword_rest = params.keyword_rest.map(|r| *r);
+            Params::new(positional, names, rest, keyword, keyword_rest)
+        };
         let args = self.new_var();
         let constraint = SpreadConstraint {
             parts,

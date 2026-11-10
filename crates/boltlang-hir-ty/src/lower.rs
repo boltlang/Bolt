@@ -1406,6 +1406,43 @@ pub fn fn_params<'db>(db: &'db dyn Db, f: FunctionId<'db>, tys: Vec<Ty<'db>>) ->
     params_from(decl.iter().zip(tys).map(|(p, t)| (p.kind, p.name.clone(), t)))
 }
 
+/// Which parameters of `f` have defaults, by where they are in its
+/// function type: for each positional parameter, the index of its declared
+/// parameter if it has a default, and the keyword-only ones with defaults,
+/// by name, with the indices of their declared parameters.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ParamDefaults {
+    pub positional: Vec<Option<u32>>,
+    pub keyword: Vec<(Name, u32)>,
+}
+
+impl ParamDefaults {
+    pub fn of(db: &dyn Db, f: FunctionId<'_>) -> Self {
+        let mut out = ParamDefaults::default();
+        for (i, p) in function_signature(db, f).params.iter().enumerate() {
+            let default = p.default.map(|_| i as u32);
+            match p.kind {
+                ParamKind::Positional => out.positional.push(default),
+                ParamKind::Keyword => {
+                    if let (Some(name), Some(i)) = (&p.name, default) {
+                        out.keyword.push((name.clone(), i));
+                    }
+                }
+                ParamKind::Rest | ParamKind::KeywordRest => {}
+            }
+        }
+        out
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.keyword.is_empty() && self.positional.iter().all(Option::is_none)
+    }
+
+    pub fn has_positional(&self, i: usize) -> bool {
+        self.positional.get(i).is_some_and(Option::is_some)
+    }
+}
+
 /// The parameters of a function type from its declared parameters, in
 /// order: how each is passed, its name, and its type,
 /// which for `*args` or `**opts` is the tuple `(*Ts)` or `(**Ks)` whose

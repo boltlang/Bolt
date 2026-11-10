@@ -43,10 +43,15 @@ pub struct Instance<'db> {
     pub root: File,
 }
 
-/// What an instance is of: a body in the source, or a shim.
+/// What an instance is of: a body in the source, the default of a
+/// parameter of a function, or a shim.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum InstanceDef<'db> {
     Body(DefWithBodyId<'db>),
+    /// The default of the `param`th declared parameter of the function
+    /// whose body this is, as a function of the parameters before it. It's
+    /// generic over what the function is.
+    Default(DefWithBodyId<'db>, u32),
     Shim(Shim<'db>),
 }
 
@@ -66,10 +71,20 @@ impl<'db> Instance<'db> {
         Instance::of_body(db, DefWithBodyId::new(db, DefWithBody::File(file)), Box::default(), file)
     }
 
-    /// The body in the source the instance is of, unless it's a shim.
+    /// The body in the source the instance is of, unless it's a shim or a
+    /// default.
     pub fn body(self, db: &'db dyn Db) -> Option<DefWithBodyId<'db>> {
         match self.def(db) {
             InstanceDef::Body(body) => Some(*body),
+            InstanceDef::Default(..) | InstanceDef::Shim(_) => None,
+        }
+    }
+
+    /// The body in the source whose inference the instance's code has: its
+    /// own, or that of the function a default is of.
+    pub fn source_body(self, db: &'db dyn Db) -> Option<DefWithBodyId<'db>> {
+        match self.def(db) {
+            InstanceDef::Body(body) | InstanceDef::Default(body, _) => Some(*body),
             InstanceDef::Shim(_) => None,
         }
     }
@@ -86,7 +101,7 @@ impl<'db> Instance<'db> {
     /// file of what it's made for.
     pub fn file(self, db: &'db dyn Db) -> Option<File> {
         match self.def(db) {
-            InstanceDef::Body(body) => Some(body.def(db).file(db)),
+            InstanceDef::Body(body) | InstanceDef::Default(body, _) => Some(body.def(db).file(db)),
             InstanceDef::Shim(Shim::Ctor(Ctor::Struct(s))) => Some(s.file(db)),
             InstanceDef::Shim(Shim::Ctor(Ctor::Variant(v))) => Some(v.parent.file(db)),
             InstanceDef::Shim(Shim::Op(f)) => match f.container(db) {
@@ -181,6 +196,15 @@ impl fmt::Display for DisplayInstance<'_> {
         let db = self.db;
         let def = match self.instance.def(db) {
             InstanceDef::Body(body) => body.def(db),
+            // `f[i32]::default1`
+            InstanceDef::Default(body, param) => {
+                let DefWithBody::Function(id) = body.def(db) else { return write!(f, "?") };
+                write!(f, "{}", container_prefix(db, id.container(db)))?;
+                let name = id.item(db).display_name();
+                write!(f, "{}", name.as_ref().map_or("?", |n| n.as_str()))?;
+                self.args(f)?;
+                return write!(f, "::default{param}");
+            }
             InstanceDef::Shim(Shim::Ctor(ctor)) => {
                 let name = match ctor {
                     Ctor::Struct(s) => s.item(db).name.clone(),
@@ -347,6 +371,20 @@ pub fn instance_generics<'db>(
 ) -> Result<Generics<'db>, GenericsError> {
     match def {
         InstanceDef::Body(body) => generics(db, *body).clone(),
+        // The function's, with the default's type: a function of the
+        // parameters before it.
+        InstanceDef::Default(body, param) => {
+            let mut g = generics(db, *body).clone()?;
+            let (DefWithBody::Function(f), Ty::Fn(params, _, _, effects)) = (body.def(db), &g.ty)
+            else {
+                return Ok(g);
+            };
+            let tys = boltlang_hir_ty::lower::declared_param_tys(db, f, params);
+            let i = (*param as usize).min(tys.len());
+            let ret = tys.get(i).cloned().unwrap_or(Ty::Error);
+            g.ty = Ty::func_does(tys[..i].to_vec(), ret, (**effects).clone());
+            Ok(g)
+        }
         InstanceDef::Shim(Shim::Ctor(ctor)) => {
             let Some(sig) = ctor_sig(db, *ctor) else { return Ok(Generics::none(Ty::unit())) };
             let kinds = (0..sig.params.len())

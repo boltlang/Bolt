@@ -99,12 +99,19 @@ pub(crate) fn lower_body<'db>(
         _ => None,
     };
     let db = cx.db;
-    let def = iu.instance.body(db);
+    let def = iu.instance.source_body(db);
     let map = def.map(|def| &body_with_source_map(db, def).1);
     // A shim's MIR, which the compiler makes, rather than a body's.
     let (bodies, shim) = match iu.instance.def(db) {
-        InstanceDef::Body(body) => (Some(mir_bodies(db, *body)), None),
+        InstanceDef::Body(body) | InstanceDef::Default(body, _) => {
+            (Some(mir_bodies(db, *body)), None)
+        }
         InstanceDef::Shim(s) => (None, Some(shim_body(db, s, iu.instance.root(db)))),
+    };
+    // A default's MIR, and its number among the function's bodies.
+    let default = match (iu.instance.def(db), bodies) {
+        (InstanceDef::Default(_, param), Some(bodies)) => bodies.default(*param),
+        _ => None,
     };
     let lcx = Cx::new(db, iu.instance, &cx.erased).map_err(|e| Error {
         instance: iu.instance.display(db).to_string(),
@@ -124,11 +131,12 @@ pub(crate) fn lower_body<'db>(
             };
             (cx.lambdas[&(iu.instance, lambda.expr)], mir)
         }
+        (None, Some(_), None) if let Some((_, mir)) = default => (cx.funcs[&iu.instance], mir),
         (None, Some(bodies), None) => (cx.funcs[&iu.instance], &bodies.body),
     };
     // The MIR body a handler is in, and which of its functions this is.
     let (body_index, handle) = match part {
-        Part::Body => (0, None),
+        Part::Body => (default.map_or(0, |(i, _)| i), None),
         Part::Lambda(lambda) => {
             let at = bodies.and_then(|b| {
                 b.lambdas.iter().position(|m| {
@@ -149,9 +157,12 @@ pub(crate) fn lower_body<'db>(
                 HandlePart::Ret => fns.ret,
                 HandlePart::Clause(effect, op) => fns.effects[effect].1[op],
             };
-            let mir = match body_index {
-                0 => &bodies.body,
-                i => &bodies.lambdas[i as usize - 1],
+            let Some(mir) = bodies.nth(body_index) else {
+                return Err(Error {
+                    instance: iu.instance.display(db).to_string(),
+                    at: None,
+                    kind: ErrorKind::unsupported("a handler in a body that isn't there"),
+                });
             };
             (id, mir)
         }

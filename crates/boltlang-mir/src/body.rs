@@ -29,6 +29,11 @@ pub enum BodyOwner<'db> {
     /// has a body of its own, which the [`ExprKind::Closure`] that makes it
     /// refers to.
     Lambda { parent: DefWithBodyId<'db>, expr: hir::ExprId },
+    /// The default of the `param`th declared parameter of the function
+    /// `parent`, which a call that leaves the parameter out evaluates. It
+    /// takes the parameters before it, and is generic over what the
+    /// function is: an instance of the function has one of it.
+    Default { parent: DefWithBodyId<'db>, param: u32 },
     /// Code that no source has, which a pass makes.
     Shim(Shim<'db>),
 }
@@ -274,6 +279,11 @@ pub enum ItemRef<'db> {
     /// An operation of an effect: calling it performs it, and the nearest
     /// handler of its effect runs.
     Op(FunctionId<'db>),
+    /// The default of the `param`th declared parameter of `function`, as a
+    /// function of the parameters before it: a [`BodyOwner::Default`].
+    /// `of` is the type that the call it's for uses `function` at, which
+    /// decides the instance of `function` it's part of.
+    Default { function: FunctionId<'db>, param: u32, of: Box<Ty<'db>> },
 }
 
 /// A function that something other than a call calls, like the `next` of a

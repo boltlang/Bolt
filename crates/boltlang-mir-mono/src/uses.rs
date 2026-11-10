@@ -172,7 +172,7 @@ impl<'a, 'db> Cx<'a, 'db> {
     ) -> Result<Self, UseError> {
         let generics = instance_generics(db, instance.def(db)).map_err(UseError::from)?;
         let slots = instance.slots(db, &generics);
-        let infer = instance.body(db).map(|body| boltlang_hir_ty::infer_body(db, body));
+        let infer = instance.source_body(db).map(|body| boltlang_hir_ty::infer_body(db, body));
         let dict_params = instance.dict_params(db);
         Ok(Cx { db, instance, infer, generics, slots, dict_params, erased })
     }
@@ -290,6 +290,18 @@ impl<'a, 'db> Cx<'a, 'db> {
             ItemRef::Extern(f) => Ok(Use::Extern(*f)),
             ItemRef::Op(f) => self.op_use(*f, use_ty),
             ItemRef::Fn(f) => self.body_use(DefWithBody::Function(*f), use_ty, &[]),
+            // Its instance is generic over what the function is, at the type
+            // the call uses the function at.
+            ItemRef::Default { function, param, of } => {
+                let body = DefWithBodyId::new(db, DefWithBody::Function(*function));
+                let of = self.ty(of)?;
+                self.instance_use_as(
+                    InstanceDef::Default(body, *param),
+                    &InstanceDef::Body(body),
+                    &of,
+                    &[],
+                )
+            }
             ItemRef::Const(c) => self.body_use(DefWithBody::Const(*c), use_ty, &[]),
             ItemRef::Ctor(c) => self.instance_use(InstanceDef::Shim(Shim::Ctor(*c)), use_ty, &[]),
             ItemRef::Method { item, class_args, imp } => {
@@ -460,19 +472,34 @@ impl<'a, 'db> Cx<'a, 'db> {
         use_ty: &MonoTy<'db>,
         given: &[Option<Slot<'db>>],
     ) -> Result<Use<'db>, UseError> {
+        let bound = def.clone();
+        self.instance_use_as(def, &bound, use_ty, given)
+    }
+
+    /// Like [`Cx::instance_use`], with the slots found from `use_ty` as the
+    /// type of `bound`, which has the same generics as `def`, like a
+    /// function for its default.
+    fn instance_use_as(
+        &self,
+        def: InstanceDef<'db>,
+        bound: &InstanceDef<'db>,
+        use_ty: &MonoTy<'db>,
+        given: &[Option<Slot<'db>>],
+    ) -> Result<Use<'db>, UseError> {
         let db = self.db;
         let callee = &instance_generics(db, &def).map_err(UseError::from)?;
+        let binding = &instance_generics(db, bound).map_err(UseError::from)?;
         let mut found: Vec<Option<Slot<'db>>> = vec![None; callee.kinds.len()];
         for (slot, g) in found.iter_mut().zip(given) {
             *slot = g.clone();
         }
-        bind(&callee.params, &callee.ty, use_ty, &mut found);
+        bind(&binding.params, &binding.ty, use_ty, &mut found);
         let actual = fill(callee, found);
         let is_erased = match &def {
             InstanceDef::Body(body) => {
                 matches!(body.def(db), DefWithBody::Function(f) if self.erased.contains(&f))
             }
-            InstanceDef::Shim(_) => false,
+            InstanceDef::Default(..) | InstanceDef::Shim(_) => false,
         };
         let erased = erase(&actual, is_erased);
         let mut dicts = Vec::new();
