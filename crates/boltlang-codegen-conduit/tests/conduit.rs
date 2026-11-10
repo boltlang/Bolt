@@ -41,12 +41,10 @@ use std::{cell::RefCell, path::Path, rc::Rc};
 
 use boltlang_base_db::{Settings, SystemPathBuf, TestDb};
 use boltlang_codegen_conduit::lower;
-use boltlang_corpus::{
-    Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
-};
+use boltlang_corpus::{Case, case_trial, catch, split_files, trials};
 use conduit_eval::{Host, HostError, Machine, Value};
 use conduit_ir::{Extern, Module};
-use libtest_mimic::{Arguments, Failed, Trial};
+use libtest_mimic::{Arguments, Failed};
 
 #[derive(Default)]
 struct Attributes {
@@ -294,55 +292,10 @@ fn updated(case: &Case) -> Option<Vec<String>> {
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/conduit");
-    let mut trials = Vec::new();
-    for path in data_files(&root) {
-        let stem = data_name(&root, &path);
-        let mut text = std::fs::read_to_string(&path).unwrap();
-        if updating()
-            && let Ok(cases) = parse_cases(&text, 2)
-        {
-            let new = update(&text, &cases, updated);
-            if new != text {
-                std::fs::write(&path, &new).unwrap();
-                text = new;
-            }
-        }
-        let cases = match parse_cases(&text, 2) {
-            Ok(cases) => cases,
-            Err(error) => {
-                let message = format!("{}: {error}", path.display());
-                trials.push(Trial::test(stem, move || Err(message.into())));
-                continue;
-            }
-        };
-        let mut seen = Vec::new();
-        for case in cases {
-            let name = format!("{stem}::{}", slug(&case.title));
-            if seen.contains(&name) {
-                let message = format!("{}: two cases are called `{}`", path.display(), case.title);
-                trials.push(Trial::test(format!("{name}_again"), move || Err(message.into())));
-                continue;
-            }
-            seen.push(name.clone());
-            let attributes = match Attributes::parse(&case) {
-                Ok(attributes) => attributes,
-                Err(error) => {
-                    let message = format!("{}: {error}", path.display());
-                    trials.push(Trial::test(name, move || Err(message.into())));
-                    continue;
-                }
-            };
-            let trial = if attributes.skip {
-                Trial::test(name, || Ok(())).with_kind("skip").with_ignored_flag(true)
-            } else if attributes.todo {
-                Trial::test(name, move || run(&case, &attributes))
-                    .with_kind("todo")
-                    .with_ignored_flag(true)
-            } else {
-                Trial::test(name, move || run(&case, &attributes))
-            };
-            trials.push(trial);
-        }
-    }
+    let trials = trials(&root, 2, updated, |name, case| {
+        let attributes = Attributes::parse(&case)?;
+        let (skip, todo) = (attributes.skip, attributes.todo);
+        Ok(case_trial(name, skip, todo, move || run(&case, &attributes)))
+    });
     libtest_mimic::run(&args, trials).exit();
 }

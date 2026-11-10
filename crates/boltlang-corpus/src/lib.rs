@@ -23,6 +23,7 @@
 //! have several files, each starting with a line like
 //! `//- /lib.bolt`: see [`split_files`].
 
+use libtest_mimic::{Failed, Trial};
 use std::{
     ops::Range,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -259,6 +260,75 @@ pub fn data_name(root: &Path, path: &Path) -> String {
         .map(|c| c.as_os_str().to_string_lossy().into_owned())
         .collect::<Vec<_>>()
         .join("::")
+}
+
+/// A test for each case of the data files of `root`, which have at most
+/// `max_sections` sections of output. When [`updating`], the files get new
+/// output first, which `updated` gives as [`update`] takes it. `trial`
+/// makes the test of a case from its name, or says why it can't, like for
+/// an unknown attribute. A file that can't be parsed, and a second case
+/// with the name of another, are tests that fail.
+pub fn trials(
+    root: &Path,
+    max_sections: usize,
+    mut updated: impl FnMut(&Case) -> Option<Vec<String>>,
+    mut trial: impl FnMut(String, Case) -> Result<Trial, String>,
+) -> Vec<Trial> {
+    let fail = |name: String, message: String| Trial::test(name, move || Err(message.into()));
+    let mut trials = Vec::new();
+    for path in data_files(root) {
+        let stem = data_name(root, &path);
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        if updating()
+            && let Ok(cases) = parse_cases(&text, max_sections)
+        {
+            let new = update(&text, &cases, &mut updated);
+            if new != text {
+                std::fs::write(&path, &new).unwrap();
+                text = new;
+            }
+        }
+        let cases = match parse_cases(&text, max_sections) {
+            Ok(cases) => cases,
+            Err(error) => {
+                trials.push(fail(stem, format!("{}: {error}", path.display())));
+                continue;
+            }
+        };
+        let mut seen = Vec::new();
+        for case in cases {
+            let name = format!("{stem}::{}", slug(&case.title));
+            if seen.contains(&name) {
+                trials.push(fail(
+                    format!("{name}_again"),
+                    format!("{}: two cases are called `{}`", path.display(), case.title),
+                ));
+                continue;
+            }
+            seen.push(name.clone());
+            match trial(name.clone(), case) {
+                Ok(t) => trials.push(t),
+                Err(error) => trials.push(fail(name, format!("{}: {error}", path.display()))),
+            }
+        }
+    }
+    trials
+}
+
+/// The test `name` of a case, which runs `run`. A case that's `skip` is
+/// never run, even with `--ignored`, since it may crash or hang. One that's
+/// `todo` is ignored, unless run with `--ignored`.
+pub fn case_trial(
+    name: String,
+    skip: bool,
+    todo: bool,
+    run: impl FnOnce() -> Result<(), Failed> + Send + 'static,
+) -> Trial {
+    if skip {
+        return Trial::test(name, || Ok(())).with_kind("skip").with_ignored_flag(true);
+    }
+    let trial = Trial::test(name, run);
+    if todo { trial.with_kind("todo").with_ignored_flag(true) } else { trial }
 }
 
 /// What `f` gives, or the message it panicked with, after `what`.

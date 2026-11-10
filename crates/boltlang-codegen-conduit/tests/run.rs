@@ -37,15 +37,13 @@
 //! write the output into the files instead of comparing it, run with
 //! `UPDATE_EXPECT=1`, and review the changes with `git diff`.
 
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
 use boltlang_base_db::{File, TestDb};
 use boltlang_codegen_conduit::{lower, run::run_captured};
-use boltlang_corpus::{
-    Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
-};
+use boltlang_corpus::{Case, case_trial, catch, split_files, trials};
 use boltlang_ide_diagnostics::{Severity, dependency_diagnostics, diagnostics};
-use libtest_mimic::{Arguments, Failed, Trial};
+use libtest_mimic::{Arguments, Failed};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum Prelude {
@@ -174,56 +172,10 @@ fn updated(case: &Case) -> Option<Vec<String>> {
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/run");
-    let mut trials = Vec::new();
-    for path in data_files(&root) {
-        let stem = data_name(&root, &path);
-        let mut text = std::fs::read_to_string(&path).unwrap();
-        if updating()
-            && let Ok(cases) = parse_cases(&text, 1)
-        {
-            let new = update(&text, &cases, updated);
-            if new != text {
-                std::fs::write(&path, &new).unwrap();
-                text = new;
-            }
-        }
-        let fail = |name: String, message: String| Trial::test(name, move || Err(message.into()));
-        let cases = match parse_cases(&text, 1) {
-            Ok(cases) => cases,
-            Err(error) => {
-                trials.push(fail(stem, format!("{}: {error}", path.display())));
-                continue;
-            }
-        };
-        let mut seen = Vec::new();
-        for case in cases {
-            let name = format!("{stem}::{}", slug(&case.title));
-            if seen.contains(&name) {
-                trials.push(fail(
-                    format!("{name}_again"),
-                    format!("{}: two cases are called `{}`", path.display(), case.title),
-                ));
-                continue;
-            }
-            seen.push(name.clone());
-            let attributes = match Attributes::parse(&case) {
-                Ok(attributes) => attributes,
-                Err(error) => {
-                    trials.push(fail(name, format!("{}: {error}", path.display())));
-                    continue;
-                }
-            };
-            let trial = if attributes.skip {
-                // Never run, even with `--ignored`, since it may hang.
-                Trial::test(name, || Ok(())).with_kind("skip").with_ignored_flag(true)
-            } else {
-                let todo = attributes.todo;
-                let case = Arc::new((case, attributes));
-                let trial = Trial::test(name, move || test(&case.0, &case.1));
-                if todo { trial.with_kind("todo").with_ignored_flag(true) } else { trial }
-            };
-            trials.push(trial);
-        }
-    }
+    let trials = trials(&root, 1, updated, |name, case| {
+        let attributes = Attributes::parse(&case)?;
+        let (skip, todo) = (attributes.skip, attributes.todo);
+        Ok(case_trial(name, skip, todo, move || test(&case, &attributes)))
+    });
     libtest_mimic::run(&args, trials).exit();
 }
