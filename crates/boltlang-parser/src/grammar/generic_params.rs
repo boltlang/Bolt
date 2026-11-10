@@ -30,6 +30,13 @@ pub(crate) fn generic_param_list(p: &mut Parser) {
     m.complete(p, GENERIC_PARAM_LIST);
 }
 
+/// Generic parameters, if a `[` starts them here.
+pub(crate) fn opt_generic_param_list(p: &mut Parser) {
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+}
+
 fn generic_param(p: &mut Parser) -> bool {
     // Attributes go before the parameter, outside its node, like siblings in
     // the grammar's `type_parameters`.

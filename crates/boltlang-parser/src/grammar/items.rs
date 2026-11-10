@@ -12,8 +12,8 @@ use crate::{
         Semicolon, TYPE_FIRST, abi, at_inner_attr, at_macro_call, at_macro_rules, at_mutability,
         attr, delimited, dotted_path, expr, function_modifiers, generic_param_list, is_path_start,
         let_stmt, macro_call, macro_rules, mutability, name, name_ref, opt_effect_row,
-        opt_ret_type, outer_attrs, param, param_list, parse_block_expr, trait_bounds, type_,
-        type_no_bounds,
+        opt_generic_param_list, opt_ret_type, outer_attrs, param, param_list, parse_block_expr,
+        trait_bounds, type_, type_no_bounds,
     },
     parser::{Marker, Parser},
     token_set::TokenSet,
@@ -221,9 +221,7 @@ fn fn_item(p: &mut Parser, m: Marker) {
             }
             _ => p.error("expected a name or an operator definition"),
         }
-        if p.at(T!['[']) {
-            generic_param_list(p);
-        }
+        opt_generic_param_list(p);
         param_list(p);
     }
     opt_ret_type(p);
@@ -245,9 +243,7 @@ fn fn_item(p: &mut Parser, m: Marker) {
 /// `fn !(f: Flag)`. The operands are the parameters, so they go in a
 /// PARAM_LIST, with the OPERATOR_NAME between or before them.
 fn operator_def(p: &mut Parser) {
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
+    opt_generic_param_list(p);
     let params = p.start();
     if is_prefix_operator(p.current()) {
         operator_name(p);
@@ -323,9 +319,7 @@ pub(crate) fn opt_where_clause(p: &mut Parser) {
 fn struct_item(p: &mut Parser, m: Marker) {
     p.bump(T![struct]);
     name(p);
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
+    opt_generic_param_list(p);
     match p.current() {
         T![;] => p.bump(T![;]),
         T!['('] => {
@@ -349,9 +343,7 @@ fn struct_item(p: &mut Parser, m: Marker) {
 fn enum_item(p: &mut Parser, m: Marker) {
     p.bump(T![enum]);
     name(p);
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
+    opt_generic_param_list(p);
     opt_where_clause(p);
     if p.at(T!['{']) {
         variant_list(p);
@@ -469,9 +461,7 @@ fn const_item(p: &mut Parser, m: Marker) {
 fn type_alias(p: &mut Parser, m: Marker) {
     p.bump(T![type]);
     name(p);
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
+    opt_generic_param_list(p);
     if p.at(T![:]) {
         trait_bounds(p);
     }
@@ -509,9 +499,7 @@ fn class_item(p: &mut Parser, m: Marker) {
 fn effect_item(p: &mut Parser, m: Marker) {
     p.bump(T![effect]);
     name(p);
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
+    opt_generic_param_list(p);
     if p.at(T!['{']) {
         item_list(p);
     } else {
@@ -527,9 +515,7 @@ fn effect_item(p: &mut Parser, m: Marker) {
 fn impl_item(p: &mut Parser, m: Marker) {
     p.bump(T![impl]);
     // Like in the grammar, `[` right after `impl` starts generic parameters.
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
+    opt_generic_param_list(p);
     // Whether the path names a class is up to name resolution. Another kind
     // of type is still parsed, so that the items after it are too.
     if is_path_start(p) {
