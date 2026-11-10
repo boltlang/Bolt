@@ -66,12 +66,7 @@ pub fn shim_body<'db>(db: &'db dyn Db, shim: &Shim<'db>, root: File) -> Body<'db
                 body.replace(body.root, ExprKind::Unsupported("this constructor"));
                 return body;
             };
-            let mut values = Vec::new();
-            for ty in fields.positional.iter() {
-                let local = body.new_temp(None, ty.clone());
-                body.params.push(local);
-                values.push(body.alloc(ExprKind::Local(local), ty.clone(), None));
-            }
+            let values = params(&mut body, &fields.positional);
             let kind = ExprKind::Construct { ctor: *ctor, fields: values.into() };
             body.root = body.alloc(kind, *made, None);
         }
@@ -80,15 +75,10 @@ pub fn shim_body<'db>(db: &'db dyn Db, shim: &Shim<'db>, root: File) -> Body<'db
         Shim::Op(op) => {
             let sig = fn_sig(db, *op);
             let fill = |t: &Ty<'db>| t.fill_unwritten(&mut || Ty::Mutability(Mutability::Imm));
-            let params: Vec<Ty<'db>> =
+            let tys: Vec<Ty<'db>> =
                 sig.params.iter().map(|p| p.as_ref().map_or(Ty::Error, fill)).collect();
             let ret = sig.ret.as_ref().map_or_else(Ty::unit, fill);
-            let mut args = Vec::new();
-            for ty in &params {
-                let local = body.new_temp(None, ty.clone());
-                body.params.push(local);
-                args.push(body.local_expr(local));
-            }
+            let args = params(&mut body, &tys);
             body.root = body.call(ItemRef::Op(*op), args, ret);
         }
         Shim::ImmDeep(ty) => {
@@ -98,6 +88,18 @@ pub fn shim_body<'db>(db: &'db dyn Db, shim: &Shim<'db>, root: File) -> Body<'db
         }
     }
     body
+}
+
+/// Add a parameter of each of the types `tys` to `body`, and give a node
+/// that reads each.
+fn params<'db>(body: &mut Body<'db>, tys: &[Ty<'db>]) -> Vec<ExprId> {
+    let mut values = Vec::new();
+    for ty in tys {
+        let local = body.new_temp(None, ty.clone());
+        body.params.push(local);
+        values.push(body.local_expr(local));
+    }
+    values
 }
 
 /// The deep copy of `imm e` for a value of type `ty`, the local `x`: a
