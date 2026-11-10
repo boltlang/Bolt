@@ -170,7 +170,6 @@ pub enum SyntaxKind {
     RET_TYPE,
     /// `does A + B` after a function's parameters or result type
     EFFECT_ROW,
-    /// `extern` or `extern "C"`
     /// `impl Trait` or `impl for[T] Trait`
     IMPL_TRAIT_TYPE,
 
@@ -289,8 +288,6 @@ pub enum SyntaxKind {
     RECORD_EXPR_FIELD_LIST,
     /// `type A = B;`, or `type Item: Bound;` in a trait
     TYPE_ALIAS,
-
-    // Impl helper syntax
 
     // Helper syntax
     BLOCK,
@@ -663,19 +660,14 @@ impl rowan::Language for Lang {
     }
 }
 
-#[allow(unused)]
 pub type SyntaxNode = rowan::SyntaxNode<Lang>;
 
-#[allow(unused)]
 pub type SyntaxToken = rowan::SyntaxToken<Lang>;
 
-#[allow(unused)]
 pub type NodeOrToken = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
 
-#[allow(unused)]
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<Lang>;
 
-#[allow(unused)]
 pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
 
 #[salsa::tracked]
