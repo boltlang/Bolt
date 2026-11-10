@@ -15,38 +15,12 @@ use unicode_ident::{is_xid_continue, is_xid_start};
 
 const CHAR_EOF: char = '\u{FFFF}';
 
-#[derive(Debug, Clone)]
-pub struct Pos {
-    /// Byte offset into the source text.
-    offset: usize,
-    line: usize,
-    column: usize,
-}
-
-impl PartialEq for Pos {
-    fn eq(&self, other: &Self) -> bool {
-        self.offset.eq(&other.offset)
-    }
-}
-
-impl Eq for Pos {}
-
-impl Pos {
-    pub fn new(offset: usize, line: usize, column: usize) -> Self {
-        Self { offset, line, column }
-    }
-}
-
-impl Default for Pos {
-    fn default() -> Self {
-        Self::new(0, 1, 1)
-    }
-}
-
-pub struct Lexer<'d, I> {
-    iter: I,
+pub struct Lexer<'a, 'd> {
+    chars: Chars<'a>,
+    /// Characters that were peeked at but not consumed yet.
     buffer: VecDeque<char>,
-    pos: Pos,
+    /// The byte offset of the next character.
+    offset: usize,
     diags: &'d mut Diagnostics,
 }
 
@@ -159,15 +133,13 @@ lazy_static! {
     };
 }
 
-impl<'d, 'a> Lexer<'d, Chars<'a>> {
-    pub fn new(iter: Chars<'a>, diags: &'d mut Diagnostics) -> Self {
-        Self { iter, pos: Pos::default(), buffer: VecDeque::new(), diags }
+impl<'a, 'd> Lexer<'a, 'd> {
+    pub fn new(text: &'a str, diags: &'d mut Diagnostics) -> Self {
+        Self { chars: text.chars(), buffer: VecDeque::new(), offset: 0, diags }
     }
-}
 
-impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
     fn read(&mut self) -> char {
-        self.iter.next().unwrap_or(CHAR_EOF)
+        self.chars.next().unwrap_or(CHAR_EOF)
     }
 
     fn get(&mut self) -> char {
@@ -176,13 +148,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
             None => self.read(),
         };
         if ch != CHAR_EOF {
-            self.pos.offset += ch.len_utf8();
-            if ch == '\n' {
-                self.pos.line += 1;
-                self.pos.column = 1;
-            } else {
-                self.pos.column += 1;
-            }
+            self.offset += ch.len_utf8();
         }
         ch
     }
@@ -199,23 +165,19 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
         self.diags.push(UnexpectedCharDiagnostic { message: msg.into(), span }.into());
     }
 
-    pub fn pos(&self) -> Pos {
-        self.pos.clone()
-    }
-
     /// Lex an escape sequence after its `\\`, reporting an invalid one.
     /// Like the grammar, any character can be escaped, but `\\x` must be
     /// followed by two hex digits and `\\u` by `{` hex digits `}` or four
     /// hex digits.
     fn scan_escape(&mut self) {
-        let start = self.pos.offset - 1;
+        let start = self.offset - 1;
         match self.get() {
             'x' => {
                 if is_hex_num(self.peek(0)) && is_hex_num(self.peek(1)) {
                     self.get();
                     self.get();
                 } else {
-                    self.error("expected two hex digits after `\\x`", start..self.pos.offset);
+                    self.error("expected two hex digits after `\\x`", start..self.offset);
                 }
             }
             'u' if self.peek(0) == '{' => {
@@ -225,14 +187,14 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
                     digits.push(self.get());
                 }
                 if self.peek(0) != '}' {
-                    self.error("expected `}` to end the unicode escape", start..self.pos.offset);
+                    self.error("expected `}` to end the unicode escape", start..self.offset);
                     return;
                 }
                 self.get();
                 if digits.is_empty() || digits.len() > 6 {
                     self.error(
                         "expected one to six hex digits in a unicode escape",
-                        start..self.pos.offset,
+                        start..self.offset,
                     );
                     return;
                 }
@@ -244,7 +206,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
                     if !is_hex_num(self.peek(0)) {
                         self.error(
                             "expected `{` or four hex digits after `\\u`",
-                            start..self.pos.offset,
+                            start..self.offset,
                         );
                         return;
                     }
@@ -262,7 +224,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
     fn check_code_point(&mut self, digits: &str, start: usize) {
         let value = u32::from_str_radix(digits, 16).expect("hex digits");
         if char::from_u32(value).is_none() {
-            self.error(format!("`{digits}` is not a unicode character"), start..self.pos.offset);
+            self.error(format!("`{digits}` is not a unicode character"), start..self.offset);
         }
     }
 
@@ -273,7 +235,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 CHAR_EOF => {
                     self.error(
                         "expected '\"' to delimit the string literal but found end-of-file",
-                        self.pos.offset - 1..self.pos.offset,
+                        self.offset - 1..self.offset,
                     );
                     break;
                 }
@@ -286,11 +248,11 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
 
     /// Lex the rest of a character literal after its opening `'`.
     fn scan_char_body(&mut self, kind: SyntaxKind) -> SyntaxKind {
-        let start = self.pos.offset - 1;
+        let start = self.offset - 1;
         match self.get() {
             '\\' => self.scan_escape(),
             '\'' | '\n' | CHAR_EOF => {
-                self.error("expected a character", start..self.pos.offset);
+                self.error("expected a character", start..self.offset);
                 return kind;
             }
             _ => {}
@@ -298,7 +260,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
         if self.peek(0) == '\'' {
             self.get();
         } else {
-            self.error("expected `'` to end the character literal", start..self.pos.offset);
+            self.error("expected `'` to end the character literal", start..self.offset);
         }
         kind
     }
@@ -314,7 +276,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
 
     /// Lex a raw string like `r#"..."#` after its `r`.
     fn scan_raw_string(&mut self) {
-        let start = self.pos.offset - 1;
+        let start = self.offset - 1;
         let mut hashes = 0;
         while self.peek(0) == '#' {
             self.get();
@@ -324,7 +286,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
         loop {
             match self.get() {
                 CHAR_EOF => {
-                    self.error("expected the raw string to be closed", start..self.pos.offset);
+                    self.error("expected the raw string to be closed", start..self.offset);
                     return;
                 }
                 '"' => {
@@ -408,7 +370,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
         if !is_ident_start(self.peek(0)) {
             return false;
         }
-        let suffix_start = self.pos.offset;
+        let suffix_start = self.offset;
         let mut suffix = String::new();
         while is_ident_part(self.peek(0)) {
             suffix.push(self.get());
@@ -421,7 +383,7 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
         if !valid {
             self.error(
                 format!("invalid suffix `{suffix}` for a number literal"),
-                suffix_start..self.pos.offset,
+                suffix_start..self.offset,
             );
         }
         matches!(suffix.as_str(), "f32" | "f64")
@@ -476,14 +438,14 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
             '\'' => QUOTE,
             // `#!` at the start of a file is a shebang, unless it starts an
             // inner attribute like `#![allow(unused)]`.
-            '#' if self.pos.offset == 1 && self.peek(0) == '!' && !self.at_inner_attribute() => {
+            '#' if self.offset == 1 && self.peek(0) == '!' && !self.at_inner_attribute() => {
                 self.eat_while(|ch| ch != '\n' && ch != CHAR_EOF);
                 SHEBANG
             }
             '#' => HASHTAG,
             '/' if self.peek(0) == '*' => {
                 // Block comments nest, like in Rust: `/* a /* b */ c */`.
-                let start = self.pos.offset - 1;
+                let start = self.offset - 1;
                 self.get();
                 let mut depth = 1;
                 loop {
@@ -570,10 +532,10 @@ impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 operator_kind(&text)
             }
             ch => {
-                let start = self.pos.offset - ch.len_utf8();
+                let start = self.offset - ch.len_utf8();
                 self.error(
                     format!("unexpected character `{}`", ch.escape_debug()),
-                    start..self.pos.offset,
+                    start..self.offset,
                 );
                 ERROR
             }
@@ -651,56 +613,19 @@ impl LexResult {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct LineColumn {
-    pub line: usize,
-    pub column: usize,
-}
-
-impl LineColumn {
-    pub fn new(line: usize, column: usize) -> Self {
-        Self { line, column }
-    }
-}
-
-impl Default for LineColumn {
-    fn default() -> Self {
-        LineColumn { line: 1, column: 1 }
-    }
-}
-
-impl From<&Pos> for LineColumn {
-    fn from(value: &Pos) -> Self {
-        LineColumn::new(value.line, value.column)
-    }
-}
-
 pub fn tokenize(text: &str, diags: &mut Diagnostics) -> LexResult {
-    // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
-
-    // State
-    let mut lexer = Lexer::new(text.chars(), diags);
-
+    let mut lexer = Lexer::new(text, diags);
     loop {
-        let start = lexer.pos();
+        let start = lexer.offset;
         let kind = lexer.scan();
-        let end = lexer.pos();
         if kind == EOF {
             break;
         }
-
-        // Transfer the token from the input to the output vectors
         kinds.push(kind);
-        lens.push((end.offset - start.offset) as u32);
+        lens.push((lexer.offset - start) as u32);
     }
-
-    // For debugging only
-    // for (i, (a, b)) in (&kinds).iter().zip(&lines).enumerate() {
-    //     eprintln!("{i}. {a:?} = {b}");
-    // }
-
     LexResult { kinds, lens }
 }
 

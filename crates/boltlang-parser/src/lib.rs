@@ -14,7 +14,7 @@ pub(crate) use event::{intersperse_trivia, process_events};
 
 pub use diagnostic::Diagnostic;
 
-pub use {lexer::LineColumn, parser::Parser};
+pub use parser::Parser;
 
 use crate::{diagnostic::Diagnostics, lexer::tokenize};
 
