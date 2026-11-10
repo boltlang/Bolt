@@ -315,64 +315,37 @@ impl<'db> MonoTy<'db> {
     /// `first` in the order they appear, an equal row by the same one.
     /// `out` gets the rows that were replaced, by their number.
     pub fn abstract_rows(&self, first: u32, out: &mut Vec<MonoRow<'db>>) -> Self {
-        let param = |r: &MonoRow<'db>, out: &mut Vec<MonoRow<'db>>| {
-            let at = out.iter().position(|o| o == r).unwrap_or_else(|| {
-                out.push(r.clone());
-                out.len() - 1
-            });
-            MonoRow::param(first + at as u32)
-        };
-        let all = |tys: &[MonoTy<'db>], out: &mut Vec<MonoRow<'db>>| -> Box<[MonoTy<'db>]> {
-            tys.iter().map(|t| t.abstract_rows(first, out)).collect()
-        };
-        match self {
-            MonoTy::Adt(adt, args, muts, own) => {
-                MonoTy::Adt(*adt, all(args, out), muts.clone(), *own)
-            }
-            MonoTy::Tuple(elems, own) => MonoTy::Tuple(all(elems, out), *own),
-            MonoTy::Record(elems, names, own) => {
-                MonoTy::Record(all(elems, out), names.clone(), *own)
-            }
-            MonoTy::Array(m, elem) => MonoTy::Array(*m, Box::new(elem.abstract_rows(first, out))),
-            MonoTy::Fn(params, names, ret, m, row) => {
-                let params = all(params, out);
-                let ret = Box::new(ret.abstract_rows(first, out));
-                MonoTy::Fn(params, names.clone(), ret, *m, param(row, out))
-            }
-            MonoTy::Row(row) => MonoTy::Row(param(row, out)),
-            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, out)),
-            MonoTy::Builtin(_)
-            | MonoTy::Never
-            | MonoTy::Any(_)
-            | MonoTy::Host(_)
-            | MonoTy::Erased(_) => self.clone(),
+        struct AbstractRows<'o, 'db> {
+            first: u32,
+            out: &'o mut Vec<MonoRow<'db>>,
         }
+        impl<'db> MapParts<'db> for AbstractRows<'_, 'db> {
+            fn ty(&mut self, t: &MonoTy<'db>) -> MonoTy<'db> {
+                t.abstract_rows(self.first, self.out)
+            }
+            fn row(&mut self, r: &MonoRow<'db>) -> MonoRow<'db> {
+                let at = self.out.iter().position(|o| o == r).unwrap_or_else(|| {
+                    self.out.push(r.clone());
+                    self.out.len() - 1
+                });
+                MonoRow::param(self.first + at as u32)
+            }
+        }
+        self.map_children(&mut AbstractRows { first, out })
     }
 
     /// The type with each row parameter replaced by the row `f` gives it.
     pub fn map_rows(&self, f: &mut dyn FnMut(u32) -> MonoRow<'db>) -> Self {
-        let all = |tys: &[MonoTy<'db>], f: &mut dyn FnMut(u32) -> MonoRow<'db>| {
-            tys.iter().map(|t| t.map_rows(f)).collect::<Box<[_]>>()
-        };
-        match self {
-            MonoTy::Erased(_)
-            | MonoTy::Builtin(_)
-            | MonoTy::Never
-            | MonoTy::Any(_)
-            | MonoTy::Host(_) => self.clone(),
-            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
-            MonoTy::Adt(adt, args, ms, own) => MonoTy::Adt(*adt, all(args, f), ms.clone(), *own),
-            MonoTy::Tuple(args, own) => MonoTy::Tuple(all(args, f), *own),
-            MonoTy::Record(args, names, own) => MonoTy::Record(all(args, f), names.clone(), *own),
-            MonoTy::Array(own, elem) => MonoTy::Array(*own, Box::new(elem.map_rows(f))),
-            MonoTy::Fn(params, names, ret, own, row) => {
-                let params = all(params, f);
-                let ret = Box::new(ret.map_rows(f));
-                let row = map_row(row, f);
-                MonoTy::Fn(params, names.clone(), ret, *own, row)
+        struct MapRows<'f, 'db>(&'f mut dyn FnMut(u32) -> MonoRow<'db>);
+        impl<'db> MapParts<'db> for MapRows<'_, 'db> {
+            fn ty(&mut self, t: &MonoTy<'db>) -> MonoTy<'db> {
+                t.map_rows(self.0)
             }
-            MonoTy::Row(row) => MonoTy::Row(map_row(row, f)),
+            fn row(&mut self, r: &MonoRow<'db>) -> MonoRow<'db> {
+                map_row(r, self.0)
+            }
         }
+        self.map_children(&mut MapRows(f))
     }
 
     /// Whether a mutability parameter is somewhere in the type.
