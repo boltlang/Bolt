@@ -55,20 +55,15 @@ impl Server {
         let encodings = capabilities.general.as_ref().and_then(|g| g.position_encodings.as_deref());
         let encoding = Encoding::choose(encodings);
         self.workspace.encoding = encoding;
+        let option = |name| params.initialization_options.as_ref().and_then(|o| o.get(name));
         // `{ "prelude": "name" }` picks the prelude, and `{ "prelude": null }`
         // turns it off. Without it, the default prelude is used.
-        if let Some(prelude) = params.initialization_options.as_ref().and_then(|o| o.get("prelude"))
-        {
+        if let Some(prelude) = option("prelude") {
             self.workspace.set_prelude(prelude.as_str().map(str::to_string));
         }
         // `{ "std": "/path" }` says where `std` is, for a server without one,
         // like in the browser, where the page gives it the files.
-        if let Some(std) = params
-            .initialization_options
-            .as_ref()
-            .and_then(|o| o.get("std"))
-            .and_then(|s| s.as_str())
-        {
+        if let Some(std) = option("std").and_then(|s| s.as_str()) {
             self.workspace.set_std_dir(Some(SystemPathBuf::from(std)));
         }
         self.refresh_support = capabilities
@@ -159,9 +154,7 @@ impl Server {
         ));
         (report, error)
     }
-}
 
-impl Server {
     /// The diagnostics of the files that open documents use, like those of
     /// the prelude, which aren't open themselves: they're shown where they
     /// are, not in each document that uses them (#249).
