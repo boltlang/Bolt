@@ -504,20 +504,28 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let ExprKind::Closure { captures, .. } = &self.mir[e].kind else {
             return Err(ErrorKind::unsupported("this lambda"));
         };
-        let mut values = Vec::new();
-        for c in captures.iter() {
-            match self.locals.get(&c.local) {
-                Some(LocalVal::Value(Some(v))) => values.push(v.clone()),
-                Some(LocalVal::Ref(r)) => values.push(Atom::Var(*r)),
-                Some(LocalVal::Value(None)) => {}
-                None => return Err(ErrorKind::unsupported("a capture that isn't in scope")),
-            }
-        }
+        let values = self
+            .passed(captures.iter().map(|c| c.local))
+            .ok_or_else(|| ErrorKind::unsupported("a capture that isn't in scope"))?;
         let MonoTy::Fn(_, _, _, m, _) = self.mono(e)? else {
             return Err(ErrorKind::unsupported("a lambda whose type isn't a function"));
         };
         let (margs, rows) = (self.own_margs(), self.own_rows());
         Ok(Some(Atom::Var(self.b.closure_with(f, margs, rows, mutability(m), values))))
+    }
+
+    /// What a function that's given `locals` first gets for them: a local
+    /// that's assigned as its ref. `None` if one isn't in scope.
+    fn passed(&self, locals: impl IntoIterator<Item = Local>) -> Option<Vec<Atom>> {
+        let mut out = Vec::new();
+        for local in locals {
+            match self.locals.get(&local)? {
+                LocalVal::Value(Some(v)) => out.push(v.clone()),
+                LocalVal::Ref(r) => out.push(Atom::Var(*r)),
+                LocalVal::Value(None) => {}
+            }
+        }
+        Some(out)
     }
 
     /// The instance's own mutability parameters, to give a lifted lambda,
@@ -742,19 +750,9 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             // its scrutinee.
             ExprKind::Handle { .. } => {
                 let fns = &self.cx.handles[&(self.lcx.instance, self.body_index, e)];
-                let given = |l: &Self, locals: &[Local]| -> R<Vec<Atom>> {
-                    let mut out = Vec::new();
-                    for local in locals {
-                        match l.locals.get(local) {
-                            Some(LocalVal::Value(Some(v))) => out.push(v.clone()),
-                            Some(LocalVal::Ref(r)) => out.push(Atom::Var(*r)),
-                            Some(LocalVal::Value(None)) => {}
-                            None => {
-                                return Err(ErrorKind::unsupported("a local that isn't in scope"));
-                            }
-                        }
-                    }
-                    Ok(out)
+                let given = |l: &Self, locals: &[Local]| {
+                    l.passed(locals.iter().copied())
+                        .ok_or_else(|| ErrorKind::unsupported("a local that isn't in scope"))
                 };
                 let mut env = given(self, &fns.env)?;
                 let captures = given(self, &fns.captures)?;
