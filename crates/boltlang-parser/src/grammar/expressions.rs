@@ -12,7 +12,10 @@ use boltlang_syntax::{
 };
 
 use crate::{
-    grammar::{at_inner_attr, attr, opt_item, outer_attrs, parse_pattern, type_, type_no_bounds},
+    grammar::{
+        TupleSide, at_inner_attr, at_named_field, at_spread, attr, delimited, name_ref, opt_item,
+        outer_attrs, parse_pattern, spread, spread_side, type_, type_no_bounds,
+    },
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -347,12 +350,10 @@ fn call_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
     m.complete(p, CALL_EXPR)
 }
 
-/// `(a, b)`, with named arguments like `sep: ","` and spreads like `*xs`
-/// and `**opts`. The positional ones and `*e` come first.
 /// A named field of a tuple or a named argument, like `x: 1`.
 fn tuple_expr_field(p: &mut Parser) {
     let field = p.start();
-    crate::grammar::name_ref(p);
+    name_ref(p);
     p.bump(T![:]);
     if expr(p).is_none() {
         p.error("expected an expression");
@@ -363,18 +364,19 @@ fn tuple_expr_field(p: &mut Parser) {
 /// A spread in a tuple or among arguments, like `*xs` or `**opts`.
 fn tuple_expr_spread(p: &mut Parser) {
     let s = p.start();
-    crate::grammar::spread(p);
+    spread(p);
     if expr(p).is_none() {
         p.error("expected an expression");
     }
     s.complete(p, TUPLE_EXPR_SPREAD);
 }
 
+/// `(a, b)`, with named arguments like `sep: ","` and spreads like `*xs`
+/// and `**opts`. The positional ones and `*e` come first.
 pub(super) fn arg_list(p: &mut Parser) {
-    use crate::grammar::{at_named_field, at_spread, spread_side};
     let m = p.start();
     let mut named = false;
-    crate::grammar::delimited(
+    delimited(
         p,
         T!['('],
         T![')'],
@@ -382,8 +384,8 @@ pub(super) fn arg_list(p: &mut Parser) {
         || "expected an expression".into(),
         EXPR_FIRST,
         |p| {
-            let positional = !at_named_field(p)
-                && !(at_spread(p) && spread_side(p) == crate::grammar::TupleSide::Named);
+            let positional =
+                !at_named_field(p) && !(at_spread(p) && spread_side(p) == TupleSide::Named);
             if positional && named {
                 p.error("a positional argument can't come after a named one");
             }
