@@ -19,7 +19,7 @@ use crate::{
     holds::split,
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult, solve_overloads},
     lower::{
-        ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig,
+        ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, first_hidden, fn_sig,
         generic_predicates, impl_assoc_ty, impl_header, subst_params, with_superclasses,
     },
     rows::{RowConstraint, positive_rows},
@@ -100,8 +100,23 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     // gives them: calls through the class use the class's.
                     if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
                         let origin = Origin::new(def, ExprOrPat::Expr(ctx.body.body_expr));
+                        // A parameter written without `mut` or `imm` takes
+                        // either, so it fits whatever mutability the class
+                        // gives it: its hidden mutability is new here (#409).
+                        let own_def = GenericDefId::Function(f);
+                        let first = first_hidden(db, own_def);
+                        let mut fresh = std::collections::HashMap::new();
                         for (own, class) in params.iter().zip(class_params.iter()) {
-                            ctx.solver.equal(class, own, origin);
+                            let own = own.fold(&mut |t| match t {
+                                Ty::Param(p) if p.def == own_def && p.index >= first => Some(
+                                    fresh
+                                        .entry(p.index)
+                                        .or_insert_with(|| ctx.solver.new_var(VarKind::Mutability))
+                                        .clone(),
+                                ),
+                                _ => None,
+                            });
+                            ctx.solver.equal(class, &own, origin);
                         }
                         ctx.solver.equal(&class_ret, ret, origin);
                     }

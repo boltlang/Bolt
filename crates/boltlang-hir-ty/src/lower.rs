@@ -41,8 +41,7 @@ struct HiddenParams<'db> {
 
 impl<'db> HiddenParams<'db> {
     fn new(db: &'db dyn Db, def: GenericDefId<'db>) -> Self {
-        let first = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();
-        HiddenParams { def, first: first as u32, count: 0 }
+        HiddenParams { def, first: first_hidden(db, def), count: 0 }
     }
 
     fn fill(&mut self, ty: &Ty<'db>) -> Ty<'db> {
@@ -51,6 +50,12 @@ impl<'db> HiddenParams<'db> {
             Ty::Param(GenericParamId { def: self.def, index: self.first + self.count - 1 })
         })
     }
+}
+
+/// The index of the first hidden mutability parameter of `def`: after its
+/// declared type parameters and its named mutabilities.
+pub fn first_hidden<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> u32 {
+    (def.generic_params(db).type_params.len() + named_mutabilities(db, def).len()) as u32
 }
 
 /// A class applied to types, like `Show[T]` or `Convert[A, B]`.

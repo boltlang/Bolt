@@ -106,6 +106,17 @@ Show[i32].show: fn(x: i32) -> String
 error at `1`: expected String, found {integer}
 
 ================================================================================
+An impl method can take a struct without mut or imm where the class has a parameter (#409)
+================================================================================
+class Same[T] { fn same(a: T, b: T) -> Bool; }
+struct P { n: i32 }
+impl Same[P] { fn same(a: P, b: P) -> Bool = True; }
+let r = same(P { n: 1 }, P { n: 2 });
+--------------------------------------------------------------------------------
+Same[P].same: fn(a: P, b: P) -> Bool
+let r: Bool
+
+================================================================================
 Class constants
 ================================================================================
 class Zero[T] { const ZERO: T; }
