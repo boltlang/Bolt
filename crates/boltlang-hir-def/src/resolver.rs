@@ -433,10 +433,13 @@ impl<'db> Resolver<'db> {
             && let Some((file, owner)) = owner_of(db, ty)
             && let Some(entry) = type_member_entry(db, file, owner, &segments[i].name)
         {
-            return (!is_visible_from(db, entry.visibility, file, self.file)).then(|| Hidden {
-                name: segments[i].name.clone(),
-                package_only: entry.visibility == RawVisibility::Package,
-            });
+            return Hidden::unless_visible(
+                db,
+                &segments[i].name,
+                entry.visibility,
+                file,
+                self.file,
+            );
         }
         let (file, i) = self.walk_files(db, segments);
         if file == self.file {
@@ -447,10 +450,7 @@ impl<'db> Resolver<'db> {
         [Namespace::Values, Namespace::Types].into_iter().find_map(|ns| {
             // The prelude's names aren't the file's: it has nothing by that name.
             let entry = scope.get(ns, name).filter(|entry| !entry.prelude)?;
-            (!is_visible_from(db, entry.visibility, file, self.file)).then(|| Hidden {
-                name: name.clone(),
-                package_only: entry.visibility == RawVisibility::Package,
-            })
+            Hidden::unless_visible(db, name, entry.visibility, file, self.file)
         })
     }
 
@@ -485,6 +485,23 @@ impl<'db> Resolver<'db> {
 pub struct Hidden {
     pub name: Name,
     pub package_only: bool,
+}
+
+impl Hidden {
+    /// That `name`, defined in `owner` with `visibility`, isn't visible in
+    /// `from`, if it isn't.
+    fn unless_visible(
+        db: &dyn Db,
+        name: &Name,
+        visibility: RawVisibility,
+        owner: File,
+        from: File,
+    ) -> Option<Hidden> {
+        (!is_visible_from(db, visibility, owner, from)).then(|| Hidden {
+            name: name.clone(),
+            package_only: visibility == RawVisibility::Package,
+        })
+    }
 }
 
 enum Local<'db> {
