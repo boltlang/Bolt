@@ -422,7 +422,6 @@ macro_rules! T {
 }
 
 use SyntaxKind::*;
-use rowan::GreenNode;
 
 pub use rowan;
 
@@ -669,13 +668,6 @@ pub type NodeOrToken = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<Lang>;
 
 pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
-
-#[salsa::tracked]
-pub struct DbNode<'db> {
-    #[tracked]
-    #[returns(ref)]
-    pub node: GreenNode,
-}
 
 #[cfg(test)]
 mod tests {

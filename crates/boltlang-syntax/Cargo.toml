@@ -6,4 +6,3 @@ publish.workspace = true
 
 [dependencies]
 rowan = { version = "0.17.0", features = ["serde1"] }
-salsa = "0.28.5"
