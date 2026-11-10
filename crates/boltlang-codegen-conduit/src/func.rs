@@ -628,7 +628,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 if matches!(self.mono(e)?, MonoTy::Never) {
                     self.b.unreachable();
                 }
-                Ok(results.first().map(|&v| Atom::Var(v)))
+                Ok(first(&results))
             }
             ExprKind::Construct { ctor, fields } => {
                 let mut values = Vec::new();
@@ -699,7 +699,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                         let rows = self.rows(&rows);
                         let args = v.into_iter().collect::<Vec<_>>();
                         let results = self.b.call_with(f, margs, rows, args);
-                        Ok(results.first().map(|&r| Atom::Var(r)))
+                        Ok(first(&results))
                     }
                     Some(_) => Err(ErrorKind::unsupported("this copy")),
                 }
@@ -732,7 +732,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     self.b.jump(&target.exit, v.into_iter().collect::<Vec<_>>());
                 }
                 self.b.switch_to(target.exit.block());
-                Ok(target.exit.params().first().map(|&p| Atom::Var(p)))
+                Ok(first(target.exit.params()))
             }
             ExprKind::If { cond, then, else_ } => self.if_expr(e, *cond, *then, *else_),
             ExprKind::Logic { op, lhs, rhs } => {
@@ -778,7 +778,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                 let body = self.b.closure_with(fns.body, margs, rows, Mutability::Mut, captures);
                 env.push(Atom::Var(body));
                 let results = self.b.handle_with(fns.handler, self.own_rows(), env);
-                Ok(results.first().map(|&v| Atom::Var(v)))
+                Ok(first(&results))
             }
             ExprKind::Match { scrutinee, decision, arms } => {
                 let guards: Vec<Option<ExprId>> = arms.iter().map(|a| a.guard).collect();
@@ -826,7 +826,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     self.b.jump(target.next.as_ref().unwrap(), ());
                 }
                 self.b.switch_to(target.exit.block());
-                Ok(target.exit.params().first().map(|&p| Atom::Var(p)))
+                Ok(first(target.exit.params()))
             }
             ExprKind::Break { label, value } => {
                 let v = match value {
@@ -888,7 +888,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let rows = self.rows(&rows);
         if let Some(DefWithBody::Const(_)) = instance.body(self.cx.db).map(|b| b.def(self.cx.db)) {
             let results = self.b.call_with(f, margs, rows, Vec::<Atom>::new());
-            return Ok(results.first().map(|&v| Atom::Var(v)));
+            return Ok(first(&results));
         }
         let MonoTy::Fn(_, _, _, m, _) = self.mono(e)? else {
             return Err(ErrorKind::unsupported("a function whose type isn't a function"));
@@ -995,7 +995,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         let crows = self.rows(&rows);
         let args = args.into_iter().flatten().collect::<Vec<_>>();
         let results = self.b.call_with(f, margs, crows, args);
-        Ok((results.first().map(|&v| Atom::Var(v)), ret))
+        Ok((first(&results), ret))
     }
 
     /// The index of the loop or block that `break` or `continue` to `label`
@@ -1153,7 +1153,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Use::Method { .. } => return Err(ErrorKind::unsupported("dictionaries")),
             Use::Op { .. } => unreachable!("performed above"),
         };
-        Ok(results.first().map(|&v| Atom::Var(v)))
+        Ok(first(&results))
     }
 
     /// A `perform` of the operation `f`, which the nearest handler of its
@@ -1184,7 +1184,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             atoms.extend(self.cx.convs.emit(&mut ccx, &mut self.b, v, g, d)?);
         }
         let results = self.b.perform(effect, index, atoms);
-        let result = results.first().map(|&v| Atom::Var(v));
+        let result = first(&results);
         // A handler can't resume with a value of a type that has none, so
         // the operation doesn't return then.
         if matches!(result_ty, MonoTy::Never) {
@@ -1210,7 +1210,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Builtin::Prim(op, t) => self.prim(op, Scalar::of(&MonoTy::Builtin(t))?.unwrap(), args),
             Builtin::Resume => {
                 let results = self.b.resume(args[0].clone(), args[1..].to_vec());
-                Ok(results.first().map(|&v| Atom::Var(v)))
+                Ok(first(&results))
             }
             Builtin::ArrayLen => one(self.b.array_len(args[0].clone())),
             // An element of a type with no values is read for the check of
@@ -1264,7 +1264,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             // `u16` and `i16` are both an `i16`.
             PrimOp::Load => {
                 let vs = self.b.op_as(Op::ArrayLoad, args, vec![s.ty()]);
-                return Ok(vs.first().map(|&v| Atom::Var(v)));
+                return Ok(first(&vs));
             }
             PrimOp::Store => {
                 self.b.op(Op::ArrayStore, args);
@@ -1415,7 +1415,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             (branch.borrow_mut())(l, other)
         })?;
         self.b.switch_to(k.block());
-        Ok(k.params().first().map(|&p| Atom::Var(p)))
+        Ok(first(k.params()))
     }
 
     fn match_expr(
@@ -1441,7 +1441,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             Ok(())
         })?;
         self.b.switch_to(k.block());
-        Ok(k.params().first().map(|&p| Atom::Var(p)))
+        Ok(first(k.params()))
     }
 
     /// A `let` with a pattern: its bindings go on after it, and a value it
@@ -1558,6 +1558,12 @@ fn subst_muts<'db>(t: &MonoTy<'db>, args: &[boltlang_mir_mono::MonoMut]) -> Mono
         MonoMut::Param(i) => args.get(i as usize).copied().unwrap_or(m),
         other => other,
     })
+}
+
+/// The first of `vars`, which is the value of a call or a join point
+/// that gives one.
+fn first(vars: &[conduit_ir::Var]) -> Val {
+    vars.first().map(|&v| Atom::Var(v))
 }
 
 /// An integer or `Bool` literal of a scalar type, wrapped to its range.
