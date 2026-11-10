@@ -85,15 +85,8 @@ fn expr_stmt(p: &mut Parser, m: Option<Marker>) -> Option<(CompletedMarker, Bloc
     expr_bp(p, m, r, 1)
 }
 
-/// Whether a statement needs a `;`. Only the one kind for now; kept as a
-/// parameter to follow rust-analyzer, which also has optional ones.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Semicolon {
-    Required,
-}
-
 /// A statement: `;`, a `let`, an item like a function, or an expression.
-pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
+pub(crate) fn stmt(p: &mut Parser) {
     // An empty statement.
     if p.eat(T![;]) {
         return;
@@ -106,7 +99,7 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
     let m = p.start();
     let has_attrs = outer_attrs(p);
     if p.at(T![let]) {
-        let_stmt(p, m, semicolon);
+        let_stmt(p, m);
         return;
     }
     // Like in the grammar, an attribute can stand on its own, e.g. at the
@@ -131,15 +124,12 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
         }
         let cm_kind = cm.kind();
         let m = cm.precede(p);
-        match semicolon {
-            // Like in the grammar, a macro invocation is a statement on its
-            // own, so it doesn't need a `;` either.
-            Semicolon::Required if blocklike.is_block() || cm_kind == MACRO_EXPR => {
-                p.eat(T![;]);
-            }
-            Semicolon::Required => {
-                p.expect(T![;]);
-            }
+        // Like in the grammar, a macro invocation is a statement on its own,
+        // so it doesn't need a `;` either.
+        if blocklike.is_block() || cm_kind == MACRO_EXPR {
+            p.eat(T![;]);
+        } else {
+            p.expect(T![;]);
         }
         m.complete(p, EXPR_STMT);
     }
@@ -147,7 +137,7 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
 
 /// `let pattern: Type = value else { ... };`, with the type, value and
 /// `else` block optional.
-pub(crate) fn let_stmt(p: &mut Parser, m: Marker, semicolon: Semicolon) {
+pub(crate) fn let_stmt(p: &mut Parser, m: Marker) {
     p.bump(T![let]);
     // `let mut x` has a `MUT_PATT`, like a parameter.
     parse_pattern(p);
@@ -160,18 +150,14 @@ pub(crate) fn let_stmt(p: &mut Parser, m: Marker, semicolon: Semicolon) {
     if p.eat(T![else]) {
         parse_block_expr(p);
     }
-    match semicolon {
-        Semicolon::Required => {
-            p.expect(T![;]);
-        }
-    }
+    p.expect(T![;]);
     m.complete(p, LET_STMT);
 }
 
 /// The statements and tail expression of a block, up to its `}`.
 pub(crate) fn expr_block_contents(p: &mut Parser) {
     while !p.at(EOF) && !p.at(T!['}']) {
-        stmt(p, Semicolon::Required);
+        stmt(p);
     }
 }
 

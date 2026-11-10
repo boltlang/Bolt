@@ -219,7 +219,7 @@ pub fn parse_source_file(p: &mut Parser) {
             p.error_and_bump("unexpected '}'");
             continue;
         }
-        stmt(p, Semicolon::Required);
+        stmt(p);
     }
     m.complete(p, SOURCE_FILE);
 }
