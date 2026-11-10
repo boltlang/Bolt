@@ -1450,15 +1450,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let def = GenericDefId::Class(class);
         let scheme = Scheme {
             params: generic_param_ids(self.db, [def]),
-            bound: 0,
             predicates: Box::new([ClassConstraint { class, args: identity_args(self.db, def) }]),
-            fields: Box::new([]),
-            assoc: Box::new([]),
-            bounds: Box::new([]),
-            rows: Box::new([]),
-            effect_vars: Box::new([]),
-            ty,
-            sources: Default::default(),
+            ..Scheme::mono(ty)
         };
         scheme.instantiate(self.solver, self.origin(expr))
     }
