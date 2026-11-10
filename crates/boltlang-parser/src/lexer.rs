@@ -215,7 +215,6 @@ impl<'a, 'd> Lexer<'a, 'd> {
                 }
                 self.check_code_point(self.text_since(digits_start), start);
             }
-            CHAR_EOF => {}
             _ => {}
         }
     }
@@ -248,13 +247,13 @@ impl<'a, 'd> Lexer<'a, 'd> {
     }
 
     /// Lex the rest of a character literal after its opening `'`.
-    fn scan_char_body(&mut self, kind: SyntaxKind) -> SyntaxKind {
+    fn scan_char_body(&mut self) {
         let start = self.offset - 1;
         match self.get() {
             '\\' => self.scan_escape(),
             '\'' | '\n' | CHAR_EOF => {
                 self.error("expected a character", start..self.offset);
-                return kind;
+                return;
             }
             _ => {}
         }
@@ -263,7 +262,6 @@ impl<'a, 'd> Lexer<'a, 'd> {
         } else {
             self.error("expected `'` to end the character literal", start..self.offset);
         }
-        kind
     }
 
     /// Whether a raw string starts at `peek(n)`: `"` or `#`s followed by `"`.
@@ -391,9 +389,7 @@ impl<'a, 'd> Lexer<'a, 'd> {
         match c0 {
             CHAR_EOF => EOF,
             ch if is_whitespace(ch) => {
-                while is_whitespace(self.peek(0)) {
-                    self.get();
-                }
+                self.eat_while(is_whitespace);
                 WHITESPACE
             }
             '(' => L_PAREN,
@@ -410,16 +406,12 @@ impl<'a, 'd> Lexer<'a, 'd> {
             ':' => COLON,
             '@' => AT,
             '$' if is_ident_start(self.peek(0)) => {
-                while is_ident_part(self.peek(0)) {
-                    self.get();
-                }
+                self.eat_while(is_ident_part);
                 METAVARIABLE
             }
             // A label like `'outer`. Char literals like `'a'` end with a quote.
             '\'' if is_ident_start(self.peek(0)) && self.peek(1) != '\'' => {
-                while is_ident_part(self.peek(0)) {
-                    self.get();
-                }
+                self.eat_while(is_ident_part);
                 LABEL_IDENT
             }
             ';' => SEMI,
@@ -430,7 +422,8 @@ impl<'a, 'd> Lexer<'a, 'd> {
             // `'a'` or `'\n'` is a character, but a `'` that doesn't start one
             // is a token of its own, like in the grammar's token trees.
             '\'' if self.peek(0) == '\\' || (self.peek(0) != '\n' && self.peek(1) == '\'') => {
-                self.scan_char_body(CHAR)
+                self.scan_char_body();
+                CHAR
             }
             '\'' => QUOTE,
             // `#!` at the start of a file is a shebang, unless it starts an
@@ -468,9 +461,7 @@ impl<'a, 'd> Lexer<'a, 'd> {
             }
             '/' if self.peek(0) == '/' => {
                 // The newline isn't part of the comment.
-                while !matches!(self.peek(0), '\n' | CHAR_EOF) {
-                    self.get();
-                }
+                self.eat_while(|ch| !matches!(ch, '\n' | CHAR_EOF));
                 LINE_COMMENT
             }
             // Prefixed literals: b"..", b'.', c"..", r".." and r#".."#, br"..",
@@ -482,7 +473,8 @@ impl<'a, 'd> Lexer<'a, 'd> {
             }
             'b' if self.peek(0) == '\'' => {
                 self.get();
-                self.scan_char_body(BYTE)
+                self.scan_char_body();
+                BYTE
             }
             'c' if self.peek(0) == '"' => {
                 self.get();
