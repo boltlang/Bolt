@@ -12,7 +12,7 @@
 //! That can erase a group that would have stopped growing, through
 //! associated types; the program is still correct, only slower.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque, hash_map::Entry};
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
@@ -24,12 +24,12 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::Ty;
 use boltlang_mir::{Body as MirBody, ExprId, ExprKind, ItemRef, Pattern, Place, Stmt};
 use boltlang_mir_build::{MirBodies, mir_bodies};
-use boltlang_pattern::decision::{Bound, Decision, Node as DecisionNode, Value};
+use boltlang_pattern::decision::{Bound, Decision, Node as DecisionNode, Value, body_decisions};
 
 use boltlang_mir_transform::shim_body;
 
 use crate::{
-    instance::{Instance, InstanceDef, generics},
+    instance::{Instance, InstanceDef, Kind, generics},
     ty::MonoTy,
     uses::{ClassItem, Cx, Dict, Use, UseError, dict_entries},
 };
@@ -149,7 +149,7 @@ fn collect<'db>(
     let mut seen: HashMap<Instance<'db>, usize> = HashMap::new();
     let mut queue: VecDeque<usize> = VecDeque::new();
     for &root in &program.roots {
-        if let std::collections::hash_map::Entry::Vacant(e) = seen.entry(root) {
+        if let Entry::Vacant(e) = seen.entry(root) {
             e.insert(nodes.len());
             queue.push_back(nodes.len());
             nodes.push(Node { instance: root, parent: None });
@@ -202,7 +202,7 @@ fn collect<'db>(
 /// Whether a `match` of `instance` can be taken by no arm.
 fn can_fail<'db>(db: &'db dyn Db, instance: Instance<'db>) -> bool {
     instance.body(db).is_some_and(|body| {
-        boltlang_pattern::decision::body_decisions(db, body)
+        body_decisions(db, body)
             .matches
             .iter()
             .any(|(_, d)| d.as_ref().is_ok_and(|d| d.nodes.contains(&DecisionNode::Fail)))
@@ -221,7 +221,7 @@ fn plain_instance<'db>(db: &'db dyn Db, f: FunctionId<'db>, root: File) -> Insta
     let body = DefWithBodyId::new(db, DefWithBody::Function(f));
     let count = generics(db, body)
         .as_ref()
-        .map_or(0, |g| g.kinds.iter().filter(|k| **k == crate::instance::Kind::Ty).count());
+        .map_or(0, |g| g.kinds.iter().filter(|k| **k == Kind::Ty).count());
     Instance::of_body(db, body, vec![MonoTy::unit(); count].into_boxed_slice(), root)
 }
 
