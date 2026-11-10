@@ -21,6 +21,7 @@
 //! default method, which an impl doesn't override, has the class itself as
 //! its first constraint: that's the dictionary itself.
 
+use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     body::{DefWithBody, DefWithBodyId},
@@ -36,7 +37,7 @@ use boltlang_hir_ty::{
     lower::{ClassConstraint, generic_predicates, impl_header},
     scheme::generic_param_ids,
     solve::visible_impls,
-    ty::TupleParts,
+    ty::{TupleParts, is_hidden_param},
 };
 
 pub use boltlang_mir::ClassItem;
@@ -44,8 +45,8 @@ use boltlang_mir::{ItemRef, Shim};
 
 use crate::{
     instance::{
-        Generics, GenericsError, Instance, InstanceDef, Kind, MonoConstraint, generics,
-        instance_generics,
+        Generics, GenericsError, Instance, InstanceDef, Kind, MonoConstraint, class_name, generics,
+        instance_generics, param_kind,
     },
     ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError, slot_index},
 };
@@ -92,7 +93,7 @@ impl<'db> Dict<'db> {
     /// The dictionary as text: `#0` for a parameter, `#0.super1` for a
     /// superclass of one, and `impl Show[(A, B)] at [i32, Bool] with (#0)`
     /// for an impl at its type parameters, with the dictionaries it's given.
-    pub fn display(&self, db: &'db dyn boltlang_base_db::Db) -> String {
+    pub fn display(&self, db: &'db dyn Db) -> String {
         match self {
             Dict::Param(i) => format!("#{i}"),
             Dict::Super { of, index } => format!("{}.super{index}", of.display(db)),
@@ -101,11 +102,7 @@ impl<'db> Dict<'db> {
                     Some(c) => {
                         let args: Vec<String> =
                             c.args.iter().map(|t| t.display(db).to_string()).collect();
-                        format!(
-                            "impl {}[{}]",
-                            crate::instance::class_name(db, c.class),
-                            args.join(", ")
-                        )
+                        format!("impl {}[{}]", class_name(db, c.class), args.join(", "))
                     }
                     None => "impl".to_string(),
                 };
@@ -154,7 +151,7 @@ impl From<GenericsError> for UseError {
 
 /// An instance being looked at: its types, and which functions are erased.
 pub struct Cx<'a, 'db> {
-    pub db: &'db dyn boltlang_base_db::Db,
+    pub db: &'db dyn Db,
     pub instance: Instance<'db>,
     /// What the checker found in the instance's body, unless it's a shim.
     pub infer: Option<&'db InferenceResult<'db>>,
@@ -166,7 +163,7 @@ pub struct Cx<'a, 'db> {
 
 impl<'a, 'db> Cx<'a, 'db> {
     pub fn new(
-        db: &'db dyn boltlang_base_db::Db,
+        db: &'db dyn Db,
         instance: Instance<'db>,
         erased: &'a [FunctionId<'db>],
     ) -> Result<Self, UseError> {
@@ -403,11 +400,7 @@ impl<'a, 'db> Cx<'a, 'db> {
             .iter()
             .enumerate()
             .map(|(i, &p)| {
-                if boltlang_hir_ty::ty::is_hidden_param(self.db, p) {
-                    None
-                } else {
-                    args.get(i).cloned().map(Slot::Ty)
-                }
+                if is_hidden_param(self.db, p) { None } else { args.get(i).cloned().map(Slot::Ty) }
             })
             .collect()
     }
@@ -426,7 +419,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         let class_params = generic_param_ids(self.db, [GenericDefId::Class(class)]);
         class_params
             .iter()
-            .filter(|&&p| !boltlang_hir_ty::ty::is_hidden_param(self.db, p))
+            .filter(|&&p| !is_hidden_param(self.db, p))
             .map(|p| {
                 let i = callee.params.iter().position(|q| q == p);
                 match i.and_then(|i| found[i].clone()) {
@@ -662,10 +655,7 @@ impl<'a, 'db> Cx<'a, 'db> {
 }
 
 /// What the function `f` is generic over.
-fn fn_generics<'db>(
-    db: &'db dyn boltlang_base_db::Db,
-    f: FunctionId<'db>,
-) -> Result<&'db Generics<'db>, UseError> {
+fn fn_generics<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db Generics<'db>, UseError> {
     let body = DefWithBodyId::new(db, DefWithBody::Function(f));
     generics(db, body).as_ref().map_err(|e| UseError::from(*e))
 }
@@ -673,7 +663,7 @@ fn fn_generics<'db>(
 /// The dictionary for `want` that `dict`, for `have`, gives: itself, or one
 /// of the superclass dictionaries it holds, searched breadth-first.
 fn find_super<'db>(
-    db: &'db dyn boltlang_base_db::Db,
+    db: &'db dyn Db,
     dict: Dict<'db>,
     have: &MonoConstraint<'db>,
     want: &MonoConstraint<'db>,
@@ -697,10 +687,7 @@ fn find_super<'db>(
 
 /// The superclasses of `c`, like `Eq[T]` for `Ord[T]`, in the order a
 /// dictionary holds theirs.
-pub fn superclasses<'db>(
-    db: &'db dyn boltlang_base_db::Db,
-    c: &MonoConstraint<'db>,
-) -> Vec<MonoConstraint<'db>> {
+pub fn superclasses<'db>(db: &'db dyn Db, c: &MonoConstraint<'db>) -> Vec<MonoConstraint<'db>> {
     let def = GenericDefId::Class(c.class);
     let params = generic_param_ids(db, [def]);
     let slots: Vec<Slot<'db>> = c.args.iter().cloned().map(Slot::Ty).collect();
@@ -719,10 +706,10 @@ pub fn superclasses<'db>(
 /// parameters: for each method and constant of the class, in order, the
 /// instance that gives it.
 pub fn dict_entries<'db>(
-    db: &'db dyn boltlang_base_db::Db,
+    db: &'db dyn Db,
     imp: ImplId<'db>,
     args: &[MonoTy<'db>],
-    root: boltlang_base_db::File,
+    root: File,
 ) -> Result<Vec<(ClassItem<'db>, Instance<'db>)>, UseError> {
     let Some(target) = &impl_header(db, imp).class else { return Ok(Vec::new()) };
     let class = target.class;
@@ -1031,11 +1018,11 @@ fn fill<'db>(generics: &Generics<'db>, found: Vec<Option<Slot<'db>>>) -> Vec<Slo
 
 /// [`fill`] for the parameters of an item, whose kinds come from them.
 fn fill_slots<'db>(
-    db: &'db dyn boltlang_base_db::Db,
+    db: &'db dyn Db,
     params: &[GenericParamId<'db>],
     found: impl IntoIterator<Item = Option<Slot<'db>>>,
 ) -> Vec<Slot<'db>> {
-    let kinds: Box<[Kind]> = params.iter().map(|&p| crate::instance::param_kind(db, p)).collect();
+    let kinds: Box<[Kind]> = params.iter().map(|&p| param_kind(db, p)).collect();
     let generics =
         Generics { params: params.into(), kinds, predicates: Box::new([]), ty: Ty::unit() };
     let mut found: Vec<Option<Slot<'db>>> = found.into_iter().collect();
