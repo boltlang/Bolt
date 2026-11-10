@@ -56,7 +56,7 @@ impl PreludeArgs {
     fn database(&self) -> anyhow::Result<CliDatabase> {
         // `std`'s prelude may be missing, as without `std`.
         let prelude = (!self.no_prelude).then(|| DEFAULT_PRELUDE.to_string());
-        Ok(CliDatabase::new(&current_dir()?, prelude, false, std_dir()))
+        Ok(CliDatabase::new(&current_dir()?, prelude, std_dir()))
     }
 
     /// A database that compiles for `target`, which `#[cfg]` picks items by.

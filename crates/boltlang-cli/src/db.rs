@@ -10,20 +10,15 @@ pub struct CliDatabase {
 
 impl CliDatabase {
     /// A database for the files in `cwd`, with the prelude of `prelude`;
-    /// see [`Settings`].
+    /// see [`Settings`]. A prelude that can't be found isn't an error.
     /// `std` is the one in `std_dir`, which comes with the compiler.
-    pub fn new(
-        cwd: &SystemPath,
-        prelude: Option<String>,
-        prelude_required: bool,
-        std_dir: Option<SystemPathBuf>,
-    ) -> Self {
+    pub fn new(cwd: &SystemPath, prelude: Option<String>, std_dir: Option<SystemPathBuf>) -> Self {
         let mut db = Self {
             storage: salsa::Storage::new(None),
             files: Files::new(),
             system: OsSystem::new(cwd),
         };
-        Settings::init(&db, prelude, prelude_required);
+        Settings::init(&db, prelude, false);
         Settings::change_std_dir(&mut db, std_dir);
         db
     }
