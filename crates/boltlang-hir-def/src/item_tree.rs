@@ -94,9 +94,7 @@ pub fn item_nodes(root: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> {
     while let Some(node) = stack.pop() {
         let children: Vec<_> = node.children().collect();
         for child in children.into_iter().rev() {
-            if is_item_kind(child.kind()) {
-                stack.push(child.clone());
-            } else if child.kind() == ITEM_LIST {
+            if is_item_kind(child.kind()) || child.kind() == ITEM_LIST {
                 stack.push(child);
             }
         }
