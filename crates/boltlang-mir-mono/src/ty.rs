@@ -298,42 +298,16 @@ impl<'db> MonoTy<'db> {
 
     /// The type with each of its mutabilities replaced by what `f` gives.
     pub fn map_muts(&self, f: &mut dyn FnMut(MonoMut) -> MonoMut) -> Self {
-        let all = |tys: &[MonoTy<'db>], f: &mut dyn FnMut(MonoMut) -> MonoMut| {
-            tys.iter().map(|t| t.map_muts(f)).collect::<Box<[_]>>()
-        };
-        match self {
-            MonoTy::Erased(_)
-            | MonoTy::Builtin(_)
-            | MonoTy::Never
-            | MonoTy::Any(_)
-            | MonoTy::Host(_) => self.clone(),
-            MonoTy::ErasedAssoc(alias, args) => MonoTy::ErasedAssoc(*alias, all(args, f)),
-            MonoTy::Adt(adt, args, ms, own) => {
-                let args = all(args, f);
-                let ms = ms.iter().map(|&m| f(m)).collect();
-                MonoTy::Adt(*adt, args, ms, f(*own))
+        struct MapMuts<'f>(&'f mut dyn FnMut(MonoMut) -> MonoMut);
+        impl<'db> MapParts<'db> for MapMuts<'_> {
+            fn ty(&mut self, t: &MonoTy<'db>) -> MonoTy<'db> {
+                t.map_muts(self.0)
             }
-            MonoTy::Tuple(args, own) => {
-                let args = all(args, f);
-                MonoTy::Tuple(args, f(*own))
+            fn mutability(&mut self, m: MonoMut) -> MonoMut {
+                (self.0)(m)
             }
-            MonoTy::Record(args, names, own) => {
-                let args = all(args, f);
-                MonoTy::Record(args, names.clone(), f(*own))
-            }
-            MonoTy::Array(own, elem) => {
-                let own = f(*own);
-                MonoTy::Array(own, Box::new(elem.map_muts(f)))
-            }
-            MonoTy::Fn(params, names, ret, own, row) => {
-                let params = all(params, f);
-                let ret = Box::new(ret.map_muts(f));
-                let own = f(*own);
-                let row = row.map(&mut MonoRow::param, &mut |t| t.map_muts(f));
-                MonoTy::Fn(params, names.clone(), ret, own, row)
-            }
-            MonoTy::Row(row) => MonoTy::Row(row.map(&mut MonoRow::param, &mut |t| t.map_muts(f))),
         }
+        self.map_children(&mut MapMuts(f))
     }
 
     /// The type with each of its rows, like that of the closure in
