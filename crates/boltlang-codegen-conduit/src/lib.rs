@@ -354,84 +354,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     // The functions of each handler, after the lambdas.
     plan_handles(&mut cx, p, &mut names);
     // Every type a body has, so that the data types are all declared before
-    // the bodies are built. An error is reported where the type is used.
-    let mut sigs = Vec::new();
-    let mut convs = conv::Convs::default();
-    for iu in &p.instances {
-        let error = |kind: ErrorKind| Error {
-            instance: iu.instance.display(db).to_string(),
-            at: None,
-            kind,
-        };
-        let lcx = match Cx::new(db, iu.instance, &p.erased) {
-            Ok(lcx) => lcx,
-            Err(e) => {
-                errors.push(error(e.into()));
-                continue;
-            }
-        };
-        let shim;
-        let mirs: Vec<&boltlang_mir::Body<'_>> = match iu.instance.def(db) {
-            InstanceDef::Body(body) => {
-                let bodies = mir_bodies(db, *body);
-                std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
-            }
-            InstanceDef::Default(body, param) => {
-                mir_bodies(db, *body).default(*param).into_iter().map(|(_, b)| b).collect()
-            }
-            InstanceDef::Shim(s) => {
-                shim = shim_body(db, s, iu.instance.root(db));
-                vec![&shim]
-            }
-        };
-        for mir in mirs {
-            let locals =
-                mir.bindings.iter().map(|(_, d)| &d.ty).chain(mir.temps.iter().map(|d| &d.ty));
-            for ty in mir.exprs().map(|(_, node)| &node.ty).chain(locals) {
-                if let Ok(t) = lcx.ty(ty) {
-                    let _ = types.value(db, entry, &t);
-                }
-            }
-            for (_, node) in mir.exprs() {
-                if let boltlang_mir::ExprKind::Call { callee, .. } = &node.kind
-                    && let boltlang_mir::ExprKind::Item(boltlang_mir::ItemRef::Op(op)) =
-                        &mir[*callee].kind
-                    && let Err(kind) = plan_perform(
-                        &mut convs,
-                        &mut types,
-                        &lcx,
-                        entry,
-                        *op,
-                        &mir[*callee].ty,
-                        &mut names,
-                        &mut sigs,
-                    )
-                {
-                    errors.push(error(kind));
-                }
-            }
-        }
-        match instance_sig(&mut types, &lcx, entry) {
-            Ok(sig) => sigs.push((cx.funcs[&iu.instance], sig)),
-            Err(kind) => errors.push(error(kind)),
-        }
-        let lambdas = iu.instance.body(db).map_or(&[][..], |b| body_lambdas(db, b));
-        for lambda in lambdas {
-            match lambda_sig(&mut types, &lcx, entry, lambda) {
-                Ok(sig) => sigs.push((cx.lambdas[&(iu.instance, lambda.expr)], sig)),
-                Err(kind) => errors.push(error(kind)),
-            }
-        }
-        if let Err(kind) = handler_sigs(&cx, &mut module, &mut types, &lcx, &mut sigs) {
-            errors.push(error(kind));
-        }
-        for (site, u) in &iu.uses {
-            if let Err(kind) = declare_extern(&mut cx, &mut module, &mut types, &lcx, site, u) {
-                errors.push(error(kind));
-            }
-        }
-    }
-    cx.convs = convs;
+    // the bodies are built.
+    let sigs = declare_body_types(&mut cx, &mut module, &mut types, p, &mut names, &mut errors);
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -696,6 +620,99 @@ fn plan_handles<'db>(cx: &mut Ctx<'db>, p: &Program<'db>, names: &mut BTreeMap<F
             }
         }
     }
+}
+
+/// Declare every type the bodies of `p` have, so that the data types are
+/// all declared before the bodies are built, with the signatures of their
+/// functions, the conversions they need and the host functions they call.
+/// An error is reported where the type is used.
+fn declare_body_types<'db>(
+    cx: &mut Ctx<'db>,
+    module: &mut Module,
+    types: &mut Types<'db>,
+    p: &Program<'db>,
+    names: &mut BTreeMap<FuncId, String>,
+    errors: &mut Vec<Error>,
+) -> Vec<(FuncId, (Sig, MutParams, u32))> {
+    let (db, root) = (cx.db, cx.root);
+    let mut sigs = Vec::new();
+    let mut convs = conv::Convs::default();
+    for iu in &p.instances {
+        let error = |kind: ErrorKind| Error {
+            instance: iu.instance.display(db).to_string(),
+            at: None,
+            kind,
+        };
+        let lcx = match Cx::new(db, iu.instance, &p.erased) {
+            Ok(lcx) => lcx,
+            Err(e) => {
+                errors.push(error(e.into()));
+                continue;
+            }
+        };
+        let shim;
+        let mirs: Vec<&boltlang_mir::Body<'_>> = match iu.instance.def(db) {
+            InstanceDef::Body(body) => {
+                let bodies = mir_bodies(db, *body);
+                std::iter::once(&bodies.body).chain(&bodies.lambdas).collect()
+            }
+            InstanceDef::Default(body, param) => {
+                mir_bodies(db, *body).default(*param).into_iter().map(|(_, b)| b).collect()
+            }
+            InstanceDef::Shim(s) => {
+                shim = shim_body(db, s, iu.instance.root(db));
+                vec![&shim]
+            }
+        };
+        for mir in mirs {
+            let locals =
+                mir.bindings.iter().map(|(_, d)| &d.ty).chain(mir.temps.iter().map(|d| &d.ty));
+            for ty in mir.exprs().map(|(_, node)| &node.ty).chain(locals) {
+                if let Ok(t) = lcx.ty(ty) {
+                    let _ = types.value(db, root, &t);
+                }
+            }
+            for (_, node) in mir.exprs() {
+                if let boltlang_mir::ExprKind::Call { callee, .. } = &node.kind
+                    && let boltlang_mir::ExprKind::Item(boltlang_mir::ItemRef::Op(op)) =
+                        &mir[*callee].kind
+                    && let Err(kind) = plan_perform(
+                        &mut convs,
+                        types,
+                        &lcx,
+                        root,
+                        *op,
+                        &mir[*callee].ty,
+                        names,
+                        &mut sigs,
+                    )
+                {
+                    errors.push(error(kind));
+                }
+            }
+        }
+        match instance_sig(types, &lcx, root) {
+            Ok(sig) => sigs.push((cx.funcs[&iu.instance], sig)),
+            Err(kind) => errors.push(error(kind)),
+        }
+        let lambdas = iu.instance.body(db).map_or(&[][..], |b| body_lambdas(db, b));
+        for lambda in lambdas {
+            match lambda_sig(types, &lcx, root, lambda) {
+                Ok(sig) => sigs.push((cx.lambdas[&(iu.instance, lambda.expr)], sig)),
+                Err(kind) => errors.push(error(kind)),
+            }
+        }
+        if let Err(kind) = handler_sigs(cx, module, types, &lcx, &mut sigs) {
+            errors.push(error(kind));
+        }
+        for (site, u) in &iu.uses {
+            if let Err(kind) = declare_extern(cx, module, types, &lcx, site, u) {
+                errors.push(error(kind));
+            }
+        }
+    }
+    cx.convs = convs;
+    sigs
 }
 
 /// The Conduit signature of an instance, its mutability parameters and how
