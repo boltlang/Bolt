@@ -428,12 +428,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
             }
         }
     }
-    for key in effects {
-        let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
-        if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, key) {
-            errors.push(Error { instance: name, at: None, kind });
-        }
-    }
+    declare_effects(&mut cx, &mut module, &mut types, effects, &mut errors);
     // The functions of each handler, after the lambdas.
     for iu in &p.instances {
         let Some(body) = iu.instance.body(db) else { continue };
@@ -483,8 +478,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
                             .map(|&op| {
                                 let name = op_name(op);
                                 let name = if shared(&name) {
-                                    let e = effect.0.item(db).name.as_ref();
-                                    format!("{}_{name}", e.map_or("?", |n| n.as_str()))
+                                    format!("{}_{name}", effect_name(db, effect.0))
                                 } else {
                                     name
                                 };
@@ -665,15 +659,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     }
     // The effects that only rows name, which nothing performs or handles.
     while !types.undeclared.is_empty() {
-        for key in std::mem::take(&mut types.undeclared) {
-            if cx.effects.contains_key(&key) {
-                continue;
-            }
-            let name = key.0.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
-            if let Err(kind) = declare_effect(&mut cx, &mut module, &mut types, key) {
-                errors.push(Error { instance: name, at: None, kind });
-            }
-        }
+        let keys = std::mem::take(&mut types.undeclared);
+        declare_effects(&mut cx, &mut module, &mut types, keys, &mut errors);
     }
     if !errors.is_empty() {
         return Err(errors);
@@ -905,6 +892,31 @@ fn handler_sigs<'db>(
     Ok(())
 }
 
+/// The name of an effect, like `State`.
+fn effect_name(db: &dyn Db, e: EffectId<'_>) -> String {
+    e.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string()
+}
+
+/// Declare each of the effects `keys` that isn't declared yet, with an
+/// error for each that can't be.
+fn declare_effects<'db>(
+    cx: &mut Ctx<'db>,
+    module: &mut Module,
+    types: &mut Types<'db>,
+    keys: Vec<EffectKey<'db>>,
+    errors: &mut Vec<Error>,
+) {
+    for key in keys {
+        if cx.effects.contains_key(&key) {
+            continue;
+        }
+        let instance = effect_name(cx.db, key.0);
+        if let Err(kind) = declare_effect(cx, module, types, key) {
+            errors.push(Error { instance, at: None, kind });
+        }
+    }
+}
+
 /// Declare the effect `key`, an effect and its arguments, with the
 /// signature of each of its operations.
 fn declare_effect<'db>(
@@ -938,7 +950,7 @@ fn declare_effect<'db>(
         // An operation's signature has no row.
         sigs.push(Sig::new(params, results));
     }
-    let name = e.item(db).name.as_ref().map_or("?", |n| n.as_str()).to_string();
+    let name = effect_name(db, e);
     let args: Vec<String> = key.1.iter().map(|t| t.display(db).to_string()).collect();
     let name = if args.is_empty() { name } else { format!("{name}[{}]", args.join(", ")) };
     let debug_name = Some(ident(&name).into());
