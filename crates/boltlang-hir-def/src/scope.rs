@@ -11,7 +11,7 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     body::{Body, DefWithBodyId, body},
-    hir::{BinaryOp, BindingId, Expr, ExprId, LabelId, LogicOp, Pat, PatId, Statement, TupleItem},
+    hir::{BinaryOp, BindingId, Expr, ExprId, LabelId, LogicOp, Pat, PatId, Statement},
 };
 
 pub type ScopeId = Idx<ScopeData>;
@@ -262,62 +262,15 @@ impl ExprScopes {
                 }
                 self.walk_expr(body, *lambda_body, inner);
             }
+            // Everything else evaluates its parts in the same scope.
             other => {
-                // Everything else evaluates its parts in the same scope.
-                for child in children(other) {
+                for child in other.children() {
                     self.walk_expr(body, child, scope);
                 }
             }
         }
         scope
     }
-}
-
-/// The subexpressions of an expression that doesn't introduce bindings.
-fn children(expr: &Expr) -> Vec<ExprId> {
-    let mut out = Vec::new();
-    match expr {
-        Expr::Missing
-        | Expr::Path(_)
-        | Expr::Literal(_)
-        | Expr::Continue { .. }
-        | Expr::MacroCall { .. } => {}
-        Expr::Call { callee, args, .. } => {
-            out.push(*callee);
-            out.extend(args.iter().copied());
-        }
-        Expr::CallWith { callee, args } => {
-            out.push(*callee);
-            out.extend(args.iter().map(TupleItem::value));
-        }
-        Expr::Field { expr, .. }
-        | Expr::Try { expr, .. }
-        | Expr::Imm { expr }
-        | Expr::Mut { expr }
-        | Expr::Cast { expr, .. }
-        | Expr::Prefix { expr, .. } => out.push(*expr),
-        Expr::Index { base, index } => out.extend([*base, *index]),
-        Expr::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
-        Expr::Range { lhs, rhs, .. } => out.extend(lhs.iter().chain(rhs.iter()).copied()),
-        Expr::Tuple { exprs } | Expr::Array { exprs, .. } => out.extend(exprs.iter().copied()),
-        Expr::NamedTuple { items } => out.extend(items.iter().map(TupleItem::value)),
-        Expr::ArrayRepeat { value, count, .. } => out.extend([*value, *count]),
-        Expr::Record { fields, spread, .. } => {
-            out.extend(fields.iter().map(|f| f.expr));
-            out.extend(*spread);
-        }
-        Expr::Break { expr, .. } | Expr::Return { expr } => out.extend(*expr),
-        // These are handled by walk_expr.
-        Expr::Let { .. }
-        | Expr::Block { .. }
-        | Expr::If { .. }
-        | Expr::While { .. }
-        | Expr::Loop { .. }
-        | Expr::For { .. }
-        | Expr::Match { .. }
-        | Expr::Lambda { .. } => unreachable!(),
-    }
-    out
 }
 
 #[cfg(test)]
