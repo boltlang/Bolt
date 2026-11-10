@@ -34,11 +34,12 @@ use crate::{
     uses::{ClassItem, Cx, Dict, Use, UseError, dict_entries},
 };
 
-/// Where a use is: a node of the MIR of a body, or of one of its lambdas,
-/// and which of the node's uses it is.
+/// Where a use is: a node of the MIR of a body, of one of its lambdas or of
+/// one of its defaults, and which of the node's uses it is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub struct Site<'db> {
-    /// 0 for the body, and `i + 1` for its `i`th lambda in `MirBodies`.
+    /// The number of the MIR body, as in [`MirBodies::all`]: 0 for the
+    /// body, then its lambdas, then its defaults.
     pub body: u32,
     pub expr: ExprId,
     pub role: Role<'db>,
