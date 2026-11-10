@@ -376,46 +376,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         f.row = sig.row.clone();
         module.funcs.insert(*id, f);
     }
-    let mut built = Vec::new();
-    for iu in &p.instances {
-        match func::lower_body(&cx, &module, &mut types, iu, Part::Body) {
-            Ok(f) => built.push((cx.funcs[&iu.instance], f)),
-            Err(e) => errors.push(e),
-        }
-        let lambdas = iu.instance.body(db).map_or(&[][..], |b| body_lambdas(db, b));
-        for lambda in lambdas {
-            match func::lower_body(&cx, &module, &mut types, iu, Part::Lambda(lambda)) {
-                Ok(f) => built.push((cx.lambdas[&(iu.instance, lambda.expr)], f)),
-                Err(e) => errors.push(e),
-            }
-        }
-    }
-    let mut keys: Vec<&HandleKey<'_>> = cx.handles.keys().collect();
-    keys.sort_by_key(|k| cx.handles[*k].handler.0);
-    for key in keys {
-        let iu = p.instances.iter().find(|iu| iu.instance == key.0).unwrap();
-        let fns = &cx.handles[key];
-        let mut parts = vec![
-            (fns.body, Part::Handle(key.1, key.2, HandlePart::Body)),
-            (fns.ret, Part::Handle(key.1, key.2, HandlePart::Ret)),
-        ];
-        for (effect, (_, clauses)) in fns.effects.iter().enumerate() {
-            for (op, &clause) in clauses.iter().enumerate() {
-                parts.push((clause, Part::Handle(key.1, key.2, HandlePart::Clause(effect, op))));
-            }
-        }
-        for (id, part) in parts {
-            match func::lower_body(&cx, &module, &mut types, iu, part) {
-                Ok(f) => built.push((id, f)),
-                Err(e) => errors.push(e),
-            }
-        }
-    }
-    let mut ccx = conv::ConvCx { db, root: entry, types: &mut types };
-    match cx.convs.build(&mut ccx, &module) {
-        Ok(fs) => built.extend(fs),
-        Err(kind) => errors.push(Error { instance: "a conversion".into(), at: None, kind }),
-    }
+    let built = build_bodies(&cx, &module, &mut types, p, &mut errors);
     if !errors.is_empty() {
         return Err(errors);
     }
@@ -713,6 +674,59 @@ fn declare_body_types<'db>(
     }
     cx.convs = convs;
     sigs
+}
+
+/// Build the function of each instance, of its lambdas and of its
+/// handlers, and the conversions they use.
+fn build_bodies<'db>(
+    cx: &Ctx<'db>,
+    module: &Module,
+    types: &mut Types<'db>,
+    p: &Program<'db>,
+    errors: &mut Vec<Error>,
+) -> Vec<(FuncId, Func)> {
+    let db = cx.db;
+    let mut built = Vec::new();
+    for iu in &p.instances {
+        match func::lower_body(cx, module, types, iu, Part::Body) {
+            Ok(f) => built.push((cx.funcs[&iu.instance], f)),
+            Err(e) => errors.push(e),
+        }
+        let lambdas = iu.instance.body(db).map_or(&[][..], |b| body_lambdas(db, b));
+        for lambda in lambdas {
+            match func::lower_body(cx, module, types, iu, Part::Lambda(lambda)) {
+                Ok(f) => built.push((cx.lambdas[&(iu.instance, lambda.expr)], f)),
+                Err(e) => errors.push(e),
+            }
+        }
+    }
+    let mut keys: Vec<&HandleKey<'_>> = cx.handles.keys().collect();
+    keys.sort_by_key(|k| cx.handles[*k].handler.0);
+    for key in keys {
+        let iu = p.instances.iter().find(|iu| iu.instance == key.0).unwrap();
+        let fns = &cx.handles[key];
+        let mut parts = vec![
+            (fns.body, Part::Handle(key.1, key.2, HandlePart::Body)),
+            (fns.ret, Part::Handle(key.1, key.2, HandlePart::Ret)),
+        ];
+        for (effect, (_, clauses)) in fns.effects.iter().enumerate() {
+            for (op, &clause) in clauses.iter().enumerate() {
+                parts.push((clause, Part::Handle(key.1, key.2, HandlePart::Clause(effect, op))));
+            }
+        }
+        for (id, part) in parts {
+            match func::lower_body(cx, module, types, iu, part) {
+                Ok(f) => built.push((id, f)),
+                Err(e) => errors.push(e),
+            }
+        }
+    }
+    let mut ccx = conv::ConvCx { db, root: cx.root, types };
+    match cx.convs.build(&mut ccx, module) {
+        Ok(fs) => built.extend(fs),
+        Err(kind) => errors.push(Error { instance: "a conversion".into(), at: None, kind }),
+    }
+    built
 }
 
 /// The Conduit signature of an instance, its mutability parameters and how
