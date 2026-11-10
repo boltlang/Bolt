@@ -72,7 +72,10 @@ impl System for OsSystem {
         } else if metadata.file_type().is_symlink() {
             FileType::Symlink
         } else {
-            return Err(other_error("path {} points to an unsupported file type"));
+            return Err(other_error(format!(
+                "path {} points to an unsupported file type",
+                path.display()
+            )));
         };
 
         #[cfg(unix)]
