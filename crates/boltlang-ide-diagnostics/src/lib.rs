@@ -517,35 +517,7 @@ fn describe(
 
         K::DuplicateDefinition { name } => (C::DUPLICATE_DEFINITION, format!("`{name}` is defined more than once")),
         K::UnresolvedImportPath { path, error } => {
-            let message = match error {
-                ImportPathError::FileNotFound => format!("cannot find the file `{path}`"),
-                ImportPathError::NoManifest { package } => format!(
-                    "cannot find the package `{package}`: this file is in no package, so it can only use `std`; \
-                     add a `bolt.toml` with `{package}` as a dependency"
-                ),
-                ImportPathError::NotADependency { package } => {
-                    format!("`{package}` isn't a dependency of this package: add it to `[dependencies]` in `bolt.toml`")
-                }
-                ImportPathError::BadManifest => {
-                    format!("cannot import `{path}`: the `bolt.toml` of this package has an error")
-                }
-                ImportPathError::DependencyNotFound { package, path } => {
-                    format!("the dependency `{package}` is at `{path}`, which has no `bolt.toml`")
-                }
-                ImportPathError::NoStd => "cannot find `std`, which comes with the compiler".to_string(),
-                ImportPathError::NotInPackage { package, path } => {
-                    format!("the package `{package}` has no file `{path}`")
-                }
-                ImportPathError::Invalid => format!(
-                    "cannot import `{path}`: import a file with a path like `./file`, \
-                     or a package with its name, like `std/io`"
-                ),
-                // Only the prelude is looked for in two files.
-                ImportPathError::TwoPreludes { package } => {
-                    format!("the package `{package}` has two preludes")
-                }
-            };
-            (C::UNRESOLVED_IMPORT_PATH, message)
+            (C::UNRESOLVED_IMPORT_PATH, import_path_message(&path, error))
         }
         K::UnresolvedImportName { name } => {
             (C::UNRESOLVED_IMPORT_NAME, format!("the imported file has nothing named `{name}`"))
@@ -607,30 +579,7 @@ fn describe(
             format!("`{name}` is `mut` in some alternatives of this pattern, but not in all of them"),
         ),
         K::UnresolvedPrelude { package, error } => {
-            let message = match error {
-                ImportPathError::NoManifest { .. } | ImportPathError::NotADependency { .. } => {
-                    format!("cannot find the package `{package}` of the prelude: it isn't a dependency")
-                }
-                ImportPathError::BadManifest => {
-                    format!("cannot find the prelude of `{package}`: the `bolt.toml` of this package has an error")
-                }
-                ImportPathError::DependencyNotFound { path, .. } => {
-                    format!("the package `{package}` of the prelude is at `{path}`, which has no `bolt.toml`")
-                }
-                ImportPathError::NoStd => "there's no `std`, which the prelude comes from".to_string(),
-                ImportPathError::NotInPackage { .. } => format!(
-                    "the package `{package}` has no prelude: it needs a file `__prelude__.bolt`, or \
-                     `__prelude__/lib.bolt` for a prelude of several files"
-                ),
-                ImportPathError::FileNotFound | ImportPathError::Invalid => {
-                    format!("cannot use `{package}` as the prelude: it's not the name of a package")
-                }
-                ImportPathError::TwoPreludes { .. } => format!(
-                    "the package `{package}` has both a `__prelude__.bolt` and a `__prelude__/lib.bolt`, so \
-                     it isn't clear which is its prelude; remove one of them"
-                ),
-            };
-            (C::UNRESOLVED_PRELUDE, message)
+            (C::UNRESOLVED_PRELUDE, prelude_message(&package, error))
         }
         K::UnresolvedName => (C::UNRESOLVED_NAME, format!("cannot find `{source}`")),
         K::UnresolvedType => (C::UNRESOLVED_TYPE, format!("cannot find type `{source}`")),
@@ -844,49 +793,7 @@ fn describe(
              without one"
                 .to_string(),
         ),
-        K::BadLink { reason } => (
-            C::BAD_LINK,
-            match reason {
-                BadLink::NotFunctionOrType => {
-                    "`#[link]` can only be on a function or a type, which the host provides".to_string()
-                }
-                BadLink::TypeHasValue => {
-                    "a type linked to the host can't have `= ..`: the host provides it".to_string()
-                }
-                BadLink::TypeParams => "a type linked to the host can't have type parameters yet".to_string(),
-                BadLink::TypeNotWasm => "a type of the host is declared with just `#[link(wasm)]`: it has no \
-                                         module, name or ABI, and only Wasm has types of the host"
-                    .to_string(),
-                BadLink::NotTopLevel => "a function or type linked to the host must be at the top level of a file, not \
-                                         in a class, an impl or the namespace of a type"
-                    .to_string(),
-                BadLink::HasBody => {
-                    "a function linked to the host can't have a body: the host provides it".to_string()
-                }
-                BadLink::Builtin => "a function can't be both a builtin and linked to the host".to_string(),
-                BadLink::Written(e) => link_error(&e),
-                BadLink::FlatParam(ty) => format!(
-                    "a function linked with `abi = flat` can't take a `{}`: only scalars, arrays of them, and \
-                     arrays of `[u8]`",
-                    ty.display_with(db, names)
-                ),
-                BadLink::FlatResult(ty) => format!(
-                    "a function linked with `abi = flat` can't give a `{}`: only scalars, or a tuple of them",
-                    ty.display_with(db, names)
-                ),
-                BadLink::Addr => "`#[addr]` is only for an array that a function linked with `abi = flat` takes"
-                    .to_string(),
-                BadLink::EmuGated(key) => format!(
-                    "a function linked to `emu` can't be in a `#[cfg]` on `{key}`, only on `host`: the evaluator \
-                     is the same host for every machine it imitates"
-                ),
-                BadLink::EmuSize(ty) => format!(
-                    "a function linked to `emu` can't take or give a `{}`, whose width is the machine's: the \
-                     evaluator is the same host for every machine it imitates",
-                    ty.display_with(db, names)
-                ),
-            },
-        ),
+        K::BadLink { reason } => (C::BAD_LINK, bad_link_message(db, names, reason)),
         K::BadBuiltin { reason } => (
             C::BAD_BUILTIN,
             match reason {
@@ -898,19 +805,7 @@ fn describe(
             }
             .to_string(),
         ),
-        K::BadTest { reason } => (
-            C::BAD_TEST,
-            match reason {
-                BadTest::NotTopLevel => {
-                    "a test must be a function at the top level of a file, not in a class, an impl or the namespace \
-                     of a type"
-                }
-                BadTest::Params => "a test can't have parameters: nothing gives it any",
-                BadTest::Generic => "a test can't have type parameters: nothing decides them",
-                BadTest::Result => "a test must give `()`: nothing looks at what it gives",
-            }
-            .to_string(),
-        ),
+        K::BadTest { reason } => (C::BAD_TEST, bad_test_message(reason)),
         K::UnmetAssocEquality { name, item, class, expected, actual } => {
             let class = class_name(db, class);
             (
@@ -1191,6 +1086,137 @@ fn join_list(items: &[String], conjunction: &str) -> String {
         Some((last, [])) => last.clone(),
         Some((last, rest)) => format!("{} {conjunction} {last}", rest.join(", ")),
     }
+}
+
+/// The message for an import of `path` that can't be found.
+fn import_path_message(path: &str, error: ImportPathError) -> String {
+    match error {
+        ImportPathError::FileNotFound => format!("cannot find the file `{path}`"),
+        ImportPathError::NoManifest { package } => format!(
+            "cannot find the package `{package}`: this file is in no package, so it can only use `std`; \
+             add a `bolt.toml` with `{package}` as a dependency"
+        ),
+        ImportPathError::NotADependency { package } => {
+            format!(
+                "`{package}` isn't a dependency of this package: add it to `[dependencies]` in `bolt.toml`"
+            )
+        }
+        ImportPathError::BadManifest => {
+            format!("cannot import `{path}`: the `bolt.toml` of this package has an error")
+        }
+        ImportPathError::DependencyNotFound { package, path } => {
+            format!("the dependency `{package}` is at `{path}`, which has no `bolt.toml`")
+        }
+        ImportPathError::NoStd => "cannot find `std`, which comes with the compiler".to_string(),
+        ImportPathError::NotInPackage { package, path } => {
+            format!("the package `{package}` has no file `{path}`")
+        }
+        ImportPathError::Invalid => format!(
+            "cannot import `{path}`: import a file with a path like `./file`, \
+             or a package with its name, like `std/io`"
+        ),
+        // Only the prelude is looked for in two files.
+        ImportPathError::TwoPreludes { package } => {
+            format!("the package `{package}` has two preludes")
+        }
+    }
+}
+
+/// The message for the prelude of `package` that can't be found.
+fn prelude_message(package: &str, error: ImportPathError) -> String {
+    match error {
+        ImportPathError::NoManifest { .. } | ImportPathError::NotADependency { .. } => {
+            format!("cannot find the package `{package}` of the prelude: it isn't a dependency")
+        }
+        ImportPathError::BadManifest => {
+            format!(
+                "cannot find the prelude of `{package}`: the `bolt.toml` of this package has an error"
+            )
+        }
+        ImportPathError::DependencyNotFound { path, .. } => {
+            format!(
+                "the package `{package}` of the prelude is at `{path}`, which has no `bolt.toml`"
+            )
+        }
+        ImportPathError::NoStd => "there's no `std`, which the prelude comes from".to_string(),
+        ImportPathError::NotInPackage { .. } => format!(
+            "the package `{package}` has no prelude: it needs a file `__prelude__.bolt`, or \
+             `__prelude__/lib.bolt` for a prelude of several files"
+        ),
+        ImportPathError::FileNotFound | ImportPathError::Invalid => {
+            format!("cannot use `{package}` as the prelude: it's not the name of a package")
+        }
+        ImportPathError::TwoPreludes { .. } => format!(
+            "the package `{package}` has both a `__prelude__.bolt` and a `__prelude__/lib.bolt`, so \
+             it isn't clear which is its prelude; remove one of them"
+        ),
+    }
+}
+
+/// What's wrong with a `#[link]`.
+fn bad_link_message(db: &dyn Db, names: &TyNames, reason: BadLink<'_>) -> String {
+    match reason {
+        BadLink::NotFunctionOrType => {
+            "`#[link]` can only be on a function or a type, which the host provides".to_string()
+        }
+        BadLink::TypeHasValue => {
+            "a type linked to the host can't have `= ..`: the host provides it".to_string()
+        }
+        BadLink::TypeParams => {
+            "a type linked to the host can't have type parameters yet".to_string()
+        }
+        BadLink::TypeNotWasm => {
+            "a type of the host is declared with just `#[link(wasm)]`: it has no \
+                                 module, name or ABI, and only Wasm has types of the host"
+                .to_string()
+        }
+        BadLink::NotTopLevel => {
+            "a function or type linked to the host must be at the top level of a file, not \
+                                 in a class, an impl or the namespace of a type"
+                .to_string()
+        }
+        BadLink::HasBody => {
+            "a function linked to the host can't have a body: the host provides it".to_string()
+        }
+        BadLink::Builtin => "a function can't be both a builtin and linked to the host".to_string(),
+        BadLink::Written(e) => link_error(&e),
+        BadLink::FlatParam(ty) => format!(
+            "a function linked with `abi = flat` can't take a `{}`: only scalars, arrays of them, and \
+             arrays of `[u8]`",
+            ty.display_with(db, names)
+        ),
+        BadLink::FlatResult(ty) => format!(
+            "a function linked with `abi = flat` can't give a `{}`: only scalars, or a tuple of them",
+            ty.display_with(db, names)
+        ),
+        BadLink::Addr => {
+            "`#[addr]` is only for an array that a function linked with `abi = flat` takes"
+                .to_string()
+        }
+        BadLink::EmuGated(key) => format!(
+            "a function linked to `emu` can't be in a `#[cfg]` on `{key}`, only on `host`: the evaluator \
+             is the same host for every machine it imitates"
+        ),
+        BadLink::EmuSize(ty) => format!(
+            "a function linked to `emu` can't take or give a `{}`, whose width is the machine's: the \
+             evaluator is the same host for every machine it imitates",
+            ty.display_with(db, names)
+        ),
+    }
+}
+
+/// What's wrong with a `#[test]`.
+fn bad_test_message(reason: BadTest) -> String {
+    match reason {
+        BadTest::NotTopLevel => {
+            "a test must be a function at the top level of a file, not in a class, an impl or the namespace \
+             of a type"
+        }
+        BadTest::Params => "a test can't have parameters: nothing gives it any",
+        BadTest::Generic => "a test can't have type parameters: nothing decides them",
+        BadTest::Result => "a test must give `()`: nothing looks at what it gives",
+    }
+    .to_string()
 }
 
 /// What's wrong with a `#[cfg(..)]`.
