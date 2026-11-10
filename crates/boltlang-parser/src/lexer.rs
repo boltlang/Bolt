@@ -12,10 +12,11 @@ use unicode_ident::{is_xid_continue, is_xid_start};
 const CHAR_EOF: char = '\u{FFFF}';
 
 pub struct Lexer<'a, 'd> {
+    text: &'a str,
     chars: Chars<'a>,
     /// Characters that were peeked at but not consumed yet.
     buffer: VecDeque<char>,
-    /// The byte offset of the next character.
+    /// The byte offset in `text` of the next character.
     offset: usize,
     diags: &'d mut Diagnostics,
 }
@@ -131,7 +132,7 @@ fn keyword_kind(name: &str) -> Option<SyntaxKind> {
 
 impl<'a, 'd> Lexer<'a, 'd> {
     pub fn new(text: &'a str, diags: &'d mut Diagnostics) -> Self {
-        Self { chars: text.chars(), buffer: VecDeque::new(), offset: 0, diags }
+        Self { text, chars: text.chars(), buffer: VecDeque::new(), offset: 0, diags }
     }
 
     fn read(&mut self) -> char {
@@ -161,6 +162,11 @@ impl<'a, 'd> Lexer<'a, 'd> {
         self.diags.push(UnexpectedCharDiagnostic { message: msg.into(), span }.into());
     }
 
+    /// The text consumed since the byte offset `start`.
+    fn text_since(&self, start: usize) -> &'a str {
+        &self.text[start..self.offset]
+    }
+
     /// Lex an escape sequence after its `\\`, reporting an invalid one.
     /// Like the grammar, any character can be escaped, but `\\x` must be
     /// followed by two hex digits and `\\u` by `{` hex digits `}` or four
@@ -178,10 +184,9 @@ impl<'a, 'd> Lexer<'a, 'd> {
             }
             'u' if self.peek(0) == '{' => {
                 self.get();
-                let mut digits = String::new();
-                while is_hex_num(self.peek(0)) {
-                    digits.push(self.get());
-                }
+                let digits_start = self.offset;
+                self.eat_while(is_hex_num);
+                let digits = self.text_since(digits_start);
                 if self.peek(0) != '}' {
                     self.error("expected `}` to end the unicode escape", start..self.offset);
                     return;
@@ -194,10 +199,10 @@ impl<'a, 'd> Lexer<'a, 'd> {
                     );
                     return;
                 }
-                self.check_code_point(&digits, start);
+                self.check_code_point(digits, start);
             }
             'u' => {
-                let mut digits = String::new();
+                let digits_start = self.offset;
                 for _ in 0..4 {
                     if !is_hex_num(self.peek(0)) {
                         self.error(
@@ -206,9 +211,9 @@ impl<'a, 'd> Lexer<'a, 'd> {
                         );
                         return;
                     }
-                    digits.push(self.get());
+                    self.get();
                 }
-                self.check_code_point(&digits, start);
+                self.check_code_point(self.text_since(digits_start), start);
             }
             CHAR_EOF => {}
             _ => {}
@@ -367,25 +372,21 @@ impl<'a, 'd> Lexer<'a, 'd> {
             return false;
         }
         let suffix_start = self.offset;
-        let mut suffix = String::new();
-        while is_ident_part(self.peek(0)) {
-            suffix.push(self.get());
-        }
-        let valid = if is_float {
-            matches!(suffix.as_str(), "f32" | "f64")
-        } else {
-            NUMERIC_SUFFIXES.contains(&suffix.as_str())
-        };
+        self.eat_while(is_ident_part);
+        let suffix = self.text_since(suffix_start);
+        let is_float_suffix = matches!(suffix, "f32" | "f64");
+        let valid = if is_float { is_float_suffix } else { NUMERIC_SUFFIXES.contains(&suffix) };
         if !valid {
             self.error(
                 format!("invalid suffix `{suffix}` for a number literal"),
                 suffix_start..self.offset,
             );
         }
-        matches!(suffix.as_str(), "f32" | "f64")
+        is_float_suffix
     }
 
     pub fn scan(&mut self) -> SyntaxKind {
+        let start = self.offset;
         let c0 = self.get();
         match c0 {
             CHAR_EOF => EOF,
@@ -441,7 +442,6 @@ impl<'a, 'd> Lexer<'a, 'd> {
             '#' => HASHTAG,
             '/' if self.peek(0) == '*' => {
                 // Block comments nest, like in Rust: `/* a /* b */ c */`.
-                let start = self.offset - 1;
                 self.get();
                 let mut depth = 1;
                 loop {
@@ -504,31 +504,25 @@ impl<'a, 'd> Lexer<'a, 'd> {
                 IDENT
             }
             c0 if is_ident_start(c0) => {
-                let mut name = String::new();
-                name.push(c0);
-                while is_ident_part(self.peek(0)) {
-                    name.push(self.get());
-                }
+                self.eat_while(is_ident_part);
+                let name = self.text_since(start);
                 if name == "_" {
                     return UNDERSCORE;
                 }
-                keyword_kind(&name).unwrap_or(IDENT)
+                keyword_kind(name).unwrap_or(IDENT)
             }
             c0 if is_dec_num(c0) => self.scan_number(c0),
             '?' => QUEST,
             c0 if is_operator(c0) => {
-                let mut text = String::new();
-                text.push(c0);
                 // Stop before `//` and `/*`, so `a +// note` is `+` followed by a comment.
                 while is_operator(self.peek(0))
                     && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*'))
                 {
-                    text.push(self.get());
+                    self.get();
                 }
-                operator_kind(&text)
+                operator_kind(self.text_since(start))
             }
             ch => {
-                let start = self.offset - ch.len_utf8();
                 self.error(
                     format!("unexpected character `{}`", ch.escape_debug()),
                     start..self.offset,
