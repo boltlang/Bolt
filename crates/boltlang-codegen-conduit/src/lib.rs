@@ -332,21 +332,7 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
         handles: HashMap::new(),
         convs: conv::Convs::default(),
     };
-    // From 0, in the order they're defined, so that the text format can
-    // write each by its name alone.
-    let mut names = BTreeMap::new();
-    for iu in &p.instances {
-        let id = new_func(&mut names, iu.instance.display(db).to_string());
-        cx.funcs.insert(iu.instance, id);
-    }
-    // The lambdas, lifted, after the instances.
-    for iu in &p.instances {
-        let Some(body) = iu.instance.body(db) else { continue };
-        for (k, lambda) in body_lambdas(db, body).iter().enumerate() {
-            let id = new_func(&mut names, format!("{}::lambda{k}", iu.instance.display(db)));
-            cx.lambdas.insert((iu.instance, lambda.expr), id);
-        }
-    }
+    let mut names = number_funcs(&mut cx, p);
     let mut module = Module::default();
     let mut types = Types::default();
     let effects = used_effects(db, p, &mut errors);
@@ -456,6 +442,27 @@ fn program_errors<'db>(db: &'db dyn Db, p: &Program<'db>) -> Vec<Error> {
         }
     }
     errors
+}
+
+/// Number and name the function of each instance, and then those of its
+/// lambdas, lifted. They count from 0, in the order they're defined, so
+/// that the text format can write each by its name alone.
+fn number_funcs<'db>(cx: &mut Ctx<'db>, p: &Program<'db>) -> BTreeMap<FuncId, String> {
+    let db = cx.db;
+    let mut names = BTreeMap::new();
+    for iu in &p.instances {
+        let id = new_func(&mut names, iu.instance.display(db).to_string());
+        cx.funcs.insert(iu.instance, id);
+    }
+    // The lambdas, lifted, after the instances.
+    for iu in &p.instances {
+        let Some(body) = iu.instance.body(db) else { continue };
+        for (k, lambda) in body_lambdas(db, body).iter().enumerate() {
+            let id = new_func(&mut names, format!("{}::lambda{k}", iu.instance.display(db)));
+            cx.lambdas.insert((iu.instance, lambda.expr), id);
+        }
+    }
+    names
 }
 
 /// The effects that the program performs or handles, with their
