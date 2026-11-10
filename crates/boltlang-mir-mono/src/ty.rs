@@ -663,16 +663,17 @@ pub fn closed_ty<'db>(
     Subst { db, root, params, slots: &slots }.ty(ty)
 }
 
-/// Whether `ty` is a type parameter of an operation of an effect.
-fn is_op_param(db: &dyn Db, ty: &Ty<'_>) -> bool {
-    matches!(ty, Ty::Param(p) if matches!(p.def, GenericDefId::Function(f)
-        if matches!(f.container(db), ItemContainerId::Effect(_))))
-}
-
-fn op_param<'db>(ty: &Ty<'db>) -> GenericParamId<'db> {
+/// The type parameter of an operation of an effect that `ty` is, if it's
+/// one.
+fn op_param<'db>(db: &dyn Db, ty: &Ty<'db>) -> Option<GenericParamId<'db>> {
     match ty {
-        Ty::Param(p) => *p,
-        _ => unreachable!("only a parameter is an operation's"),
+        Ty::Param(p)
+            if matches!(p.def, GenericDefId::Function(f)
+                if matches!(f.container(db), ItemContainerId::Effect(_))) =>
+        {
+            Some(*p)
+        }
+        _ => None,
     }
 }
 
@@ -791,7 +792,7 @@ impl<'db> Subst<'_, 'db> {
                 Some(Slot::Row(r)) => MonoTy::Row(r.clone()),
                 // An operation's own type parameter, which a handler's arm
                 // or the operation's declaration has.
-                None if is_op_param(self.db, ty) => MonoTy::Any(op_param(ty)),
+                None if let Some(p) = op_param(self.db, ty) => MonoTy::Any(p),
                 _ => return Err(TyError::Unknown),
             },
             Ty::Builtin(b) => MonoTy::Builtin(*b),
@@ -950,7 +951,7 @@ impl<'db> Subst<'_, 'db> {
                 Some(Slot::Mut(m)) => *m,
                 // An operation's own mutability parameter, as its
                 // declaration has it: unwritten, so `imm`.
-                None if is_op_param(self.db, ty) => MonoMut::Imm,
+                None if op_param(self.db, ty).is_some() => MonoMut::Imm,
                 _ => return Err(TyError::Unknown),
             },
             // A mutability left undecided is `imm`, as the checker defaults it.
