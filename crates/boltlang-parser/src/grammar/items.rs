@@ -613,9 +613,8 @@ fn extern_block(p: &mut Parser, m: Marker) {
 }
 
 /// `import "./path";`, `import "./path" (a, b as c);`,
-/// `import "./path" as name;` or `import "./path" *;`, following the
-/// grammar's `import_declaration`, and `import Option.*;`, which the grammar
-/// doesn't have yet.
+/// `import "./path" as name;`, `import "./path" *;` or `import Option.*;`,
+/// following the grammar's `import_declaration`.
 fn import_item(p: &mut Parser, m: Marker) {
     p.bump(T![import]);
     if is_path_start(p) {
