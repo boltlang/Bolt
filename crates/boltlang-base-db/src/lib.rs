@@ -3,7 +3,6 @@
 //! `base-db`, it sits below the HIR crates so that they can query files.
 
 mod db;
-mod error;
 mod files;
 mod parse;
 mod settings;
@@ -32,7 +31,6 @@ pub type FxDashSet<K> = dashmap::DashSet<K, BuildHasherDefault<FxHasher>>;
 
 pub use {
     db::Db,
-    error::{Error, Result},
     files::{File, FilePath, Files},
     parse::{Parse, parse_file},
     settings::{DEFAULT_PRELUDE, Settings},
