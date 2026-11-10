@@ -30,33 +30,33 @@ pub(crate) enum PathMode {
 /// A path in an expression. Expressions only have single-segment paths,
 /// because `a.b` is a field access there.
 pub(crate) fn expr_path(p: &mut Parser) -> Option<CompletedMarker> {
+    single_segment_path(p, PathMode::Expr)
+}
+
+/// A dotted path like `Shape.Circle`, as used in patterns and attributes.
+pub(crate) fn dotted_path(p: &mut Parser) -> Option<CompletedMarker> {
+    qualified_path(p, PathMode::Expr)
+}
+
+/// A path in a type, like `Vec[T]`, `Shape.Circle` or `M[N].O`.
+pub(crate) fn type_path(p: &mut Parser) -> Option<CompletedMarker> {
+    qualified_path(p, PathMode::Type)
+}
+
+fn single_segment_path(p: &mut Parser, mode: PathMode) -> Option<CompletedMarker> {
     let m = p.start();
-    if path_segment(p, PathMode::Expr).is_none() {
+    if path_segment(p, mode).is_none() {
         m.abandon(p);
         return None;
     }
     Some(m.complete(p, PATH))
 }
 
-/// A dotted path like `Shape.Circle`, as used in patterns and attributes.
-pub(crate) fn dotted_path(p: &mut Parser) -> Option<CompletedMarker> {
-    let mut qualifier = expr_path(p)?;
+/// A path with any number of segments, separated by `.`.
+fn qualified_path(p: &mut Parser, mode: PathMode) -> Option<CompletedMarker> {
+    let mut qualifier = single_segment_path(p, mode)?;
     while p.at(T![.]) && p.nth_at_ts(1, PATH_SEGMENT_FIRST) {
-        qualifier = path_for_qualifier(p, qualifier, PathMode::Expr);
-    }
-    Some(qualifier)
-}
-
-/// A path in a type, like `Vec[T]`, `Shape.Circle` or `M[N].O`.
-pub(crate) fn type_path(p: &mut Parser) -> Option<CompletedMarker> {
-    let m = p.start();
-    if path_segment(p, PathMode::Type).is_none() {
-        m.abandon(p);
-        return None;
-    }
-    let mut qualifier = m.complete(p, PATH);
-    while p.at(T![.]) && p.nth_at_ts(1, PATH_SEGMENT_FIRST) {
-        qualifier = path_for_qualifier(p, qualifier, PathMode::Type);
+        qualifier = path_for_qualifier(p, qualifier, mode);
     }
     Some(qualifier)
 }
