@@ -1413,30 +1413,10 @@ impl<'db> Solver<'db> {
             self.equal(&constraint.ty, &ty, origin);
             return true;
         }
-        let mut found = None;
-        for &imp in self.impls {
-            let Some(target) = &impl_header(self.db, imp).class else { continue };
-            if target.class != goal.class {
-                continue;
-            }
-            let mut subst = HashMap::new();
-            match match_all(&target.args, &goal.args, &mut subst) {
-                Match::Yes if found.is_none() => found = Some((imp, subst)),
-                // Overlapping impls, or one that may match: wait until the
-                // types decide.
-                Match::Yes | Match::Maybe => return false,
-                Match::No => {}
-            }
-        }
-        let ty = match found {
-            Some((imp, subst)) => match impl_assoc_ty(self.db, imp, constraint.alias) {
+        let ty = match find_impl(self.db, self.impls, &goal) {
+            ImplSearch::Found(imp, subst) => match impl_assoc_ty(self.db, imp, constraint.alias) {
                 Some(ty) => {
-                    let ty = ty.fold(&mut |t| match t {
-                        Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
-                            Some(subst.get(p).cloned().unwrap_or(Ty::Error))
-                        }
-                        _ => None,
-                    });
+                    let ty = subst_impl_params(&ty, imp, &subst);
                     // What the impl gives can have associated types of its
                     // own, like the `A.Item` of `type Item = (A.Item, B.Item)`.
                     self.flatten_assoc(&ty, origin)
@@ -1444,12 +1424,15 @@ impl<'db> Solver<'db> {
                 // The impl doesn't define it, which is reported with the impl.
                 None => Ty::Error,
             },
-            None if goal.args.iter().any(has_vars) => return false,
+            // Overlapping impls, or one that may match: wait until the types
+            // decide.
+            ImplSearch::Unsure => return false,
+            ImplSearch::Missing if goal.args.iter().any(has_vars) => return false,
             // `C.Item` for a parameter `C` with `where Index[C]`.
-            None if self.assumptions.contains(&goal) => {
+            ImplSearch::Missing if self.assumptions.contains(&goal) => {
                 Ty::Assoc(constraint.alias, goal.args.clone())
             }
-            None => {
+            ImplSearch::Missing => {
                 let error = TypeError::NoInstance { origin, constraint: goal };
                 self.report_once(error);
                 Ty::Error
@@ -1880,38 +1863,17 @@ impl<'db> Solver<'db> {
             return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
         let has_vars = goal.args.iter().any(has_vars);
-        let mut found = None;
-        let mut maybe = has_vars && self.assumptions.iter().any(|a| a.class == goal.class);
-        for &imp in self.impls {
-            let Some(target) = &impl_header(self.db, imp).class else { continue };
-            if target.class != goal.class {
-                continue;
-            }
-            let mut subst = HashMap::new();
-            match match_all(&target.args, &goal.args, &mut subst) {
-                Match::Yes => {
-                    if found.is_some() {
-                        // Overlapping impls; wait until something decides.
-                        return Step::Wait;
-                    }
-                    found = Some((imp, subst));
-                }
-                Match::Maybe => maybe = true,
-                Match::No => {}
-            }
-        }
-        match found {
-            Some(_) if maybe => Step::Wait,
-            Some((imp, subst)) => {
+        // A `where` clause of the class may give the instance once the
+        // variables are known.
+        let assumed = has_vars && self.assumptions.iter().any(|a| a.class == goal.class);
+        match find_impl(self.db, self.impls, goal) {
+            // Overlapping impls, or one that may match: wait until
+            // something decides.
+            ImplSearch::Unsure => Step::Wait,
+            ImplSearch::Found(..) if assumed => Step::Wait,
+            ImplSearch::Found(imp, subst) => {
                 let def = GenericDefId::Impl(imp);
-                let instantiate = |t: &Ty<'db>| {
-                    t.fold(&mut |t| match t {
-                        Ty::Param(p) if p.def == def => {
-                            Some(subst.get(p).cloned().unwrap_or(Ty::Error))
-                        }
-                        _ => None,
-                    })
-                };
+                let instantiate = |t: &Ty<'db>| subst_impl_params(t, imp, &subst);
                 let predicates = generic_predicates(self.db, def);
                 let subgoals = predicates.predicates.iter().map(|p| p.map(instantiate)).collect();
                 let at_most = predicates.at_most.iter().map(|(c, _)| c.map(instantiate)).collect();
@@ -1926,10 +1888,61 @@ impl<'db> Solver<'db> {
                     .collect();
                 Step::Solved(subgoals, at_most, equalities, Some(imp))
             }
-            None if maybe || has_vars => Step::Wait,
-            None => Step::NoInstance,
+            ImplSearch::Missing if has_vars => Step::Wait,
+            ImplSearch::Missing => Step::NoInstance,
         }
     }
+}
+
+/// What [`find_impl`] finds.
+enum ImplSearch<'db> {
+    /// The one impl whose instance fits, with what its parameters are.
+    Found(ImplId<'db>, HashMap<GenericParamId<'db>, Ty<'db>>),
+    /// Several impls fit, or one may fit once the variables are known.
+    Unsure,
+    /// No impl fits.
+    Missing,
+}
+
+/// The impl among `impls` whose instance is `goal`, without deciding any
+/// variables.
+fn find_impl<'db>(
+    db: &'db dyn Db,
+    impls: &[ImplId<'db>],
+    goal: &ClassConstraint<'db>,
+) -> ImplSearch<'db> {
+    let mut found = None;
+    for &imp in impls {
+        let Some(target) = &impl_header(db, imp).class else { continue };
+        if target.class != goal.class {
+            continue;
+        }
+        let mut subst = HashMap::new();
+        match match_all(&target.args, &goal.args, &mut subst) {
+            Match::Yes if found.is_none() => found = Some((imp, subst)),
+            Match::Yes | Match::Maybe => return ImplSearch::Unsure,
+            Match::No => {}
+        }
+    }
+    match found {
+        Some((imp, subst)) => ImplSearch::Found(imp, subst),
+        None => ImplSearch::Missing,
+    }
+}
+
+/// `ty` with the parameters of `imp` replaced by what `subst` says they
+/// are, and those it says nothing about by the error type.
+fn subst_impl_params<'db>(
+    ty: &Ty<'db>,
+    imp: ImplId<'db>,
+    subst: &HashMap<GenericParamId<'db>, Ty<'db>>,
+) -> Ty<'db> {
+    ty.fold(&mut |t| match t {
+        Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
+            Some(subst.get(p).cloned().unwrap_or(Ty::Error))
+        }
+        _ => None,
+    })
 }
 
 enum Step<'db> {
@@ -2187,27 +2200,11 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
         let Ty::Assoc(alias, args) = t else { return None };
         let args: Box<[Ty<'db>]> = args.iter().map(|a| normalize_assoc(db, file, a)).collect();
         let ItemContainerId::Class(class) = alias.container(db) else { return None };
-        let mut found = None;
-        for &imp in visible_impls(db, file) {
-            let Some(target) = &impl_header(db, imp).class else { continue };
-            if target.class != class {
-                continue;
-            }
-            let mut subst = HashMap::new();
-            match match_all(&target.args, &args, &mut subst) {
-                Match::Yes if found.is_none() => found = Some((imp, subst)),
-                Match::Yes | Match::Maybe => return Some(Ty::Assoc(*alias, args)),
-                Match::No => {}
-            }
-        }
-        let Some((imp, subst)) = found else { return Some(Ty::Assoc(*alias, args)) };
-        let ty = impl_assoc_ty(db, imp, *alias)?;
-        let ty = ty.fold(&mut |t| match t {
-            Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
-                Some(subst.get(p).cloned().unwrap_or(Ty::Error))
-            }
-            _ => None,
-        });
+        let goal = ClassConstraint { class, args };
+        let ImplSearch::Found(imp, subst) = find_impl(db, visible_impls(db, file), &goal) else {
+            return Some(Ty::Assoc(*alias, goal.args));
+        };
+        let ty = subst_impl_params(&impl_assoc_ty(db, imp, *alias)?, imp, &subst);
         // It can have associated types of its own.
         Some(normalize_assoc(db, file, &ty))
     })
