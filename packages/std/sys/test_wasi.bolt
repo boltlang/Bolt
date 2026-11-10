@@ -109,3 +109,11 @@ fn poll_oneoff_waits_for_a_clock() {
 fn proc_exit_with_0_ends_the_program() {
   proc_exit(0);
 }
+
+#[cfg(host = "wasm")]
+#[test]
+fn stdout_can_be_written() {
+  let r = fd_fdstat_get(1);
+  // Bit 6 of the rights is `fd_write`.
+  assert(not_there(r.0) || (succeeded(r.0) && (r.1.rights_base & 64u64) != 0u64));
+}

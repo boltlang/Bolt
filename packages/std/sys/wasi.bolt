@@ -10,6 +10,7 @@
 
 import "../ops" *;
 import "../array" (array_len, array_alloc, array_set, array_freeze);
+import "../prim" (u16_load, u32_load, u64_load, u16_store, u32_store, u64_store);
 
 pub(package) type Size = u32;
 pub(package) type Filesize = u64;
@@ -363,9 +364,9 @@ pub(package) fn fd_fdstat_get(fd: Fd) -> (Errno, Fdstat) {
   let e = fd_fdstat_get_bytes(fd, buf);
   let stat = Fdstat {
     filetype: filetype_of(buf[0]),
-    flags: read_u16(buf, 2),
-    rights_base: read_u64(buf, 8),
-    rights_inheriting: read_u64(buf, 16),
+    flags: u16_load(buf, 2),
+    rights_base: u64_load(buf, 8),
+    rights_inheriting: u64_load(buf, 16),
   };
   (e, stat)
 }
@@ -408,7 +409,7 @@ fn fd_prestat_get_bytes(fd: Fd, #[addr] stat: mut [u8]) -> Errno;
 pub(package) fn fd_prestat_get(fd: Fd) -> (Errno, Prestat) {
   let buf = mut [0u8; PRESTAT_SIZE as usize];
   let e = fd_prestat_get_bytes(fd, buf);
-  (e, Prestat { kind: Preopentype.Dir, name_len: read_u32(buf, 4) })
+  (e, Prestat { kind: Preopentype.Dir, name_len: u32_load(buf, 4) })
 }
 
 /// The name of a preopened directory, written to `path`.
@@ -570,49 +571,6 @@ pub(package) fn sock_shutdown(fd: Fd, how: Sdflags) -> Errno;
 
 // WASI's layouts, little-endian.
 
-fn read_u16(buf: [u8], at: i32) -> u16 = (buf[at] as u16) | ((buf[at + 1] as u16) << 8);
-
-fn read_u32(buf: [u8], at: i32) -> u32 {
-  let mut n: u32 = 0;
-  let mut i = 3;
-  while i >= 0 {
-    n = (n << 8) | (buf[at + i] as u32);
-    i = i - 1;
-  }
-  n
-}
-
-fn read_u64(buf: [u8], at: i32) -> u64 {
-  let mut n: u64 = 0;
-  let mut i = 7;
-  while i >= 0 {
-    n = (n << 8) | (buf[at + i] as u64);
-    i = i - 1;
-  }
-  n
-}
-
-fn write_u16(buf: mut [u8], at: i32, n: u16) {
-  buf[at] = n as u8;
-  buf[at + 1] = (n >> 8) as u8;
-}
-
-fn write_u32(buf: mut [u8], at: i32, n: u32) {
-  let mut i = 0;
-  while i < 4 {
-    buf[at + i] = (n >> (8 * i as u32)) as u8;
-    i = i + 1;
-  }
-}
-
-fn write_u64(buf: mut [u8], at: i32, n: u64) {
-  let mut i = 0;
-  while i < 8 {
-    buf[at + i] = (n >> (8 * i as u32)) as u8;
-    i = i + 1;
-  }
-}
-
 fn filetype_of(n: u8) -> Filetype = match n {
   1 => Filetype.BlockDevice,
   2 => Filetype.CharacterDevice,
@@ -631,52 +589,52 @@ fn eventtype_of(n: u8) -> Eventtype = match n {
 };
 
 fn filestat_of(buf: [u8]) -> Filestat = Filestat {
-  dev: read_u64(buf, 0),
-  ino: read_u64(buf, 8),
+  dev: u64_load(buf, 0),
+  ino: u64_load(buf, 8),
   filetype: filetype_of(buf[16]),
-  nlink: read_u64(buf, 24),
-  size: read_u64(buf, 32),
-  atim: read_u64(buf, 40),
-  mtim: read_u64(buf, 48),
-  ctim: read_u64(buf, 56),
+  nlink: u64_load(buf, 24),
+  size: u64_load(buf, 32),
+  atim: u64_load(buf, 40),
+  mtim: u64_load(buf, 48),
+  ctim: u64_load(buf, 56),
 };
 
 /// The entry of a directory at `at` in what `fd_readdir` wrote. Its name
 /// is the `namlen` bytes after it, at `at + DIRENT_SIZE`.
 pub(package) fn dirent_of(buf: [u8], at: i32) -> Dirent = Dirent {
-  next: read_u64(buf, at),
-  ino: read_u64(buf, at + 8),
-  namlen: read_u32(buf, at + 16),
+  next: u64_load(buf, at),
+  ino: u64_load(buf, at + 8),
+  namlen: u32_load(buf, at + 16),
   filetype: filetype_of(buf[at + 20]),
 };
 
 fn event_of(buf: [u8], at: i32) -> Event = Event {
-  userdata: read_u64(buf, at),
-  error: errno_of(read_u16(buf, at + 8)),
+  userdata: u64_load(buf, at),
+  error: errno_of(u16_load(buf, at + 8)),
   kind: eventtype_of(buf[at + 10]),
-  nbytes: read_u64(buf, at + 16),
-  flags: read_u16(buf, at + 24),
+  nbytes: u64_load(buf, at + 16),
+  flags: u16_load(buf, at + 24),
 };
 
 fn write_subscription(buf: mut [u8], at: i32, sub: Subscription) {
   match sub {
     Subscription.Clock { userdata, id, timeout, precision, flags } => {
-      write_u64(buf, at, userdata);
+      u64_store(buf, at, userdata);
       buf[at + 8] = 0u8;
-      write_u32(buf, at + 16, clockid_code(id));
-      write_u64(buf, at + 24, timeout);
-      write_u64(buf, at + 32, precision);
-      write_u16(buf, at + 40, flags);
+      u32_store(buf, at + 16, clockid_code(id));
+      u64_store(buf, at + 24, timeout);
+      u64_store(buf, at + 32, precision);
+      u16_store(buf, at + 40, flags);
     }
     Subscription.FdRead { userdata, fd } => {
-      write_u64(buf, at, userdata);
+      u64_store(buf, at, userdata);
       buf[at + 8] = 1u8;
-      write_u32(buf, at + 16, fd);
+      u32_store(buf, at + 16, fd);
     }
     Subscription.FdWrite { userdata, fd } => {
-      write_u64(buf, at, userdata);
+      u64_store(buf, at, userdata);
       buf[at + 8] = 2u8;
-      write_u32(buf, at + 16, fd);
+      u32_store(buf, at + 16, fd);
     }
   }
 }
