@@ -18,7 +18,7 @@ use std::{
     time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
-use conduit_eval::{Arrays, HostError, Value};
+use conduit_eval::{Arrays, Host, HostError, Value};
 use conduit_ir::{Extern, Ty};
 
 /// The errors of `emu.bolt`'s `Error`, by their index there.
@@ -88,10 +88,12 @@ impl Emu {
             captured: None,
         }
     }
+}
 
+impl Host for Emu {
     /// Call the function `name`, declared as `decl`: its results, as the
     /// extern declares them.
-    pub(crate) fn call(
+    fn call(
         &mut self,
         name: &str,
         decl: &Extern,
@@ -244,7 +246,9 @@ impl Emu {
         };
         Ok(typed(&decl.sig.results, &results))
     }
+}
 
+impl Emu {
     fn write(&mut self, fd: i64, data: &[u8]) -> Result<(), Errno> {
         let result = match (fd, &mut self.captured) {
             (1 | 2, Some(captured)) => {

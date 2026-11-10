@@ -3,8 +3,8 @@
 //! [`crate::emu`]), with the process's stdout, stderr and files. Calling an
 //! extern linked for another target stops the program with an error.
 
-use conduit_eval::{Arrays, ErrorKind, Host, HostError, Machine, Value};
-use conduit_ir::{Extern, FuncId};
+use conduit_eval::{ErrorKind, Machine};
+use conduit_ir::FuncId;
 
 use crate::{Lowered, emu::Emu};
 
@@ -57,10 +57,10 @@ fn execute(
     fuel: Option<u64>,
     emu: Emu,
 ) -> (Emu, Result<(), RunError>) {
-    let mut machine = Machine::new(&program.module, Stdio(emu));
+    let mut machine = Machine::new(&program.module, emu);
     machine.fuel = fuel;
     let result = machine.call(f, Vec::new());
-    let Stdio(emu) = machine.host;
+    let emu = machine.host;
     let Err(e) = result else { return (emu, Ok(())) };
     let message = match &e.kind {
         // `exit(0)` ends the program as its end does.
@@ -79,19 +79,4 @@ fn execute(
         }
     };
     (emu, Err(RunError { message }))
-}
-
-/// The evaluator's host, [`Emu`].
-struct Stdio(Emu);
-
-impl Host for Stdio {
-    fn call(
-        &mut self,
-        name: &str,
-        decl: &Extern,
-        args: &[Value],
-        arrays: &mut Arrays<'_, '_>,
-    ) -> Result<Vec<Value>, HostError> {
-        self.0.call(name, decl, args, arrays)
-    }
 }
