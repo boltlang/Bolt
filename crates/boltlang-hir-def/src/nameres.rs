@@ -28,7 +28,9 @@ use crate::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         MacroRulesId, ModuleDefId, StructId, TypeAliasId,
     },
-    item_tree::{AssocItem, AstId, ImportKind, ItemTree, ModItem, RawVisibility, item_tree},
+    item_tree::{
+        AssocItem, AstId, Import, ImportKind, ItemTree, ModItem, RawVisibility, item_tree,
+    },
 };
 
 /// The namespaces a name can be in. A name can refer to a type, a value and
@@ -61,6 +63,12 @@ impl<'db> ScopeEntry<'db> {
     /// A name that `import` brings in.
     fn imported(def: ModuleDefId<'db>, visibility: RawVisibility, import: AstId) -> Self {
         ScopeEntry { def, visibility, import: Some(import), prelude: false }
+    }
+
+    /// The name `entry` of another file, as `import` brings it in.
+    fn imported_by(import: &Import, entry: &ScopeEntry<'db>) -> Self {
+        let visibility = narrower(import.visibility, entry.visibility);
+        ScopeEntry::imported(entry.def, visibility, import.ast_id)
     }
 }
 
@@ -486,13 +494,6 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             }
         };
         let exports = &file_scope(db, target).scope;
-        let imported = |entry: &ScopeEntry<'db>| {
-            ScopeEntry::imported(
-                entry.def,
-                narrower(import.visibility, entry.visibility),
-                import.ast_id,
-            )
-        };
         match &import.kind {
             ImportKind::Plain => {}
             ImportKind::Alias(alias) => {
@@ -516,7 +517,12 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                                 continue;
                             }
                             found = true;
-                            out.define(ns, local_name, imported(entry), import.ast_id);
+                            out.define(
+                                ns,
+                                local_name,
+                                ScopeEntry::imported_by(import, entry),
+                                import.ast_id,
+                            );
                         }
                     }
                     if !found {
@@ -542,17 +548,8 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     // A glob import brings in all the names visible here, but doesn't
     // replace names that are already in scope.
     for (import, target) in globs {
-        for ns in Namespace::ALL {
-            for (name, entry) in file_scope(db, target).scope.entries(ns) {
-                if is_visible_from(db, entry.visibility, target, file) {
-                    let entry = ScopeEntry::imported(
-                        entry.def,
-                        narrower(import.visibility, entry.visibility),
-                        import.ast_id,
-                    );
-                    out.scope.insert(ns, name.clone(), entry);
-                }
-            }
+        for (ns, name, entry) in visible_names(db, target, file) {
+            out.scope.insert(ns, name.clone(), ScopeEntry::imported_by(import, entry));
         }
     }
     // The prelude's names come last, so that everything else replaces them.
@@ -560,18 +557,14 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let mut prelude = ItemScope::default();
     match prelude_file(db, file).clone() {
         Ok(Some(source)) => {
-            for ns in Namespace::ALL {
-                for (name, entry) in file_scope(db, source).scope.entries(ns) {
-                    if is_visible_from(db, entry.visibility, source, file) {
-                        let entry = ScopeEntry {
-                            visibility: RawVisibility::Private,
-                            import: None,
-                            prelude: true,
-                            ..*entry
-                        };
-                        prelude.insert(ns, name.clone(), entry);
-                    }
-                }
+            for (ns, name, entry) in visible_names(db, source, file) {
+                let entry = ScopeEntry {
+                    visibility: RawVisibility::Private,
+                    import: None,
+                    prelude: true,
+                    ..*entry
+                };
+                prelude.insert(ns, name.clone(), entry);
             }
         }
         Ok(None) => {}
@@ -617,6 +610,20 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     }
     out.scope.extend(&prelude);
     out
+}
+
+/// The names of `target` that `from` can import, in each namespace, as
+/// [`ItemScope::entries`] has them.
+fn visible_names<'db>(
+    db: &'db dyn Db,
+    target: File,
+    from: File,
+) -> impl Iterator<Item = (Namespace, &'db Name, &'db ScopeEntry<'db>)> {
+    let scope = &file_scope(db, target).scope;
+    Namespace::ALL
+        .into_iter()
+        .flat_map(move |ns| scope.entries(ns).map(move |(name, entry)| (ns, name, entry)))
+        .filter(move |(_, _, entry)| is_visible_from(db, entry.visibility, target, from))
 }
 
 /// The package whose prelude `file` gets, and whether that's asked for: by
