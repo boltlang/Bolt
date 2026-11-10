@@ -77,15 +77,7 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
             match def_kind {
                 DefWithBody::Function(f) => {
-                    for assumption in assumptions(db, f) {
-                        ctx.solver.assume(assumption);
-                    }
-                    for (assumption, _) in at_most_assumptions(db, f) {
-                        ctx.solver.assume_at_most(assumption);
-                    }
-                    for (assumption, _) in equality_assumptions(db, f) {
-                        ctx.solver.assume_assoc(assumption);
-                    }
+                    assume_declared(db, ctx.solver, f);
                     let Ty::Fn(params, ret, _, effects) = &declared_scheme(db, f).ty else {
                         unreachable!()
                     };
@@ -300,6 +292,20 @@ fn file_inference_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _file: File) -> F
     FileInference::default()
 }
 
+/// Assume in `solver` what the bounds and `where` clauses of `f` and of its
+/// impl or class say, as its body can.
+fn assume_declared<'db>(db: &'db dyn Db, solver: &mut Solver<'db>, f: FunctionId<'db>) {
+    for assumption in assumptions(db, f) {
+        solver.assume(assumption);
+    }
+    for (assumption, _) in at_most_assumptions(db, f) {
+        solver.assume_at_most(assumption);
+    }
+    for (assumption, _) in equality_assumptions(db, f) {
+        solver.assume_assoc(assumption);
+    }
+}
+
 /// What the body of `f` can assume because the values it's given exist
 /// (#256): that its parameter types, and its impl's instance, are
 /// well-formed, like `T ⊑ 'm` for `xs: 'm [T]`, as Rust's implied bounds
@@ -338,15 +344,7 @@ fn infer_group<'db>(
     let mut solver = Solver::new(db, file);
     let mut signatures = Vec::new();
     for &f in group {
-        for assumption in assumptions(db, f) {
-            solver.assume(assumption);
-        }
-        for (assumption, _) in at_most_assumptions(db, f) {
-            solver.assume_at_most(assumption);
-        }
-        for (assumption, _) in equality_assumptions(db, f) {
-            solver.assume_assoc(assumption);
-        }
+        assume_declared(db, &mut solver, f);
         let sig = fn_sig(db, f);
         let params: Box<[Ty<'db>]> = sig
             .params
