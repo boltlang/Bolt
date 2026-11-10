@@ -387,11 +387,7 @@ fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut F
         let variants = match out.scope.get(Namespace::Types, owner).map(|entry| entry.def) {
             Some(ModuleDefId::Struct(_)) => &[][..],
             Some(ModuleDefId::Enum(id)) => &id.item(db).variants[..],
-            Some(ModuleDefId::TypeAlias(id))
-                if id.item(db).link.is_some() && !id.item(db).has_value =>
-            {
-                &[][..]
-            }
+            Some(ModuleDefId::TypeAlias(id)) if id.item(db).is_host_type() => &[][..],
             _ => {
                 out.diagnostics.push(NameResDiagnostic::UnresolvedOwner {
                     function: f.ast_id,

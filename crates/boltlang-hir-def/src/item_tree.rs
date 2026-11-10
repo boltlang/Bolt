@@ -365,6 +365,13 @@ pub struct TypeAlias {
     pub ast_id: AstId,
 }
 
+impl TypeAlias {
+    /// Whether it's a type of the host, like `#[link(wasm)] type JsString;`.
+    pub fn is_host_type(&self) -> bool {
+        self.link.is_some() && !self.has_value
+    }
+}
+
 /// `import "./path" ...;`
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Import {

@@ -603,7 +603,7 @@ fn owner_of<'db>(db: &'db dyn Db, ty: TypeNs<'db>) -> Option<(File, &'db Name)> 
         TypeNs::Struct(id) => Some((id.file(db), id.item(db).name.as_ref()?)),
         TypeNs::Enum(id) => Some((id.file(db), id.item(db).name.as_ref()?)),
         // A type of the host, like `JsString.from`.
-        TypeNs::TypeAlias(id) if id.item(db).link.is_some() && !id.item(db).has_value => {
+        TypeNs::TypeAlias(id) if id.item(db).is_host_type() => {
             Some((id.file(db), id.item(db).name.as_ref()?))
         }
         _ => None,
