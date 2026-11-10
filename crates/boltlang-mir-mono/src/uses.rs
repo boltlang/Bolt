@@ -259,16 +259,8 @@ impl<'a, 'db> Cx<'a, 'db> {
         let mut found = vec![None; callee.kinds.len()];
         bind(&callee.params, &callee.ty, use_ty, &mut found);
         let params = generic_param_ids(db, [GenericDefId::Effect(effect)]);
-        let effect_args = params
-            .iter()
-            .map(|p| {
-                let i = callee.params.iter().position(|q| q == p);
-                match i.and_then(|i| found[i].clone()) {
-                    Some(Slot::Ty(t)) => Ok(t),
-                    _ => Err(UseError::UnknownType),
-                }
-            })
-            .collect::<Result<_, _>>()?;
+        let effect_args =
+            params.iter().map(|p| found_ty(callee, &found, p)).collect::<Result<_, _>>()?;
         Ok(Use::Op { op, effect_args })
     }
 
@@ -420,13 +412,7 @@ impl<'a, 'db> Cx<'a, 'db> {
         class_params
             .iter()
             .filter(|&&p| !is_hidden_param(self.db, p))
-            .map(|p| {
-                let i = callee.params.iter().position(|q| q == p);
-                match i.and_then(|i| found[i].clone()) {
-                    Some(Slot::Ty(t)) => Ok(t),
-                    _ => Err(UseError::UnknownType),
-                }
-            })
+            .map(|p| found_ty(callee, &found, p))
             .collect()
     }
 
@@ -651,6 +637,19 @@ impl<'a, 'db> Cx<'a, 'db> {
             }
         }
         found
+    }
+}
+
+/// The type that matching a use found for the parameter `p` of `callee`.
+fn found_ty<'db>(
+    callee: &Generics<'db>,
+    found: &[Option<Slot<'db>>],
+    p: &GenericParamId<'db>,
+) -> Result<MonoTy<'db>, UseError> {
+    let i = callee.params.iter().position(|q| q == p);
+    match i.and_then(|i| found[i].clone()) {
+        Some(Slot::Ty(t)) => Ok(t),
+        _ => Err(UseError::UnknownType),
     }
 }
 
