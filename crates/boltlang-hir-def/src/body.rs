@@ -51,6 +51,10 @@ pub struct Body {
     pub store: ExpressionStore,
     /// The patterns of the parameters of a function, in order.
     pub params: Box<[PatId]>,
+    /// The default value of each parameter, like the `0` of `width: i32 =
+    /// 0`, as many as `params`. It's evaluated where the function is
+    /// called, and sees the parameters before it.
+    pub defaults: Box<[Option<ExprId>]>,
     /// The expression the body evaluates.
     pub body_expr: ExprId,
 }
@@ -73,6 +77,7 @@ pub fn body_with_source_map<'db>(
     let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
     let mut collector = ExprCollector::new();
     let mut params = Vec::new();
+    let mut defaults = Vec::new();
     let body_expr = match def {
         DefWithBody::Function(id) => {
             let decl = id.item(db).ast_id.to_node(db, file, &root).and_then(ast::FuncDecl::cast);
@@ -80,17 +85,20 @@ pub fn body_with_source_map<'db>(
                 Some(decl) => {
                     if let Some(list) = decl.param_list() {
                         // In the order of the signature's parameters.
-                        params = list
+                        let items: Vec<_> = list
                             .items()
                             .filter_map(|item| match item {
-                                ast::ParamItem::Param(p) => Some(p.pattern()),
-                                ast::ParamItem::Rest(r) => Some(r.pattern()),
+                                ast::ParamItem::Param(p) => Some((p.pattern(), p.default())),
+                                ast::ParamItem::Rest(r) => Some((r.pattern(), None)),
                                 ast::ParamItem::Marker
                                 | ast::ParamItem::PositionalMarker
                                 | ast::ParamItem::Pack(_) => None,
                             })
-                            .map(|p| collector.lower_opt_pat(p))
                             .collect();
+                        for (pattern, default) in items {
+                            params.push(collector.lower_opt_pat(pattern));
+                            defaults.push(default.map(|e| collector.lower_expr(e)));
+                        }
                     }
                     collector.lower_opt_expr(decl.body())
                 }
@@ -134,7 +142,8 @@ pub fn body_with_source_map<'db>(
     };
     let (mut store, source_map) = collector.finish();
     resolve_variant_patterns(db, file, &mut store);
-    (Body { store, params: params.into(), body_expr }, source_map)
+    let (params, defaults) = (params.into(), defaults.into());
+    (Body { store, params, defaults, body_expr }, source_map)
 }
 
 /// A name on its own in a pattern that's a variant in the scope of the

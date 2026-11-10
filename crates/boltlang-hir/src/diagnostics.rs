@@ -247,6 +247,12 @@ pub enum DiagnosticKind<'db> {
     /// A function at the top level of a file without a body, which only a
     /// builtin or a function the host provides can be.
     MissingBody,
+    /// A positional parameter without a default after one with a default,
+    /// which only a call by name could give.
+    DefaultMissing,
+    /// A default of a parameter of a method in a class impl: calls through
+    /// the class use the class's defaults.
+    DefaultInImpl,
     /// A type alias at the top level of a file without a type, which only
     /// a type the host provides can be.
     MissingType,
@@ -1124,11 +1130,15 @@ impl<'db> Collector<'db> {
         self.test(id);
         self.builtin_decl(id);
         let (sig, map) = function_signature_with_source_map(db, id);
+        self.param_defaults(id, sig, map);
         self.lower(map, &fn_sig(db, id).diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::Function(id)).diagnostics);
-        if id.item(db).has_body {
+        // A function without a body, like a class method, can have defaults,
+        // which are checked like a body.
+        if id.item(db).has_body || sig.params.iter().any(|p| p.default.is_some()) {
             self.body(DefWithBody::Function(id));
-        } else {
+        }
+        if !id.item(db).has_body {
             // Without a body, like a class method, nothing else looks at
             // the types it's given.
             let lowered = fn_sig(db, id);
@@ -1266,6 +1276,39 @@ impl<'db> Collector<'db> {
         let tys = sig.params.iter().flatten().chain(sig.ret.iter());
         if let Some(t) = tys.into_iter().find(|t| sized(t)) {
             self.push(range, DiagnosticKind::BadLink { reason: BadLink::EmuSize(t.clone()) });
+        }
+    }
+
+    /// Report a positional parameter without a default after one with a
+    /// default, and defaults in a method of a class impl, which takes the
+    /// class's.
+    fn param_defaults(
+        &mut self,
+        f: FunctionId<'db>,
+        sig: &boltlang_hir_def::signatures::FunctionSignature,
+        map: &ExpressionStoreSourceMap,
+    ) {
+        let in_impl = matches!(f.container(self.db), ItemContainerId::Impl(imp)
+            if impl_header(self.db, imp).class.is_some());
+        let mut defaulted = false;
+        for param in sig.params.iter() {
+            if let Some(default) = param.default
+                && in_impl
+            {
+                let range = map.expr_syntax(default).map(ptr_range);
+                self.push(range, DiagnosticKind::DefaultInImpl);
+            }
+            if param.kind != boltlang_hir_def::hir::ParamKind::Positional {
+                continue;
+            }
+            match param.default {
+                Some(_) => defaulted = true,
+                None if defaulted => {
+                    let range = param.type_ref.and_then(|t| map.type_syntax(t)).map(ptr_range);
+                    self.push(range, DiagnosticKind::DefaultMissing);
+                }
+                None => {}
+            }
         }
     }
 

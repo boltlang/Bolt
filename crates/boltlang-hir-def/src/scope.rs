@@ -55,6 +55,17 @@ impl ExprScopes {
         for &param in body.params.iter() {
             scopes.walk_pat_exprs(body, param, root);
         }
+        // The default of a parameter sees the parameters before it, in a
+        // scope of its own for each.
+        let mut before = scopes.new_scope(None);
+        for (&param, default) in body.params.iter().zip(body.defaults.iter()) {
+            if let Some(default) = *default {
+                scopes.walk_expr(body, default, before);
+            }
+            let next = scopes.new_scope(Some(before));
+            scopes.add_pat_bindings(body, next, param);
+            before = next;
+        }
         scopes.walk_expr(body, body.body_expr, root);
         scopes
     }

@@ -735,10 +735,19 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let origin = self.origin(self.body.body_expr);
         let ret = &self.solver.flatten_assoc(ret, origin);
         let mut params = params.iter();
+        let mut tys = Vec::new();
         for &pat in self.body.params.iter() {
             let ty = params.next().cloned().unwrap_or(Ty::Error);
             let ty = self.solver.flatten_assoc(&ty, origin);
             self.check_pat(pat, &ty);
+            tys.push(ty);
+        }
+        // A default has the type of its parameter. It's evaluated where the
+        // function is called, so what it does, the function does.
+        for (default, ty) in self.body.defaults.iter().zip(&tys) {
+            if let Some(default) = *default {
+                self.check_expr(default, ty);
+            }
         }
         self.return_ty = ret.clone();
         self.return_reason = match self.def.def(self.db) {

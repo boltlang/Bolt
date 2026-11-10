@@ -134,6 +134,8 @@ impl DiagnosticCode {
     pub const NOT_SPREADABLE: Self = Self("E0257");
     pub const NOT_A_PACK: Self = Self("E0258");
     pub const DUPLICATE_ARGUMENT: Self = Self("E0259");
+    pub const DEFAULT_MISSING: Self = Self("E0260");
+    pub const DEFAULT_IN_IMPL: Self = Self("E0261");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -717,6 +719,15 @@ fn describe(
         K::DuplicateArgument { name } => {
             (C::DUPLICATE_ARGUMENT, format!("the argument `{name}` is given more than once"))
         }
+        K::DefaultMissing => (
+            C::DEFAULT_MISSING,
+            "this parameter needs a default, since a positional parameter before it has one".into(),
+        ),
+        K::DefaultInImpl => (
+            C::DEFAULT_IN_IMPL,
+            "a method of an impl takes the defaults of the class's declaration, so it can't have its own"
+                .into(),
+        ),
         K::DuplicateField { name } => (C::DUPLICATE_FIELD, format!("the field `{name}` is given more than once")),
         K::NotSpreadable { ty } => (
             C::NOT_SPREADABLE,

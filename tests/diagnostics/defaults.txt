@@ -1,0 +1,28 @@
+================================================================================
+A positional parameter after one with a default needs a default
+================================================================================
+fn f(a: i32 = 1, b: i32) -> i32 = a;
+                  //^^^ error: this parameter needs a default, since a positional parameter before it has one
+fn g(a: i32 = 1, *, b: i32) -> i32 = a;
+
+================================================================================
+A method of an impl has the class's defaults
+================================================================================
+class Size[T] { fn size(x: T, scale: i32 = 1) -> i32; }
+impl Size[Bool] { fn size(x: Bool, scale: i32 = 2) -> i32 = scale; }
+                                              //^ error: a method of an impl takes the defaults of the class's declaration, so it can't have its own
+
+================================================================================
+A default sees the parameters before it
+================================================================================
+fn f(a: i32, b: i32 = a) -> i32 = b;
+fn g(a: i32 = b, b: i32 = 0) -> i32 = a;
+            //^ error: cannot find `b`
+
+================================================================================
+A default has the type of its parameter
+================================================================================
+fn f(a: i32, b: Bool = 3) -> i32 = a;
+                     //^ error: expected `Bool`, found an integer
+class Size[T] { fn size(x: T, scale: i32 = True) -> i32; }
+                                         //^^^^ error: expected `i32`, found `Bool`
