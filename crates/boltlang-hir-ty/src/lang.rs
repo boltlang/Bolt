@@ -20,20 +20,39 @@ use boltlang_hir_def::{
 
 use crate::{AdtId, Ty, lower::assoc_type};
 
-/// The struct called `name` in the prelude, as `file` sees it. Files of
-/// the prelude's own package find it too.
-fn prelude_struct<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<StructId<'db>> {
+/// What's called `name` in the namespace `ns` of the prelude, as `file`
+/// sees it. Files of the prelude's own package, which don't get the
+/// prelude, find it too, in their own copy of the package.
+fn prelude_def<'db>(
+    db: &'db dyn Db,
+    file: File,
+    ns: Namespace,
+    name: &str,
+) -> Option<ModuleDefId<'db>> {
     let lib = prelude_lib(db, file)?;
-    match file_scope(db, lib).scope.get(Namespace::Types, &Name::new(name))?.def {
+    Some(file_scope(db, lib).scope.get(ns, &Name::new(name))?.def)
+}
+
+/// The struct called `name` in the prelude, as `file` sees it.
+fn prelude_struct<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<StructId<'db>> {
+    match prelude_def(db, file, Namespace::Types, name)? {
         ModuleDefId::Struct(id) => Some(id),
         _ => None,
     }
 }
 
+/// The enum called `name` in the prelude, as `file` sees it.
 fn prelude_enum<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<EnumId<'db>> {
-    let lib = prelude_lib(db, file)?;
-    match file_scope(db, lib).scope.get(Namespace::Types, &Name::new(name))?.def {
+    match prelude_def(db, file, Namespace::Types, name)? {
         ModuleDefId::Enum(id) => Some(id),
+        _ => None,
+    }
+}
+
+/// The function called `name` in the prelude, as `file` sees it.
+fn prelude_fn<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<FunctionId<'db>> {
+    match prelude_def(db, file, Namespace::Values, name)? {
+        ModuleDefId::Function(id) => Some(id),
         _ => None,
     }
 }
@@ -100,21 +119,13 @@ pub fn char_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
 /// The function `repr` of the prelude, as `file` sees it: how a
 /// value of a type with an impl of `Debug` looks, as a `String`.
 pub fn repr_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
-    let lib = prelude_lib(db, file)?;
-    match file_scope(db, lib).scope.get(Namespace::Values, &Name::new("repr"))?.def {
-        ModuleDefId::Function(id) => Some(id),
-        _ => None,
-    }
+    prelude_fn(db, file, "repr")
 }
 
 /// The function `panic` of the prelude, as `file` sees it, which compiled
 /// code calls when no arm of a `match` matches.
 pub fn panic_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
-    let lib = prelude_lib(db, file)?;
-    match file_scope(db, lib).scope.get(Namespace::Values, &Name::new("panic"))?.def {
-        ModuleDefId::Function(id) => Some(id),
-        _ => None,
-    }
+    prelude_fn(db, file, "panic")
 }
 
 /// A class of the prelude that syntax uses.
@@ -174,8 +185,7 @@ impl LangClass {
     /// prelude's own package, which don't get the prelude, find it too, in
     /// their own copy of the package.
     pub fn class(self, db: &dyn Db, file: File) -> Option<ClassId<'_>> {
-        let lib = prelude_lib(db, file)?;
-        match file_scope(db, lib).scope.get(Namespace::Types, &Name::new(self.name()))?.def {
+        match prelude_def(db, file, Namespace::Types, self.name())? {
             ModuleDefId::Class(class) => Some(class),
             _ => None,
         }
