@@ -210,14 +210,8 @@ impl<'db> Printer<'_, 'db> {
                 format!("let {} = {}", self.decision(decision, indent), x(*scrutinee))
             }
             ExprKind::Match { scrutinee, decision, arms } => {
-                let inner = INDENT.repeat(indent + 1);
                 let mut s = format!("match {} {{\n", x(*scrutinee));
-                for line in self.decision_lines(decision) {
-                    s.push_str(&format!("{inner}{line}\n"));
-                }
-                for (i, arm) in arms.iter().enumerate() {
-                    s.push_str(&format!("{inner}{}\n", self.arm(i, arm, None, indent + 1)));
-                }
+                self.push_arms(&mut s, decision, arms, None, indent + 1);
                 s.push_str(&format!("{pad}}}"));
                 s
             }
@@ -225,23 +219,11 @@ impl<'db> Printer<'_, 'db> {
             // operation, after `effect`, with their continuations.
             ExprKind::Handle { body, value, arms, ops } => {
                 let inner = INDENT.repeat(indent + 1);
-                let inner2 = INDENT.repeat(indent + 2);
                 let mut s = format!("handle {} {{\n", x(*body));
-                for line in self.decision_lines(value) {
-                    s.push_str(&format!("{inner}{line}\n"));
-                }
-                for (i, arm) in arms.iter().enumerate() {
-                    s.push_str(&format!("{inner}{}\n", self.arm(i, arm, None, indent + 1)));
-                }
+                self.push_arms(&mut s, value, arms, None, indent + 1);
                 for op in ops.iter() {
                     s.push_str(&format!("{inner}effect {} {{\n", fn_name(db, op.op)));
-                    for line in self.decision_lines(&op.decision) {
-                        s.push_str(&format!("{inner2}{line}\n"));
-                    }
-                    for (i, (arm, k)) in op.arms.iter().zip(op.conts.iter()).enumerate() {
-                        let k = Some(k.map_or_else(|| "_".to_string(), |k| self.local(k)));
-                        s.push_str(&format!("{inner2}{}\n", self.arm(i, arm, k, indent + 2)));
-                    }
+                    self.push_arms(&mut s, &op.decision, &op.arms, Some(&op.conts), indent + 2);
                     s.push_str(&format!("{inner}}}\n"));
                 }
                 s.push_str(&format!("{pad}}}"));
@@ -299,6 +281,26 @@ impl<'db> Printer<'_, 'db> {
                 }
             }
             ExprKind::Unsupported(what) => format!("unsupported({what:?})"),
+        }
+    }
+
+    /// The lines of a decision and then its arms, a line each at `indent`,
+    /// with the continuations of the arms of an operation.
+    fn push_arms(
+        &self,
+        s: &mut String,
+        d: &Decision<'db>,
+        arms: &[Arm],
+        conts: Option<&[Option<Local>]>,
+        indent: usize,
+    ) {
+        let pad = INDENT.repeat(indent);
+        for line in self.decision_lines(d) {
+            s.push_str(&format!("{pad}{line}\n"));
+        }
+        for (i, arm) in arms.iter().enumerate() {
+            let k = conts.map(|ks| ks[i].map_or_else(|| "_".to_string(), |k| self.local(k)));
+            s.push_str(&format!("{pad}{}\n", self.arm(i, arm, k, indent)));
         }
     }
 
