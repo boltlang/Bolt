@@ -10,9 +10,8 @@ use boltlang_syntax::SyntaxKind::{self, TOMBSTONE};
 /// Intermediate error structure generated during parsing.
 pub type ParseError = String;
 
-/// `Parser` produces a flat list of `Event`s.
-/// They are converted to a tree-structure in
-/// a separate pass, via `TreeBuilder`.
+/// `Parser` produces a flat list of `Event`s. They are turned into a tree
+/// in a separate pass, by [`intersperse_trivia`] and [`process_events`].
 ///
 /// `Event::Error` holds its message. `forward_parent` uses `NonZeroU32`, so
 /// that its `Option` takes no extra space: the offset is always ≥ 1 because
@@ -58,18 +57,18 @@ pub fn process_events<I: Iterator<Item = Event>>(
     processor.builder.finish()
 }
 
-struct EventProcessor<'lex, 'text, 'cache, 'diag> {
+struct EventProcessor<'lex, 'text, 'diag> {
     lexed: &'lex LexResult,
     text: &'text str,
     diags: &'diag mut Diagnostics,
-    builder: GreenNodeBuilder<'cache>,
+    builder: GreenNodeBuilder<'static>,
     /// Which token is being inspected
     pos: u32,
     /// Where in the text the token is
     text_pos: usize,
 }
 
-impl<'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
+impl<'lex, 'text, 'diag> EventProcessor<'lex, 'text, 'diag> {
     fn new(lexed: &'lex LexResult, text: &'text str, diags: &'diag mut Diagnostics) -> Self {
         Self { lexed, text, diags, builder: GreenNodeBuilder::new(), pos: 0, text_pos: 0 }
     }
@@ -104,21 +103,6 @@ impl<'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
             }
         }
     }
-}
-
-#[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-enum IntersperseState {
-    PendingEnter,
-    Normal,
-    PendingExit,
-}
-
-pub(crate) struct IntersperseTrivia<'a> {
-    lexed: &'a LexResult,
-    pos: u32,
-    text_pos: usize,
-    state: IntersperseState,
-    output: Vec<Event>,
 }
 
 /// Resolve `forward_parent` links, so that every `Start` event is in the
@@ -161,93 +145,83 @@ fn resolve_forward_parents(mut events: Vec<Event>) -> Vec<Event> {
     output
 }
 
+/// The parser's events with events for the trivia (whitespace and comments)
+/// added between them. Trivia between two nodes goes outside both, so a
+/// node starts at its first token and ends at its last one.
 pub(crate) fn intersperse_trivia(events: Vec<Event>, lexed: &LexResult) -> Vec<Event> {
-    let mut builder = IntersperseTrivia::new(lexed);
+    let mut builder =
+        IntersperseTrivia { lexed, pos: 0, state: State::BeforeRoot, output: Vec::new() };
     for event in resolve_forward_parents(events) {
         builder.feed_event(event);
     }
-    match std::mem::replace(&mut builder.state, IntersperseState::Normal) {
-        IntersperseState::PendingExit => {
-            builder.eat_trivias();
-            builder.output.push(Event::Finish);
-        }
-        IntersperseState::PendingEnter | IntersperseState::Normal => unreachable!(),
-    }
+    assert!(builder.state == State::AfterFinish, "the root node wasn't finished");
+    builder.eat_trivia();
+    builder.output.push(Event::Finish);
     builder.output
 }
 
-impl<'a> IntersperseTrivia<'a> {
-    pub fn new(lexed: &'a LexResult) -> Self {
-        Self {
-            lexed,
-            pos: 0,
-            text_pos: 0,
-            state: IntersperseState::PendingEnter,
-            output: Vec::new(),
-        }
-    }
+#[derive(PartialEq, Eq)]
+enum State {
+    /// No node has started yet. Trivia at the start of the file goes in the
+    /// root node.
+    BeforeRoot,
+    Normal,
+    /// A node just finished. Its `Finish` waits for the next event, so that
+    /// trivia after the node can go outside it.
+    AfterFinish,
+}
 
-    fn eat_trivias(&mut self) {
+struct IntersperseTrivia<'a> {
+    lexed: &'a LexResult,
+    /// The index of the next token in `lexed`.
+    pos: u32,
+    state: State,
+    output: Vec<Event>,
+}
+
+impl IntersperseTrivia<'_> {
+    fn eat_trivia(&mut self) {
         while self.pos < self.lexed.len() {
             let kind = self.lexed.token_kind(self.pos);
             if !kind.is_trivia() {
                 break;
             }
-            self.do_token(kind);
+            self.output.push(Event::Token { kind });
+            self.pos += 1;
         }
     }
 
-    fn do_token(&mut self, kind: SyntaxKind) {
-        self.output.push(Event::Token { kind });
-        self.text_pos += self.lexed.token_len(self.pos) as usize;
-        self.pos += 1
+    /// Push the `Finish` of a node that just finished, if there is one.
+    fn finish_pending(&mut self) {
+        debug_assert!(self.state != State::BeforeRoot, "an event before the root node");
+        if self.state == State::AfterFinish {
+            self.output.push(Event::Finish);
+        }
+        self.state = State::Normal;
     }
 
     fn feed_event(&mut self, event: Event) {
-        // FIXME must be placed somewhere else
         match event {
-            Event::Token { kind } => {
-                match std::mem::replace(&mut self.state, IntersperseState::Normal) {
-                    IntersperseState::PendingEnter => unreachable!(),
-                    IntersperseState::PendingExit => self.output.push(Event::Finish),
-                    IntersperseState::Normal => (),
-                }
-                self.eat_trivias();
-                self.do_token(kind);
-            }
             Event::Start { kind: TOMBSTONE, .. } => {}
-            Event::Start { kind, .. } => {
-                match std::mem::replace(&mut self.state, IntersperseState::Normal) {
-                    IntersperseState::PendingEnter => {
-                        self.output.push(Event::Start { kind, forward_parent: None });
-                        // No need to attach trivias to previous node: there is no
-                        // previous node.
-                        return;
-                    }
-                    IntersperseState::PendingExit => self.output.push(Event::Finish),
-                    IntersperseState::Normal => (),
-                }
-                self.eat_trivias();
+            Event::Start { kind, .. } if self.state == State::BeforeRoot => {
+                self.state = State::Normal;
                 self.output.push(Event::Start { kind, forward_parent: None });
-                // TODO add trivias attached to node here
-                // https://github.com/rust-lang/rust-analyzer/blob/137eee2f3d9acbabe677b07e221686d38f233ce9/crates/parser/src/shortcuts.rs#L156
             }
             Event::Finish => {
-                match std::mem::replace(&mut self.state, IntersperseState::PendingExit) {
-                    IntersperseState::PendingEnter => unreachable!(),
-                    IntersperseState::PendingExit => self.output.push(Event::Finish),
-                    IntersperseState::Normal => (),
-                }
+                self.finish_pending();
+                self.state = State::AfterFinish;
             }
-            e @ Event::Error { .. } => {
-                // Close a finished node first, or the trivia before the error
-                // would end up inside it, like the space in `g ` of `g x`.
-                if self.state == IntersperseState::PendingExit {
-                    self.output.push(Event::Finish);
-                    self.state = IntersperseState::Normal;
+            // Close a finished node first, or the trivia before the event
+            // would end up inside it, like the space in `g ` of `g x`.
+            event => {
+                self.finish_pending();
+                self.eat_trivia();
+                if let Event::Token { kind } = event {
+                    self.output.push(Event::Token { kind });
+                    self.pos += 1;
+                } else {
+                    self.output.push(event);
                 }
-                self.eat_trivias();
-                self.output.push(e)
             }
         }
     }
