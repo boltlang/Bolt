@@ -248,7 +248,6 @@ pub enum DiagnosticKind<'db> {
         name: Name,
         candidates: Vec<String>,
     },
-    /// A function with `#[test]` that can't be run as a test.
     /// A function at the top level of a file without a body, which only a
     /// builtin or a function the host provides can be.
     MissingBody,
@@ -275,6 +274,7 @@ pub enum DiagnosticKind<'db> {
     BadBuiltin {
         reason: BadBuiltin,
     },
+    /// A function with `#[test]` that can't be run as a test.
     BadTest {
         reason: BadTest,
     },
@@ -2086,8 +2086,6 @@ impl<'db> Collector<'db> {
         node.children().find(|n| n.kind() == NAME).unwrap_or(node).text_range()
     }
 
-    /// Where `name` is in the item or import `ast_id`. For an item, that's
-    /// the name it defines; for an import, the name in its list.
     /// The `Vec` of `fn Vec.new()`, or the whole function if it's gone.
     fn owner_range(&self, function: AstId) -> Option<TextRange> {
         let node = function.to_node(self.db, self.file, &self.root)?;
@@ -2095,6 +2093,8 @@ impl<'db> Collector<'db> {
         Some(owner.unwrap_or(node).text_range())
     }
 
+    /// Where `name` is in the item or import `ast_id`. For an item, that's
+    /// the name it defines; for an import, the name in its list.
     fn name_in(&self, ast_id: AstId, name: &Name) -> Option<TextRange> {
         let node = ast_id.to_node(self.db, self.file, &self.root)?;
         if ast_id.kind != SyntaxKind::IMPORT {

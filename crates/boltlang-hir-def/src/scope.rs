@@ -125,9 +125,7 @@ impl ExprScopes {
         self.scopes[scope].entries.push(ScopeEntry { name, binding });
     }
 
-    /// Add the bindings of a pattern. In `A(x) | B(x)` each alternative has
-    /// its own `x`; the first one is added, and the type checker checks the
-    /// others against it.
+    /// Add the bindings of a pattern.
     fn add_pat_bindings(&mut self, body: &Body, scope: ScopeId, pat: PatId) {
         match &body[pat] {
             Pat::Bind { id, .. } => self.add_binding(body, scope, *id),

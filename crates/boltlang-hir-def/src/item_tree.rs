@@ -87,7 +87,7 @@ pub fn ast_id_map(db: &dyn Db, file: File) -> AstIdMap {
 }
 
 /// The nodes of the items in a file in the order they appear, including the
-/// items in classes, impls and extern blocks, but not those in bodies.
+/// items in classes, effects and impls, but not those in bodies.
 pub fn item_nodes(root: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> {
     let mut stack = vec![root.clone()];
     let mut out = Vec::new();
@@ -152,7 +152,7 @@ pub enum ModItem {
     MacroRules(Idx<MacroRules>),
 }
 
-/// An item in a class, impl or extern block.
+/// An item in a class, effect or impl.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum AssocItem {
     Function(Idx<Function>),
@@ -399,7 +399,7 @@ pub struct MacroRules {
     pub ast_id: AstId,
 }
 
-/// A macro invocation in a class, impl or extern block.
+/// A macro invocation in a class, effect or impl.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct MacroCall {
     pub name: Option<Name>,
@@ -470,8 +470,8 @@ impl ItemTree {
                 ModItem::Enum(push(&mut self.enums, enum_))
             }
             // The items inside get their `AstId`s after the item's own. A
-            // class, effect, impl or extern block can't contain another, so it's
-            // pushed after them at the index it had before.
+            // class, effect or impl can't contain another, so it's pushed
+            // after them at the index it had before.
             E::Class(c) => {
                 let ast_id = self.next_ast_id(CLASS);
                 let items = self.lower_assoc_items(c.item_list(), target);

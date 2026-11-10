@@ -177,7 +177,7 @@ pub fn body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> Body {
 }
 
 impl Body {
-    /// The patterns of the parameters, with whether they are bindings.
+    /// The patterns of the parameters, with their IDs.
     pub fn param_pats(&self) -> impl Iterator<Item = (PatId, &Pat)> {
         self.params.iter().map(|p| (*p, &self.store[*p]))
     }

@@ -748,7 +748,6 @@ impl ExprCollector {
         (args.into(), rest)
     }
 
-    /// Make the bindings in a pattern mutable, but not the ones after an `@`.
     /// Make the alternatives of an or-pattern share the bindings of the
     /// first one, by name, so that the `x` of `A(x) | B(x)` is one binding.
     /// Each alternative is a list of patterns, to also cover the arguments of
@@ -773,6 +772,7 @@ impl ExprCollector {
         }
     }
 
+    /// Make the bindings in a pattern mutable, but not the ones after an `@`.
     fn mark_mutable(&mut self, pat: PatId) {
         let mut stack = vec![pat];
         while let Some(pat) = stack.pop() {
