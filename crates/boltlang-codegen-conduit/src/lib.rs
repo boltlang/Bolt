@@ -345,23 +345,8 @@ pub fn lower(db: &dyn Db, entry: File) -> Result<Lowered, Vec<Error>> {
     if !errors.is_empty() {
         return Err(errors);
     }
-    // `panic`, if a `match` calls it: the `String` it takes is its first
-    // parameter.
-    if let Some(instance) = boltlang_mir_mono::panic_instance(db, entry)
-        && let Some(&id) = cx.funcs.get(&instance)
-    {
-        let string =
-            sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| sig.params.first());
-        cx.panic = string.map(|t| (id, t.clone()));
-    }
-    module.data = types.decls.clone();
-    for (id, (sig, mut_params, effect_params)) in &sigs {
-        let mut f = Func::new(sig.params.clone(), sig.results.clone());
-        f.mut_params = mut_params.clone();
-        f.effect_params = *effect_params;
-        f.row = sig.row.clone();
-        module.funcs.insert(*id, f);
-    }
+    cx.panic = panic_func(&cx, &sigs);
+    declare_funcs(&mut module, &types, &sigs);
     let built = build_bodies(&cx, &module, &mut types, p, &mut errors);
     if !errors.is_empty() {
         return Err(errors);
@@ -681,6 +666,31 @@ fn declare_body_types<'db>(
     }
     cx.convs = convs;
     sigs
+}
+
+/// The prelude's `panic`, if a `match` calls it, with the type of the
+/// `String` it takes, which is its first parameter.
+fn panic_func(
+    cx: &Ctx<'_>,
+    sigs: &[(FuncId, (Sig, MutParams, u32))],
+) -> Option<(FuncId, conduit_ir::Ty)> {
+    let instance = boltlang_mir_mono::panic_instance(cx.db, cx.root)?;
+    let &id = cx.funcs.get(&instance)?;
+    let string = sigs.iter().find(|(f, _)| *f == id).and_then(|(_, (sig, ..))| sig.params.first());
+    string.map(|t| (id, t.clone()))
+}
+
+/// Declare the data types so far and the function of each signature, so
+/// that a body can name any of them before they're all built.
+fn declare_funcs(module: &mut Module, types: &Types<'_>, sigs: &[(FuncId, (Sig, MutParams, u32))]) {
+    module.data = types.decls.clone();
+    for (id, (sig, mut_params, effect_params)) in sigs {
+        let mut f = Func::new(sig.params.clone(), sig.results.clone());
+        f.mut_params = mut_params.clone();
+        f.effect_params = *effect_params;
+        f.row = sig.row.clone();
+        module.funcs.insert(*id, f);
+    }
 }
 
 /// Build the function of each instance, of its lambdas and of its
