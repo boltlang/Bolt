@@ -23,12 +23,12 @@ A program goes through these stages, each a crate in `crates/`:
 
 | Stage | Crate | Pages |
 |---|---|---|
-| Lexing and parsing into a lossless tree | `boltlang-parser`, `boltlang-syntax` | |
-| Definitions, name resolution and bodies | `boltlang-hir-def` | |
+| Lexing and parsing into a lossless tree | `boltlang-parser`, `boltlang-syntax` | [Syntax](./compiler/syntax.mdx) |
+| Definitions, name resolution and bodies | `boltlang-hir-def` | [Definitions and names](./compiler/names.mdx) |
 | Type checking | `boltlang-hir-ty` | [Type checking](./compiler/type-checking/index.mdx) |
-| Building MIR, with patterns as decision graphs | `boltlang-mir-build`, `boltlang-pattern` | |
-| Passes over MIR, like desugarings and shims | `boltlang-mir-transform` | |
-| Monomorphization | `boltlang-mir-mono` | |
+| Building MIR, with patterns as decision graphs | `boltlang-mir-build`, `boltlang-pattern` | [MIR](./compiler/mir.mdx) |
+| Passes over MIR, like desugarings and shims | `boltlang-mir-transform` | [MIR](./compiler/mir.mdx#passes-and-shims) |
+| Monomorphization | `boltlang-mir-mono` | [MIR](./compiler/mir.mdx#monomorphization) |
 | Lowering to Conduit | `boltlang-codegen-conduit` | [Conduit](./compiler/conduit/index.mdx) |
 
 Conduit, the IR that Bolt compiles to, is a project of its own. It runs

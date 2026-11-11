@@ -1,0 +1,136 @@
+---
+sidebar_position: 4
+title: MIR
+description: Bolt's MIR, how it's built from HIR and the type checker's results, how patterns become decision graphs, and how monomorphization finds the instances a program needs.
+---
+
+# MIR
+
+Between the [type checker](./type-checking/index.mdx) and
+[Conduit](./conduit/index.mdx) is MIR: a body after type checking, with
+everything the checker decided written into it. Five crates make and use
+it:
+
+| Crate | What it does |
+|---|---|
+| `boltlang-mir` | the MIR itself, ways to walk and rewrite it, and a text form for tests |
+| `boltlang-mir-build` | building MIR from HIR and the checker's results, and what each lambda captures |
+| `boltlang-pattern` | compiling patterns to decision graphs |
+| `boltlang-mir-transform` | passes over MIR, and the shims the compiler makes |
+| `boltlang-mir-mono` | monomorphization, shared by the backends |
+
+## What MIR is
+
+MIR is a tree, like HIR, not a control-flow graph: that's Conduit's job.
+It differs from HIR in that each node has its type, each name what it
+refers to, and each call the function it calls, so nothing has to be
+looked up in side tables. It's generic: the types can contain the body's
+type parameters, which monomorphization substitutes later.
+
+The nodes live in an arena (`Body`), and a pass rewrites them in place: it
+replaces a node or adds new ones, so a node's ID stays the same, and so
+does the HIR expression it came from. `Visitor` and `VisitorMut` walk a
+body to read or rewrite it.
+
+A body belongs to a function, a const, a lambda, the default of a
+parameter, or a shim (`BodyOwner`). The locals of the source are those of
+HIR, so the bindings of a decision graph are locals as they are, and
+lowering adds locals of its own, like temporaries.
+
+## Building it
+
+`boltlang-mir-build` makes the MIR of a body, of each lambda in it, and of
+the default of each parameter that has one (`mir_bodies`). It reads the
+checker's results for what HIR leaves open:
+
+- **Calls with names and defaults.** A call's arguments are evaluated into
+  temporaries in the order they're written, and passed in the order of the
+  parameters, with the defaults of those it leaves out evaluated after
+  (`call_with`).
+- **Struct literals**, whose fields are in the order of their declaration.
+  A literal with `..base` evaluates the fields given, then `base` once,
+  and copies the fields it doesn't give.
+- **Overloaded names**, which use the function the checker chose
+  (`InferenceResult::overloads`).
+- **Patterns**, which become decision graphs (below).
+- **Handlers**, a `match` with effect arms, whose arms become a decision
+  over each operation's arguments (`OpArms`).
+
+What the builder can't build yet becomes an `unsupported` node with a
+reason, like `` `e?` ``. Lowering it to Conduit fails with that reason, so
+the error says what's missing.
+
+**Lambdas** are lifted (`lambda.rs`): the builder finds what each lambda
+captures, so that a backend can make it a function of its own, with its
+captures as its first parameters. A lambda captures a local of the body
+around it, not a copy of its value: a local that's assigned is the same
+place inside and outside, like a ref in Conduit. A lambda is part of the
+body it's in, so its types are the body's in each instance.
+
+## Patterns
+
+`boltlang-pattern` compiles the patterns of a `match` or a `let` to a
+`Decision`: which tests to make, in which order, to find the arm a value
+takes. It's built from a pattern matrix, as in Maranget's *Compiling
+Pattern Matching to Good Decision Trees*, testing the first place that the
+first row tests.
+
+A decision is a graph in an arena, not a tree: the same rest of a
+decision, reached along several paths, is one node, and arm bodies are
+never copied. An arm node only names its arm, and a backend makes each arm
+a join point, and a node with several predecessors too. Building and
+walking it never recurse on the Rust stack for each pattern.
+
+Which tests are needed depends only on the patterns, not on the types of
+an instance, since a pattern can't test what a type parameter is. So a
+body's decisions are made once (`body_decisions`), for every instance and
+backend. The diagnostics of `match`, like an arm that can't be reached or
+a value no arm takes, come from the same graphs.
+
+## Passes and shims
+
+`boltlang-mir-transform` is where passes over MIR go, rewriting a body in
+place through `VisitorMut`. There are none yet. It also makes the shims:
+bodies for what the source has none for, as rustc's are. These are the
+constructors of tuple structs and variants used as functions, and the
+deep copy that `imm e` calls for each type it copies, through the type's
+`ToImmDeep` impl.
+
+## Monomorphization
+
+`boltlang-mir-mono` finds which instances of its functions a program needs
+and what each use in them calls. An `Instance` is a body at concrete
+types. It's specialized on types, not on mutabilities, which stay its
+parameters, and its types are closed (`MonoTy`).
+
+The collector (`collect.rs`) follows each use from the roots, the entry
+file and the tests, as rustc's collector does. A use names a function the
+way the source does, like a class method, an overloaded name or a
+builtin; `uses.rs` says what it is in the instance: an instance of a
+function with a body, a builtin, a function of the host, or a method of a
+dictionary.
+
+**Erasure.** A function that recurses polymorphically, like
+`fn depth[A](n: Nested[A])` calling `depth` at `(A, A)`, would need
+instances without end. When the collector sees an instance under one of
+its own whose types are inside the new one's, like `(i32, i32)` under
+`i32`, it erases every function on that path: each is compiled once, with
+its types `MonoTy::Erased`, and starts over until nothing grows. That can
+erase a group that would have stopped growing, through associated types;
+the program is still right, only slower.
+
+**Dictionaries.** Erased code doesn't know which impl a class method of
+an erased type uses, so it gets a dictionary for each such class
+constraint of its scheme. A dictionary is a record with an entry for each
+method and constant of the class, in the class's order, and then a
+dictionary for each superclass. An entry's own dictionaries for the impl's
+constraints come first, held by the record, and those of the entry's own
+constraints are given by the call. The Conduit backend doesn't lower
+erased code and dictionaries yet.
+
+## Tests
+
+`tests/mir` has cases of MIR as text, in the format of the other corpora:
+the code, and the MIR of each function after a line of `-`. `cargo test
+-p boltlang-mir-build --test mir` runs them, and `UPDATE_EXPECT=1` writes
+what's found into the files.
