@@ -276,3 +276,22 @@ print(show(freeze(mut [5])[0]));
 2
 7
 5
+
+================================================================================
+ro T: a type parameter seen as ro (#320)
+:test-prelude
+================================================================================
+struct P { x: i32 }
+fn first[T](xs: ro [T]) -> ro T = xs[0];
+fn pass[T](x: T) -> ro T = x;
+fn both[T](a: ro T, b: T) -> T = b;
+fn px[T](xs: ro [T], f: fn(ro T) -> i32) -> i32 = f(xs[0]);
+print(show(first(mut [3])));
+print(show(first([4]) + pass(5)));
+print(show(both(1, 2)));
+print(show(px(mut [mut P { x: 8 }], |p| p.x)));
+--------------------------------------------------------------------------------
+3
+9
+2
+8

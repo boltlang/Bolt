@@ -458,6 +458,10 @@ impl<'a, 'db> Cx<'a, 'db> {
         for (slot, g) in found.iter_mut().zip(given) {
             *slot = g.clone();
         }
+        // A `ro T` only gives the view of `T`, so `T` is taken from the
+        // places where it's written as it is first (#320).
+        let plain = binding.ty.fold(&mut |t| matches!(t, Ty::Ro(_)).then_some(Ty::Error));
+        bind(&binding.params, &plain, use_ty, &mut found);
         bind(&binding.params, &binding.ty, use_ty, &mut found);
         let actual = fill(callee, found);
         let is_erased = match &def {
@@ -847,6 +851,9 @@ pub(crate) fn bind<'db>(
         return;
     }
     match (pattern, ty) {
+        // What's at a `ro T` is the view of the `T`, which stands for it
+        // where `T` isn't written as it is.
+        (Ty::Ro(x), y) => bind(params, x, y, found),
         (Ty::Adt(a, xs, ms, own), MonoTy::Adt(b, ys, ns, n)) if a == b => {
             all(xs, ys, found);
             for (m, n) in ms.iter().zip(ns.iter()) {
