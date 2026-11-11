@@ -410,6 +410,14 @@ pub enum Ty<'db> {
     /// same `imm`. In a body, the checker replaces it with a variable and a
     /// constraint, which gives `T` itself when `T` is `imm`.
     Imm(Box<Ty<'db>>),
+    /// `ro T` (#320): a `T` seen as `ro`, for a type whose view can't be
+    /// taken apart yet, like a type parameter. A `T` can be used where a
+    /// `ro T` is expected, and what's read through a `ro [T]` is a `ro T`,
+    /// so a generic function can't give it back as a `T`. The view of a
+    /// known type is that type with its arrays, tuples and structs `ro`
+    /// ([`Ty::ro_view`]). In a body, the checker replaces it with a
+    /// variable and a constraint, like `imm T`.
+    Ro(Box<Ty<'db>>),
     /// A type parameter as seen inside the item that declares it, where it
     /// stands for any type and only equals itself.
     Param(GenericParamId<'db>),
@@ -468,9 +476,62 @@ impl<'db> Ty<'db> {
     /// The type with each mutability inside it that isn't written seen as
     /// `ro`, as in a type written `ro` (#320), whose view is deep.
     pub fn ro_inside(&self) -> Ty<'db> {
+        self.ro_view(true)
+    }
+
+    /// Each `ro T` in the type whose `T` is known replaced by the view of
+    /// it (#320). A `ro T` of what can't be taken apart, like a type
+    /// parameter or a variable, stays.
+    pub fn normalize_ro(&self) -> Ty<'db> {
+        if !self.any(&mut |t| matches!(t, Ty::Ro(_))) {
+            return self.clone();
+        }
         self.fold(&mut |t| {
-            matches!(t, Ty::Unwritten).then_some(Ty::Mutability(Mutability::ReadOnly))
+            let Ty::Ro(inner) = t else { return None };
+            let inner = inner.normalize_ro();
+            Some(match inner {
+                Ty::Param(_)
+                | Ty::Bound(_)
+                | Ty::App(..)
+                | Ty::Assoc(..)
+                | Ty::Imm(_)
+                | Ty::Var(_)
+                | Ty::Error => Ty::Ro(Box::new(inner)),
+                inner => inner.ro_view(false).normalize_ro(),
+            })
         })
+    }
+
+    /// The type seen as `ro` (#320): its arrays, tuples and structs `ro`,
+    /// what they hold seen the same way, and a type that can't be taken
+    /// apart yet, like a type parameter, as `ro T`. With `unwritten`, only
+    /// the mutabilities that aren't written are, as in a type written `ro`,
+    /// where one written otherwise is kept, and reported if it can't be
+    /// held. A closure stays as it is, as do the type arguments of a
+    /// struct or enum, which can be anywhere in its fields.
+    pub fn ro_view(&self, unwritten: bool) -> Ty<'db> {
+        let ro = Ty::Mutability(Mutability::ReadOnly);
+        let m = |m: &Ty<'db>| match unwritten && !matches!(m, Ty::Unwritten) {
+            true => m.clone(),
+            false => ro.clone(),
+        };
+        let view = |t: &Ty<'db>| t.ro_view(unwritten);
+        match self {
+            Ty::Array(mu, elem) => Ty::array(m(mu), view(elem)),
+            Ty::Tuple(tys, mu) => Ty::tuple(tys.iter().map(view).collect(), m(mu)),
+            Ty::Record(tys, named, mu) => Ty::record(
+                tys.iter().map(view).collect(),
+                named.iter().map(|(n, t)| (n.clone(), view(t))).collect(),
+                m(mu),
+            ),
+            Ty::Adt(id @ AdtId::Struct(_), args, ms, own) => {
+                Ty::Adt(*id, args.clone(), ms.clone(), Box::new(m(own)))
+            }
+            Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Var(_) | Ty::Imm(_) => {
+                Ty::Ro(Box::new(self.clone()))
+            }
+            _ => self.clone(),
+        }
     }
 
     pub fn imm_of_unknown(ty: Ty<'db>) -> Self {
@@ -767,7 +828,7 @@ impl<'db> Ty<'db> {
                 rest.iter().for_each(f);
             }
             Ty::Assoc(_, args) => args.iter().for_each(f),
-            Ty::Imm(ty) | Ty::Spread(_, ty) => f(ty),
+            Ty::Imm(ty) | Ty::Ro(ty) | Ty::Spread(_, ty) => f(ty),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Host(_)
@@ -828,6 +889,7 @@ impl<'db> Ty<'db> {
             ),
             Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
             Ty::Imm(ty) => Ty::Imm(Box::new(ty.fold(f))),
+            Ty::Ro(ty) => Ty::Ro(Box::new(ty.fold(f))),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Host(_)
@@ -1259,8 +1321,12 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 }
             }
             Ty::Imm(ty) => match ty.as_ref() {
-                Ty::Fn(..) | Ty::Imm(_) => write!(f, "imm ({})", show(ty)),
+                Ty::Fn(..) | Ty::Imm(_) | Ty::Ro(_) => write!(f, "imm ({})", show(ty)),
                 _ => write!(f, "imm {}", show(ty)),
+            },
+            Ty::Ro(ty) => match ty.as_ref() {
+                Ty::Fn(..) | Ty::Imm(_) | Ty::Ro(_) => write!(f, "ro ({})", show(ty)),
+                _ => write!(f, "ro {}", show(ty)),
             },
             Ty::Bound(index) => match named(Unknown::Bound(*index)) {
                 Some(name) => f.write_str(name),

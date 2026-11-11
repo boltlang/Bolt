@@ -353,6 +353,13 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 if deep && kind == Some(Kind::Type) && written == Ty::Mutability(Mutability::Imm) {
                     return (Ty::imm_of_unknown(ty), kind);
                 }
+                // `ro T` of a type parameter: the `T` seen as `ro` (#320).
+                if deep
+                    && kind == Some(Kind::Type)
+                    && written == Ty::Mutability(Mutability::ReadOnly)
+                {
+                    return (Ty::Ro(Box::new(ty)), kind);
+                }
                 let ty = self.with_mutability(id, ty, written.clone());
                 // A `ro` view is deep (#320): what's in it is seen as `ro`.
                 if written == Ty::Mutability(Mutability::ReadOnly) {

@@ -421,7 +421,9 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
         // `VecIter[i32, mut]`, whose fields can have it. Something seen as
         // `ro` may change too (#320).
         let more_than_imm = [Mutability::Mut, Mutability::ReadOnly];
-        if more_than_imm.iter().any(|&m| has(ty, m) || *ty == Ty::Mutability(m)) {
+        if more_than_imm.iter().any(|&m| has(ty, m) || *ty == Ty::Mutability(m))
+            || matches!(ty, Ty::Ro(_))
+        {
             return Some(ty.clone());
         }
         match ty {

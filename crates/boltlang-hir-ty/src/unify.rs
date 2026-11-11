@@ -139,6 +139,8 @@ impl<'db> Unifier<'db> {
                     let head = self.shallow_resolve(&head);
                     return Ty::app(head, args.into_vec());
                 }
+                // A `ro T` whose `T` is known is the view of it (#320).
+                Ty::Ro(_) => return self.view_known_ro(ty),
                 _ => return ty,
             }
         }
@@ -153,6 +155,23 @@ impl<'db> Unifier<'db> {
             },
             _ => None,
         })
+        .normalize_ro()
+    }
+
+    /// A `ro T` whose `T` is known as the view of it, so that unifying
+    /// compares what it is.
+    fn view_known_ro(&self, ty: Ty<'db>) -> Ty<'db> {
+        let Ty::Ro(inner) = &ty else { return ty };
+        match self.shallow_resolve(inner) {
+            // A number holds nothing, so it's its own view.
+            Ty::Var(v) if matches!(self.var_kind(v), Some(VarKind::Int | VarKind::Float)) => {
+                Ty::Var(v)
+            }
+            Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) => {
+                ty
+            }
+            _ => self.resolve(&ty),
+        }
     }
 
     /// Give unbound integer and float variables their default types.
@@ -473,6 +492,10 @@ impl<'db> Unifier<'db> {
             // So does `imm T`, which the checker only keeps for types it can't
             // take apart, like type parameters.
             (Ty::Imm(x), Ty::Imm(y)) => self.unify(x, y),
+            // `ro T` too, and a `T` fits where a `ro T` is received (#320).
+            (Ty::Ro(x), Ty::Ro(y)) => self.unify(x, y),
+            (Ty::Ro(x), _) if !self.flipped => self.unify(x, &b),
+            (_, Ty::Ro(y)) if self.flipped => self.unify(&a, y),
             _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),
         }
     }
@@ -772,6 +795,10 @@ impl<'db> Unifier<'db> {
 
     fn bind(&mut self, var: TyVar, ty: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         let kind = self.var_kind(var).unwrap();
+        // A number is its own `ro` view, so a literal fits a `ro T` as a `T`.
+        if let (VarKind::Int | VarKind::Float, Ty::Ro(inner)) = (kind, ty) {
+            return self.unify(&Ty::Var(var), inner);
+        }
         let fits = match kind {
             VarKind::General => true,
             VarKind::Int => matches!(ty, Ty::Builtin(BuiltinType::Int(_) | BuiltinType::Uint(_))),

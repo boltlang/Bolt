@@ -165,3 +165,53 @@ call: fn(h: ro Handler[ro [i32]], xs: ro [i32]) -> ()
 go: fn() -> ()
 --------------------------------------------------------------------------------
 error at `h`: expected ro Handler[ro [i32]], found mut Handler[mut [i32]]
+
+================================================================================
+ro T: a type parameter seen as ro
+:test-prelude
+================================================================================
+fn first[T](xs: ro [T]) -> ro T = xs[0];
+fn pass[T](x: T) -> ro T = x;
+fn swap[A, B](p: ro (A, B)) -> mut (ro B, ro A) = mut (p.1, p.0);
+fn copy[T](x: ro T) -> imm T where T: ToImmDeep = imm x;
+let a = first(mut [mut [1]]);
+let b = first([1]);
+let c = pass(mut [1]);
+struct P { x: i32 }
+fn px[T](xs: ro [T], f: fn(ro T) -> i32) -> i32 = f(xs[0]);
+let d = px(mut [mut P { x: 8 }], |p| p.x);
+--------------------------------------------------------------------------------
+first: forall T. fn(xs: ro [ro T]) -> ro T
+pass: forall T. fn(x: T) -> ro T
+swap: forall A B. fn(p: ro (ro A, ro B)) -> mut (ro B, ro A)
+copy: forall T. ToImmDeep[T] => fn(x: ro T) -> imm T
+px: forall T. fn(xs: ro [ro T], f: fn(ro T) -> i32) -> i32
+let a: ro [i32]
+let b: i32
+let c: ro [i32]
+let d: i32
+
+================================================================================
+A ro T can't be given back as a T, held by an imm value, or changed
+:error
+:test-prelude
+================================================================================
+fn leak[T](xs: ro [T]) -> T = xs[0];
+fn keep[T](x: ro T) = [x];
+fn hold[T](x: ro T) = mut [x];
+fn change() = {
+  let xs = mut [mut [1]];
+  let ys = first(xs);
+  ys[0] = 2;
+};
+fn first[T](xs: ro [T]) -> ro T = xs[0];
+--------------------------------------------------------------------------------
+leak: forall T. fn(xs: ro [ro T]) -> T
+keep: forall T. fn(x: ro T) -> imm [ro T]
+hold: forall T. fn(x: ro T) -> mut [ro T]
+change: fn() -> ()
+first: forall T. fn(xs: ro [ro T]) -> ro T
+--------------------------------------------------------------------------------
+error at `xs[0]`: expected T, found ro T
+error at `[x]`: imm [ro T] holds ro T
+error at `ys`: can't change ro [i32]

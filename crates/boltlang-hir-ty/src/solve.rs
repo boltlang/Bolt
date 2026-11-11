@@ -1000,6 +1000,11 @@ impl<'db> Solver<'db> {
                 self.imm_unknown(&t, &c.to, origin);
                 true
             }
+            // A copy of a `T` seen as `ro` is a copy of the `T`.
+            Ty::Ro(inner) => {
+                sub(self, *inner, c.to.clone());
+                true
+            }
             // A copy of `imm T` is an `imm T` too, and a value that holds
             // nothing that can be changed is itself.
             t => {
@@ -2299,10 +2304,22 @@ pub fn missing_instances<'db>(
 /// a type parameter is replaced. Those whose arguments aren't known well
 /// enough stay.
 pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
-    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_))) {
+    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_) | Ty::Ro(_))) {
         return ty.clone();
     }
     ty.fold(&mut |t| {
+        if let Ty::Ro(inner) = t {
+            let inner = normalize_assoc(db, file, inner);
+            return Some(match inner {
+                Ty::Param(_)
+                | Ty::Bound(_)
+                | Ty::App(..)
+                | Ty::Assoc(..)
+                | Ty::Imm(_)
+                | Ty::Var(_) => Ty::Ro(Box::new(inner)),
+                inner => normalize_assoc(db, file, &inner.ro_view(false)),
+            });
+        }
         if let Ty::Imm(inner) = t {
             let inner = normalize_assoc(db, file, inner);
             return Some(match inner {

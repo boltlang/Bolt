@@ -830,6 +830,14 @@ impl<'db> Subst<'_, 'db> {
                 _ => return Err(TyError::Unknown),
             },
             Ty::Assoc(alias, args) => self.assoc(*alias, args)?,
+            // `ro T`, once `T` is known: `T` seen as `ro` (#320).
+            Ty::Ro(inner) => {
+                let viewed = self.back(&self.ty(inner)?)?.ro_view(false);
+                if viewed.any(&mut |t| matches!(t, Ty::Ro(_))) {
+                    return Err(TyError::Unknown);
+                }
+                self.ty(&viewed)?
+            }
             // `imm T`, once `T` is known: what `imm` makes of it.
             Ty::Imm(inner) => {
                 let inner = self.back(&self.ty(inner)?)?;
