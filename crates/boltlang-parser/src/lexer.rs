@@ -9,13 +9,12 @@ use boltlang_syntax::SyntaxKind::{self, *};
 
 use unicode_ident::{is_xid_continue, is_xid_start};
 
-const CHAR_EOF: char = '\u{FFFF}';
-
 pub struct Lexer<'a, 'd> {
     text: &'a str,
     chars: Chars<'a>,
     /// Characters that were peeked at but not consumed yet.
-    buffer: VecDeque<char>,
+    /// `None` is the end of the input.
+    buffer: VecDeque<Option<char>>,
     /// The byte offset in `text` of the next character.
     offset: usize,
     diags: &'d mut Diagnostics,
@@ -135,24 +134,22 @@ impl<'a, 'd> Lexer<'a, 'd> {
         Self { text, chars: text.chars(), buffer: VecDeque::new(), offset: 0, diags }
     }
 
-    fn read(&mut self) -> char {
-        self.chars.next().unwrap_or(CHAR_EOF)
-    }
-
-    fn get(&mut self) -> char {
+    /// The next character, or `None` at the end of the input.
+    fn get(&mut self) -> Option<char> {
         let ch = match self.buffer.pop_front() {
             Some(ch) => ch,
-            None => self.read(),
+            None => self.chars.next(),
         };
-        if ch != CHAR_EOF {
+        if let Some(ch) = ch {
             self.offset += ch.len_utf8();
         }
         ch
     }
 
-    fn peek(&mut self, n: usize) -> char {
+    /// The character `n` places ahead, or `None` past the end of the input.
+    fn peek(&mut self, n: usize) -> Option<char> {
         while self.buffer.len() <= n {
-            let ch = self.read();
+            let ch = self.chars.next();
             self.buffer.push_back(ch);
         }
         self.buffer[n]
@@ -174,20 +171,20 @@ impl<'a, 'd> Lexer<'a, 'd> {
     fn scan_escape(&mut self) {
         let start = self.offset - 1;
         match self.get() {
-            'x' => {
-                if is_hex_num(self.peek(0)) && is_hex_num(self.peek(1)) {
+            Some('x') => {
+                if self.peek(0).is_some_and(is_hex_num) && self.peek(1).is_some_and(is_hex_num) {
                     self.get();
                     self.get();
                 } else {
                     self.error("expected two hex digits after `\\x`", start..self.offset);
                 }
             }
-            'u' if self.peek(0) == '{' => {
+            Some('u') if self.peek(0) == Some('{') => {
                 self.get();
                 let digits_start = self.offset;
                 self.eat_while(is_hex_num);
                 let digits = self.text_since(digits_start);
-                if self.peek(0) != '}' {
+                if self.peek(0) != Some('}') {
                     self.error("expected `}` to end the unicode escape", start..self.offset);
                     return;
                 }
@@ -201,10 +198,10 @@ impl<'a, 'd> Lexer<'a, 'd> {
                 }
                 self.check_code_point(digits, start);
             }
-            'u' => {
+            Some('u') => {
                 let digits_start = self.offset;
                 for _ in 0..4 {
-                    if !is_hex_num(self.peek(0)) {
+                    if !self.peek(0).is_some_and(is_hex_num) {
                         self.error(
                             "expected `{` or four hex digits after `\\u`",
                             start..self.offset,
@@ -232,15 +229,15 @@ impl<'a, 'd> Lexer<'a, 'd> {
     fn scan_string_body(&mut self) {
         loop {
             match self.get() {
-                CHAR_EOF => {
+                None => {
                     self.error(
                         "expected '\"' to delimit the string literal but found end-of-file",
                         self.offset - 1..self.offset,
                     );
                     break;
                 }
-                '"' => break,
-                '\\' => self.scan_escape(),
+                Some('"') => break,
+                Some('\\') => self.scan_escape(),
                 _ => {}
             }
         }
@@ -250,14 +247,14 @@ impl<'a, 'd> Lexer<'a, 'd> {
     fn scan_char_body(&mut self) {
         let start = self.offset - 1;
         match self.get() {
-            '\\' => self.scan_escape(),
-            '\'' | '\n' | CHAR_EOF => {
+            Some('\\') => self.scan_escape(),
+            Some('\'' | '\n') | None => {
                 self.error("expected a character", start..self.offset);
                 return;
             }
             _ => {}
         }
-        if self.peek(0) == '\'' {
+        if self.peek(0) == Some('\'') {
             self.get();
         } else {
             self.error("expected `'` to end the character literal", start..self.offset);
@@ -267,30 +264,30 @@ impl<'a, 'd> Lexer<'a, 'd> {
     /// Whether a raw string starts at `peek(n)`: `"` or `#`s followed by `"`.
     fn at_raw_string(&mut self, n: usize) -> bool {
         let mut i = n;
-        while self.peek(i) == '#' {
+        while self.peek(i) == Some('#') {
             i += 1;
         }
-        self.peek(i) == '"'
+        self.peek(i) == Some('"')
     }
 
     /// Lex a raw string like `r#"..."#` after its `r`.
     fn scan_raw_string(&mut self) {
         let start = self.offset - 1;
         let mut hashes = 0;
-        while self.peek(0) == '#' {
+        while self.peek(0) == Some('#') {
             self.get();
             hashes += 1;
         }
         self.get(); // the opening `"`
         loop {
             match self.get() {
-                CHAR_EOF => {
+                None => {
                     self.error("expected the raw string to be closed", start..self.offset);
                     return;
                 }
-                '"' => {
+                Some('"') => {
                     let mut closing = 0;
-                    while closing < hashes && self.peek(0) == '#' {
+                    while closing < hashes && self.peek(0) == Some('#') {
                         self.get();
                         closing += 1;
                     }
@@ -306,15 +303,15 @@ impl<'a, 'd> Lexer<'a, 'd> {
     /// Whether `![` follows, skipping whitespace after the `!`.
     fn at_inner_attribute(&mut self) -> bool {
         let mut i = 1;
-        while matches!(self.peek(i), ' ' | '\t' | '\r' | '\x0b' | '\x0c') {
+        while matches!(self.peek(i), Some(' ' | '\t' | '\r' | '\x0b' | '\x0c')) {
             i += 1;
         }
-        self.peek(i) == '['
+        self.peek(i) == Some('[')
     }
 
     /// Consume characters while `pred` holds for them.
     fn eat_while(&mut self, pred: impl Fn(char) -> bool) {
-        while pred(self.peek(0)) {
+        while self.peek(0).is_some_and(&pred) {
             self.get();
         }
     }
@@ -324,13 +321,13 @@ impl<'a, 'd> Lexer<'a, 'd> {
     /// `1_000`, `0xff`, `0b1010`, `0o17`, `1.5`, `1.`, `2.5e-3` and any of
     /// those with a type suffix like `u8` or `f64`.
     fn scan_number(&mut self, c0: char) -> SyntaxKind {
-        if c0 == '0' && matches!(self.peek(0), 'b' | 'o' | 'x') {
+        if c0 == '0' && matches!(self.peek(0), Some('b' | 'o' | 'x')) {
             let is_digit: fn(char) -> bool = match self.peek(0) {
-                'b' => is_bin_num,
-                'o' => is_oct_num,
+                Some('b') => is_bin_num,
+                Some('o') => is_oct_num,
                 _ => is_hex_num,
             };
-            if is_digit(self.peek(1)) || self.peek(1) == '_' {
+            if self.peek(1).is_some_and(|ch| is_digit(ch) || ch == '_') {
                 self.get();
                 self.eat_while(|ch| is_digit(ch) || ch == '_');
                 self.scan_number_suffix(false);
@@ -341,17 +338,21 @@ impl<'a, 'd> Lexer<'a, 'd> {
         let mut is_float = false;
         // `1.5` and `1.` are floats, but `1..2` is a range and `1.foo()` a
         // method call.
-        if self.peek(0) == '.' && self.peek(1) != '.' && !is_ident_start(self.peek(1)) {
+        if self.peek(0) == Some('.')
+            && self.peek(1) != Some('.')
+            && !self.peek(1).is_some_and(is_ident_start)
+        {
             self.get();
             self.eat_while(|ch| is_dec_num(ch) || ch == '_');
             is_float = true;
         }
-        if matches!(self.peek(0), 'e' | 'E')
-            && (is_dec_num(self.peek(1))
-                || (matches!(self.peek(1), '+' | '-') && is_dec_num(self.peek(2))))
+        if matches!(self.peek(0), Some('e' | 'E'))
+            && (self.peek(1).is_some_and(is_dec_num)
+                || (matches!(self.peek(1), Some('+' | '-'))
+                    && self.peek(2).is_some_and(is_dec_num)))
         {
             self.get();
-            if matches!(self.peek(0), '+' | '-') {
+            if matches!(self.peek(0), Some('+' | '-')) {
                 self.get();
             }
             self.eat_while(|ch| is_dec_num(ch) || ch == '_');
@@ -366,7 +367,7 @@ impl<'a, 'd> Lexer<'a, 'd> {
     /// Lex a type suffix like `u8` after a number, if there is one. Returns
     /// whether it was a float suffix.
     fn scan_number_suffix(&mut self, is_float: bool) -> bool {
-        if !is_ident_start(self.peek(0)) {
+        if !self.peek(0).is_some_and(is_ident_start) {
             return false;
         }
         let suffix_start = self.offset;
@@ -385,9 +386,10 @@ impl<'a, 'd> Lexer<'a, 'd> {
 
     pub fn scan(&mut self) -> SyntaxKind {
         let start = self.offset;
-        let c0 = self.get();
+        let Some(c0) = self.get() else {
+            return EOF;
+        };
         match c0 {
-            CHAR_EOF => EOF,
             ch if is_whitespace(ch) => {
                 self.eat_while(is_whitespace);
                 WHITESPACE
@@ -399,18 +401,18 @@ impl<'a, 'd> Lexer<'a, 'd> {
             '[' => L_BRACKET,
             ']' => R_BRACKET,
             ',' => COMMA,
-            ':' if self.peek(0) == ':' => {
+            ':' if self.peek(0) == Some(':') => {
                 self.get();
                 COLONCOLON
             }
             ':' => COLON,
             '@' => AT,
-            '$' if is_ident_start(self.peek(0)) => {
+            '$' if self.peek(0).is_some_and(is_ident_start) => {
                 self.eat_while(is_ident_part);
                 METAVARIABLE
             }
             // A label like `'outer`. Char literals like `'a'` end with a quote.
-            '\'' if is_ident_start(self.peek(0)) && self.peek(1) != '\'' => {
+            '\'' if self.peek(0).is_some_and(is_ident_start) && self.peek(1) != Some('\'') => {
                 self.eat_while(is_ident_part);
                 LABEL_IDENT
             }
@@ -421,36 +423,38 @@ impl<'a, 'd> Lexer<'a, 'd> {
             }
             // `'a'` or `'\n'` is a character, but a `'` that doesn't start one
             // is a token of its own, like in the grammar's token trees.
-            '\'' if self.peek(0) == '\\' || (self.peek(0) != '\n' && self.peek(1) == '\'') => {
+            '\'' if self.peek(0) == Some('\\')
+                || (self.peek(0) != Some('\n') && self.peek(1) == Some('\'')) =>
+            {
                 self.scan_char_body();
                 CHAR
             }
             '\'' => QUOTE,
             // `#!` at the start of a file is a shebang, unless it starts an
             // inner attribute like `#![allow(unused)]`.
-            '#' if self.offset == 1 && self.peek(0) == '!' && !self.at_inner_attribute() => {
-                self.eat_while(|ch| ch != '\n' && ch != CHAR_EOF);
+            '#' if self.offset == 1 && self.peek(0) == Some('!') && !self.at_inner_attribute() => {
+                self.eat_while(|ch| ch != '\n');
                 SHEBANG
             }
             '#' => HASHTAG,
-            '/' if self.peek(0) == '*' => {
+            '/' if self.peek(0) == Some('*') => {
                 // Block comments nest, like in Rust: `/* a /* b */ c */`.
                 self.get();
                 let mut depth = 1;
                 loop {
                     match self.get() {
-                        CHAR_EOF => {
+                        None => {
                             self.error("unterminated block comment", start..start + 2);
                             break;
                         }
-                        '*' if self.peek(0) == '/' => {
+                        Some('*') if self.peek(0) == Some('/') => {
                             self.get();
                             depth -= 1;
                             if depth == 0 {
                                 break;
                             }
                         }
-                        '/' if self.peek(0) == '*' => {
+                        Some('/') if self.peek(0) == Some('*') => {
                             self.get();
                             depth += 1;
                         }
@@ -459,24 +463,24 @@ impl<'a, 'd> Lexer<'a, 'd> {
                 }
                 BLOCK_COMMENT
             }
-            '/' if self.peek(0) == '/' => {
+            '/' if self.peek(0) == Some('/') => {
                 // The newline isn't part of the comment.
-                self.eat_while(|ch| !matches!(ch, '\n' | CHAR_EOF));
+                self.eat_while(|ch| ch != '\n');
                 LINE_COMMENT
             }
             // Prefixed literals: b"..", b'.', c"..", r".." and r#".."#, br"..",
             // cr"..", and raw identifiers like r#match.
-            'b' if self.peek(0) == '"' => {
+            'b' if self.peek(0) == Some('"') => {
                 self.get();
                 self.scan_string_body();
                 BYTE_STRING
             }
-            'b' if self.peek(0) == '\'' => {
+            'b' if self.peek(0) == Some('\'') => {
                 self.get();
                 self.scan_char_body();
                 BYTE
             }
-            'c' if self.peek(0) == '"' => {
+            'c' if self.peek(0) == Some('"') => {
                 self.get();
                 self.scan_string_body();
                 C_STRING
@@ -485,12 +489,12 @@ impl<'a, 'd> Lexer<'a, 'd> {
                 self.scan_raw_string();
                 STRING
             }
-            'b' | 'c' if self.peek(0) == 'r' && self.at_raw_string(1) => {
+            'b' | 'c' if self.peek(0) == Some('r') && self.at_raw_string(1) => {
                 self.get();
                 self.scan_raw_string();
                 if c0 == 'b' { BYTE_STRING } else { C_STRING }
             }
-            'r' if self.peek(0) == '#' && is_ident_start(self.peek(1)) => {
+            'r' if self.peek(0) == Some('#') && self.peek(1).is_some_and(is_ident_start) => {
                 self.get();
                 self.eat_while(is_ident_part);
                 IDENT
@@ -507,8 +511,8 @@ impl<'a, 'd> Lexer<'a, 'd> {
             '?' => QUEST,
             c0 if is_operator(c0) => {
                 // Stop before `//` and `/*`, so `a +// note` is `+` followed by a comment.
-                while is_operator(self.peek(0))
-                    && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*'))
+                while self.peek(0).is_some_and(is_operator)
+                    && !(self.peek(0) == Some('/') && matches!(self.peek(1), Some('/' | '*')))
                 {
                     self.get();
                 }
@@ -731,6 +735,24 @@ mod tests {
     fn unexpected_characters() {
         assert_eq!(lex_errors("a ~ b"), ["unexpected character `~`"]);
         assert_eq!(lex_errors("\u{200b}"), ["unexpected character `\\u{200b}`"]);
+    }
+
+    /// U+FFFF is an ordinary character, not the end of the input (#428).
+    #[test]
+    fn u_ffff_is_not_the_end() {
+        let text = "a \u{FFFF} b";
+        let mut diags = Diagnostics::new();
+        let lexed = super::tokenize(text, &mut diags);
+        let errors: Vec<_> = diags.take_diagnostics().iter().map(|d| d.to_string()).collect();
+        assert_eq!(errors, ["unexpected character `\\u{ffff}`"]);
+        let kinds: Vec<_> = (0..lexed.len()).map(|i| lexed.token_kind(i)).collect();
+        assert_eq!(kinds, [IDENT, WHITESPACE, ERROR, WHITESPACE, IDENT]);
+        let len: u32 = (0..lexed.len()).map(|i| lexed.token_len(i)).sum();
+        assert_eq!(len as usize, text.len());
+
+        assert_eq!(lex("\"\u{FFFF}\""), [(STRING, "\"\u{FFFF}\"")]);
+        assert_eq!(lex("// x \u{FFFF} y"), [(LINE_COMMENT, "// x \u{FFFF} y")]);
+        assert_eq!(lex("/* \u{FFFF} */"), [(BLOCK_COMMENT, "/* \u{FFFF} */")]);
     }
 
     #[test]
