@@ -510,7 +510,15 @@ impl<'a, 'db> Cx<'a, 'db> {
             .collect();
         mutabilities.extend(free.iter().map(|&i| MonoMut::Param(i)));
         rows.extend(free_rows);
-        let instance = Instance::new(db, def, canonical(&args), self.instance.root(db));
+        // A mutability given `ro` makes an instance of its own, where it's
+        // `ro`, since Conduit doesn't take `ro` as an argument (#320).
+        let ro: Box<[u32]> = (0..mutabilities.len() as u32)
+            .filter(|&i| mutabilities[i as usize] == MonoMut::ReadOnly)
+            .collect();
+        for &i in ro.iter() {
+            mutabilities[i as usize] = MonoMut::Imm;
+        }
+        let instance = Instance::new(db, def, canonical(&args), self.instance.root(db), ro);
         Ok(Use::Instance {
             instance,
             mutabilities: mutabilities.into(),

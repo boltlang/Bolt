@@ -258,3 +258,21 @@ print(show(b[0]));
 --------------------------------------------------------------------------------
 1
 9
+
+================================================================================
+A ro parameter takes a mut and an imm value (#320)
+:test-prelude
+================================================================================
+struct Money { cents: i32 }
+fn peek(xs: ro [i32]) -> i32 = xs[0];
+fn pick(c: Bool, a: ro Money, b: ro Money) -> ro Money = if c { a } else { b };
+let m = mut Money { cents: 1 };
+let i = Money { cents: 2 };
+print(show(pick(False, m, i).cents));
+print(show(peek(mut [3]) + peek([4])));
+fn freeze(xs: ro [i32]) -> imm [i32] = imm xs;
+print(show(freeze(mut [5])[0]));
+--------------------------------------------------------------------------------
+2
+7
+5

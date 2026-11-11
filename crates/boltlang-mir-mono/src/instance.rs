@@ -31,7 +31,10 @@ use crate::ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError};
 /// in order: its declared ones, then those it was generalized over. Where a
 /// type is [`MonoTy::Erased`], the instance is erased there. The mutability
 /// parameters aren't in it, since instances aren't specialized on them:
-/// the `i`th one is [`MonoMut::Param`]`(i)` in the instance's types.
+/// the `i`th one is [`MonoMut::Param`]`(i)` in the instance's types. Except
+/// those in `ro`, which a use gives `ro` (#320): Conduit doesn't take that
+/// as an argument, so they're [`MonoMut::ReadOnly`] in the instance's types,
+/// and the use gives them `imm`, which nothing in the instance uses.
 #[salsa::interned(debug)]
 pub struct Instance<'db> {
     #[returns(ref)]
@@ -42,6 +45,9 @@ pub struct Instance<'db> {
     /// class method in the instance can use (#182).
     #[returns(copy)]
     pub root: File,
+    /// The mutability parameters that are `ro` in this instance, in order.
+    #[returns(ref)]
+    pub ro: Box<[u32]>,
 }
 
 /// What an instance is of: a body in the source, the default of a
@@ -64,7 +70,7 @@ impl<'db> Instance<'db> {
         args: Box<[MonoTy<'db>]>,
         root: File,
     ) -> Self {
-        Instance::new(db, InstanceDef::Body(body), args, root)
+        Instance::new(db, InstanceDef::Body(body), args, root, Box::default())
     }
 
     /// The instance for the top-level statements of `file`.
@@ -126,7 +132,10 @@ impl<'db> Instance<'db> {
                 Kind::Ty => Slot::Ty(types.next().cloned().unwrap_or_else(MonoTy::unit)),
                 Kind::Mut => {
                     muts += 1;
-                    Slot::Mut(MonoMut::Param(muts - 1))
+                    match self.ro(db).contains(&(muts - 1)) {
+                        true => Slot::Mut(MonoMut::ReadOnly),
+                        false => Slot::Mut(MonoMut::Param(muts - 1)),
+                    }
                 }
                 Kind::Row => {
                     rows += 1;
