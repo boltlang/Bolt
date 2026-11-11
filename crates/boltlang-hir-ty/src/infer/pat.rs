@@ -141,7 +141,7 @@ impl<'db> InferenceContext<'_, 'db> {
     /// don't become type parameters.
     fn expect_shape(&mut self, pat: PatId, expected: &Ty<'db>, shape: &Ty<'db>, parts: &[Ty<'db>]) {
         let errors = self.solver.errors.len();
-        self.solver.equal(expected, shape, self.pat_origin(pat));
+        self.solver.equal_into(expected, shape, self.pat_origin(pat));
         if self.solver.errors.len() > errors {
             for part in parts {
                 self.solver.unifier.met_error(part);
@@ -308,7 +308,7 @@ impl<'db> InferenceContext<'_, 'db> {
         // A pattern matches a struct of either mutability.
         let mutability = self.new_mutability();
         let (ty, args) = self.fresh_adt(def, mutability);
-        self.solver.equal(expected, &ty, self.pat_origin(pat));
+        self.solver.equal_into(expected, &ty, self.pat_origin(pat));
         Some((def, args))
     }
 

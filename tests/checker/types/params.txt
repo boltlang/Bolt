@@ -436,3 +436,54 @@ fn w(k) = apply2(k) + k(b: 1, a: 2);
 --------------------------------------------------------------------------------
 apply2: fn(k: fn(a: i32, b: i32) -> i32) -> i32
 w: fn(k: fn(b: i32, a: i32) -> i32) -> i32
+
+================================================================================
+A call by name through a field needs the field's names (#411)
+:test-prelude
+================================================================================
+struct Cell[T] { v: T }
+struct H { run: fn(item: i32) -> i32 }
+fn generic() = { let c = Cell { v: |x: i32| x }; c.v(x: 1) + c.v(zzz: 1) };
+fn read() = { let c = Cell { v: |x: i32| x }; let k = c.v; k(zzz: 1) };
+fn written() = { let h = H { run: |x: i32| x }; h.run(item: 1) + h.run(zzz: 1) };
+fn element() = { let ks = [|x: i32| x]; ks[0](x: 1) + ks[0](zzz: 1) };
+--------------------------------------------------------------------------------
+generic: fn() -> i32
+read: fn() -> i32
+written: fn() -> i32
+element: fn() -> i32
+--------------------------------------------------------------------------------
+error at `1`: no parameter zzz
+error at `1`: no parameter zzz
+error at `1`: no parameter zzz
+error at `1`: no parameter zzz
+
+================================================================================
+A call by name through a pattern needs the names of what it matched (#411)
+:test-prelude
+================================================================================
+struct Cell[T] { v: T }
+fn record() = { let c = Cell { v: |x: i32| x }; let Cell { v } = c; v(x: 1) + v(zzz: 1) };
+fn variant() = match Some(|x: i32| x) { Some(f) => f(x: 1) + f(zzz: 1), None => 0 };
+fn tuple() = { let (f, n) = (|x: i32| x, 1); f(x: n) + f(zzz: n) };
+fn param((g, n): (fn(x: i32) -> i32, i32)) = g(x: n) + g(zzz: n);
+fn rest() = { let t = (f: |x: i32| x, n: 1); let (f: g, ..) = t; g(zzz: 1) };
+fn shared(c: Bool) = {
+  let p = if c { (|x: i32| x, 1) } else { (|y: i32| y, 2) };
+  let (f, _) = p;
+  f(x: 1)
+};
+--------------------------------------------------------------------------------
+record: fn() -> i32
+variant: fn() -> i32
+tuple: fn() -> i32
+param: fn((fn(x: i32) -> i32, i32)) -> i32
+rest: fn() -> i32
+shared: fn(c: Bool) -> i32
+--------------------------------------------------------------------------------
+error at `1`: no parameter zzz
+error at `1`: no parameter zzz
+error at `n`: no parameter zzz
+error at `n`: no parameter zzz
+error at `1`: no parameter zzz
+error at `1`: no parameter x, unnamed ones left

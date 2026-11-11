@@ -638,19 +638,7 @@ impl<'db> Solver<'db> {
         match constraint {
             Constraint::Equal { expected, actual, origin } => {
                 let unified = self.unifier.unify(&expected, &actual);
-                if let Err(err) = unified {
-                    let error = match err {
-                        UnifyError::Mismatch(..) => TypeError::Mismatch {
-                            origin,
-                            expected: self.unifier.resolve(&expected),
-                            actual: self.unifier.resolve(&actual),
-                        },
-                        UnifyError::Occurs(_, ty) => TypeError::InfiniteType { origin, ty },
-                    };
-                    // The arguments of an effect can be compared more than
-                    // once, as its row is settled and then checked.
-                    self.report_once(error);
-                }
+                self.report_unified(unified, &expected, &actual, origin);
             }
             Constraint::Class { constraint, origin } => self.pending.push((constraint, origin)),
             // Solved right away when possible, so that the field's type is
@@ -905,7 +893,7 @@ impl<'db> Solver<'db> {
                 }
             };
             match field {
-                Some(field) => self.equal(&field, ty, origin),
+                Some(field) => self.equal_into(&field, ty, origin),
                 // Reported as too many patterns already.
                 None if too_many && matches!(part, TuplePatPart::Positional(_)) => {
                     self.unifier.met_error(ty);
@@ -1545,7 +1533,9 @@ impl<'db> Solver<'db> {
             _ => None,
         };
         match field {
-            Some(declared) => self.equal(&declared, &constraint.field, origin),
+            // What the field holds flows into the access, which is how a
+            // call by name through it is checked (#411).
+            Some(declared) => self.equal(&constraint.field, &declared, origin),
             None => {
                 let ty = self.unifier.resolve(&ty);
                 self.errors.push(TypeError::NoSuchField {
@@ -1580,6 +1570,37 @@ impl<'db> Solver<'db> {
 
     pub fn equal(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
         self.add(Constraint::Equal { expected: expected.clone(), actual: actual.clone(), origin });
+    }
+
+    /// Like [`Solver::equal`], but the names of parameters flow from
+    /// `expected` into `actual`: from the value a pattern matches into the
+    /// pattern's parts, so that calls by name through them are checked
+    /// (#411).
+    pub fn equal_into(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
+        let unified = self.unifier.unify_into(expected, actual);
+        self.report_unified(unified, expected, actual, origin);
+    }
+
+    fn report_unified(
+        &mut self,
+        unified: Result<(), UnifyError<'db>>,
+        expected: &Ty<'db>,
+        actual: &Ty<'db>,
+        origin: Origin<'db>,
+    ) {
+        if let Err(err) = unified {
+            let error = match err {
+                UnifyError::Mismatch(..) => TypeError::Mismatch {
+                    origin,
+                    expected: self.unifier.resolve(expected),
+                    actual: self.unifier.resolve(actual),
+                },
+                UnifyError::Occurs(_, ty) => TypeError::InfiniteType { origin, ty },
+            };
+            // The arguments of an effect can be compared more than once, as
+            // its row is settled and then checked.
+            self.report_once(error);
+        }
     }
 
     /// Wait for the types to decide which function a use of a name with

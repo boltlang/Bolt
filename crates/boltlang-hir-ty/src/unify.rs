@@ -255,6 +255,15 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// Like [`Unifier::unify`], but the names of parameters flow from `a`
+    /// into `b`, like from the value a pattern matches into its parts.
+    pub fn unify_into(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
+        self.flipped = !self.flipped;
+        let unified = self.unify(a, b);
+        self.flipped = !self.flipped;
+        unified
+    }
+
     pub fn unify(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         let a = self.shallow_resolve(a);
         let b = self.shallow_resolve(b);
