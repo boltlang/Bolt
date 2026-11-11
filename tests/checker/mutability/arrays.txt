@@ -278,15 +278,22 @@ sum([1, 2]): i32
 sum(mut [1, 2]): i32
 
 ================================================================================
-A parameter without mut or imm can't be changed
+Changing a parameter makes it mut, unless its type says imm
 :error
 :test-prelude
 ================================================================================
 fn clear(xs: [i32]) { xs[0] = 0; }
+fn keep(xs: imm [i32]) { xs[0] = 0; }
+clear(mut [1]);
+clear([1]);
 --------------------------------------------------------------------------------
-clear: fn(xs: [i32]) -> ()
+clear: fn(xs: mut [i32]) -> ()
+keep: fn(xs: imm [i32]) -> ()
+clear(mut [1]): ()
+clear([1]): ()
 --------------------------------------------------------------------------------
-error at `xs`: can't change [i32]
+error at `xs`: can't change imm [i32]
+error at `[1]`: expected mut [i32], found imm [i32]
 
 ================================================================================
 A mut parameter can be changed, and needs a mut array
@@ -504,7 +511,7 @@ a.items[0] = 2;
 let c = Inventory { items: mut [1] };
 let d = mut Inventory { items: [1] };
 --------------------------------------------------------------------------------
-f: fn(inv: Inventory) -> ()
+f: fn(inv: mut Inventory) -> ()
 let a: imm Inventory
 let b: mut Inventory
 b.items[0] = 2: ()
@@ -512,7 +519,6 @@ a.items[0] = 2: ()
 let c: imm Inventory
 let d: mut Inventory
 --------------------------------------------------------------------------------
-error at `inv.items`: can't change [i32]
 error at `a.items`: can't change imm [i32]
 error at `mut [1]`: expected imm [i32], found mut [i32]
 error at `[1]`: expected mut [i32], found imm [i32]

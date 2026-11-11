@@ -250,7 +250,7 @@ drain(a);
 fn bump(it) { it.next += 1; it.vec }
 --------------------------------------------------------------------------------
 remaining: forall T. fn(it: VecIter[T]) -> i32
-reset: forall T. fn(it: VecIter[T]) -> ()
+reset: forall T. fn(it: VecIter[T, mut]) -> ()
 drain: forall T. fn(it: VecIter[T, mut]) -> ()
 bump: forall a b. mut a.next: i32 => a.vec: b => fn(it: a) -> b
 let frozen: imm Vec[i32]
@@ -265,7 +265,6 @@ let d: imm VecIter[i32, mut]
 drain(b): ()
 drain(a): ()
 --------------------------------------------------------------------------------
-error at `it.vec`: expected mut Vec[T], found Vec[T]
 error at `a.vec`: expected mut Vec[{integer}], found imm Vec[{integer}]
 error at `a`: expected VecIter[{integer}, mut], found mut VecIter[{integer}, imm]
 error at `VecIter { vec: growing, next: 0 }`: imm VecIter[i32, mut] holds Mut

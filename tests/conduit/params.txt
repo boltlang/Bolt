@@ -147,7 +147,7 @@ fn file() -> () {
   let %7: i32 = get Tuple_i32_i32.0.0(%o)
   let %8: i32 = call plus_i32(%6, %7)
   let = call_extern log(%8)
-  let %9: i32 = call both_i32_i32_w_Bool[imm, imm](1i32, 2i32, 3i32, 1i32)
+  let %9: i32 = call both_i32_i32_w_Bool(1i32, 2i32, 3i32, 1i32)
   let = call_extern log(%9)
   jump ret()
 }
@@ -172,7 +172,7 @@ fn star_i32(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn both_i32_i32_w_Bool['m1, 'm2](%0: i32, %1: i32, %sep: i32, %3: i32) -> (i32) {
+fn both_i32_i32_w_Bool(%0: i32, %1: i32, %sep: i32, %3: i32) -> (i32) {
   let %args: imm Tuple_i32_i32 = new Tuple_i32_i32.0(%0, %1)
   let %o: imm Tuple_Bool = new Tuple_Bool.0(%3)
   jump ret(%sep)

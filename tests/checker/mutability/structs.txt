@@ -136,15 +136,17 @@ norm(Point { x: 1, y: 2 }): i32
 norm(mut Point { x: 1, y: 2 }): i32
 
 ================================================================================
-A parameter without mut or imm can't be changed
+Changing a parameter makes it mut, unless its type says imm
 :error
 ================================================================================
 struct Point { x: i32, y: i32 }
 fn reset(p: Point) { p.x = 0; }
+fn keep(p: imm Point) { p.x = 0; }
 --------------------------------------------------------------------------------
-reset: fn(p: Point) -> ()
+reset: fn(p: mut Point) -> ()
+keep: fn(p: imm Point) -> ()
 --------------------------------------------------------------------------------
-error at `p`: can't change Point
+error at `p`: can't change imm Point
 
 ================================================================================
 A mut parameter needs a mut struct
@@ -235,18 +237,20 @@ error at `mut Point { x: 0, y: 0 }`: expected imm Point, found mut Point
 error at `Point { x: 0, y: 0 }`: expected mut Point, found imm Point
 
 ================================================================================
-A field of a parameter's struct can't be changed
+Changing a field of a parameter's struct makes the parameter mut
 :error
 ================================================================================
 struct Point { x: i32, y: i32 }
 struct Line { a: Point, b: Point }
 fn f(l: Line) { l.a.x = 1; }
 fn g(l: mut Line) { l.a.x = 1; }
+fn h(l: imm Line) { l.a.x = 1; }
 --------------------------------------------------------------------------------
-f: fn(l: Line) -> ()
+f: fn(l: mut Line) -> ()
 g: fn(l: mut Line) -> ()
+h: fn(l: imm Line) -> ()
 --------------------------------------------------------------------------------
-error at `l.a`: can't change Point
+error at `l.a`: can't change imm Point
 
 ================================================================================
 A struct holding arrays
@@ -733,15 +737,20 @@ let c: mut Box[imm [i32]]
 c.n = 2: ()
 
 ================================================================================
-A complete signature can't put an array of a generic mutability in an imm one (#247)
+Putting a parameter in an imm array makes it imm, unless its type names a mutability (#247)
 :error
 ================================================================================
 fn hide(xs: [i32]) -> i32 {
   let w = [xs];
   0
 }
+fn named(xs: 'm [i32]) -> i32 {
+  let w = [xs];
+  0
+}
 --------------------------------------------------------------------------------
-hide: fn(xs: [i32]) -> i32
+hide: fn(xs: imm [i32]) -> i32
+named: fn(xs: 'm [i32]) -> i32
 --------------------------------------------------------------------------------
 error at `[xs]`: 'm [i32] isn't at most imm
 

@@ -1385,7 +1385,7 @@ impl FnSig<'_> {
     /// struct whose mutability isn't written needs the body.
     pub fn is_complete(&self) -> bool {
         self.ret.as_ref().is_some_and(|t| !t.has_unwritten())
-            && self.params.iter().all(Option::is_some)
+            && self.params.iter().all(|t| t.as_ref().is_some_and(|t| !t.has_unwritten()))
     }
 }
 
@@ -1508,8 +1508,20 @@ pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store)
         .with_mutabilities(GenericDefId::Function(id));
     let mut hidden = HiddenParams::new(db, GenericDefId::Function(id));
-    let params =
-        sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref).map(|t| hidden.fill(&t))).collect();
+    // A mutability that a parameter doesn't write is decided with the body,
+    // like a type that isn't written. Only a function whose type can't come
+    // from its body, because it has none or its class declares it, takes
+    // either mutability there, as a hidden parameter.
+    let declared_elsewhere = !id.item(db).has_body
+        || matches!(id.container(db), ItemContainerId::Class(_) | ItemContainerId::Impl(_));
+    let params = sig
+        .params
+        .iter()
+        .map(|p| {
+            let t = ctx.lower_opt_ty(p.type_ref)?;
+            Some(if declared_elsewhere { hidden.fill(&t) } else { t })
+        })
+        .collect();
     let ret = match sig.ret_type {
         Some(ret) => Some(ctx.lower_ty(ret)),
         None if !id.item(db).has_body => Some(Ty::unit()),

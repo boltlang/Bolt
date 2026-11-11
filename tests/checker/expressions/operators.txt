@@ -128,14 +128,11 @@ fn f(p: Point, xs: [i32; 2]) {
   z = 2;
 }
 --------------------------------------------------------------------------------
-f: fn(p: Point, xs: [i32]) -> ()
+f: fn(p: mut Point, xs: mut [i32]) -> ()
 --------------------------------------------------------------------------------
 error at `x`: not mut
 error at `x`: not mut
 error at `z`: not mut
-error at `p`: can't change Point
-error at `xs`: can't change [i32]
-error at `q`: can't change Point
 
 ================================================================================
 Assigning to something that isn't a place is an error

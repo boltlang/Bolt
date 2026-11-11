@@ -349,7 +349,11 @@ fn infer_group<'db>(
         let params: Box<[Ty<'db>]> = sig
             .params
             .iter()
-            .map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General)))
+            .map(|t| match t {
+                // The body decides the mutabilities that aren't written.
+                Some(t) => t.fill_unwritten(&mut || solver.new_var(VarKind::Mutability)),
+                None => solver.new_var(VarKind::General),
+            })
             .collect();
         for assumption in implied_assumptions(db, f, &params) {
             solver.assume_at_most(assumption);
