@@ -6,10 +6,11 @@ description: A proposal for what the names of a function type's parameters mean 
 
 # Arguments and parameter names
 
-:::info[Proposal]
-Nothing on this page is implemented yet. It's the design for
-[#411](https://github.com/boltlang/Bolt/issues/411). What the checker does
-now is described in
+:::info[Design]
+This is the design of [#411](https://github.com/boltlang/Bolt/issues/411),
+which is implemented, except for the warning for swapped names
+([#433](https://github.com/boltlang/Bolt/issues/433)). How the checker
+does it is described in
 [Names of positional parameters](./types.mdx#names-of-positional-parameters).
 :::
 
@@ -20,10 +21,10 @@ given to another function, kept in a variable or a struct, or returned.
 
 ## The problem
 
-Now, a name in a function type is a contract. A written type asks for
-names, and only a function with those names fits it. `apply(|x| x)` works,
-because a lambda takes the names of the type it's checked against, but
-almost any other way of passing a function fails:
+Before, a name in a function type was a contract. A written type asked for
+names, and only a function with those names fit it. `apply(|x| x)` worked,
+because a lambda took the names of the type it was checked against, but
+almost any other way of passing a function failed:
 
 ```bolt
 fn apply(k: fn(item: i32) -> i32) -> i32 = k(item: 1);
@@ -41,7 +42,7 @@ apply(g);              // a function without names doesn't fit one with names
 apply(f) + apply_v(f); // `f` can't be both `item` and `value`
 
 fn q(k) = k(item: 2) + apply(k);
-// `k(item: 2)` makes `item` keyword-only, which `apply` doesn't take
+// `k(item: 2)` made `item` keyword-only, which `apply` didn't take
 ```
 
 None of these can go wrong at runtime. A name only says which position an
@@ -90,7 +91,7 @@ anyway.
 The rules:
 
 1. **Names never make unification fail.** Two function types unify by
-   their shapes, as now.
+   their shapes, like other types.
 2. **Functions that flow into a variable give it the intersection of their
    slots.** Like `f` and `g` into `k` in `let k = if c { f } else { g }`,
    into the elements of an array, or into a type parameter. A written slot
@@ -107,8 +108,7 @@ The rules:
 
 ### Examples
 
-These are the results of a prototype of the rules (see
-[below](#what-changes-in-the-checker)).
+These are cases in `tests/checker/types/params.txt`.
 
 ```bolt
 let f = |x: i32| x;
@@ -165,45 +165,26 @@ A function that only reaches the variable through a generic function, like
 isn't an error. That's harmless, since the call still passes its argument by
 position.
 
-## What changes in the checker
-
-A prototype of the rules, which isn't merged, changes about 180 lines in
-`unify.rs` and `infer.rs`:
+## What changed in the checker
 
 - `NameEdge` means "flows into": a variable `lo` that the slot `hi` flowed
   into. `Unifier::relate_names` records it only when `lo` is a variable, and
   never fails, except for a function that comes after a call it doesn't
-  fit. The order of names (`NameBound`) and `Unifier::name_solutions` go.
+  fit. The order of names, its solving and the tags that the solver used to
+  report names that didn't fit are gone.
 - A slot's set is found when it's needed (`Unifier::name_set`): the name a
   call claimed, the intersection of its sources, or any name.
 - `Unifier::require_name` claims (`Unifier::claim`), and
   `Unifier::slots_now` tells a call which slots are open.
-  `Unifier::settle_names` gives each slot its name and reports nothing.
+  `Unifier::settle_names` gives each slot its name.
 - `apply_general` gives a named argument for no name the first open slot
   after the positional arguments, and makes an unknown callee's parameters
   positional, with open slots.
 - `infer_lambda` takes its names from its patterns only.
 
-Tests that turn around, all of them on purpose:
-
-- `tests/checker/types/params.txt`: "A function without the names that are
-  asked for doesn't fit" and "Inside a parameter's function type, names are
-  asked for the other way".
-- `tests/checker/inference/annotations.txt`: "Annotations on lambda
-  parameters that disagree with their use" shows the lambda's own names
-  now.
-- The unit tests `names_fit_where_fewer_are_expected` and
-  `a_name_a_call_uses_is_kept` in `unify.rs`.
-
-To do before it's done:
-
-- The examples on this page as cases in `tests/checker/types/params.txt`.
-- Code that compares types with `==` instead of unifying them, like
-  instance lookup, should ignore the names of positional parameters, the
-  way monomorphization does.
-- A clearer error for a function that comes after a call, naming the call.
-- Rewrite the section on names in [Types and schemes](./types.mdx) from
-  this page.
+Left to do: a clearer error for a function that comes after a call it
+doesn't fit, naming the call
+([#434](https://github.com/boltlang/Bolt/issues/434)).
 
 ## Swapped names
 
@@ -251,7 +232,7 @@ like `|x| x` for `fn(item: i32) -> i32`, don't warn.
 
 - **OCaml** has labels in function types, and a function with other labels
   doesn't fit: `~x:int -> int` isn't `~item:int -> int`. That's what Bolt
-  does now.
+  did before #411.
 - **Swift** took argument labels out of function types (SE-0111), so a
   function value can't be called by name at all. This design keeps names
   in the types, for calls through a value.

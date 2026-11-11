@@ -225,54 +225,64 @@ with keyword parameters or rests binds its parameters from the flat ones
 
 ### Names of positional parameters
 
-[Arguments and parameter names](./arguments.mdx) proposes to change what
-these names promise when a function is passed around
-([#411](https://github.com/boltlang/Bolt/issues/411)).
-
 A positional parameter can be passed by name too: `f(y: 2, x: 1)` for
 `fn f(x: i32, y: i32)`. The names are in the function's type, as
 `fn(x: i32, y: i32)`, and a function type can be written with them. Each
-positional parameter in `Params` has a name in `Params::names`: a
+positional parameter in `Params` has a name slot in `Params::names`: a
 `Ty::ParamName`, which is `None` for one without a name, like a pattern
 that isn't a name, or a variable of kind `VarKind::Name` while it's
-inferred.
+inferred. At runtime nothing changes: a name only decides a position, which
+the checker and MIR find the same way (`place_args`), and monomorphization
+drops the names.
 
-Names aren't types. A written type is a requirement, so a function with
-names fits where fewer are asked for: `fn(x: i32)` fits `fn(i32)`, but
-`fn(i32)` doesn't fit `fn(x: i32)`, which would let a call pass `x` by
-name. So names are never unified. Where the unifier meets two function
-types, it relates their names one way, the expected one at most the other
-(`NameEdge`): no name, or the same one. Inside the parameters of a
-function type, the other way around, since a function there is given, not
-taken. At runtime nothing changes: a name only decides a position, which
-the checker and MIR find the same way (`place_args`).
+Only a call by name checks a name
+([#411](https://github.com/boltlang/Bolt/issues/411); the reasons are in
+[Arguments and parameter names](./arguments.mdx)). A name in a function
+type says how whoever holds a value of that type can call it by name, so
+names never make unification fail, and instance matching ignores them. A
+written function type renames the parameters of what it's given:
+`apply(f)` for `fn apply(k: fn(item: i32) -> i32)` checks whatever `f`
+calls its parameter, and inside `apply`, `k(item: 1)` uses `apply`'s
+names.
 
-A variable that's bound to a function type gets new name variables, which
-the names it was bound to bound from above when the variable is on the
-expected side, and from below otherwise. So a variable that two functions
-meet in, like the type of `if c { f } else { g }`, has the names they share:
-with `f(x, y)` and `g(x, z)`, it's `fn(x: i32, i32)`. Unifying the names
-instead would make the first function decide them for the second, and
-copying them would make the second an error.
+A slot stands for the set of names its parameter can be called by: one
+name, none, or any, for a variable that nothing decided yet. When a type
+variable is bound to a function type (`Unifier::bind_freshened`), its
+slots become new variables. On the side that's expected, the given
+function's slots flow into them (`NameEdge`), and when the unifier meets
+two function types, the actual one's slots flow into the expected one's
+too, the other way around inside parameters. A written slot doesn't
+receive anything, which is the renaming. A variable's set is the
+intersection of what flowed into it (`Unifier::name_set`), so the type of
+`if c { f } else { g }` has the names that `f` and `g` share: with `f(x,
+y)` and `g(x, z)`, it's `fn(x: i32, i32)`. A variable on the other side,
+like `k` in `apply(k)` for a `k` without an annotation, gets open slots.
 
-The solver tags each name relation with the equality that made it, and
-settles the names before generalizing (`Solver::settle_names`): a name
-that's at least a name, because a call passes it by that name, is that
-name, and otherwise it's the greatest name that the names above it allow,
-which is no name when they differ or when nothing says. A relation that
-doesn't hold then is reported as a mismatch at its equality. A call with a
-named argument looks at the names the callee would have now
-(`Unifier::names_now`), and a name it uses becomes a lower bound.
+A call with a named argument looks at what the callee's slots are now
+(`Unifier::slots_now`). A name that no slot has takes the first open one
+after the positional arguments, in the order the call writes them, and the
+call claims the slot (`Unifier::claim`), along with the open slots that
+flowed into it, so that what's given there can be called by that name. So
+`fn pick(c, f, g) = { let k = if c { f } else { g }; k(x: 1) }` names the
+parameters of both `f` and `g` `x`. A call by name of a function that isn't
+known yet makes its arguments positional parameters, with open slots that
+the call claims: `fn r(k) = k(item: 2)` has type `fn(k: fn(item: i32) ->
+a) -> a`. A slot that's claimed has one name, so `k(x: 1); k(y: 1)` is an
+error. A function that flows into a claimed slot after the call must have
+its name, or unifying it fails.
+
+Before generalizing, the solver settles the names
+(`Solver::settle_names`): a claimed slot has its claim, one whose set is a
+single name has that name, and every other slot has none.
 
 A parameter before a `/` has no name (`ParamData::name` is `None`), so
 its type is the same as if the name were left out: `fn f(x: i32, /, y:
 i32)` has type `fn(i32, y: i32)`. A function type has no `/` for that
 reason, since leaving the names out says the same.
 
-A lambda's parameters have the names of the function type it's checked
-against, or else those of its patterns. A method of a class impl can name
-its parameters otherwise than the class: calls through the class use the
-class's names.
+A lambda's parameters have the names of its patterns, whatever it's
+checked against. A method of a class impl can name its parameters
+otherwise than the class: calls through the class use the class's names.
 
 ### Default values
 
