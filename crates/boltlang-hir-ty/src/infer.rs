@@ -43,6 +43,7 @@ use crate::{
         TuplePart, TypeError,
     },
     ty::{AdtId, ArgPlace, ArgPlaces, Mutability, Params, Ty, VarKind, place_args},
+    unify::SlotNow,
 };
 
 /// The arguments of a call: only positional ones, or with named ones and
@@ -1071,28 +1072,26 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         else {
             unreachable!("only called for a lambda")
         };
-        let (hint_params, hint_names, hint_ret) =
+        let (hint_params, hint_ret) =
             match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
                 // A lambda only has positional parameters for now.
                 Some(Ty::Fn(ps, r, _, _))
                     if ps.is_positional() && ps.positional.len() == params.len() =>
                 {
-                    (Some(ps.positional), Some(ps.names), Some(*r))
+                    (Some(ps.positional), Some(*r))
                 }
-                _ => (None, None, None),
+                _ => (None, None),
             };
-        // The names of the parameters are those of the function type
-        // it's checked against, or else those of its patterns.
-        let names = hint_names.map(|n| n.into_vec()).unwrap_or_else(|| {
-            let body = self.body;
-            params
-                .iter()
-                .map(|&p| match &body[p] {
-                    Pat::Bind { id, subpat: None } => Ty::ParamName(Some(body[*id].name.clone())),
-                    _ => Ty::ParamName(None),
-                })
-                .collect()
-        });
+        // The names of the parameters are those of its patterns: a written
+        // type it's given for renames them (#411).
+        let body = self.body;
+        let names: Vec<Ty<'db>> = params
+            .iter()
+            .map(|&p| match &body[p] {
+                Pat::Bind { id, subpat: None } => Ty::ParamName(Some(body[*id].name.clone())),
+                _ => Ty::ParamName(None),
+            })
+            .collect();
         self.closures.push(ClosureFrame::default());
         let mut param_tys = Vec::new();
         for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
@@ -2000,18 +1999,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     self.solver.errors.push(TypeError::TypeNeeded { origin });
                     return Ty::Error;
                 }
-                let positional = items.iter().filter(|i| matches!(i, TupleItem::Positional(_)));
-                let count = positional.count() + receiver.is_some() as usize;
+                // Named arguments are positional parameters too, after the
+                // others, in the order they're written, and their slots are
+                // open, so that the call claims them (#411).
+                let count = items.len() + receiver.is_some() as usize;
                 let positional = (0..count).map(|_| self.new_var()).collect();
-                let names = (0..count).map(|_| Ty::ParamName(None)).collect();
-                let keyword = items
-                    .iter()
-                    .filter_map(|i| match i {
-                        TupleItem::Named(n, _) => Some((n.clone(), self.new_var())),
-                        _ => None,
-                    })
-                    .collect();
-                let params = Params::new(positional, names, None, keyword, None);
+                let names = (0..count).map(|_| self.solver.new_var(VarKind::Name)).collect();
+                let params = Params::new(positional, names, None, Vec::new(), None);
                 let ret = self.new_var();
                 let effects = self.solver.new_var(VarKind::Effect);
                 let fn_ty = Ty::Fn(
@@ -2036,8 +2030,31 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             parts.push(TuplePart::Positional(receiver_ty.clone()));
             position = Some(1);
         }
-        let names = self.solver.unifier.names_now(&params.names);
+        let slots = self.solver.unifier.slots_now(&params.names);
         let first = receiver.is_some() as usize;
+        let mut names: Vec<Option<Name>> = slots
+            .iter()
+            .map(|s| match s {
+                SlotNow::Named(name) => Some(name.clone()),
+                _ => None,
+            })
+            .collect();
+        // A named argument for no name claims the first open slot after the
+        // positional arguments, in the order they're written (#411).
+        if !items.iter().any(|i| matches!(i, TupleItem::Spread(..))) {
+            let given =
+                first + items.iter().filter(|i| matches!(i, TupleItem::Positional(_))).count();
+            let mut open = (given..slots.len()).filter(|&i| slots[i] == SlotNow::Open);
+            for item in items {
+                if let TupleItem::Named(name, _) = item
+                    && !names.contains(&Some(name.clone()))
+                    && !params.keyword.iter().any(|(n, _)| n == name)
+                    && let Some(i) = open.next()
+                {
+                    names[i] = Some(name.clone());
+                }
+            }
+        }
         // The defaults of the function, if it's known: those of the
         // parameters the call leaves out.
         let defaults = function.map(|f| ParamDefaults::of(self.db, f)).unwrap_or_default();

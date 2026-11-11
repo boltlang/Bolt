@@ -38,68 +38,67 @@ struct Var<'db> {
     defaulted: Option<NumberKind>,
 }
 
-/// That the name `lo` of a positional parameter is at most `hi`: `lo` has
-/// no name, or the same as `hi`. A written type is a requirement, which a
-/// function with more names meets: `fn(x: i32)` fits where `fn(i32)` is
-/// expected, but not the other way around. `tag` is what the solver set
-/// when it was made, to know where to report it.
+/// That a function whose name slot is `hi` flows into the variable `lo`,
+/// like `f` into `k` in `let k = f`: `lo` can only be called by the names
+/// that all its sources have.
 #[derive(Debug, Clone)]
-pub struct NameEdge<'db> {
-    pub lo: Ty<'db>,
-    pub hi: Ty<'db>,
-    pub tag: u32,
+struct NameEdge<'db> {
+    lo: Ty<'db>,
+    hi: Ty<'db>,
 }
 
-/// What a name variable can be, as [`Unifier::name_solutions`] finds it.
+/// The names a parameter's slot can be called by (#411): any, while
+/// nothing decided it, one, or none.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum NameBound {
-    /// Nothing says.
+enum NameSet {
     Any,
-    Is(Option<Name>),
-    /// Two different names.
-    Conflict,
+    One(Name),
+    Empty,
 }
 
-impl NameBound {
+impl NameSet {
     fn of(name: &Option<Name>) -> Self {
-        NameBound::Is(name.clone())
-    }
-
-    /// The least name at least both: a name below gives it.
-    fn join(&self, other: &NameBound) -> NameBound {
-        match (self, other) {
-            (NameBound::Any, b) | (b, NameBound::Any) => b.clone(),
-            (NameBound::Is(None), b) | (b, NameBound::Is(None)) => b.clone(),
-            (a, b) if a == b => a.clone(),
-            _ => NameBound::Conflict,
+        match name {
+            Some(name) => NameSet::One(name.clone()),
+            None => NameSet::Empty,
         }
     }
 
-    /// The greatest name at most both: two different names give none.
-    fn meet(&self, other: &NameBound) -> NameBound {
+    fn meet(&self, other: &NameSet) -> NameSet {
         match (self, other) {
-            (NameBound::Any, b) | (b, NameBound::Any) => b.clone(),
-            (a, b) if a == b => a.clone(),
-            _ => NameBound::Is(None),
+            (NameSet::Any, s) | (s, NameSet::Any) => s.clone(),
+            (NameSet::One(a), NameSet::One(b)) if a == b => NameSet::One(a.clone()),
+            _ => NameSet::Empty,
+        }
+    }
+
+    fn contains(&self, name: &Name) -> bool {
+        match self {
+            NameSet::Any => true,
+            NameSet::One(n) => n == name,
+            NameSet::Empty => false,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+/// What a call by name finds in a slot: a name, a slot that it can claim,
+/// or no name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SlotNow {
+    Named(Name),
+    Open,
+    Unnamed,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Unifier<'db> {
     vars: Vec<Var<'db>>,
     /// Inside the parameters of a function type, an odd number of times:
-    /// names are related the other way around there.
+    /// functions flow the other way around there.
     flipped: bool,
     names: Vec<NameEdge<'db>>,
-    /// The tag of the name edges made from now on.
-    pub tag: u32,
-}
-
-impl Default for Unifier<'_> {
-    fn default() -> Self {
-        Unifier { vars: Vec::new(), flipped: false, names: Vec::new(), tag: u32::MAX }
-    }
+    /// The names that calls passed name variables by.
+    claims: std::collections::HashMap<TyVar, Name>,
 }
 
 impl<'db> Unifier<'db> {
@@ -278,13 +277,16 @@ impl<'db> Unifier<'db> {
                 };
                 self.vars[y.0 as usize].state = VarState::Unbound(kind);
                 self.vars[x.0 as usize].state = VarState::Bound(b.clone());
+                if let Some(name) = self.claims.remove(x) {
+                    self.claims.entry(*y).or_insert(name);
+                }
                 if self.vars[x.0 as usize].met_error {
                     self.vars[y.0 as usize].met_error = true;
                 }
                 Ok(())
             }
-            // The variable on the side that's expected takes the names that
-            // the other has as an upper bound, and the other way around.
+            // A variable on the side that's expected receives the names of
+            // the other; on the other side, it gets open names.
             (Ty::Var(var), ty) => self.bind_freshened(*var, ty, true),
             (ty, Ty::Var(var)) => self.bind_freshened(*var, ty, false),
             // A tuple with a pack spread in it: its fields are matched with
@@ -356,8 +358,8 @@ impl<'db> Unifier<'db> {
             // Positional parameters one by one. With packs or keyword
             // parameters, the parameters unify as tuples do: by position, by
             // name, and with the packs taking what's left. The names of the
-            // positional ones that both have are related, the expected ones
-            // at most the others.
+            // positional ones that both have flow from the actual function
+            // into the expected one, which a written name doesn't receive.
             (Ty::Fn(xs, x, m, e), Ty::Fn(ys, y, n, f))
                 if !(xs.is_positional() && ys.is_positional())
                     || xs.positional.len() == ys.positional.len() =>
@@ -512,32 +514,74 @@ impl<'db> Unifier<'db> {
         }
     }
 
-    /// That the name `lo` is at most `hi`, now if both are known, or once
-    /// they're settled otherwise.
+    /// That a function with the name slot `hi` flows into `lo`. A written
+    /// name renames what it's given, so only a variable records it. A
+    /// source that comes after a call by name must have that name.
     fn relate_names(&mut self, lo: &Ty<'db>, hi: &Ty<'db>) -> Result<(), ()> {
         let (lo, hi) = (self.shallow_resolve(lo), self.shallow_resolve(hi));
-        match (&lo, &hi) {
-            (Ty::ParamName(None), _) => Ok(()),
-            (Ty::ParamName(x), Ty::ParamName(y)) => {
-                if x == y {
-                    Ok(())
-                } else {
-                    Err(())
+        let Ty::Var(v) = lo else { return Ok(()) };
+        if lo == hi {
+            return Ok(());
+        }
+        self.names.push(NameEdge { lo, hi: hi.clone() });
+        if let Some(name) = self.claims.get(&v).cloned() {
+            if !self.name_set(&hi, &mut Vec::new()).contains(&name) {
+                return Err(());
+            }
+            self.claim(&hi, &name);
+        }
+        Ok(())
+    }
+
+    /// The names the slot `ty` can be called by: those all its sources
+    /// have, or the one a call claimed.
+    fn name_set(&self, ty: &Ty<'db>, seen: &mut Vec<TyVar>) -> NameSet {
+        match self.shallow_resolve(ty) {
+            Ty::ParamName(name) => NameSet::of(&name),
+            Ty::Var(v) => {
+                if let Some(name) = self.claims.get(&v) {
+                    return NameSet::One(name.clone());
                 }
+                if seen.contains(&v) {
+                    return NameSet::Any;
+                }
+                seen.push(v);
+                let mut set = NameSet::Any;
+                for edge in &self.names {
+                    if self.shallow_resolve(&edge.lo) == Ty::Var(v) {
+                        set = set.meet(&self.name_set(&edge.hi, seen));
+                    }
+                }
+                set
             }
-            (Ty::Var(x), Ty::Var(y)) if x == y => Ok(()),
-            _ => {
-                self.names.push(NameEdge { lo, hi, tag: self.tag });
-                Ok(())
-            }
+            _ => NameSet::Any,
+        }
+    }
+
+    /// Claim `name` for the slot `ty` and for the open slots that flowed
+    /// into it, so that what's given there can be called by it.
+    fn claim(&mut self, ty: &Ty<'db>, name: &Name) {
+        let Ty::Var(v) = self.shallow_resolve(ty) else { return };
+        if self.claims.contains_key(&v) {
+            return;
+        }
+        self.claims.insert(v, name.clone());
+        let sources: Vec<Ty<'db>> = self
+            .names
+            .iter()
+            .filter(|e| self.shallow_resolve(&e.lo) == Ty::Var(v))
+            .map(|e| e.hi.clone())
+            .collect();
+        for source in sources {
+            self.claim(&source, name);
         }
     }
 
     /// Bind `var` to `ty`, with new variables for the names of the
-    /// parameters in it, which the names of `ty` bound: from above when
-    /// `var` is on the side that's expected, and from below otherwise. A
-    /// variable that two functions with different names meet in has the
-    /// names they share, like that of `if c { f } else { g }`.
+    /// parameters in it. When `var` is on the side that's expected, the
+    /// names of `ty` flow into them, so a variable that two functions meet
+    /// in has the names they share, like that of `if c { f } else { g }`.
+    /// Otherwise they're open, for calls by name to claim.
     fn bind_freshened(
         &mut self,
         var: TyVar,
@@ -553,9 +597,9 @@ impl<'db> Unifier<'db> {
         self.bind(var, &ty)
     }
 
-    /// `ty` with a new variable for each name of a parameter, at most that
-    /// name when `low`, and at least it otherwise. Inside the parameters of
-    /// a function type, the other way around.
+    /// `ty` with a new variable for each name of a parameter, which that
+    /// name flows into when `low`, and that flows into the name otherwise.
+    /// Inside the parameters of a function type, the other way around.
     fn freshen(&mut self, ty: &Ty<'db>, low: bool) -> Ty<'db> {
         ty.fold(&mut |t| {
             let Ty::Fn(params, ret, m, e) = t else { return None };
@@ -581,135 +625,55 @@ impl<'db> Unifier<'db> {
 
     /// The names that `names` would have if they were settled now.
     pub fn names_now(&self, names: &[Ty<'db>]) -> Vec<Option<Name>> {
-        let mut solutions = None;
-        names
-            .iter()
-            .map(|n| match self.shallow_resolve(n) {
-                Ty::ParamName(name) => name,
-                Ty::Var(v) => solutions
-                    .get_or_insert_with(|| self.name_solutions())
-                    .get(&v)
-                    .cloned()
-                    .flatten(),
+        self.slots_now(names)
+            .into_iter()
+            .map(|s| match s {
+                SlotNow::Named(name) => Some(name),
                 _ => None,
             })
             .collect()
     }
 
-    /// How many relations between names there are, to tell whether
-    /// unifying made one.
-    pub fn name_edge_count(&self) -> usize {
-        self.names.len()
+    /// What a call by name finds in each of `names` now.
+    pub fn slots_now(&self, names: &[Ty<'db>]) -> Vec<SlotNow> {
+        names
+            .iter()
+            .map(|n| match self.name_set(n, &mut Vec::new()) {
+                NameSet::One(name) => SlotNow::Named(name),
+                NameSet::Any => SlotNow::Open,
+                NameSet::Empty => SlotNow::Unnamed,
+            })
+            .collect()
     }
 
     /// That the name `ty` is `name`, as a call by that name needs.
     pub fn require_name(&mut self, ty: &Ty<'db>, name: &Name) {
-        let _ = self.relate_names(&Ty::ParamName(Some(name.clone())), ty);
+        self.claim(ty, name);
     }
 
-    /// What each name variable is when the names are settled: a name that
-    /// must be at least one is that one, and otherwise it's the greatest
-    /// that what it must be at most allows, which is no name when they
-    /// differ or when nothing says.
-    fn name_solutions(&self) -> std::collections::HashMap<TyVar, Option<Name>> {
-        use std::collections::HashMap;
-        let edges: Vec<(Ty<'db>, Ty<'db>)> = self
-            .names
-            .iter()
-            .map(|e| (self.shallow_resolve(&e.lo), self.shallow_resolve(&e.hi)))
-            .collect();
-        let mut lower: HashMap<TyVar, NameBound> = HashMap::new();
-        let bound = |t: &Ty<'db>, map: &HashMap<TyVar, NameBound>| match t {
-            Ty::ParamName(name) => NameBound::of(name),
-            Ty::Var(v) => map.get(v).cloned().unwrap_or(NameBound::Any),
-            _ => NameBound::Any,
-        };
-        // What each must be at least, from the names below it.
-        loop {
-            let mut changed = false;
-            for (lo, hi) in &edges {
-                let &Ty::Var(v) = hi else { continue };
-                let old = lower.get(&v).cloned().unwrap_or(NameBound::Any);
-                let new = old.join(&bound(lo, &lower));
-                if new != old {
-                    lower.insert(v, new);
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
+    /// Give each name variable its name: the one a call claimed, or the
+    /// one all its sources have, and otherwise none. A source that doesn't
+    /// fit a claim is reported where it's unified.
+    pub fn settle_names(&mut self) {
+        let mut values = Vec::new();
+        for i in 0..self.vars.len() {
+            if matches!(self.vars[i].state, VarState::Unbound(VarKind::Name)) {
+                let var = TyVar(i as u32);
+                let name = match self.claims.get(&var) {
+                    Some(name) => Some(name.clone()),
+                    None => match self.name_set(&Ty::Var(var), &mut Vec::new()) {
+                        NameSet::One(name) => Some(name),
+                        _ => None,
+                    },
+                };
+                values.push((var, name));
             }
         }
-        let forced = |v: &TyVar| match lower.get(v) {
-            Some(NameBound::Is(Some(name))) => Some(NameBound::Is(Some(name.clone()))),
-            Some(NameBound::Conflict) => Some(NameBound::Conflict),
-            _ => None,
-        };
-        // What each can be at most, from the names above it.
-        let mut upper: HashMap<TyVar, NameBound> = HashMap::new();
-        let above = |t: &Ty<'db>, upper: &HashMap<TyVar, NameBound>| match t {
-            Ty::ParamName(name) => NameBound::of(name),
-            Ty::Var(v) => {
-                forced(v).unwrap_or_else(|| upper.get(v).cloned().unwrap_or(NameBound::Any))
-            }
-            _ => NameBound::Any,
-        };
-        loop {
-            let mut changed = false;
-            for (lo, hi) in &edges {
-                let &Ty::Var(v) = lo else { continue };
-                let old = upper.get(&v).cloned().unwrap_or(NameBound::Any);
-                let new = old.meet(&above(hi, &upper));
-                if new != old {
-                    upper.insert(v, new);
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
+        for (var, name) in values {
+            self.vars[var.0 as usize].state = VarState::Bound(Ty::ParamName(name));
         }
-        let vars = edges.iter().flat_map(|(lo, hi)| [lo, hi]).filter_map(|t| match t {
-            Ty::Var(v) => Some(*v),
-            _ => None,
-        });
-        vars.map(|v| {
-            let name = match forced(&v).or_else(|| upper.get(&v).cloned()) {
-                Some(NameBound::Is(name)) => name,
-                _ => None,
-            };
-            (v, name)
-        })
-        .collect()
-    }
-
-    /// Give each name variable its name, as [`Unifier::name_solutions`]
-    /// finds it, and those that nothing decided none. The tags of the
-    /// relations between names that don't hold are given back.
-    pub fn settle_names(&mut self) -> Vec<u32> {
-        for (var, name) in self.name_solutions() {
-            if self.var_kind(var) == Some(VarKind::Name) {
-                self.vars[var.0 as usize].state = VarState::Bound(Ty::ParamName(name));
-            }
-        }
-        for var in &mut self.vars {
-            if matches!(var.state, VarState::Unbound(VarKind::Name)) {
-                var.state = VarState::Bound(Ty::ParamName(None));
-            }
-        }
-        let mut broken = Vec::new();
-        for edge in std::mem::take(&mut self.names) {
-            let (lo, hi) = (self.shallow_resolve(&edge.lo), self.shallow_resolve(&edge.hi));
-            let holds = match (&lo, &hi) {
-                (Ty::ParamName(None), _) => true,
-                (Ty::ParamName(x), Ty::ParamName(y)) => x == y,
-                _ => true,
-            };
-            if !holds && !broken.contains(&edge.tag) {
-                broken.push(edge.tag);
-            }
-        }
-        broken
+        self.names.clear();
+        self.claims.clear();
     }
 
     fn unify_all(&mut self, xs: &[Ty<'db>], ys: &[Ty<'db>]) -> Result<(), UnifyError<'db>> {
@@ -789,17 +753,20 @@ mod tests {
         Ty::func_with(params, i32(), Ty::nothing())
     }
 
+    /// The names of the parameters of `ty`, a function type.
+    fn names_of<'db>(u: &Unifier<'db>, ty: &Ty<'db>) -> Box<[Ty<'db>]> {
+        let Ty::Fn(params, ..) = u.resolve(ty) else { unreachable!() };
+        params.names
+    }
+
     #[test]
-    fn names_fit_where_fewer_are_expected() {
+    fn names_never_make_unification_fail() {
         let mut u = Unifier::new();
         assert!(u.unify(&named(None), &named(Some("x"))).is_ok());
-        assert!(u.unify(&named(Some("x")), &named(Some("x"))).is_ok());
-        assert!(u.unify(&named(Some("x")), &named(None)).is_err());
-        assert!(u.unify(&named(Some("x")), &named(Some("y"))).is_err());
-        // Inside a parameter, the other way around.
+        assert!(u.unify(&named(Some("x")), &named(None)).is_ok());
+        assert!(u.unify(&named(Some("x")), &named(Some("y"))).is_ok());
         let takes = |t| Ty::func(vec![t], i32());
-        assert!(u.unify(&takes(named(Some("x"))), &takes(named(None))).is_ok());
-        assert!(u.unify(&takes(named(None)), &takes(named(Some("x")))).is_err());
+        assert!(u.unify(&takes(named(None)), &takes(named(Some("x")))).is_ok());
     }
 
     #[test]
@@ -810,22 +777,47 @@ mod tests {
         let b = u.new_var(VarKind::General);
         u.unify(&b, &named(Some("x"))).unwrap();
         u.unify(&b, &named(Some("y"))).unwrap();
-        assert!(u.settle_names().is_empty());
+        u.settle_names();
         assert_eq!(u.resolve(&a), named(Some("x")));
         assert_eq!(u.resolve(&b), named(None));
     }
 
     #[test]
-    fn a_name_a_call_uses_is_kept() {
+    fn a_written_name_renames_what_it_is_given() {
         let mut u = Unifier::new();
         let a = u.new_var(VarKind::General);
         u.unify(&a, &named(Some("x"))).unwrap();
-        let Ty::Fn(params, ..) = u.resolve(&a) else { unreachable!() };
-        assert_eq!(u.names_now(&params.names), vec![Some(Name::new("x"))]);
-        u.require_name(&params.names[0], &Name::new("x"));
-        u.tag = 7;
-        u.unify(&a, &named(Some("y"))).unwrap();
-        assert_eq!(u.settle_names(), vec![7]);
+        // Like `apply(a)` for `apply(k: fn(item: i32) -> i32)`.
+        u.unify(&named(Some("item")), &a).unwrap();
+        u.settle_names();
+        assert_eq!(u.resolve(&a), named(Some("x")));
+    }
+
+    #[test]
+    fn a_call_claims_an_open_slot_and_what_flowed_into_it() {
+        let mut u = Unifier::new();
+        // `f` is given where a written type is expected, so its slot is open.
+        let f = u.new_var(VarKind::General);
+        u.unify(&named(Some("item")), &f).unwrap();
+        assert_eq!(u.slots_now(&names_of(&u, &f)), vec![SlotNow::Open]);
+        // `let k = f; k(x: 1)`.
+        let k = u.new_var(VarKind::General);
+        u.unify(&k, &f).unwrap();
+        u.require_name(&names_of(&u, &k)[0], &Name::new("x"));
+        assert_eq!(u.names_now(&names_of(&u, &f)), vec![Some(Name::new("x"))]);
+        u.settle_names();
+        assert_eq!(u.resolve(&f), named(Some("x")));
+        assert_eq!(u.resolve(&k), named(Some("x")));
+    }
+
+    #[test]
+    fn a_function_given_after_a_call_needs_its_name() {
+        let mut u = Unifier::new();
+        let a = u.new_var(VarKind::General);
+        u.unify(&a, &named(Some("x"))).unwrap();
+        u.require_name(&names_of(&u, &a)[0], &Name::new("x"));
+        assert!(u.unify(&a, &named(Some("y"))).is_err());
+        assert!(u.unify(&a, &named(Some("x"))).is_ok());
     }
 
     #[test]

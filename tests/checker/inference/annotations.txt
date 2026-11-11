@@ -306,8 +306,8 @@ call: fn(f: fn(i32) -> i32) -> i32
 call(|x: Bool| 1): i32
 call(|x| -> Bool { True }): i32
 --------------------------------------------------------------------------------
-error at `|x: Bool| 1`: expected fn(i32) -> i32, found fn(Bool) -> i32
-error at `|x| -> Bool { True }`: expected fn(i32) -> i32, found fn(i32) -> Bool
+error at `|x: Bool| 1`: expected fn(i32) -> i32, found fn(x: Bool) -> i32
+error at `|x| -> Bool { True }`: expected fn(i32) -> i32, found fn(x: i32) -> Bool
 
 ================================================================================
 A function type with the wrong number of parameters

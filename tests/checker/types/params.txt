@@ -146,11 +146,11 @@ let g: fn(i32, i32) -> i32
 let a: i32
 
 ================================================================================
-A function without the names that are asked for doesn't fit
-:error
+A written function type renames the parameters of what it's given
 ================================================================================
 fn f(x: i32, y: i32) -> i32 = x;
 let g: fn(y: i32, x: i32) -> i32 = f;
+let b = g(y: 1, x: 2);
 fn apply(k: fn(item: i32) -> i32) -> i32 = k(item: 1);
 fn one(n: i32) -> i32 = n;
 let a = apply(one);
@@ -159,10 +159,8 @@ f: fn(x: i32, y: i32) -> i32
 apply: fn(k: fn(item: i32) -> i32) -> i32
 one: fn(n: i32) -> i32
 let g: fn(y: i32, x: i32) -> i32
+let b: i32
 let a: i32
---------------------------------------------------------------------------------
-error at `f`: expected fn(y: i32, x: i32) -> i32, found fn(x: i32, y: i32) -> i32
-error at `one`: expected fn(item: i32) -> i32, found fn(n: i32) -> i32
 
 ================================================================================
 A function type written without names can't be called by name
@@ -180,8 +178,7 @@ error at `1`: no parameter x, unnamed ones left
 error at `2`: no parameter y, unnamed ones left
 
 ================================================================================
-Inside a parameter's function type, names are asked for the other way
-:error
+Inside a parameter's function type, a written type renames too
 ================================================================================
 fn take(h: fn(fn(x: i32) -> i32) -> i32) -> i32 = 0;
 fn k(cb: fn(i32) -> i32) -> i32 = cb(1);
@@ -194,8 +191,6 @@ k: fn(cb: fn(i32) -> i32) -> i32
 m: fn(cb: fn(y: i32) -> i32) -> i32
 let a: i32
 let b: i32
---------------------------------------------------------------------------------
-error at `m`: expected fn(fn(x: i32) -> i32) -> i32, found fn(cb: fn(y: i32) -> i32) -> i32
 
 ================================================================================
 Functions that meet keep the names they share
@@ -226,7 +221,7 @@ let a: i32
 error at `2`: argument x is given twice
 
 ================================================================================
-A lambda has the names of its parameters, or those it's checked against
+A lambda has the names of its parameters
 ================================================================================
 let l = |x: i32, y: i32| x;
 let a = l(y: 1, x: 2);
@@ -314,3 +309,130 @@ let y: i32
 --------------------------------------------------------------------------------
 error at `g(1)`: expected 2 arguments, found 1
 error at `False`: argument b is given twice
+
+================================================================================
+A function given for a written type keeps its own names (#411)
+:test-prelude
+================================================================================
+fn apply(k: fn(item: i32) -> i32) -> i32 = k(item: 1);
+fn apply_v(k: fn(value: i32) -> i32) -> i32 = k(value: 1);
+fn id[T](t: T) -> T = t;
+fn double(n: i32) -> i32 = n * 2;
+fn mk() = |x: i32| x;
+struct Handler { run: fn(item: i32) -> i32 }
+fn passed() = {
+  let f = |x: i32| x;
+  let fs = [f];
+  apply(f) + apply_v(f) + f(x: 1) + apply(id(f)) + apply(fs[0]) + apply(mk())
+};
+fn named() = apply(double) + double(n: 1);
+fn nameless() = { let g = |_: i32| 0; apply(g) };
+fn stored() = { let r = |x: i32| x; Handler { run: r } };
+fn wrong_name() = { let f = |x: i32| x; f(item: 1) };
+fn written_without_names() = { let h: fn(i32) -> i32 = |x: i32| x; h(x: 1) };
+--------------------------------------------------------------------------------
+apply: fn(k: fn(item: i32) -> i32) -> i32
+apply_v: fn(k: fn(value: i32) -> i32) -> i32
+id: forall T. fn(t: T) -> T
+double: fn(n: i32) -> i32
+mk: fn() -> fn(x: i32) -> i32
+passed: fn() -> i32
+named: fn() -> i32
+nameless: fn() -> i32
+stored: fn() -> imm Handler
+wrong_name: fn() -> i32
+written_without_names: fn() -> i32
+--------------------------------------------------------------------------------
+error at `1`: no parameter item
+error at `1`: no parameter x, unnamed ones left
+
+================================================================================
+A variable that functions flow into has the names they share (#411)
+:test-prelude
+================================================================================
+fn differ(c: Bool) = {
+  let f = |x: i32| x;
+  let g = |y: i32| y;
+  let k = if c { f } else { g };
+  k(1) + k(x: 1)
+};
+fn same(c: Bool) = {
+  let f = |x: i32| x;
+  let g = |x: i32| x + 1;
+  let k = if c { f } else { g };
+  k(x: 1)
+};
+fn lambdas(c: Bool) = { let k = if c { |x: i32| x } else { |y: i32| y }; k(y: 1) };
+--------------------------------------------------------------------------------
+differ: fn(c: Bool) -> i32
+same: fn(c: Bool) -> i32
+lambdas: fn(c: Bool) -> i32
+--------------------------------------------------------------------------------
+error at `1`: no parameter x, unnamed ones left
+error at `1`: no parameter y, unnamed ones left
+
+================================================================================
+A call by name names the parameters of a function given from outside (#411)
+:test-prelude
+================================================================================
+fn apply(k: fn(item: i32) -> i32) -> i32 = k(item: 1);
+fn apply_v(k: fn(value: i32) -> i32) -> i32 = k(value: 1);
+fn p(k) = apply(k) + k(item: 2);
+fn q(k) = k(item: 2) + apply(k);
+fn s(k) = apply(k) + k(x: 2);
+fn r(k) = k(item: 2);
+fn r2() = r(|x| x);
+fn t(k) = apply(k) + apply_v(k);
+fn v(k) = { k(1); k(x: 2) };
+fn u(k) = { k(x: 1); k(y: 1) };
+--------------------------------------------------------------------------------
+apply: fn(k: fn(item: i32) -> i32) -> i32
+apply_v: fn(k: fn(value: i32) -> i32) -> i32
+p: fn(k: fn(item: i32) -> i32) -> i32
+q: fn(k: fn(item: i32) -> i32) -> i32
+s: fn(k: fn(x: i32) -> i32) -> i32
+r: forall a e. fn(k: fn(item: i32) -> a does e) -> a does e
+r2: fn() -> i32
+t: fn(k: fn(i32) -> i32) -> i32
+v: forall a e. fn(k: fn(x: i32) -> a does e) -> a does e
+u: forall a e. fn(k: fn(x: i32) -> a does e) -> a does e
+--------------------------------------------------------------------------------
+error at `1`: no parameter y
+
+================================================================================
+A call by name narrows the functions that flowed into its callee (#411)
+:test-prelude
+================================================================================
+fn pick(c: Bool, f, g) = { let k = if c { f } else { g }; k(x: 1) + 0 };
+fn mix(c: Bool, f) = { let k = if c { f } else { |x: i32| x }; k(x: 1) };
+fn bad(c: Bool, f) = { let k = if c { f } else { |x: i32| x }; k(y: 1) };
+--------------------------------------------------------------------------------
+pick: forall e. fn(c: Bool, f: 'm fn(x: i32) -> i32 does e, g: 'm fn(x: i32) -> i32 does e) -> i32 does e
+mix: forall e. fn(c: Bool, f: fn(x: i32) -> i32 does e) -> i32 does e
+bad: forall e. fn(c: Bool, f: fn(x: i32) -> i32 does e) -> i32 does e
+--------------------------------------------------------------------------------
+error at `1`: no parameter y
+
+================================================================================
+A function assigned after a call by name needs its name (#411)
+================================================================================
+fn f() = {
+  let mut k = |x: i32| x;
+  let a = k(x: 1);
+  k = |y: i32| y;
+  a
+};
+--------------------------------------------------------------------------------
+f: fn() -> i32
+--------------------------------------------------------------------------------
+error at `|y: i32| y`: expected fn(x: i32) -> i32, found fn(y: i32) -> i32
+
+================================================================================
+A call names open parameters in the order it writes them (#411)
+:test-prelude
+================================================================================
+fn apply2(k: fn(a: i32, b: i32) -> i32) -> i32 = k(a: 1, b: 2);
+fn w(k) = apply2(k) + k(b: 1, a: 2);
+--------------------------------------------------------------------------------
+apply2: fn(k: fn(a: i32, b: i32) -> i32) -> i32
+w: fn(k: fn(b: i32, a: i32) -> i32) -> i32
