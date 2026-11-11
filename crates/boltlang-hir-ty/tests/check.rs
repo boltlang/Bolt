@@ -430,6 +430,16 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         let unnamed = if *unnamed { ", unnamed ones left" } else { "" };
                         format!("error at `{}`: no parameter {name}{unnamed}", at(origin.node))
                     }
+                    InferenceDiagnostic::Type(TypeError::TooManyPatterns {
+                        origin,
+                        expected,
+                        found,
+                    }) => {
+                        format!(
+                            "error at `{}`: expected at most {expected} patterns, found {found}",
+                            at(origin.node)
+                        )
+                    }
                     InferenceDiagnostic::Type(TypeError::DuplicateField { origin, name }) => {
                         format!("error at `{}`: {name} is given twice", at(origin.node))
                     }

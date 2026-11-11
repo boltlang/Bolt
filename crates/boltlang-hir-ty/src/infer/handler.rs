@@ -92,13 +92,7 @@ impl<'db> InferenceContext<'_, 'db> {
                     sig.params.iter().map(|p| p.as_ref().map_or(Ty::Error, subst)).collect();
                 let ret = sig.ret.as_ref().map_or(Ty::unit(), subst);
                 self.result.pat_types.insert(op, Ty::func(params.clone(), ret.clone()));
-                if rest.is_none() && params.len() != args.len() {
-                    self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {
-                        expr: ExprOrPat::Pat(op),
-                        expected: params.len(),
-                        found: args.len(),
-                    });
-                }
+                self.check_pat_count(op, *rest, params.len(), args.len());
                 self.check_pat_list(args, *rest, &params);
                 // With several operations, the continuation is checked for
                 // each, as the alternatives of an or-pattern: a named one

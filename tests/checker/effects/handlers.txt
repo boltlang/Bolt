@@ -153,6 +153,7 @@ fn run() = match 1 {
   effect helper(x), k => 0,
   effect missing(), k => 0,
   effect log(a, b), k => 0,
+  effect log(a, .., b), k => 0,
 };
 --------------------------------------------------------------------------------
 helper: fn(x: i32) -> i32
@@ -161,6 +162,7 @@ run: fn() -> i32
 error at `helper(x)`: not an operation
 error at `missing()`: unresolved
 error at `log(a, b)`: expected 1 arguments, found 2
+error at `log(a, .., b)`: expected at most 1 patterns, found 2
 
 ================================================================================
 An inferred handler of two effects

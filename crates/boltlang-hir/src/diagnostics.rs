@@ -222,6 +222,12 @@ pub enum DiagnosticKind<'db> {
         name: Name,
         unnamed: bool,
     },
+    /// A pattern with `..` that has more positional patterns than the
+    /// tuple, variant or operation has values, like `(a, b, .., c)` for a pair.
+    TooManyPatterns {
+        expected: usize,
+        found: usize,
+    },
     /// A spread, like `*e` or `**e`, of something that isn't a tuple of
     /// its kind.
     NotSpreadable {
@@ -1663,6 +1669,9 @@ impl<'db> Collector<'db> {
                             continue;
                         }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
+                        TypeError::TooManyPatterns { origin, expected, found } => {
+                            (origin, DiagnosticKind::TooManyPatterns { expected, found })
+                        }
                         TypeError::DuplicateField { origin, name } => {
                             (origin, DiagnosticKind::DuplicateField { name })
                         }

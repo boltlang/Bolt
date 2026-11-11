@@ -371,6 +371,13 @@ pub enum TypeError<'db> {
     TypeNeeded {
         origin: Origin<'db>,
     },
+    /// A pattern with `..`, like `(a, b, .., c)`, has `found` positional
+    /// patterns for a tuple, variant or operation with only `expected` values.
+    TooManyPatterns {
+        origin: Origin<'db>,
+        expected: usize,
+        found: usize,
+    },
     /// An element of an array, or a field of a struct, of type `ty` is
     /// assigned to, but `ty` isn't `mut`.
     CannotChange {
@@ -417,6 +424,7 @@ impl<'db> TypeError<'db> {
             | TypeError::NoOverload { origin, .. }
             | TypeError::AmbiguousOverload { origin, .. }
             | TypeError::Effects { origin, .. }
+            | TypeError::TooManyPatterns { origin, .. }
             | TypeError::TypeNeeded { origin } => origin,
         }
     }
@@ -443,6 +451,7 @@ impl<'db> TypeError<'db> {
                 *allowed = f(allowed);
             }
             TypeError::TypeNeeded { .. }
+            | TypeError::TooManyPatterns { .. }
             | TypeError::PrivateField { .. }
             | TypeError::DuplicateField { .. }
             | TypeError::DuplicateArgument { .. }
@@ -830,6 +839,7 @@ impl<'db> Solver<'db> {
     /// Match the fields a tuple pattern with `..` names against its type,
     /// once that's known. Returns `false` if it has to wait.
     fn solve_tuple_pat(&mut self, c: &TuplePatConstraint<'db>, origin: Origin<'db>) -> bool {
+        let mut too_many = false;
         let resolved = self.unifier.shallow_resolve(&c.ty);
         let (tys, named) = match self.unifier.resolve(&resolved).tuple_parts() {
             _ if matches!(resolved, Ty::Var(_)) => return false,
@@ -858,6 +868,14 @@ impl<'db> Solver<'db> {
                         self.unifier.met_error(ty);
                     }
                     return true;
+                }
+                // Without spreads, the pattern can't name more positional
+                // fields than there are. The named ones are still matched.
+                let len = parts.positional.len();
+                if c.rest.is_some() && c.positional > len && !parts.positional.iter().any(spread) {
+                    let (expected, found) = (len, c.positional);
+                    self.errors.push(TypeError::TooManyPatterns { origin, expected, found });
+                    too_many = true;
                 }
                 (parts.positional, parts.named)
             }
@@ -899,6 +917,10 @@ impl<'db> Solver<'db> {
             };
             match field {
                 Some(field) => self.equal(&field, ty, origin),
+                // Reported as too many patterns already.
+                None if too_many && matches!(part, TuplePatPart::Positional(_)) => {
+                    self.unifier.met_error(ty);
+                }
                 None => {
                     let name = match part {
                         TuplePatPart::Positional(i) => Name::new(i.to_string()),

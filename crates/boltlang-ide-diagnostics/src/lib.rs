@@ -138,6 +138,7 @@ impl DiagnosticCode {
     pub const DEFAULT_MISSING: Self = Self("E0260");
     pub const DEFAULT_IN_IMPL: Self = Self("E0261");
     pub const UNKNOWN_ARGUMENT: Self = Self("E0262");
+    pub const TOO_MANY_PATTERNS: Self = Self("E0263");
 
     // E0301 was for errors while running a program, and E0401 for code
     // that the code generator couldn't compile. Nothing gives them since
@@ -675,6 +676,10 @@ fn describe(
         K::DuplicateArgument { name } => {
             (C::DUPLICATE_ARGUMENT, format!("the argument `{name}` is given more than once"))
         }
+        K::TooManyPatterns { expected, found } => (
+            C::TOO_MANY_PATTERNS,
+            format!("expected at most {}, found {found}", count(expected, "pattern", "patterns")),
+        ),
         K::UnknownArgument { name, unnamed: false } => {
             (C::UNKNOWN_ARGUMENT, format!("no parameter is named `{name}`"))
         }

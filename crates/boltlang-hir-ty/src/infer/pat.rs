@@ -2,7 +2,7 @@
 
 use boltlang_hir_def::{
     Name,
-    hir::{Pat, PatId, Path, RecordFieldPat, TupleItem},
+    hir::{Pat, PatId, Path, RecordFieldPat, TupleItem, positional_index},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
 };
 
@@ -47,49 +47,31 @@ impl<'db> InferenceContext<'_, 'db> {
                 let ty = self.path_pat_ty(pat, path);
                 self.solver.equal(expected, &ty, self.pat_origin(pat));
             }
-            Pat::Tuple { args, rest } => {
-                let resolved = self.solver.unifier.shallow_resolve(expected);
-                let resolved = match resolved.has_spread() {
-                    true => self.solver.unifier.resolve(&resolved),
-                    false => resolved,
+            // What `..` covers is only known with the tuple's type, so the
+            // fields are matched once that is, like with named fields.
+            Pat::Tuple { args, rest: Some(rest) } => {
+                let vars: Vec<_> =
+                    args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
+                let fields = (0..args.len()).map(TuplePatPart::Positional).zip(vars.clone());
+                let constraint = TuplePatConstraint {
+                    ty: expected.clone(),
+                    fields: fields.collect(),
+                    positional: args.len(),
+                    rest: Some(*rest),
                 };
-                let elems = match (resolved.tuple_parts(), rest) {
-                    // With a pack spread in it, only the fields before the
-                    // first spread and after the last one are known.
-                    (Some(parts), Some(r)) if parts.positional.len() >= args.len() => {
-                        let split = *r as usize;
-                        let spread = |t: &Ty<'db>| matches!(t, Ty::Spread(..));
-                        let tys = &parts.positional;
-                        let before = tys.iter().take_while(|t| !spread(t)).count();
-                        let after = tys.iter().rev().take_while(|t| !spread(t)).count();
-                        if split > before || args.len() - split > after {
-                            let origin = self.pat_origin(pat);
-                            self.solver.errors.push(TypeError::TypeNeeded { origin });
-                            for &arg in args.iter() {
-                                self.check_pat(arg, &Ty::Error);
-                            }
-                            return;
-                        }
-                        tys.clone()
-                    }
-                    (_, Some(_)) => {
-                        // The length isn't known, so neither is what `..` covers.
-                        for &arg in args.iter() {
-                            let var = self.solver.new_var(VarKind::General);
-                            self.check_pat(arg, &var);
-                        }
-                        return;
-                    }
-                    (_, None) => {
-                        let tys: Vec<_> =
-                            args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
-                        let m = self.solver.new_var(VarKind::Mutability);
-                        let shape = Ty::tuple(tys.clone().into(), m);
-                        self.expect_shape(pat, expected, &shape, &tys);
-                        tys
-                    }
-                };
-                self.check_pat_list(args, *rest, &elems);
+                let origin = self.pat_origin(pat);
+                self.solver.add(Constraint::TuplePat { constraint, origin });
+                for (&arg, ty) in args.iter().zip(&vars) {
+                    self.check_pat(arg, ty);
+                }
+            }
+            Pat::Tuple { args, rest: None } => {
+                let tys: Vec<_> =
+                    args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
+                let m = self.solver.new_var(VarKind::Mutability);
+                let shape = Ty::tuple(tys.clone().into(), m);
+                self.expect_shape(pat, expected, &shape, &tys);
+                self.check_pat_list(args, None, &tys);
             }
             Pat::TupleStruct { path, args, rest } => {
                 let Some((def, args_ty)) = self.variant_pat(pat, path, expected) else {
@@ -108,17 +90,11 @@ impl<'db> InferenceContext<'_, 'db> {
                     .iter()
                     .map(|(_, t)| subst_params(t, generic_def, &args_ty))
                     .collect();
-                if rest.is_none() && field_tys.len() != args.len() {
-                    self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {
-                        expr: ExprOrPat::Pat(pat),
-                        expected: field_tys.len(),
-                        found: args.len(),
-                    });
-                }
+                self.check_pat_count(pat, *rest, field_tys.len(), args.len());
                 // The fields the pattern names must be visible; `..` can
                 // stand for private ones.
                 for (i, &arg) in args.iter().enumerate() {
-                    if let Some(index) = list_index(i, args.len(), *rest, field_tys.len()) {
+                    if let Some(index) = positional_index(i, *rest, args.len(), field_tys.len()) {
                         self.check_field_visible(ExprOrPat::Pat(arg), def, index);
                     }
                 }
@@ -236,11 +212,39 @@ impl<'db> InferenceContext<'_, 'db> {
         }
     }
 
+    /// Report a pattern list like `Rect(a, b)` that has `found` patterns
+    /// for `expected` values: without `..` the counts must be equal, and
+    /// with it there can't be more patterns than values.
+    pub(super) fn check_pat_count(
+        &mut self,
+        pat: PatId,
+        rest: Option<u32>,
+        expected: usize,
+        found: usize,
+    ) {
+        match rest {
+            None if found != expected => {
+                self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {
+                    expr: ExprOrPat::Pat(pat),
+                    expected,
+                    found,
+                });
+            }
+            Some(_) if found > expected => {
+                let origin = self.pat_origin(pat);
+                self.solver.errors.push(TypeError::TooManyPatterns { origin, expected, found });
+            }
+            _ => {}
+        }
+    }
+
     /// Check the patterns of a tuple or tuple struct, where `..` at `rest`
-    /// stands for the elements not matched.
+    /// stands for the elements not matched. A pattern for no element, like
+    /// the `c` of `(a, b, .., c)` for a pair, is matched against the error
+    /// type.
     pub(super) fn check_pat_list(&mut self, args: &[PatId], rest: Option<u32>, elems: &[Ty<'db>]) {
         for (i, &arg) in args.iter().enumerate() {
-            let index = list_index(i, args.len(), rest, elems.len());
+            let index = positional_index(i, rest, args.len(), elems.len());
             let ty = index.map_or(Ty::Error, |i| elems[i].clone());
             self.check_pat(arg, &ty);
         }
@@ -330,13 +334,4 @@ impl<'db> InferenceContext<'_, 'db> {
         let mutability = self.new_mutability();
         self.fresh_adt(def, mutability).0
     }
-}
-
-/// Which of `len` elements the `i`th of `count` patterns of a tuple or
-/// tuple struct matches, where `..` at `rest` stands for the elements not
-/// matched: those after it match from the end.
-fn list_index(i: usize, count: usize, rest: Option<u32>, len: usize) -> Option<usize> {
-    let split = rest.map_or(count, |r| r as usize);
-    let index = if i < split { Some(i) } else { len.checked_sub(count - i) };
-    index.filter(|&index| index < len)
 }

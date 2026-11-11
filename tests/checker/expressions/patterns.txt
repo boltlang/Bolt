@@ -309,3 +309,34 @@ struct Marker[T];
 fn f(m: Marker[i32]) = match m { Marker => 1 };
 --------------------------------------------------------------------------------
 f: fn(m: Marker[i32]) -> i32
+
+================================================================================
+Patterns with .. and too many fields
+================================================================================
+enum Shape { Rect(f64, Bool) }
+fn f(s: Shape) = match s { Shape.Rect(a, b, .., c) => c };
+fn g(t: (i32, Bool)) = match t { (a, b, .., c) => c };
+fn h(t: (i32, Bool)) = match t { (a, .., b) => b };
+fn k(t: (i32, Bool)) = match t { (a, b, ..) => a };
+fn n(t: (i32, x: Bool)) = match t { (a, b, .., x: y) => y };
+--------------------------------------------------------------------------------
+f: fn(s: Shape) -> {error}
+g: fn(t: (i32, Bool)) -> {error}
+h: fn(t: (i32, Bool)) -> Bool
+k: fn(t: (i32, Bool)) -> i32
+n: fn(t: (i32, x: Bool)) -> Bool
+--------------------------------------------------------------------------------
+error at `Shape.Rect(a, b, .., c)`: expected at most 2 patterns, found 3
+error at `(a, b, .., c)`: expected at most 2 patterns, found 3
+error at `(a, b, .., x: y)`: expected at most 1 patterns, found 2
+
+================================================================================
+Tuple patterns with .. need the tuple's type
+================================================================================
+fn g(t) = match t { (a, ..) => a };
+fn h(t) = { let r: (i32, Bool) = t; match t { (.., c) => c } };
+--------------------------------------------------------------------------------
+g: forall a. fn(t: a) -> {error}
+h: forall a. fn(t: (i32, Bool)) -> Bool
+--------------------------------------------------------------------------------
+error at `(a, ..)`: type needed
