@@ -657,7 +657,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                         if dicts.is_empty() =>
                     {
                         let f = self.cx.funcs[&instance];
-                        let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
+                        let margs = call_margs(&mutabilities)?;
                         let rows = self.rows(&rows);
                         let args = Vec::from_iter(v);
                         let results = self.b.call_with(f, margs, rows, args);
@@ -836,7 +836,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
             return Err(ErrorKind::unsupported("dictionaries"));
         }
         let f = self.cx.funcs[&instance];
-        let margs: Vec<Mutability> = mutabilities.iter().map(|&m| mutability(m)).collect();
+        let margs: Vec<Mutability> = call_margs(&mutabilities)?;
         let rows = self.rows(&rows);
         if let Some(DefWithBody::Const(_)) = instance.body(self.cx.db).map(|b| b.def(self.cx.db)) {
             let results = self.b.call_with(f, margs, rows, Vec::<Atom>::new());
@@ -943,7 +943,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
         }
         let ret = subst_muts(&ret, &mutabilities).map_rows(&mut |i| rows[i as usize].clone());
         let f = self.cx.funcs[&instance];
-        let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
+        let margs = call_margs(&mutabilities)?;
         let crows = self.rows(&rows);
         let args = args.into_iter().flatten().collect::<Vec<_>>();
         let results = self.b.call_with(f, margs, crows, args);
@@ -1075,7 +1075,7 @@ impl<'a, 'm, 'db> Lower<'a, 'm, 'db> {
                     return Err(ErrorKind::unsupported("dictionaries"));
                 }
                 let f = self.cx.funcs[&instance];
-                let margs = mutabilities.iter().map(|&m| mutability(m)).collect();
+                let margs = call_margs(&mutabilities)?;
                 let rows = self.rows(&rows);
                 self.b.call_with(f, margs, rows, args)
             }
@@ -1588,4 +1588,14 @@ fn field_ty<'db>(
         _ => return Err(ErrorKind::unsupported("this pattern")),
     };
     fields.get(index as usize).cloned().ok_or_else(|| ErrorKind::unsupported("this pattern"))
+}
+
+/// The mutability arguments of a call. Conduit takes `mut`, `imm` or a
+/// parameter of the caller, never `ro`: a function called at a `ro`
+/// mutability would need an instance of its own (#320).
+fn call_margs(mutabilities: &[boltlang_mir_mono::MonoMut]) -> Result<Vec<Mutability>, ErrorKind> {
+    if mutabilities.contains(&boltlang_mir_mono::MonoMut::ReadOnly) {
+        return Err(ErrorKind::unsupported("a function called at a `ro` mutability"));
+    }
+    Ok(mutabilities.iter().map(|&m| mutability(m)).collect())
 }

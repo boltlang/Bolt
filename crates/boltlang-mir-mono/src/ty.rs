@@ -38,6 +38,8 @@ use boltlang_hir_ty::{
 pub enum MonoMut {
     Imm,
     Mut,
+    /// A `ro` view (#320), which is only written, never an argument.
+    ReadOnly,
     /// The `i`th mutability parameter of the instance.
     Param(u32),
 }
@@ -373,6 +375,7 @@ impl<'db> MonoTy<'db> {
         let m = |m: &MonoMut| match m {
             MonoMut::Imm => Ty::Mutability(Mutability::Imm),
             MonoMut::Mut => Ty::Mutability(Mutability::Mut),
+            MonoMut::ReadOnly => Ty::Mutability(Mutability::ReadOnly),
             MonoMut::Param(i) => param(*i),
         };
         let all = |tys: &[MonoTy<'db>]| -> Option<Box<[Ty<'db>]>> {
@@ -434,6 +437,7 @@ impl fmt::Display for MonoMut {
         match self {
             MonoMut::Imm => write!(f, "imm"),
             MonoMut::Mut => write!(f, "mut"),
+            MonoMut::ReadOnly => write!(f, "ro"),
             MonoMut::Param(i) => write!(f, "'{i}"),
         }
     }
@@ -944,6 +948,7 @@ impl<'db> Subst<'_, 'db> {
         Ok(match ty {
             Ty::Mutability(Mutability::Imm) | Ty::Unwritten => MonoMut::Imm,
             Ty::Mutability(Mutability::Mut) => MonoMut::Mut,
+            Ty::Mutability(Mutability::ReadOnly) => MonoMut::ReadOnly,
             Ty::Param(_) | Ty::Bound(_) => match self.slot(ty) {
                 Some(Slot::Mut(m)) => *m,
                 // An operation's own mutability parameter, as its

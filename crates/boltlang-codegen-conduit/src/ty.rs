@@ -395,6 +395,7 @@ pub(crate) fn mutability(m: MonoMut) -> Mutability {
     match m {
         MonoMut::Imm => Mutability::Imm,
         MonoMut::Mut => Mutability::Mut,
+        MonoMut::ReadOnly => Mutability::ReadOnly,
         MonoMut::Param(OWN) => Mutability::Inherit,
         MonoMut::Param(i) => Mutability::Param(i + 1),
     }
