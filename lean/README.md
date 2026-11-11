@@ -13,7 +13,9 @@ lake build
 ```
 
 The rules are described in
-[`site/docs/internals/type-checking/mutability/`](../site/docs/internals/type-checking/mutability/).
+[`site/docs/internals/designs/mutability/`](../site/docs/internals/designs/mutability/),
+and how the checker implements them in
+[`site/docs/internals/compiler/type-checking/mutability/`](../site/docs/internals/compiler/type-checking/mutability/).
 
 ## The language
 

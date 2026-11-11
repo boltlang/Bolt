@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2.5
+sidebar_position: 3
 title: Kinds
 description: Higher-kinded types in boltlang-hir-ty, kind inference, and how applications are unified.
 ---
@@ -38,7 +38,7 @@ of kind $\mathsf{Type} \to \mathsf{Type}$. Applying a constructor of kind
 $\kappa_1 \to \kappa_2$ to a type of kind $\kappa_1$ gives a type of kind
 $\kappa_2$, so `Either[String]` is of kind $\mathsf{Type} \to \mathsf{Type}$.
 
-$\mathsf{Effect}$ is the kind of [effects](../effects.mdx#kind-inference):
+$\mathsf{Effect}$ is the kind of [effects](../../designs/effects.mdx#kind-inference):
 `Log` is of kind $\mathsf{Effect}$, and `State` of kind
 $\mathsf{Type} \to \mathsf{Effect}$. An effect where a type is expected,
 like `fn f(x: Log)`, is a kind mismatch.

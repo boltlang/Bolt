@@ -37,6 +37,39 @@ const config: Config = {
     locales: ['en'],
   },
 
+  // The internals were reorganized by subject: compiler stages, designs and
+  // tooling. Old links keep working.
+  plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          {from: '/docs/internals/type-checking/arguments', to: '/docs/internals/designs/parameter-names'},
+          {from: '/docs/internals/type-checking/mutability/prior-art', to: '/docs/internals/designs/mutability/prior-art'},
+          {from: '/docs/internals/type-checking/mutability/functions', to: '/docs/internals/compiler/type-checking/mutability/functions'},
+          {from: '/docs/internals/type-checking/mutability/implementation', to: '/docs/internals/compiler/type-checking/mutability/implementation'},
+          {from: '/docs/internals/type-checking/mutability/errors', to: '/docs/internals/compiler/type-checking/mutability/errors'},
+          {from: '/docs/internals/type-checking/mutability/uniqueness', to: '/docs/internals/compiler/conduit/uniqueness'},
+          {from: '/docs/internals/type-checking/mutability/regions', to: '/docs/internals/compiler/conduit'},
+          {from: '/docs/internals/type-checking/mutability', to: '/docs/internals/designs/mutability'},
+          {from: '/docs/internals/conduit', to: '/docs/internals/compiler/conduit'},
+          {from: '/docs/internals/effects', to: '/docs/internals/designs/effects'},
+          {from: '/docs/internals/async', to: '/docs/internals/designs/async'},
+          {from: '/docs/internals/reactive', to: '/docs/internals/designs/reactive'},
+          {from: '/docs/internals/packages', to: '/docs/internals/tooling/packages'},
+          {from: '/docs/internals/type-checking/constraints', to: '/docs/internals/compiler/type-checking/constraints'},
+          {from: '/docs/internals/type-checking/errors', to: '/docs/internals/compiler/type-checking/errors'},
+          {from: '/docs/internals/type-checking/generalization', to: '/docs/internals/compiler/type-checking/generalization'},
+          {from: '/docs/internals/type-checking/inference', to: '/docs/internals/compiler/type-checking/inference'},
+          {from: '/docs/internals/type-checking/kinds', to: '/docs/internals/compiler/type-checking/kinds'},
+          {from: '/docs/internals/type-checking/types', to: '/docs/internals/compiler/type-checking/types'},
+          {from: '/docs/internals/type-checking/unification', to: '/docs/internals/compiler/type-checking/unification'},
+          {from: '/docs/internals/type-checking', to: '/docs/internals/compiler/type-checking'},
+        ],
+      },
+    ],
+  ],
+
   presets: [
     [
       'classic',

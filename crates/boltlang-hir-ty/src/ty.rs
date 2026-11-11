@@ -361,7 +361,7 @@ pub enum Ty<'db> {
     /// error type. Lengths aren't checked yet.
     Array(Box<Ty<'db>>, Box<Ty<'db>>),
     /// `Mut` or `Imm`, the mutability of an array, which is a type of its
-    /// own kind: see `site/docs/internals/type-checking/mutability/`.
+    /// own kind: see `site/docs/internals/designs/mutability/`.
     Mutability(Mutability),
     /// The mutability of an array type written without `mut` or `imm`, as
     /// lowered on its own. What it means depends on where the type is
@@ -373,7 +373,7 @@ pub enum Ty<'db> {
     /// The name of a positional parameter of a function type, like the `x`
     /// of `fn(x: i32)`, or `None` for one that has none. It's only in
     /// [`Params::names`]. Names aren't types: a function with names fits
-    /// where fewer are asked for (see `site/docs/internals/type-checking/types.mdx`).
+    /// where fewer are asked for (see `site/docs/internals/compiler/type-checking/types.mdx`).
     ParamName(Option<Name>),
     /// `fn(A, B) -> C does E`: the parameters, the result, the mutability
     /// and the effects. A closure is `mut` if it can change what it

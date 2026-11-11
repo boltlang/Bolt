@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 5
 title: Unification
 description: How the unifier of boltlang-hir-ty solves equalities between types.
 ---
@@ -90,7 +90,7 @@ These kinds are a small case of what the type class literature calls
 
 ### Mutabilities
 
-A [mutability](./mutability/index.mdx) is a type of its own kind:
+A [mutability](../../designs/mutability/index.mdx) is a type of its own kind:
 `Ty::Mutability(Mut)` or `Ty::Mutability(Imm)`, a variable of kind
 `VarKind::Mutability`, a parameter, or the error type. Arrays, structs
 and function types unify their mutabilities like any other argument, and

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 1
 title: Functions and annotations
 description: The mutabilities of inferred functions, what [T] means in a signature, and return types.
 ---
@@ -100,7 +100,7 @@ fn fixed() -> imm [i32] = mut [];            // error: expected `imm [a]`, found
 
 To return such a value as `imm`, a body says so with `imm`, as in
 `imm mut []`. That's a copy, which Conduit's region analysis
-([Conduit](../../conduit.mdx)) can leave out when nothing else has the
+([Conduit](../../conduit/index.mdx)) can leave out when nothing else has the
 value.
 
 `next` returns what it's given, so its result has its argument's
@@ -110,7 +110,7 @@ mutability: `next(a)` is a `mut Node` for a `mut Node` `a`, and an
 That makes the signature incomplete: such a function is
 [inferred](../generalization.mdx), not checked on its own, so editing its
 body checks its callers again. Writing `mut`, `imm` or a
-[name](./index.mdx#named-mutabilities) in the return type makes it complete:
+[name](../../../designs/mutability/index.mdx#named-mutabilities) in the return type makes it complete:
 `fn next(n: 'm Node) -> 'm Node` says what the body of `next` would
 decide, and is checked on its own. A function without a body, like a class
 method, has no body to decide, so its return type is `imm` where it

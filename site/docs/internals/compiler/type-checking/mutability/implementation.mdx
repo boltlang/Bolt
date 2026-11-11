@@ -1,5 +1,5 @@
 ---
-sidebar_position: 8
+sidebar_position: 2
 title: Implementation
 description: Where the rules of mutability are in the checker, the tests and the Lean proof.
 ---
@@ -96,7 +96,7 @@ description: Where the rules of mutability are in the checker, the tests and the
   It isn't lowered to Conduit yet: a copy to `imm` there is the type's
   `ToImm` impl, made of `new` and `array_clone`, which Conduit's `copies`
   pass turns into an `array_freeze` when its region analysis shows nothing
-  else can reach the originals (see [Conduit](../../conduit.mdx)). What such an analysis must show is proven in Lean
+  else can reach the originals (see [Conduit](../../conduit/index.mdx)). What such an analysis must show is proven in Lean
   (below).
 - **`mut e`** (`infer.rs`): `mut` before an array, a struct
   literal or a call of a tuple struct's constructor (`constructs_struct`)

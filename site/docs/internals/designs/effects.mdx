@@ -1,5 +1,5 @@
 ---
-sidebar_position: 1.5
+sidebar_position: 3
 title: Effects
 description: The design of effect types in Bolt, with does and +, effects with parameters, and handlers.
 ---
@@ -10,7 +10,7 @@ description: The design of effect types in Bolt, with does and +, effects with p
 The type checker infers and checks effects: rows, `does`, containment,
 combination, `Nothing` and handlers, with their arms for every operation
 and for every value of its arguments. Operations and handlers run through
-Conduit ([Conduit](./conduit.mdx#effects)), and `std` has `Fail` and
+Conduit ([Conduit](../compiler/conduit/index.mdx#effects)), and `std` has `Fail` and
 `Async`. What's left is in [Still to decide](#still-to-decide). Algebraic
 effects are tracked in [#40](https://github.com/boltlang/Bolt/issues/40).
 :::
@@ -100,7 +100,7 @@ A function's effects are inferred only when neither its result type nor
 - Without either, the effects are inferred like the types (see
   [Inferring effects](#inferring-effects)).
 
-So a [complete signature](./type-checking/generalization.mdx), with every
+So a [complete signature](../compiler/type-checking/generalization.mdx), with every
 type written, tells callers what the function does without its body.
 
 Function types follow the same rule: `fn(A) -> B` has no effects. So a
@@ -467,7 +467,7 @@ like `v => v`, and `, k` is a form that nothing else in Bolt has.
 
 ## Kind inference
 
-Effects bring a new kind. The [kinds](./type-checking/kinds.mdx) are now:
+Effects bring a new kind. The [kinds](../compiler/type-checking/kinds.mdx) are now:
 
 $$
 \kappa ::= \mathsf{Type} \mid \mathsf{Effect} \mid \kappa_1 \to \kappa_2

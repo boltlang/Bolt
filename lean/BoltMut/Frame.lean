@@ -20,7 +20,7 @@ arguments that are `imm` all the way down changes nothing that existed
 before the call (`imm_fn_changes_nothing`).
 
 With algebraic effects, an operation that resumes right away, like `state`
-and `read` of the `Reactive` effect in `site/docs/internals/reactive.mdx`,
+and `read` of the `Reactive` effect in `site/docs/internals/designs/reactive.mdx`,
 compiles to a call of its handler, passed as a hidden argument. Then
 calling an `imm` function with `imm` arguments and a handler changes only
 what the handler can reach (`imm_fn_changes_only_through_handler`). That's

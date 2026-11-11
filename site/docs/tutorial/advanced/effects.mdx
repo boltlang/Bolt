@@ -9,7 +9,7 @@ description: Effects say what a function does besides returning a value, and han
 :::warning[Not implemented yet]
 Effects are only **partly implemented**: the compiler checks the effects
 of functions, closures and handlers, but nothing runs yet. The design is in the
-[internals](../../internals/effects.mdx), and the work is tracked in
+[internals](../../internals/designs/effects.mdx), and the work is tracked in
 [#40](https://github.com/boltlang/Bolt/issues/40).
 :::
 
@@ -213,7 +213,7 @@ count_logs(|| twice(|| log("hi")));
 
 `twice` works with any function, whatever it does. There's no need for a
 second version for functions that log, or that wait: in
-[async code](../../internals/async.mdx), waiting is the effect `Async`, and
+[async code](../../internals/designs/async.mdx), waiting is the effect `Async`, and
 `twice` works with it like with any other.
 
 ## Rules

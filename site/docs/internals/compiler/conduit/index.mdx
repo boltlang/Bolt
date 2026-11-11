@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 1
 title: Conduit
 description: How Bolt compiles to Conduit, the IR it lowers to after type checking, and what Bolt's designs need from it.
 ---
@@ -64,7 +64,7 @@ where `array_freeze` lowers to an `array_clone` to `imm`. Conduit's
   [Lean proof](https://github.com/boltlang/Bolt/tree/main/lean) shows this
   (`region_freeze_step` in `Unique.lean`,
   [#335](https://github.com/boltlang/Bolt/issues/335)).
-  [Uniqueness](./type-checking/mutability/uniqueness.mdx) is a proposal
+  [Uniqueness](./uniqueness.mdx) is a proposal
   for more of these.
 
 The last doesn't fire on `to_imm` of a fresh `mut` `Vec` yet: the impl
@@ -86,7 +86,7 @@ is given back as it is, with no call and no impl.
 ## Effects
 
 A call of an operation is a `perform`, and a `match` with effect arms is a
-`handle`, as [the effects design](./effects.mdx#lowering) says: the
+`handle`, as [the effects design](../../designs/effects.mdx#lowering) says: the
 scrutinee becomes a closure, the value arms the return clause, and the arms
 of each operation its clause, a function that takes the operation's
 arguments and the continuation, and matches the arguments as a tuple. The
