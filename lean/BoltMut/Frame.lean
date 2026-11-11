@@ -91,7 +91,7 @@ theorem Frame.of_deepImm {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {�
 down. -/
 theorem Frame.of_imm_fn {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {Γ : Ctx} {f : Expr} {a r : Ty}
     (hv : f.IsValue) (ht : HasType fns σ .none io Γ f (.fn .immutable a r)) (l : Nat) : ¬ Frame σ h f l :=
-  Frame.of_deepImm hv ht (.refl _) l
+  Frame.of_deepImm hv ht (.inl (.refl _)) l
 
 /-- `fill(xs, ys)`: calling an `imm` function with what can change, `w`, and
 what's `imm` all the way down, `u`, changes only what `w` reaches. -/

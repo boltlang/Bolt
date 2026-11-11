@@ -80,10 +80,12 @@ theorem HeapOk.write {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns �
 At run time nothing is assumed, so the type of `imm e` is a function of
 `e`'s: `Ty.imm`, for a type that can be copied (`Ty.Freezable`). -/
 
-/-- Each cell `imm`, with what it holds done the same way. -/
+/-- Each cell `imm`, with what it holds done the same way. A `ro T` is done
+as the `T` it views: neither can be copied (`Ty.Freezable`). -/
 def Ty.imm : Ty → Ty
   | .cell _ t => .cell .immutable t.imm
   | .prod a b => .prod a.imm b.imm
+  | .roParam i => .tparam i
   | t => t
 
 /-- What `imm e` can copy, with nothing assumed: each closure in it is
@@ -93,7 +95,7 @@ def Ty.Freezable : Ty → Prop
   | .cell _ t => t.Freezable
   | .fn m _ _ => Le .none m .immutable
   | .prod a b => a.Freezable ∧ b.Freezable
-  | .tparam _ => False
+  | .tparam _ | .roParam _ => False
 
 /-- What's `imm` all the way down stays as it is, and can be copied. -/
 theorem AtMost.imm_eq {t : Ty} (h : AtMost .none .immutable t) : t.imm = t ∧ t.Freezable := by
@@ -104,7 +106,7 @@ theorem AtMost.imm_eq {t : Ty} (h : AtMost .none .immutable t) : t.imm = t ∧ t
     subst hm
     obtain ⟨h₁, h₂⟩ := ih h.2
     exact ⟨by simp [Ty.imm, h₁], h₂⟩
-  | fn m a r => exact ⟨rfl, h⟩
+  | fn m a r => exact ⟨rfl, h.none_fn⟩
   | prod a b iha ihb =>
     obtain ⟨h₁, h₂⟩ := iha h.1
     obtain ⟨h₃, h₄⟩ := ihb h.2
@@ -114,6 +116,7 @@ theorem AtMost.imm_eq {t : Ty} (h : AtMost .none .immutable t) : t.imm = t ∧ t
     rcases hμ with rfl | hμ
     · exact nomatch Le.none_immutable hle
     · simp [Assume.none] at hμ
+  | roParam i => exact nomatch Le.none_immutable h
 
 /-- With nothing assumed, `ImmTy` is `Ty.imm`. -/
 theorem ImmTy.none_eq {t t' : Ty} (h : ImmTy .none t t') : t' = t.imm ∧ t.Freezable := by
@@ -127,9 +130,9 @@ theorem Ty.Freezable.atMost {t : Ty} (h : t.Freezable) : AtMost .none .immutable
   induction t with
   | unit | int => trivial
   | cell m t ih => exact ⟨.refl _, ih h⟩
-  | fn m a r => exact h
+  | fn m a r => exact .inl h
   | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
-  | tparam => exact h.elim
+  | tparam | roParam => exact h.elim
 
 /-- Seeing objects as `ro` changes neither what's copied nor the copy. -/
 theorem Sub.imm {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : s.imm = t.imm ∧ (t.Freezable → s.Freezable) := by
@@ -137,6 +140,7 @@ theorem Sub.imm {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : s.imm = t.imm ∧ (t
   | refl => exact ⟨rfl, id⟩
   | ro _ _ ih => exact ⟨by simp [Ty.imm, ih.1], ih.2⟩
   | prod _ _ iha ihb => exact ⟨by simp [Ty.imm, iha.1, ihb.1], fun h => ⟨iha.2 h.1, ihb.2 h.2⟩⟩
+  | tparam => exact ⟨rfl, fun h => h.elim⟩
 
 /-- A copy only adds to the heap. -/
 theorem Freeze.prefix {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
@@ -315,7 +319,7 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
     intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
     obtain ⟨b, x, body, rfl⟩ := canonical_fn hv (ht.value_sub hv hs₀)
     exact ⟨_, _, _, .lam⟩
-  | tparam => intro _ _ _ _ _ _ _ _ _ _ _ hf _; exact hf.elim
+  | tparam | roParam => intro _ _ _ _ _ _ _ _ _ _ _ hf _; exact hf.elim
 
 /-- A well-typed program that isn't a value can take a step. -/
 theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr} {t : Ty}

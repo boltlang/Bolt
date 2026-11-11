@@ -16,10 +16,9 @@ about the language holds for it as it is. `HasType.newRo` is the rule it
 gets.
 
 What it can hold is what a `ro` view can see: a `mut` array, seen as `ro`
-too, but not a value of a type parameter `T` that the function doesn't
-assume to be at most `ro` (`newRo_tparam`). A `T` can't be seen as `ro`,
-since nothing says what's in it, so a `ro` literal doesn't help with a
-tuple of generic values, like the `match (a, b)` of #415.
+too, and a value of a type parameter `T`, seen as `ro T`
+(`HasType.newRo_tparam`). So a tuple of generic values, like the
+`match (a, b)` of #415, can be a `ro` literal with nothing assumed.
 -/
 
 namespace BoltMut
@@ -56,38 +55,12 @@ theorem HasType.newRo_inv {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
         subst hx
         exact ⟨_, he, hs⟩
 
-/-- A type parameter is only seen as itself. -/
-theorem Sub.tparam_inv {Δ : Assume} {i : Nat} {t : Ty} (h : Sub Δ (.tparam i) t) :
-    t = .tparam i := by
-  cases h
-  rfl
-
-/-- What a variable of a type parameter can be typed as: that parameter. -/
-theorem HasType.var_tparam {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
-    {x i : Nat} {t : Ty} (hx : Γ x = some (.tparam i)) (h : HasType fns σ Δ io Γ (.var x) t) :
-    t = .tparam i := by
-  cases h with
-  | var hx' => rw [hx] at hx'; exact (Option.some.inj hx').symm
-  | varSub hx' hs => rw [hx] at hx'; cases hx'; exact hs.tparam_inv
-
-/-- Without assumptions, a `ro` literal can't hold a value of a type
-parameter: `x : T` can't be seen as anything but `T`, and `T` may be `mut`,
-which is more than `ro`. Like an `imm` one (#247), it needs `T ⊑ ro`. -/
-theorem newRo_tparam {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {x y i : Nat} {t : Ty}
-    (hy : Γ y = some (.tparam i)) :
-    ¬ HasType fns σ .none io Γ (Expr.newRo x (.var y)) (.cell .readonly t) := by
-  intro h
-  obtain ⟨s, he, hs⟩ := h.newRo_inv
-  have := HasType.var_tparam hy he
-  subst this
-  cases hs with
-  | ro hs hr =>
-    have := hs.tparam_inv
-    subst this
-    obtain ⟨μ', hμ', hle⟩ := hr
-    rcases hμ' with rfl | hin
-    · rcases Le.none_inv hle with h | h | h <;> exact nomatch h
-    · exact nomatch hin
+/-- A `ro` literal can hold a value of a type parameter, with no
+assumption: `x : T` is seen as `ro T`, which a `ro` object can hold. -/
+theorem HasType.newRo_tparam {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
+    {x y i : Nat} (hy : Γ y = some (.tparam i)) :
+    HasType fns σ Δ io Γ (Expr.newRo x (.var y)) (.cell .readonly (.roParam i)) :=
+  .newRo (.var hy) ⟨.mutable, .inl rfl, .refl _⟩ (.tparam i) (.refl _)
 
 /-! ## Examples -/
 
@@ -122,8 +95,13 @@ example (t : Ty) : ¬ HasType [] [] .none false
         subst hx
         rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1.1
 
-/-- A `ro` literal holding a `T` is fine when the function assumes
-`T ⊑ ro`. -/
+/-- A `ro` literal holding a `T` with nothing assumed: `ro (ro T)`, as in
+#415's `match (a, b)`. -/
+example : HasType [] [] .none false (Ctx.empty.update 0 (.tparam 0))
+    (Expr.newRo 1 (.var 0)) (.cell .readonly (.roParam 0)) :=
+  .newRo_tparam (by simp [Ctx.update])
+
+/-- With `T ⊑ ro` assumed, the literal can hold `T` itself. -/
 example : HasType [] [] { tys := [(0, .readonly)] } false (Ctx.empty.update 0 (.tparam 0))
     (Expr.newRo 1 (.var 0)) (.cell .readonly (.tparam 0)) :=
   .newRo (t := .tparam 0) (.var (by simp [Ctx.update])) ⟨.mutable, .inl rfl, .refl _⟩ (.refl _)

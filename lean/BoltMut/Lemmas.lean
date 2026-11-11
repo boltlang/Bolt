@@ -153,7 +153,7 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
       · exact nomatch Le.none_immutable hd.1
   | @lam b x body => cases ht with
     | lam hc himm hb =>
-      cases muOf_immutable (Le.none_immutable hd)
+      cases muOf_immutable (Le.none_immutable hd.none_fn)
       exact .lam hc himm (hb.weaken_imm (fun _ => by simp))
 
 /-- A value of a cell type is a location, whose type is a subtype of it. -/
@@ -206,13 +206,14 @@ theorem HasType.value_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     {t t' : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v t) (hs : Sub Δ t t') :
     HasType fns σ Δ io Γ v t' := by
   induction hv generalizing t t' with
-  | unit => cases ht; cases hs.eq_of_not (by intros; simp) (by intros; simp); exact .unit
-  | int => cases ht; cases hs.eq_of_not (by intros; simp) (by intros; simp); exact .int
+  | unit => cases ht; cases hs.eq_of_not (by intros; simp) (by intros; simp) (by intros; simp); exact .unit
+  | int => cases ht; cases hs.eq_of_not (by intros; simp) (by intros; simp) (by intros; simp); exact .int
   | loc => cases ht with
     | loc h hio => exact .locSub h hio hs
     | locSub h hio hs' => exact .locSub h hio (hs'.trans hs)
   | lam =>
     have : t' = t := hs.eq_of_not (by intros; cases ht <;> simp) (by intros; cases ht <;> simp)
+      (by intros; cases ht <;> simp)
     exact this ▸ ht
   | pair _ _ ih₁ ih₂ => cases ht with
     | pair h₁ h₂ =>

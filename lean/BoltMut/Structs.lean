@@ -51,6 +51,8 @@ end StructDecl
 def Atom.HoldsInst (Δ : Assume) (ms : List Mu) (τs : List Ty) : Atom → Prop
   | .le m μ => Le Δ (m.subst ms) (μ.subst ms)
   | .tparam i μ => AtMost Δ (μ.subst ms) (τs[i]?.getD .unit)
+  | .fn m μ => Le Δ (m.subst ms) (μ.subst ms) ∨ Le Δ .readonly (μ.subst ms)
+  | .roParam i μ => AtMost Δ (μ.subst ms) (τs[i]?.getD .unit).ro
 
 /-- With arguments in place, a type is at most `μ` exactly when the atoms it
 splits into hold for them. -/
@@ -63,6 +65,7 @@ theorem atMost_inst_iff (Δ : Assume) (ms : List Mu) (τs : List Ty) (μ : Mu) (
   | fn m a r => simp [AtMost, Ty.inst, split, Atom.HoldsInst]
   | prod a b iha ihb => simp [AtMost, Ty.inst, split, iha, ihb, or_imp, forall_and]
   | tparam i => simp [Ty.inst, split, Atom.HoldsInst]
+  | roParam i => simp [Ty.inst, split, Atom.HoldsInst]
 
 namespace StructDecl
 
@@ -106,7 +109,7 @@ example : ¬ AtMost .none .mutable (vecIter.ty [.cell .mutable .int] [.immutable
 held, so the fields imply nothing about `T`. -/
 def handler : StructDecl := { types := 1, muts := 0, fields := .fn (.param 0) (.tparam 0) .unit }
 
-example : handler.implied = [.le (.param 0) (.param 0)] := rfl
+example : handler.implied = [.fn (.param 0) (.param 0)] := rfl
 
 /-- An `imm Handler[mut [i32]]` is fine. -/
 example : AtMost .none .mutable (handler.ty [.cell .mutable .int] [] .immutable) := by
@@ -115,7 +118,7 @@ example : AtMost .none .mutable (handler.ty [.cell .mutable .int] [] .immutable)
   intro a ha
   simp [handler, StructDecl.implied, StructDecl.own, split] at ha
   subst ha
-  exact .refl _
+  exact .inl (.refl _)
 
 /-- `struct Tag[T] { id: i32 }` holds no `T` at all. -/
 def tag : StructDecl := { types := 1, muts := 0, fields := .int }

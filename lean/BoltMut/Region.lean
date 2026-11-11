@@ -225,6 +225,7 @@ theorem Sub.size {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : s.size = t.size := 
   | refl => rfl
   | ro _ _ ih => simp [Ty.size, ih]
   | prod _ _ iha ihb => simp [Ty.size, iha, ihb]
+  | tparam => rfl
 
 /-- **What a copy copies is smaller than the value.** So an object isn't
 reached again while what it holds is copied. -/

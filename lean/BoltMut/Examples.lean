@@ -117,14 +117,14 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     cases h₂ with
     | new hl hd =>
       cases hl with
-      | lam _ _ _ => exact nomatch Le.none_immutable hd
+      | lam _ _ _ => exact nomatch Le.none_immutable hd.none_fn
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new false (.int 1)) (.new false (.lam false 1 (.get (.var 0)))))
     (.cell .immutable (.fn .immutable .unit .int)) := by
-  refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_ (.get (.var rfl))) (.refl _))
+  refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_ (.get (.var rfl))) (.inl (.refl _)))
   intro _ y s hy
   simp only [Ctx.update] at hy
   split at hy
@@ -210,14 +210,24 @@ example (t : Ty) :
   cases h with
   | new hx hd =>
     cases hx with
-    | var hx | varSub hx _ =>
+    | var hx =>
       simp only [Ctx.update, ite_true, Option.some.injEq] at hx
       subst hx
-      try (rename_i hs; cases hs.eq_of_not (by simp) (by simp))
       obtain ⟨μ', hμ', hle⟩ := hd
       rcases hμ' with rfl | hmem
       · exact nomatch Le.none_immutable hle
       · simp [Assume.none] at hmem
+    | varSub hx hs =>
+      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+      subst hx
+      cases hs with
+      | refl =>
+        obtain ⟨μ', hμ', hle⟩ := hd
+        rcases hμ' with rfl | hmem
+        · exact nomatch Le.none_immutable hle
+        · simp [Assume.none] at hmem
+      -- Seen as `ro T`, it's still more than `imm`.
+      | tparam => exact nomatch Le.none_immutable hd
 
 /-- `mut Box { item: x }` is fine without one: a `mut` box can hold
 anything. -/
@@ -367,6 +377,38 @@ example (t : Ty) :
       subst hx
       rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1
 
+/-- `fn first[T](xs: ro [T]) -> ro T = xs[0]`: a `ro` view of an array of
+any `T`, with nothing assumed. What's read through it is `ro T`. -/
+def firstRo : Fn :=
+  { assume := {}, param := 0, argTy := .cell .readonly (.roParam 0), retTy := .roParam 0,
+    body := .get (.var 0) }
+
+theorem firstRo_ok : FnsOk [firstRo] := by
+  intro fn hfn
+  simp at hfn
+  subst hfn
+  exact ⟨trivial, .get (.var rfl)⟩
+
+/-- `let ys = mut [1]; let xs = mut [ys]; first(xs)`, with `T = mut [i32]`:
+`xs` is seen as `ro [ro [i32]]`, and the result is `ro [i32]`, which can't
+change `ys`. -/
+example : HasType [firstRo] [] .none false Ctx.empty
+    (.letE 0 (.new true (.int 1)) (.letE 1 (.new true (.var 0))
+      (.call 0 [] [.cell .mutable .int] (.var 1))))
+    (.cell .readonly .int) := by
+  refine .letE (.new .int trivial)
+    (.letE (.new (.var (t := .cell .mutable .int) (by simp [Ctx.update, muOf])) ⟨.refl _, trivial⟩) ?_)
+  show HasType _ _ _ _ _ _ (firstRo.retTy.inst [] [.cell .mutable .int])
+  refine .call rfl ⟨?_, ?_, ?_⟩
+    (.varSub (s := .cell .mutable (.cell .mutable .int)) (by simp [Ctx.update, muOf])
+      (.ro (.ro (.refl _) trivial) ⟨.refl _, trivial⟩))
+  · intro p h; simp [firstRo] at h
+  · intro p h; simp [firstRo] at h
+  · intro i
+    cases i with
+    | zero => exact ⟨.top _, trivial⟩
+    | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
+
 /-- The case from #320: one type parameter for a `mut` and an `imm` value.
 `fn both[T](p: (T, T))`, called with `(xs, ys)` where `xs` is `mut` and
 `ys` is `imm`, takes `T` to be `ro [i32]`. -/
@@ -414,6 +456,6 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.toImm false (.lam tr
     cases he with
     | lam _ _ _ =>
       cases hd with
-      | asIs h => exact nomatch Le.none_immutable h
+      | asIs h => exact nomatch Le.none_immutable h.none_fn
 
 end BoltMut

@@ -62,6 +62,9 @@ inductive Ty where
   | fn (m : Mu) (a r : Ty)
   | prod (a b : Ty)
   | tparam (i : Nat)
+  /-- `ro T` (#320): the `i`th type parameter seen as `ro`. Instantiated, it's
+  the argument seen as `ro` (`Ty.ro`). -/
+  | roParam (i : Nat)
   deriving DecidableEq, Repr
 
 /-- Expressions. `loc` only appears while running: it's a location in the
@@ -143,6 +146,19 @@ def Mu.subst (ms : List Mu) : Mu → Mu
   | .param i => ms[i]?.getD .immutable
   | m => m
 
+/-- `t` seen as `ro` (#320): each cell `ro`, with what it holds seen the
+same way, and each type parameter `ro T`. A closure keeps its mutability:
+it never changes once it's made, and its mutability doesn't keep it from
+being called, so a view has nothing to take from it. -/
+def Ty.ro : Ty → Ty
+  | .unit => .unit
+  | .int => .int
+  | .cell _ t => .cell .readonly t.ro
+  | .fn m a r => .fn m a r
+  | .prod a b => .prod a.ro b.ro
+  | .tparam i => .roParam i
+  | .roParam i => .roParam i
+
 /-- Replace the mutability parameters with `ms` and the type parameters with
 `τs`; one without an argument becomes `()`. -/
 def Ty.inst (ms : List Mu) (τs : List Ty) : Ty → Ty
@@ -152,6 +168,7 @@ def Ty.inst (ms : List Mu) (τs : List Ty) : Ty → Ty
   | .fn m a r => .fn (m.subst ms) (a.inst ms τs) (r.inst ms τs)
   | .prod a b => .prod (a.inst ms τs) (b.inst ms τs)
   | .tparam i => τs[i]?.getD .unit
+  | .roParam i => (τs[i]?.getD .unit).ro
 
 /-- The same for the arguments of the calls in an expression. -/
 def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
@@ -219,9 +236,10 @@ the way down. -/
 def AtMost (Δ : Assume) (μ : Mu) : Ty → Prop
   | .unit | .int => True
   | .cell m t => Le Δ m μ ∧ AtMost Δ m t
-  | .fn m _ _ => Le Δ m μ
+  | .fn m _ _ => Le Δ m μ ∨ Le Δ .readonly μ
   | .prod a b => AtMost Δ μ a ∧ AtMost Δ μ b
   | .tparam i => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
+  | .roParam _ => Le Δ .readonly μ
 
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
@@ -259,11 +277,12 @@ theorem AtMost.mono {Δ : Assume} {m μ : Mu} {t : Ty} (h : AtMost Δ m t) (hle 
   induction t generalizing m μ with
   | unit | int => trivial
   | cell m' t _ => exact ⟨h.1.trans hle, h.2⟩
-  | fn m' a r _ _ => exact Le.trans h hle
+  | fn m' a r _ _ => exact h.elim (fun h => .inl (h.trans hle)) (fun h => .inr (h.trans hle))
   | prod a b iha ihb => exact ⟨iha h.1 hle, ihb h.2 hle⟩
   | tparam i =>
     obtain ⟨μ', hmem, hle'⟩ := h
     exact ⟨μ', hmem, hle'.trans hle⟩
+  | roParam i => exact Le.trans h hle
 
 theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m μ : Mu}
     (h : Le Δ m μ) : Le Δ' (m.subst ms) (μ.subst ms) := by
@@ -274,19 +293,36 @@ theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' �
   | assume h => exact hs.1 _ h
   | trans _ _ ih₁ ih₂ => exact ih₁.trans ih₂
 
+/-- With nothing assumed, a closure at most `imm` is an `imm` one: `ro`
+isn't at most `imm`. -/
+theorem AtMost.none_fn {m : Mu} {a r : Ty} (h : AtMost .none .immutable (.fn m a r)) :
+    Le .none m .immutable :=
+  h.elim id (fun h => nomatch Le.none_immutable h)
+
+/-- A type seen as `ro` is at most `ro`. -/
+theorem AtMost.of_ro (Δ : Assume) (t : Ty) : AtMost Δ .readonly t.ro := by
+  induction t with
+  | unit | int => trivial
+  | cell m t ih => exact ⟨.refl _, ih⟩
+  | fn m a r _ _ => exact .inr (.refl _)
+  | prod a b iha ihb => exact ⟨iha, ihb⟩
+  | tparam i => exact .refl _
+  | roParam i => exact .refl _
+
 /-- What's at most `μ` stays so for arguments that meet the assumptions. -/
 theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {μ : Mu} {t : Ty}
     (h : AtMost Δ μ t) : AtMost Δ' (μ.subst ms) (t.inst ms τs) := by
   induction t generalizing μ with
   | unit | int => trivial
   | cell m t ih => exact ⟨Le.inst hs h.1, ih h.2⟩
-  | fn m a r _ _ => exact Le.inst hs h
+  | fn m a r _ _ => exact h.elim (fun h => .inl (Le.inst hs h)) (fun h => .inr (Le.inst hs h))
   | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
   | tparam i =>
     obtain ⟨μ', hmem, hle⟩ := h
     rcases hmem with rfl | hmem
     · exact (hs.2.2 i).mono (Le.inst hs hle)
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
+  | roParam i => exact (AtMost.of_ro Δ' _).mono (Le.inst hs h)
 
 theorem Mu.subst_muOf (ms : List Mu) (b : Bool) : (muOf b).subst ms = muOf b := by
   cases b <;> rfl
@@ -306,6 +342,23 @@ theorem Ty.getD_inst (ms : List Mu) (τs τs' : List Ty) (i : Nat) :
   simp only [List.getElem?_map]
   cases τs'[i]? <;> rfl
 
+/-- Seeing a type as `ro` twice is seeing it once. -/
+theorem Ty.ro_ro (t : Ty) : t.ro.ro = t.ro := by
+  induction t with
+  | unit | int | tparam | roParam => rfl
+  | cell m t ih => simp [Ty.ro, ih]
+  | fn m a r => rfl
+  | prod a b iha ihb => simp [Ty.ro, iha, ihb]
+
+/-- Seeing a type as `ro` and instantiating it go either way. -/
+theorem Ty.ro_inst (ms : List Mu) (τs : List Ty) (t : Ty) : t.ro.inst ms τs = (t.inst ms τs).ro := by
+  induction t with
+  | unit | int | tparam => rfl
+  | roParam i => simp [Ty.ro, Ty.inst, Ty.ro_ro]
+  | cell m t ih => simp [Ty.ro, Ty.inst, Mu.subst, ih]
+  | fn m a r => rfl
+  | prod a b iha ihb => simp [Ty.ro, Ty.inst, iha, ihb]
+
 theorem Ty.inst_inst (ms ms' : List Mu) (τs τs' : List Ty) (t : Ty) :
     (t.inst ms' τs').inst ms τs = t.inst (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
   induction t with
@@ -315,6 +368,7 @@ theorem Ty.inst_inst (ms ms' : List Mu) (τs τs' : List Ty) (t : Ty) :
   | fn m a r iha ihr => simp [Ty.inst, iha, ihr, Mu.subst_subst]
   | prod a b iha ihb => simp [Ty.inst, iha, ihb]
   | tparam i => exact Ty.getD_inst ms τs τs' i
+  | roParam i => simp only [Ty.inst, Ty.ro_inst, Ty.getD_inst]
 
 /-- Instantiating a call inside a generic function that's being
 instantiated still meets the callee's assumptions. -/
@@ -413,7 +467,9 @@ object can be seen as `ro`.
 
 A `ro` view is deep: what it holds is at most `ro`, so what's read through
 it can't be changed either. An object of any mutability can be seen as
-`ro`, one whose mutability is a parameter too. -/
+`ro`, one whose mutability is a parameter too, and a value of a type
+parameter `T` as `ro T`. A closure stays as it is: it never changes once
+it's made, so something at least `ro` can hold any closure. -/
 
 /-- `t` can be used where `t'` is expected: the same type, with some of its
 `mut`, `imm` and `ro` objects seen as `ro`. A `mut` object's contents can
@@ -423,6 +479,18 @@ inductive Sub (Δ : Assume) : Ty → Ty → Prop where
   | ro {m : Mu} {t t' : Ty} : Sub Δ t t' → AtMost Δ .readonly t' →
       Sub Δ (.cell m t) (.cell .readonly t')
   | prod {a a' b b' : Ty} : Sub Δ a a' → Sub Δ b b' → Sub Δ (.prod a b) (.prod a' b')
+  /-- A value of a type parameter can be seen as `ro T`. -/
+  | tparam (i : Nat) : Sub Δ (.tparam i) (.roParam i)
+
+/-- Any type can be seen as `ro`. -/
+theorem Sub.to_ro (Δ : Assume) (t : Ty) : Sub Δ t t.ro := by
+  induction t with
+  | unit | int => exact .refl _
+  | cell m t ih => exact .ro ih (AtMost.of_ro Δ t)
+  | fn m a r _ _ => exact .refl _
+  | prod a b iha ihb => exact .prod iha ihb
+  | tparam i => exact .tparam i
+  | roParam i => exact .refl _
 
 theorem Sub.trans {Δ : Assume} {t₁ t₂ t₃ : Ty} (h₁ : Sub Δ t₁ t₂) (h₂ : Sub Δ t₂ t₃) : Sub Δ t₁ t₃ := by
   induction h₁ generalizing t₃ with
@@ -435,6 +503,7 @@ theorem Sub.trans {Δ : Assume} {t₁ t₂ t₃ : Ty} (h₁ : Sub Δ t₁ t₂) 
     cases h₂ with
     | refl => exact .prod (by assumption) (by assumption)
     | prod ha hb => exact .prod (iha ha) (ihb hb)
+  | tparam i => cases h₂; exact .tparam i
 
 /-- Seeing an object as `ro` survives instantiating. -/
 theorem Sub.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t t' : Ty}
@@ -447,6 +516,7 @@ theorem Sub.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' 
     simp only [Mu.subst] at this
     exact .ro ih this
   | prod _ _ iha ihb => exact .prod iha ihb
+  | tparam i => exact Sub.to_ro Δ' _
 
 /-- What `t` can be used as, when `t` isn't a `ro` view or a tuple: only `t`. -/
 theorem Sub.cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ (.cell m t) t') :
@@ -469,10 +539,11 @@ theorem Sub.prod_inv {Δ : Assume} {a b t' : Ty} (h : Sub Δ (.prod a b) t') :
 
 /-- Other types are only subtypes of themselves. -/
 theorem Sub.eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
-    (hc : ∀ m s, t ≠ .cell m s) (hp : ∀ a b, t ≠ .prod a b) : t' = t := by
+    (hc : ∀ m s, t ≠ .cell m s) (hp : ∀ a b, t ≠ .prod a b) (hq : ∀ i, t ≠ .tparam i) : t' = t := by
   cases h with
   | refl => rfl
   | ro => exact (hc _ _ rfl).elim
   | prod => exact (hp _ _ rfl).elim
+  | tparam => exact (hq _ rfl).elim
 
 end BoltMut

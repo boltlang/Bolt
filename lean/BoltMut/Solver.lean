@@ -32,12 +32,19 @@ parameter at most a mutability. -/
 inductive Atom where
   | le (m μ : Mu)
   | tparam (i : Nat) (μ : Mu)
+  /-- A closure of mutability `m` in something of mutability `μ`: fine when
+  `m ⊑ μ`, or when `μ` is at least `ro`, which holds any closure. -/
+  | fn (m μ : Mu)
+  /-- `ro T` in something of mutability `μ`. -/
+  | roParam (i : Nat) (μ : Mu)
   deriving DecidableEq, Repr
 
 /-- What an atom says, as `AtMost` does. -/
 def Atom.Holds (Δ : Assume) : Atom → Prop
   | .le m μ => Le Δ m μ
   | .tparam i μ => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
+  | .fn m μ => Le Δ m μ ∨ Le Δ .readonly μ
+  | .roParam _ μ => Le Δ .readonly μ
 
 /-- What the solver splits "`t` is at most `μ`" into: a cell is at most `μ`,
 and what it holds at most the cell's own mutability; a closure is at most
@@ -45,9 +52,10 @@ and what it holds at most the cell's own mutability; a closure is at most
 def split (μ : Mu) : Ty → List Atom
   | .unit | .int => []
   | .cell m t => .le m μ :: split m t
-  | .fn m _ _ => [.le m μ]
+  | .fn m _ _ => [.fn m μ]
   | .prod a b => split μ a ++ split μ b
   | .tparam i => [.tparam i μ]
+  | .roParam i => [.roParam i μ]
 
 /-- Splitting says exactly what `AtMost` does. -/
 theorem atMost_iff_split (Δ : Assume) (μ : Mu) (t : Ty) :
@@ -59,6 +67,7 @@ theorem atMost_iff_split (Δ : Assume) (μ : Mu) (t : Ty) :
   | fn m a r => simp [AtMost, split, Atom.Holds]
   | prod a b iha ihb => simp [AtMost, split, iha, ihb, or_imp, forall_and]
   | tparam i => simp [AtMost, split, Atom.Holds]
+  | roParam i => simp [AtMost, split, Atom.Holds]
 
 /-! ## Deciding early -/
 
