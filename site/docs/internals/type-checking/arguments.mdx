@@ -1,0 +1,232 @@
+---
+sidebar_position: 2.7
+title: Arguments and parameter names
+description: A proposal for what the names of a function type's parameters mean when functions are passed around.
+---
+
+# Arguments and parameter names
+
+:::info[Proposal]
+Nothing on this page is implemented yet. It's the design for
+[#411](https://github.com/boltlang/Bolt/issues/411). What the checker does
+now is described in
+[Names of positional parameters](./types.mdx#names-of-positional-parameters).
+:::
+
+A positional parameter can be passed by name, like `f(y: 2, x: 1)` for
+`fn f(x: i32, y: i32)`, so a function type has names: `fn(x: i32, y: i32)`.
+This page is about what those names promise once a function is a value:
+given to another function, kept in a variable or a struct, or returned.
+
+## The problem
+
+Now, a name in a function type is a contract. A written type asks for
+names, and only a function with those names fits it. `apply(|x| x)` works,
+because a lambda takes the names of the type it's checked against, but
+almost any other way of passing a function fails:
+
+```bolt
+fn apply(k: fn(item: i32) -> i32) -> i32 = k(item: 1);
+fn apply_v(k: fn(value: i32) -> i32) -> i32 = k(value: 1);
+fn double(n: i32) -> i32 = n * 2;
+fn mk() = |x: i32| x;
+
+let f = |x: i32| x;
+apply(f);              // expected fn(item: i32) -> i32, found fn(x: i32) -> i32
+apply(id(|x: i32| x)); // the same: the `T` of `id` hides what's expected
+apply(mk());           // the same: the names of `mk` are settled with its type
+apply(double);         // expected fn(item: i32) -> i32, found fn(n: i32) -> i32
+let g = |_: i32| 0;
+apply(g);              // a function without names doesn't fit one with names
+apply(f) + apply_v(f); // `f` can't be both `item` and `value`
+```
+
+None of these can go wrong at runtime. A name only says which position an
+argument goes to, and the checker and MIR both find it from the type of the
+callee at the call (`place_args`). Inside `apply`, `k(item: 1)` passes its
+argument first, whatever the function it was given calls its parameter.
+Monomorphization already drops the names of positional parameters
+(`MonoTy::Fn`).
+
+## The rule
+
+> Only a call by name checks a name.
+
+A name in a function type says how whoever holds a value of that type can
+call it by name. Where a function is given for a written function type, it
+takes the written type's names: the type renames its parameters. Every
+example above checks then. What still doesn't is a call by a name that the
+callee's type doesn't have:
+
+```bolt
+let f = |x: i32| x;
+f(y: 1);                   // error: no parameter y
+let h: fn(i32) -> i32 = f;
+h(x: 1);                   // error: the type of `h` has no names
+```
+
+Calls through a class already work like this: they use the class's names,
+whatever an impl calls its parameters.
+
+## Names as constraint variables
+
+Each positional parameter of a function type has a name slot in
+`Params::names`: a name, no name, or a variable of kind `VarKind::Name`.
+The variables come from freshening, as now: when a type variable is bound
+to a function type (`Unifier::bind_freshened`), like the type of
+`let f = |x| x`, the `T` of `id`, or the type of a parameter without an
+annotation.
+
+The order of names stays the same: no name is below every name, and two
+different names aren't related. When the unifier meets two function types,
+it relates their slots, `lo ≤ hi`, with the slot that receives the function
+below the one that gives it: the expected type's below the actual type's,
+and the other way around inside parameters. A call by name relates the name
+it uses below the callee's slot.
+
+What changes is how strong each relation is:
+
+| Relation | Made by | Now | Proposed |
+|---|---|---|---|
+| `ν ≤ s`, the receiving slot is a variable | a variable that gets a function: `let k = f`, the branches of an `if` | must hold | must hold |
+| `n ≤ ν`, from a call | `k(x: 1)` | must hold | must hold |
+| `n ≤ s`, the receiving slot is a written name | `apply(f)`, `apply(double)`, `let h: fn(i32) -> i32 = f` | must hold | a hint |
+
+A hint between two names, like `item ≤ n` in `apply(double)`, has no
+effect: that's the renaming. It's also what the warning for swapped names
+looks at ([below](#swapped-names)). A hint whose upper side is a variable,
+like `item ≤ ν` in `apply(k)` for an unannotated `k`, only decides `ν` if
+nothing else does.
+
+When the names are settled (`Unifier::name_solutions`), each variable is,
+in this order:
+
+1. The name that a call passes it by, if a call does, directly or through
+   variables below it. Its upper bounds must allow that name, and all calls
+   must use the same one.
+2. Otherwise, the greatest name its upper bounds allow, if it has any: the
+   names of the functions it was given, if they agree, or no name.
+3. Otherwise, the name of its hints, if they agree.
+4. Otherwise, no name.
+
+Only the first step can report errors. So a name can't fail where a
+function is given; it fails at a call, or where a function reaches a
+variable that a call already named.
+
+### Examples
+
+`let f = |x: i32| x; apply(f); f(x: 1)` checks. The variable `ν` for `f`
+has the upper bound `x`, from the lambda; `apply(f)` adds the hint `item ≤
+ν`; and the call adds `x ≤ ν`. So `ν` is `x`. `f(item: 1)` would be an
+error, since nothing that `f` was given is called `item`.
+
+`fn p(k) = apply(k)` gives `k` the type `fn(item: i32) -> i32`, as now. `k`
+is only given from outside, so its variable has no upper bound, and the
+hint decides. That's why these relations become hints instead of being
+left out: without them, a parameter without an annotation loses the names
+of what it's used as, and `fn p(k) = apply(k) + k(item: 2)` stops checking.
+A prototype that left them out showed this.
+
+`fn p(k) = apply(k) + apply_v(k)` gives `k` no names, without an error,
+since its hints disagree. Now that's an error.
+
+```bolt
+let f = |x: i32| x;
+let g = |y: i32| y;
+let k = if c { f } else { g };
+k(1);     // ok
+k(x: 1);  // error: no parameter x
+```
+
+The variable of `k` is at most the variables of `f` and `g`, which are at
+most `x` and `y`, so it has no name: a variable that two functions meet in
+has the names they share, as now. With function parameters instead of
+local lambdas, like `fn pick(c, f: fn(x: i32) -> i32, g: fn(x: i32) -> i32)`,
+`if c { f } else { g }` fails for another reason: `f` and `g` have hidden
+mutabilities of their own
+([#320](https://github.com/boltlang/Bolt/issues/320)).
+
+### When calls are checked
+
+A call by name places its arguments when it's checked, from the names that
+its callee would have then (`Unifier::names_now`). Later relations can only
+add upper bounds to the variables a call used. If one of them doesn't allow
+the call's name, it's an error where that relation was made, when the
+names are settled. So placing an argument early never makes a program
+silently pass it elsewhere.
+
+## What changes in the checker
+
+- `Unifier::relate_names` makes a hint, instead of a relation that must
+  hold, when the lower side is a written name. Two different written names
+  don't fail right away anymore. `require_name` relates a written name too,
+  but must keep making a relation that must hold, so it needs a way of its
+  own.
+- `NameEdge` says whether it's a hint. `Unifier::name_solutions` gets the
+  third step, and `Unifier::settle_names` only reports relations that must
+  hold.
+- A lambda still takes the names of the type it's checked against.
+  That's the same renaming, done earlier.
+- Code that compares types with `==` instead of unifying them, like
+  instance lookup, should ignore the names of positional parameters, the
+  way monomorphization does.
+- Tests in `tests/checker/types/params.txt` turn around: "A function
+  without the names that are asked for doesn't fit" and "Inside a
+  parameter's function type, names are asked for the other way", along with
+  the unit test `names_fit_where_fewer_are_expected` in `unify.rs`. The
+  examples on this page become new cases.
+- The section on names in [Types and schemes](./types.mdx) is rewritten
+  from this page.
+
+## Swapped names
+
+Renaming makes one mistake easy to write
+([#433](https://github.com/boltlang/Bolt/issues/433)):
+
+```bolt
+fn copy(f: fn(src: Path, dst: Path)) = f(src: a, dst: b);
+copy(|dst, src| ...);    // `src` arrives in the lambda's `dst`
+
+fn f(x: i32, y: i32) -> i32 = x;
+let g: fn(y: i32, x: i32) -> i32 = f;
+```
+
+The checker warns when a function is given for a function type that has
+one of its parameter names at another position. The hints are where to
+look: once the names are settled, compare the names of the two function
+types at each place where one was given for the other. Names that differ
+but aren't swapped, like `|x| x` for `fn(item: i32) -> i32`, don't warn.
+
+## What this doesn't cover
+
+- **Keyword-only parameters**
+  ([#432](https://github.com/boltlang/Bolt/issues/432)). Their names have
+  no position to fall back on, so they stay part of the type's structure
+  (`Params::keyword`), and a lambda, which only has positional parameters,
+  can't be checked against them.
+- **Calls by name of an unknown function.** `fn p(k) = k(item: 1)` makes
+  `k` take a keyword-only `item`, so `p(|x| x)` runs into #432. A
+  positional parameter named `item` would fit more functions under this
+  design, but it's a different choice, which isn't made here.
+- **Adapting a named function with defaults**
+  ([#407](https://github.com/boltlang/Bolt/issues/407)), like giving
+  `fn fmt(x: i32, *, width: i32 = 0)` where `fn(i32) -> String` is
+  expected.
+- **Checking impl methods against their class**
+  ([#154](https://github.com/boltlang/Bolt/issues/154)), where a renamed
+  parameter could get the same warning as a swapped one.
+
+## Prior art
+
+- **OCaml** has labels in function types, and a function with other labels
+  doesn't fit: `~x:int -> int` isn't `~item:int -> int`. That's what Bolt
+  does now.
+- **Swift** took argument labels out of function types (SE-0111), so a
+  function value can't be called by name at all. This design keeps names
+  in the types, for calls through a value.
+- **Kotlin** warns when an override renames a parameter, because calls by
+  name through the supertype use the supertype's names. That's the same
+  idea as the warning for swapped names.
+- **Python** checks names at each call by keyword, at runtime, so passing a
+  function whose parameter isn't called `item` to code that calls it by
+  `item` fails when that call runs.

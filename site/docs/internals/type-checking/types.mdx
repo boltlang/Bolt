@@ -225,6 +225,10 @@ with keyword parameters or rests binds its parameters from the flat ones
 
 ### Names of positional parameters
 
+[Arguments and parameter names](./arguments.mdx) proposes to change what
+these names promise when a function is passed around
+([#411](https://github.com/boltlang/Bolt/issues/411)).
+
 A positional parameter can be passed by name too: `f(y: 2, x: 1)` for
 `fn f(x: i32, y: i32)`. The names are in the function's type, as
 `fn(x: i32, y: i32)`, and a function type can be written with them. Each
