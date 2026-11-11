@@ -147,3 +147,21 @@ fn go() = {
 --------------------------------------------------------------------------------
 call: fn(h: ro Handler) -> i32
 go: fn() -> i32
+
+================================================================================
+ro doesn't reach into the type arguments of a struct
+:error
+:test-prelude
+================================================================================
+struct Handler[T] { f: fn(T) -> () }
+fn call(h: ro Handler[ro [i32]], xs: ro [i32]) = (h.f)(xs);
+fn go() = {
+  let frozen = [1];
+  let h = mut Handler { f: |xs: mut [i32]| { xs[0] = 2; } };
+  call(h, frozen)
+};
+--------------------------------------------------------------------------------
+call: fn(h: ro Handler[ro [i32]], xs: ro [i32]) -> ()
+go: fn() -> ()
+--------------------------------------------------------------------------------
+error at `h`: expected ro Handler[ro [i32]], found mut Handler[mut [i32]]

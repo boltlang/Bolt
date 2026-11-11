@@ -356,7 +356,15 @@ impl<'db> Unifier<'db> {
                 self.unify_all(xs, ys)?;
                 self.unify_all(ms, ns)?;
                 self.unify(m, n)?;
-                self.share_if_mut(m, xs, ys)
+                // A type or mutability argument can be anywhere in the
+                // fields, like the `T` of `struct Handler[T] { f: fn(T) }`:
+                // seen as `ro`, a function that changes what it's given could
+                // be given a `ro` value. So the arguments are the same both
+                // ways, as in a `mut` value, and `ro` doesn't reach into them.
+                self.flipped = !self.flipped;
+                let shared = self.unify_all(xs, ys).and_then(|()| self.unify_all(ms, ns));
+                self.flipped = !self.flipped;
+                shared
             }
             // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
             // the last arguments are equal, and so are the rest of each
