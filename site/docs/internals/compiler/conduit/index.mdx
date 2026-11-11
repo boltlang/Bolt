@@ -85,8 +85,8 @@ is given back as it is, with no call and no impl.
 
 ## Effects
 
-A call of an operation is a `perform`, and a `match` with effect arms is a
-`handle`, as [the effects design](../../designs/effects.mdx#lowering) says: the
+A call of an operation is a `perform`, and a `match` with effect arms (see
+[the effects design](../../designs/effects.mdx#handlers)) is a `handle`: the
 scrutinee becomes a closure, the value arms the return clause, and the arms
 of each operation its clause, a function that takes the operation's
 arguments and the continuation, and matches the arguments as a tuple. The
@@ -99,7 +99,14 @@ function, like `say` in `xs.each(say)`, is a closure of a shim that
 performs it. A `match` with arms for several effects is one handler of
 all of them, with a clause for each of their operations: an arm for
 operations of two effects, like `effect fail(c) | abort(c), _ => c`, is
-the clause of each. Not lowered yet: a handler whose arms hold values of
+the clause of each. So an arm's own operations go to the handler around
+the `match`, not to the `match` itself, as nesting a `handle` per effect
+would.
+
+Effect parameters, like the `E` of `map`, are passed through to Conduit as
+effect parameters, as mutability parameters are. Instances are only made
+for types, so a `map` that's called with functions of different effects is
+still one function in Conduit. Not lowered yet: a handler whose arms hold values of
 a mutability that's a parameter, since a clause can't have mutability
 parameters in Conduit.
 

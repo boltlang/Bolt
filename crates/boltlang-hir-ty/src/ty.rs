@@ -389,7 +389,7 @@ pub enum Ty<'db> {
     /// variables bound by a scheme. Each effect is in it once, and both
     /// lists are in the order of [`Ty::row_of`]; the empty row is `Nothing`.
     /// A row made of rows still being inferred is a variable, and how it's
-    /// made is a constraint (see `site/docs/internals/effects.mdx`).
+    /// made is a constraint (see `site/docs/internals/compiler/type-checking/effects.mdx`).
     Row(Box<[EffectTy<'db>]>, Box<[Ty<'db>]>),
     /// An associated type of a class applied to types, like `C.Item` for
     /// `type Item;` of `class Index[C]`: the type alias declared in the

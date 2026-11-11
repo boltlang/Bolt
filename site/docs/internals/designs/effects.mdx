@@ -98,7 +98,7 @@ A function's effects are inferred only when neither its result type nor
   that has `Async` and whatever else its body does writes an effect
   variable: `does Async + E`.
 - Without either, the effects are inferred like the types (see
-  [Inferring effects](#inferring-effects)).
+  [Inferring effects](../compiler/type-checking/effects.mdx#inferring-effects)).
 
 So a [complete signature](../compiler/type-checking/generalization.mdx), with every
 type written, tells callers what the function does without its body.
@@ -187,7 +187,7 @@ variable: it's one because of where it's used, by the kind inference below.
 
 A row can have several effect variables, like `does E + F` for a function
 that calls two functions it's given. The checker writes such a row as a
-predicate (see [Rows as predicates](#rows-as-predicates)), so there's no
+predicate (see [Rows as predicates](../compiler/type-checking/effects.mdx#rows-as-predicates)), so there's no
 guessing how to split a row between the variables.
 
 ## No effect twice
@@ -409,25 +409,8 @@ type $U$:
 So `match` takes the effects it has arms for out of the row, and nothing
 else.
 
-The checker infers the scrutinee's row $s$ like the effects of a body, and
-adds a predicate $\rho = s \setminus \mathit{Op}_i$ for each effect with
-arms, solved once $s$ is known: $\rho$ is $s$ without $\mathit{Op}_i$, and
-the arguments of $\mathit{Op}_i$ in $s$ must be those the arms use. When
-$s$ stays unknown, because it's the row of a parameter of an inferred
-function, $s$ becomes $\mathit{Op}_1 + \dots + \rho$, as Rose and Koka
-have it:
-
-```bolt
-fn quiet(f) = match f() {
-    v => v,
-    effect log(m), k => resume(k, ()),
-};
-// forall a e. fn(fn() -> a does Log + e) -> a does e
-```
-
-So `quiet` only takes functions that do `Log`. Keeping the predicate in
-the type instead is discussed in
-[#358](https://github.com/boltlang/Bolt/issues/358).
+How the checker solves this, and what a function that handles an unknown
+row gets, is in [the checker's effects](../compiler/type-checking/effects.mdx#handlers).
 
 `resume` and `Cont` are names of the prelude, like `Nothing`, and not
 keywords.
@@ -437,23 +420,8 @@ gives each of its arms a new type for `T`, equal to no other type. In the
 scheduler above, `k` can only be resumed with a value of that type, which
 only `start` provides. Existential types of GADTs are checked the same way.
 
-### Lowering
-
-A `match` with effect arms becomes a `handle` in Conduit:
-
-- the scrutinee becomes the body closure, through lambda lifting;
-- the value arms become the return clause;
-- the arms of each operation become its clause, with a decision graph over
-  the arguments.
-
-A `match` with arms for several effects is one Conduit handler of all of
-them, so an arm's own operations go to the handler around the `match`,
-not to the `match` itself, as nesting a `handle` per effect would.
-
-Effect parameters, like the `E` of `map`, are passed through to Conduit as
-effect parameters, as mutability parameters are. Instances are only made
-for types, so a `map` that's called with functions of different effects is
-still one function in Conduit.
+A handler becomes a `handle` in Conduit, as
+[Conduit](../compiler/conduit/index.mdx#effects) describes.
 
 ### Why `match`
 
@@ -465,194 +433,11 @@ graphs that Bolt already has. It also reads like handling exceptions. The
 cost is that a `match` that only handles effects still needs a value arm
 like `v => v`, and `, k` is a form that nothing else in Bolt has.
 
-## Kind inference
+## How the checker does it
 
-Effects bring a new kind. The [kinds](../compiler/type-checking/kinds.mdx) are now:
-
-$$
-\kappa ::= \mathsf{Type} \mid \mathsf{Effect} \mid \kappa_1 \to \kappa_2
-$$
-
-$\mathsf{Effect}$ is the kind of rows. A single effect is a row of one, so
-`Log`, `State[i32]` and `Async + Log` are all of kind $\mathsf{Effect}$.
-`State` is of kind $\mathsf{Type} \to \mathsf{Effect}$, so `State` alone
-isn't a row, as `Option` alone isn't a type. Koka has two kinds here, one
-for single effects and one for rows. With one, an effect variable can stand
-for any row, which is what `map` needs, and there's less to learn.
-
-Kinds are still never written. Inference gets two new equations, next to
-those for types:
-
-1. Every term of a row after `does` is of kind $\mathsf{Effect}$.
-2. `effect T[a_1, …, a_n]` is of kind
-   $\kappa_{a_1} \to \dots \to \kappa_{a_n} \to \mathsf{Effect}$,
-   where the $\kappa_{a_i}$ come from the operations.
-
-The rest is unchanged: an application $T[\tau_1, \dots, \tau_n]$ gives
-$\kappa_T = \kappa_{\tau_1} \to \dots \to \kappa_{\tau_n} \to \beta$, a
-parameter or field type is of kind $\mathsf{Type}$, and the equations are
-solved by unification.
-
-An effect declaration is a group of its own, with its operations, like a
-class with its methods. So the kind of `State`'s `S` comes from the types of
-`get` and `set`.
-
-For the `map` above:
-
-| Parameter | Used as             | Kind                 |
-| --------- | ------------------- | -------------------- |
-| `A`       | `[A]`, `fn(A)`      | $\mathsf{Type}$      |
-| `B`       | `-> B`, `[B]`       | $\mathsf{Type}$      |
-| `E`       | `does E`            | $\mathsf{Effect}$    |
-
-A parameter of an effect can be a row too:
-
-```bolt
-effect Spawn[E] {
-    fn spawn[T](task: fn() -> T does E) -> Task[T];
-}
-```
-
-`E` is of kind $\mathsf{Effect}$, so `Spawn` is of kind
-$\mathsf{Effect} \to \mathsf{Effect}$, and `Spawn[Async + Log]` is a row.
-
-### Defaulting
-
-A kind variable that nothing decided becomes $\mathsf{Type}$, as before.
-An effect variable is always used after a `does`, so its kind is always
-decided, and it's never defaulted. That holds for the parameters of types
-and classes as well:
-
-```bolt
-struct Button[E] { on_click: fn() -> () does E }
-```
-
-`E` is of kind $\mathsf{Effect}$ from its use, so `Button[Async]` is a
-button whose click can wait.
-
-### Errors
-
-Kind errors are reported like they are now:
-
-- `fn f(x: Log)` expects a type and finds an effect: "expected a type of
-  kind `Type`, found `Log` of kind `Effect`" (`E0216`).
-- `fn f() does i32` expects an effect and finds a type: "expected a type of
-  kind `Effect`, found `i32` of kind `Type`".
-- `fn f() does State` misses an argument, like `Option` alone: "expected 1
-  type argument, found 0".
-- A parameter used both ways, like `E` in `fn f[E](x: E) does E`, takes the
-  kind of its first use, and lowering reports the second.
-
-### Applications with an unknown head
-
-Kind inference allows a parameter of kind
-$\mathsf{Type} \to \mathsf{Effect}$, like the `H` in:
-
-```bolt
-fn run[H, T](f: fn() -> T does H[T]) -> T;
-```
-
-But a row is unified by the names of its effects (see below), and `H[T]`
-has no name until `H` is known. So for now, every effect in a row has to be
-a known effect or an effect variable, and `H[T]` in a row is an error.
-
-## Rows as predicates
-
-Rows follow Morris and McKinna's Rose [Morris & McKinna 2019]. A row in a
-type has the effects that are known, like `Log + State[i32]`, and can be
-made of rows that stand for any row, like the `E` of `Log + E`: parameters,
-and the variables of an inferred function's type. A row made of rows still
-being inferred is a variable instead. How rows relate is a *predicate* on
-them, which the solver defers until the rows are known well enough, as it
-does for class constraints:
-
-- **Containment**, `ρ₁ ≲ ρ₂`: every effect of `ρ₁` is in `ρ₂`, with the
-  same arguments. A call adds `callee ≲ body`: the effects of what it calls
-  must be effects of the code it's in.
-- **Combination**, `ρ₁ ⊙ … ⊙ ρₙ ~ ρ`: `ρ` has the effects of all of them.
-  Using a function whose type has `Log + E` gives `E` a new variable `?e`,
-  and the row becomes a variable `?r` with `Log ⊙ ?e ~ ?r`. Once `?e` is
-  known, `?r` is too.
-
-What the predicates mean is a *row theory*. Rose works with several; Bolt's
-is **consistent union**: rows combine by union, and the same effect in both
-must have the same arguments. So `Log ⊙ Log ~ Log`, but no row has both
-`State[i32]` and `State[String]`. The paper's main example, simple rows, only
-combines rows with no effect in common, which would make `does Log + E` fail
-for an `E` that logs too.
-
-Containment is checked like this:
-
-1. No effects fit in any row, a row fits in itself, and a row fits in a row
-   made of it, like `E` in `Log + E`.
-2. Two rows that aren't variables: each effect of the first must be in the
-   second, and its arguments are unified with those there. Each row the
-   first is made of, like `E`, must be one the second is made of: a
-   parameter stands for any row, so it isn't known to be in any other.
-3. A variable on either side: the constraint waits.
-
-Combination waits until its rows aren't variables, and then makes the goal
-their union.
-
-### Least solutions
-
-What a function does is the least row that holds what it calls. When a
-function is generalized, each row variable that's only in *positive*
-places, like the `does` of the function, or of a closure it returns, gets
-the union of the rows that must fit in it, or `Nothing`. That's as general
-as leaving it open, since a smaller row fits wherever a bigger one does
-through `≲`. A row that must hold exactly one unknown row becomes that row:
-
-```text
-twice: forall a e. fn(fn() -> a does e) -> a does e
-```
-
-The rows of parameters stay variables, and a least row can be made of them:
-
-```text
-noisy: forall a e. fn(fn() -> a does e) -> a does Log + e
-compose: forall a b c e f. fn(fn(a) -> b does e, fn(c) -> a does f) -> fn(c) -> b does e + f
-```
-
-Rows that wait only for each other, like those of functions that call each
-other, have the same least solution, so they're made one. A row constraint
-that's still left becomes part of the function's type.
-
-A row that nothing decides has no effects, like the row of a closure that
-calls nothing.
-
-### Implementation
-
-`Ty::Row` in `boltlang-hir-ty` is a row's known effects and the rows it's
-made of, both sorted so that equal rows are equal; a row that's one
-parameter and nothing else is that parameter. Row variables are inference
-variables of kind `Effect`, and row parameters are type parameters of kind
-`Effect`. Containment and combination are `RowConstraint` in `rows.rs`,
-solved by the solver like other deferred constraints. Instantiating a
-scheme turns each row made of variables into a variable and a
-combination (`open_rows`). A scheme keeps the row constraints left about
-its rows. Instances don't keep rows: monomorphization skips row
-parameters, since only the checker needs them.
-
-## Inferring effects
-
-A body's effects are inferred like its types. The body starts with a fresh
-row variable, and each call adds the effects of what it calls. A `match`
-with effect arms takes the effects it handles out.
-
-Closures get their effects the same way, and the calls in a closure's body
-add to the closure's effects, not to those of the code around it: `||
-fetch(x)` is `fn() -> Response does Async`. A function without a written
-result type gets the [least row](#least-solutions) that holds what it
-calls, so it's polymorphic in what its callbacks do:
-
-```bolt
-fn twice(f) { f(); f() }
-```
-
-```text
-twice: forall a e. fn(fn() -> a does e) -> a does e
-```
+[The checker's effects](../compiler/type-checking/effects.mdx) has the
+`Effect` kind and its inference, rows as predicates and their least
+solutions, and how a body's effects are inferred.
 
 ## Still to decide
 

@@ -1,5 +1,5 @@
 //! Checking the effect arms of a `match`, which make it a handler: see
-//! `site/docs/internals/effects.mdx`.
+//! `site/docs/internals/compiler/type-checking/effects.mdx`.
 //!
 //! The scrutinee runs with effects of its own, `s`. Each arm names an
 //! operation, whose signature gives the types of the arm's patterns, with

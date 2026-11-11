@@ -10,7 +10,7 @@
 //! their effects, and an effect in both must have the same arguments there.
 //! So `Log ⊙ Log ~ Log`, but `State[i32]` and `State[String]` can't be in
 //! one row. That's what "no effect twice" means (see
-//! `site/docs/internals/effects.mdx`).
+//! `site/docs/internals/compiler/type-checking/effects.mdx`).
 //!
 //! There are two predicates:
 //!

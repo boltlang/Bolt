@@ -379,17 +379,19 @@ known, like `VecIter[i32, imm]`, and leave one out that's generic and
 appears once, like the mutability before a type: `VecIter[T]`. One that's
 left out before one that's shown is `'_`.
 
-## The pages of this chapter
+## Related pages
 
-1. [Functions and annotations](../../compiler/type-checking/mutability/functions.mdx): inferred functions, what
-   `[T]` means in a signature, and return types.
-2. [Uniqueness](../../compiler/conduit/uniqueness.mdx): leaving out the copy of `imm e`, an
-   optimization in Conduit, the IR that Bolt compiles to, like its region
-   analysis ([Conduit](../../compiler/conduit/index.mdx)).
-3. [Errors](../../compiler/type-checking/mutability/errors.mdx).
-4. [Implementation](../../compiler/type-checking/mutability/implementation.mdx): where each rule is in the
-   checker, the tests and the Lean proof.
-5. [Prior art](./prior-art.mdx).
+- [Prior art](./prior-art.mdx): other languages and papers that track
+  whether a value can change.
+- How the checker does it: [inferred functions and
+  annotations](../../compiler/type-checking/mutability/functions.mdx), what
+  `[T]` means in a signature, and return types;
+  [where each rule is](../../compiler/type-checking/mutability/implementation.mdx)
+  in the checker, the tests and the Lean proof; and
+  [the errors](../../compiler/type-checking/mutability/errors.mdx).
+- Leaving out the copy of `imm e`: Conduit's region analysis
+  ([Conduit](../../compiler/conduit/index.mdx)), and the
+  [uniqueness](../../compiler/conduit/uniqueness.mdx) proposal.
 
 ## Open questions
 
