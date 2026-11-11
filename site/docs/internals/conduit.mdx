@@ -55,9 +55,17 @@ where `array_freeze` lowers to an `array_clone` to `imm`. Conduit's
   object. So once Conduit has inlined it, `to_imm` of a `Vec` that's `imm`
   already costs nothing.
 - A clone to `imm` of an array that nothing else can reach becomes an
-  `array_freeze` in place, shown by a region analysis: the optimization
-  that [regions](./type-checking/mutability/regions.mdx) and
-  [uniqueness](./type-checking/mutability/uniqueness.mdx) describe.
+  `array_freeze` in place, shown by a region analysis. The *region* of a
+  value `v` is the `mut` objects it reaches, following the arrays and
+  structs it holds but not what closures captured, and `imm v` copies
+  exactly those. When the program has the region's objects only inside
+  `v`, and no object outside the region holds one, making the region `imm`
+  where it is can't be told apart from copying it: the
+  [Lean proof](https://github.com/boltlang/Bolt/tree/main/lean) shows this
+  (`region_freeze_step` in `Unique.lean`,
+  [#335](https://github.com/boltlang/Bolt/issues/335)).
+  [Uniqueness](./type-checking/mutability/uniqueness.mdx) is a proposal
+  for more of these.
 
 The last doesn't fire on `to_imm` of a fresh `mut` `Vec` yet: the impl
 reads `v.len` after cloning the buffer, so `v` is still used and the

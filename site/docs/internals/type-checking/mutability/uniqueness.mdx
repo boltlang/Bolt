@@ -9,8 +9,8 @@ description: A proposal for leaving out the copies that make imm values, when no
 :::info[Proposal]
 Nothing on this page is implemented. It's part of the design for
 [#209](https://github.com/boltlang/Bolt/issues/209): an optimization in
-Conduit, the IR that Bolt compiles to after type checking, like the
-[region](./regions.mdx) analysis. Both are about mutability: they find
+Conduit, the IR that Bolt compiles to after type checking, like its
+region analysis ([Conduit](../../conduit.mdx)). Both are about mutability: they find
 when the copy that `imm e` makes can be left out. Nothing on this page is
 written in a program, and it never changes which programs type-check.
 

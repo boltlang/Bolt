@@ -99,8 +99,9 @@ fn fixed() -> imm [i32] = mut [];            // error: expected `imm [a]`, found
 ```
 
 To return such a value as `imm`, a body says so with `imm`, as in
-`imm mut []`. That's a copy, which the [region](./regions.mdx) analysis can
-leave out when nothing else has the value.
+`imm mut []`. That's a copy, which Conduit's region analysis
+([Conduit](../../conduit.mdx)) can leave out when nothing else has the
+value.
 
 `next` returns what it's given, so its result has its argument's
 mutability: `next(a)` is a `mut Node` for a `mut Node` `a`, and an
