@@ -42,8 +42,11 @@ description: Where the rules of mutability are in the checker, the tests and the
   kind, and `struct_args` gives them to its field types. In a type like
   `VecIter[i32, imm]`, a mutability on its own is one of them; those not
   given are `Ty::Unwritten`.
-- **Unification** (`unify.rs`): mutabilities are equal or they aren't;
-  there's no subtyping. `Ty::Fn` holds its mutability last, and `fn(...)`
+- **Unification** (`unify.rs`): mutabilities are equal or they aren't,
+  except that a place that receives `ReadOnly` takes any mutability, with
+  `flipped` saying which side receives inside a function's parameters. A
+  `mut` value shares its contents both ways (`Unifier::share_if_mut`), and
+  so do a struct's type arguments, so `ro` doesn't reach into them. `Ty::Fn` holds its mutability last, and `fn(...)`
   lowers with `Ty::Unwritten` like an array, so it's a hidden parameter in
   a signature and the struct's own in a field.
 - **Inference** (`infer.rs`): an array or struct literal is `Imm`, or `Mut`
@@ -89,6 +92,16 @@ description: Where the rules of mutability are in the checker, the tests and the
     at are reported where they're written, the same way: those of a
     function without a body, like a class method, of a type alias, and of
     an impl's instance (`written_type` in `boltlang-hir`).
+- **`ro`** (#320): a written `ro` lowers to `Mutability::ReadOnly`, and
+  `Ty::ro_inside` makes the mutabilities that aren't written inside it
+  `ReadOnly` too, since a `ro` view is deep. A type parameter under it is
+  `Ty::Ro`, `ro T`, which a `T` fits where it's received. Once `T` is
+  known, `Unifier::shallow_resolve` and `Unifier::resolve` give its view
+  instead (`Ty::ro_view`, `Ty::normalize_ro`). `holds.rs` sees `ro T` as
+  at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
+  an error (E0223). Monomorphization gives a function called at `ro` an
+  instance of its own (`Instance::ro`), and finds the `T` of a `ro T` from
+  where `T` is written as it is first (`uses.rs`).
 - **`imm e`** (`solve.rs`): an `ImmConstraint` from the type of `e` to
   that of the copy, solved once the type of `e` is known
   (`Solver::solve_imm`). An array or struct becomes `imm`, and a struct or
@@ -118,7 +131,8 @@ description: Where the rules of mutability are in the checker, the tests and the
 - **Tests**: `tests/checker/mutability/arrays.txt`,
   `tests/checker/mutability/structs.txt`,
   `tests/checker/mutability/named.txt`,
-  `tests/checker/mutability/params.txt` and
+  `tests/checker/mutability/params.txt`,
+  `tests/checker/mutability/readonly.txt` and
   `tests/checker/mutability/closures.txt` have a case for each rule in this
   chapter.
 - **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a

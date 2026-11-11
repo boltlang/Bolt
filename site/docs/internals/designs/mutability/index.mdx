@@ -304,6 +304,52 @@ as `imm`, which is what makes `imm` worth having:
 It doesn't guarantee what Rust does, that nothing else changes a `mut`
 value while you have it. `mut` values are shared on purpose.
 
+## Read-only views: `ro`
+
+**`ro` is a view of a value that may or may not change, through which it
+isn't changed** ([#320](https://github.com/boltlang/Bolt/issues/320)).
+Without it, a function that only reads takes values of one mutability per
+call, and two values of different mutabilities can't meet: `if c { a }
+else { b }` with a `mut` and an `imm` `Money` is an error. With `ro`,
+`imm ⊑ ro` and `mut ⊑ ro`: a value of either mutability can be given where
+a `ro` one is received.
+
+**A `ro` view is deep.** `ro [[i32]]` is `ro [ro [i32]]`, so a
+`mut [mut [i32]]` can be seen as one, and nothing in it can be changed
+through it. That's sound only because nothing is written through `ro`:
+inside a `mut` value, where an element is both read and written, the
+mutabilities must be the same, so a `mut [mut [i32]]` isn't a
+`mut [ro [i32]]`. The same goes for function types: a function that takes
+`ro` fits where one that takes `mut` is expected, but not the other way.
+
+**`ro` isn't `imm`.** A `ro` value can be changed by whoever has it as
+`mut`, so an `imm` value can't hold one (E0223), and `imm e` of a `ro`
+value is a copy. A closure in a `ro` struct can still be called, since a
+`ro` value promises nothing about what its closures change.
+
+**`ro T` is a type parameter seen as `ro`.** A `T` fits where a `ro T` is
+expected, but a `ro T` isn't a `T`, so a generic function can't give back
+what it read through `ro [T]` as a `T`. Once `T` is known, `ro T` is its
+view: `ro (mut [i32])` is `ro [i32]`, and `ro i32` is `i32`.
+
+**The type arguments of a struct aren't seen as `ro`.** A parameter can be
+anywhere in the fields, like the `T` of `struct Handler[T] { f: fn(T) }`,
+where seeing `Handler[mut [i32]]` as `Handler[ro [i32]]` would let a
+function that changes its argument be given an `imm` array. So they're the
+same both ways, which is too strict for `struct Box[T] { item: T }`
+([#440](https://github.com/boltlang/Bolt/issues/440)).
+
+The rules are proven in `lean/BoltMut`: in `Syntax.lean`, `Ty.ro` is the
+view, `Sub.to_ro` says a type fits its view, and `Ty.roParam` is `ro T`;
+`ReadOnly.lean` has the examples.
+
+Conduit has a `ReadOnly` mutability too, but it isn't deep, and doesn't
+reach into function types, so the views above that see what a value holds
+as `ro` can't be compiled yet
+([#439](https://github.com/boltlang/Bolt/issues/439)). A function called
+at `ro` gets an instance of its own, since Conduit doesn't take `ReadOnly`
+as a mutability argument.
+
 ## Named mutabilities
 
 A name like `'m`, written where `mut` or `imm` would be, is a mutability

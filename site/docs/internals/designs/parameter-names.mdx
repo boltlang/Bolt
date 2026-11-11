@@ -252,8 +252,8 @@ neither is given for the other.
 - **Mutabilities.** Function parameters without annotations have hidden
   mutabilities of their own, so `fn pick(c, f: fn(x: i32) -> i32, g: fn(x:
   i32) -> i32) = if c { f } else { g }` fails for that reason
-  ([#320](https://github.com/boltlang/Bolt/issues/320)). Its proposed
-  read-only mutability is the same idea as rule 2: a value that's one of
+  ([#320](https://github.com/boltlang/Bolt/issues/320)). Its read-only
+  mutability, `ro`, is the same idea as rule 2: a value that's one of
   several only allows what all of them allow.
 
 ## Prior art
