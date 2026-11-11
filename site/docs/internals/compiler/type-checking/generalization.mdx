@@ -15,8 +15,8 @@ Every function is one of two kinds, decided by `is_declared` in `scheme.rs`:
 
 - A **declared** function's type comes from its declaration alone. Its
   signature is complete (every parameter type and the return type are
-  written), or it has no body, or it's in a class or impl, whose class
-  declares its type.
+  written, with every mutability in them), or it has no body, or it's in a
+  class or impl, whose class declares its type.
 - An **inferred** function is any other top-level function. Its type comes
   from its body.
 

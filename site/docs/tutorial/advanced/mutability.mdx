@@ -286,7 +286,8 @@ fn reader(xs: [i32]) = || xs[0];
 
 ## Naming a mutability
 
-A function that takes `[i32]` takes both kinds of array. But sometimes
+A function that takes `[i32]` and only reads it takes both kinds of
+array. But sometimes
 the kinds of two arrays have to match, or a function gives back the kind
 it was given. Then name the mutability, with a name that starts with `'`,
 written where `mut` or `imm` would go:

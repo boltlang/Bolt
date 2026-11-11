@@ -14,12 +14,15 @@ description: Where the rules of mutability are in the checker, the tests and the
 - **Lowering** (`lower.rs`): `mut [T]`, `imm [T]`, `mut Point` and
   `imm Point` lower to their mutability, and the rest to `Ty::Unwritten`,
   which each item then replaces with `Ty::fill_unwritten`:
-  - in a function's parameters and an impl's instance, hidden parameters,
-    numbered after the declared type parameters (`FnSig::hidden`,
-    `ImplHeader::hidden`), so that instantiating a scheme and matching an
-    impl handle them like any other parameter;
-  - in a body, and in the return type of a function with a body,
-    inference variables, which the body decides (`infer.rs`, `check.rs`);
+  - in the parameters of a function whose type comes from its class or
+    impl, or that has no body, and in an impl's instance, hidden
+    parameters, numbered after the declared type parameters
+    (`FnSig::hidden`, `ImplHeader::hidden`), so that instantiating a scheme
+    and matching an impl handle them like any other parameter;
+  - in a body, and in the parameters and the return type of any other
+    function, inference variables, which the body decides (`infer.rs`,
+    `check.rs`). So a signature is only complete when it writes every
+    mutability (`FnSig::is_complete`);
   - in a struct's field, the struct's own hidden parameter
     (`struct_mutability`), which a struct's type substitutes with its
     mutability (`struct_args`);

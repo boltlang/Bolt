@@ -37,8 +37,10 @@ primes[0] = 1;
 ```
 
 The type of an array says which kind it is: `primes` is `imm [i32]`, and
-`scores` is `mut [i32]`. A function that takes `[i32]` takes both, and
-can't change them; one that changes its argument takes `mut [i32]`.
+`scores` is `mut [i32]`. A function that takes `[i32]` and only reads it
+takes both. One that changes its argument only takes a `mut` array: Bolt
+infers that, like a type you don't write, but it's clearer to write
+`mut [i32]`. A parameter written `imm [i32]` can't be changed.
 
 ## Arrays are shared
 

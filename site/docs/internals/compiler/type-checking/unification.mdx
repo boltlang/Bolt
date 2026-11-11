@@ -99,10 +99,12 @@ a mutability, or to a parameter or bound variable that stands for one.
 When a body is done, `default_mutability_vars` makes the mutability
 variables that nothing decided `Imm`.
 
-A mutability that a function's parameter doesn't write is a hidden
-parameter of the function. Inside the body it's a `Ty::Param`, which only
-unifies with itself, but each use of the function instantiates it with a
-new variable, so a caller can pass either kind. This table shows whether
+A mutability that a function's parameter doesn't write is decided with
+the body, and one that nothing decides is generalized, so each use of the
+function instantiates it with a new variable, and a caller can pass
+either kind. In a function whose type comes from its class or impl, or
+that has no body, it's a hidden parameter of the function instead: inside
+the body a `Ty::Param`, which only unifies with itself. This table shows whether
 two parameter types unify once their functions are instantiated, which
 is how [#275](https://github.com/boltlang/Bolt/issues/275) proposes to
 find overloads that a call could fit both of:

@@ -128,7 +128,8 @@ and result has advantages:
   body is reported in the body, not at a call somewhere else.
 - **It's faster.** The compiler checks a function with a complete signature
   on its own, so changing its body doesn't make it check the code that calls
-  it again.
+  it again. A signature is only complete when it also says whether each
+  array and struct is `mut` or `imm` (see [Mutability](./mutability.mdx)).
 
 A good habit is to write types for functions other code uses, and to leave
 them out for small helpers.

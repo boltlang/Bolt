@@ -101,7 +101,8 @@ A function's effects are inferred only when neither its result type nor
   [Inferring effects](../compiler/type-checking/effects.mdx#inferring-effects)).
 
 So a [complete signature](../compiler/type-checking/generalization.mdx), with every
-type written, tells callers what the function does without its body.
+type and mutability written, tells callers what the function does without
+its body.
 
 Function types follow the same rule: `fn(A) -> B` has no effects. So a
 parameter that takes a function with any effects needs an effect variable,

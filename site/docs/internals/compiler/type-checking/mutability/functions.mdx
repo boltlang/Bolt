@@ -47,34 +47,56 @@ move_x(Point { x: 1, y: 2 });      // error: a field of an `imm Point` is change
 
 ## Annotations
 
-**`[T]` and `Point` in the parameters of a function and in a body mean
-either mutability**: a fresh mutability, like `_` stands for a fresh type.
-`mut` and `imm` ask for one.
-
-In a function's signature, a fresh mutability is a hidden parameter of the
-function, like the generalized $\mu$ of `first` above:
+**A type needs `mut` or `imm` to be fixed, and a value asks for its
+mutability with `mut`.** `[T]` and `Point` in a function's parameters,
+without `mut` or `imm`, leave the mutability to inference, like a type
+that isn't written: the body decides it.
 
 ```bolt
-fn sum(xs: [i32]) -> i32 { ... }   // forall m. fn(Array[m, i32]) -> i32
-
-let xs = mut [];
-xs.push(1);
-sum(xs);           // fine
-sum([1, 2]);       // fine
+fn sum(xs: [i32]) -> i32 = xs[0];             // fn(xs: [i32]) -> i32
+fn push_one(xs: [i32]) { xs[0] = 1; }         // fn(xs: mut [i32]) -> ()
+fn pick(c: Bool, a: Money, b: Money) -> Money = if c { a } else { b };
+                                 // fn(c: Bool, a: 'm Money, b: 'm Money) -> 'm Money
+fn both(a: Money, b: Money) = [a, b];        // fn(a: imm Money, b: imm Money) -> ...
 ```
 
-`sum` takes both kinds of array. Inside its body, the mutability of `xs` is
-a parameter, not `Mut`, so `sum` can't change `xs`: `xs.push(1)` there is
-an error. That's the same rule as for any type parameter: a function that
-takes a `T` can't assume that `T` is `i32`. So a signature promises to
-leave an array or struct alone unless it says `mut`, and callers don't have
-to care which kind they pass.
+`sum` only reads `xs`, so nothing decides its mutability, and it's
+generalized: `sum` takes both kinds of array. `push_one` changes `xs`, so
+it takes a `mut` one, and `pick` gives back one of its arguments, so they
+have one mutability. `both` puts its arguments in an `imm` array, which
+can only hold `imm` values.
 
-It doesn't promise that the value stays the same while `sum` runs: the
-caller may have a `mut` name for it. `imm` is for code that relies on a
-value never changing, like a cache keyed by it, or the reactive design
-deciding that something can't change. Few functions need it, which is why
-it isn't what `[T]` means.
+`mut`, `imm` and a named mutability like `'m` fix a mutability, as a
+written type fixes a type, and the body must fit it:
+
+```bolt
+fn keep(xs: imm [i32]) { xs[0] = 1; }        // error: can't change imm [i32]
+fn named(xs: 'm [i32]) -> i32 { let w = [xs]; 0 }
+                                             // error: 'm [i32] isn't at most imm
+```
+
+A parameter that a function only reads doesn't stay the same while the
+function runs: the caller may have a `mut` name for it. `imm` is for code
+that relies on a value never changing, like a cache keyed by it, or the
+reactive design deciding that something can't change.
+
+**Programs lay out their mutabilities like their types.** A function whose
+signature writes every type and every mutability is
+[declared](../generalization.mdx): its type doesn't depend on its body, so
+a change to the body can't change what its callers may pass, and the
+checker doesn't check them again. A lint that writes the inferred
+mutabilities into a signature is
+[#437](https://github.com/boltlang/Bolt/issues/437).
+
+A function whose type can't come from its body, like a method of a class
+or an impl, or a function without a body, has no body to decide an
+unwritten mutability. There it's a hidden parameter of the function,
+which the caller chooses:
+
+```bolt
+#[link(wasm, module = "env", name = "len")]
+fn len(xs: [i32]) -> i32;                    // takes both kinds
+```
 
 In a `let` annotation, `[T]` is an inference variable, which the value
 decides:
@@ -86,10 +108,8 @@ let b: [i32] = [1];         // `imm [i32]`
 
 ## Return types
 
-A hidden parameter is chosen by the caller, so it can't be the mutability
-of something the function makes: `fn make() -> [i32] = [1, 2]` would be
-wrong for a caller that asks for `mut`. Instead, **the body decides the
-mutabilities that a return type doesn't say**:
+Like those of the parameters, **the body decides the mutabilities that a
+return type doesn't say**:
 
 ```bolt
 fn primes() -> [i32] = [2, 3, 5];           // `fn() -> imm [i32]`
