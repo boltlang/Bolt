@@ -412,55 +412,48 @@ an `imm` object can't hold a `ro` one, since that may change, but an `imm`
 object can be seen as `ro`.
 
 A `ro` view is deep: what it holds is at most `ro`, so what's read through
-it can't be changed either. A parameter's object isn't seen as `ro`. -/
-
-/-- The mutabilities whose objects can be seen as `ro`. -/
-def Mu.Viewable : Mu → Prop
-  | .mutable | .immutable | .readonly => True
-  | .param _ => False
+it can't be changed either. An object of any mutability can be seen as
+`ro`, one whose mutability is a parameter too. -/
 
 /-- `t` can be used where `t'` is expected: the same type, with some of its
 `mut`, `imm` and `ro` objects seen as `ro`. A `mut` object's contents can
 be seen as `ro` too, since nothing can be stored through the view. -/
 inductive Sub (Δ : Assume) : Ty → Ty → Prop where
   | refl (t : Ty) : Sub Δ t t
-  | ro {m : Mu} {t t' : Ty} : m.Viewable → Sub Δ t t' → AtMost Δ .readonly t' →
+  | ro {m : Mu} {t t' : Ty} : Sub Δ t t' → AtMost Δ .readonly t' →
       Sub Δ (.cell m t) (.cell .readonly t')
   | prod {a a' b b' : Ty} : Sub Δ a a' → Sub Δ b b' → Sub Δ (.prod a b) (.prod a' b')
 
 theorem Sub.trans {Δ : Assume} {t₁ t₂ t₃ : Ty} (h₁ : Sub Δ t₁ t₂) (h₂ : Sub Δ t₂ t₃) : Sub Δ t₁ t₃ := by
   induction h₁ generalizing t₃ with
   | refl => exact h₂
-  | ro hv _ _ ih =>
+  | ro _ _ ih =>
     cases h₂ with
-    | refl => exact .ro hv (by assumption) (by assumption)
-    | ro _ h₂ ha => exact .ro hv (ih h₂) ha
+    | refl => exact .ro (by assumption) (by assumption)
+    | ro h₂ ha => exact .ro (ih h₂) ha
   | prod _ _ iha ihb =>
     cases h₂ with
     | refl => exact .prod (by assumption) (by assumption)
     | prod ha hb => exact .prod (iha ha) (ihb hb)
-
-theorem Mu.Viewable.subst {m : Mu} (h : m.Viewable) (ms : List Mu) : m.subst ms = m := by
-  cases m <;> first | rfl | exact h.elim
 
 /-- Seeing an object as `ro` survives instantiating. -/
 theorem Sub.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t t' : Ty}
     (h : Sub Δ t t') : Sub Δ' (t.inst ms τs) (t'.inst ms τs) := by
   induction h with
   | refl => exact .refl _
-  | ro hv _ ha ih =>
-    simp only [Ty.inst, hv.subst]
+  | ro _ ha ih =>
+    simp only [Ty.inst]
     have := AtMost.inst hs ha
     simp only [Mu.subst] at this
-    exact .ro hv ih this
+    exact .ro ih this
   | prod _ _ iha ihb => exact .prod iha ihb
 
 /-- What `t` can be used as, when `t` isn't a `ro` view or a tuple: only `t`. -/
 theorem Sub.cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ (.cell m t) t') :
-    t' = .cell m t ∨ ∃ s, t' = .cell .readonly s ∧ m.Viewable ∧ Sub Δ t s ∧ AtMost Δ .readonly s := by
+    t' = .cell m t ∨ ∃ s, t' = .cell .readonly s ∧ Sub Δ t s ∧ AtMost Δ .readonly s := by
   cases h with
   | refl => exact .inl rfl
-  | ro hv h ha => exact .inr ⟨_, rfl, hv, h, ha⟩
+  | ro h ha => exact .inr ⟨_, rfl, h, ha⟩
 
 theorem Sub.to_cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ t (.cell m t')) (hm : m ≠ .readonly) :
     t = .cell m t' := by

@@ -70,7 +70,8 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   `ro` one, which may change. For subtyping it's above both: `Sub` sees a
   `mut`, `imm` or `ro` cell as `ro`, and its contents too, as long as they
   are at most `ro`, so the view is deep. No object is made `ro`, and `set`
-  never takes one. A parameter's cell isn't seen as `ro`. Subtyping happens
+  never takes one. A cell of any mutability, a parameter too, can be seen
+  as `ro`. Subtyping happens
   only at variables and locations (`varSub`, `locSub`): the other rules
   stay syntax-directed, and an argument is converted by naming it first.
   A `ro` literal, like `(xs, 1)` for a `mut` `xs`, is a new `mut` object
@@ -129,7 +130,8 @@ holding a `T` rejected without `T ⊑ imm` and accepted with it, `wrap` called
 with an `imm` array but not a `mut` one, and an iterator whose array has a
 mutability `'v` of its own: `mut` with any `'v`, `imm` only with
 `'v ⊑ imm`. For #320, it shows `fn peek(xs: ro [i32])` taking a `mut`
-array and an `imm` one, `fn both[T](p: (T, T))` called with a `mut` and an
+array and an `imm` one, `fn total(xs: 'm [i32]) = peek(xs)` passing what
+it's given on as `ro`, `fn both[T](p: (T, T))` called with a `mut` and an
 `imm` array as `T = ro [i32]`, and that a `ro` view can't be changed or put
 in an `imm` object.
 
@@ -156,8 +158,8 @@ no `sorry`.
   so an index out of bounds can't happen; enums are values, like tuples.
 - **Borrowed parameters** (#283).
 - **The rest of `ro`** (#320): subtyping is only for cells and tuples, not
-  for closures, whose types stay as they are; a parameter's cell can't be
-  seen as `ro`; and there's no rule for other places, like
+  for closures, whose types stay as they are; and there's no rule for
+  other places, like
   `if` branches, which the core doesn't have. Impls and inference aren't
   covered either. A value of a type parameter can't be seen as `ro`
   without an assumption, since there's no type for "`T` seen as `ro`", so

@@ -179,7 +179,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
                     -- can't hold a `ro` one either.
                     simp only [Ctx.update, ite_true, Option.some.injEq] at hx
                     subst hx
-                    rcases hs.cell_inv with h | ⟨s, h, _, hs', _⟩
+                    rcases hs.cell_inv with h | ⟨s, h, hs', _⟩
                     · cases h
                       exact nomatch Le.none_immutable hd.1.1
                     · cases h
@@ -286,12 +286,10 @@ example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.par
         subst hx
         exact nomatch Le.none_immutable hd.1.1
       | varSub hx hs =>
-        -- A parameter's object isn't seen as `ro`.
+        -- Seen as `ro`, it's still more than `imm`.
         simp only [Ctx.update, ite_true, Option.some.injEq] at hx
         subst hx
-        rcases hs.cell_inv with rfl | ⟨_, _, hv, _⟩
-        · exact nomatch Le.none_immutable hd.1.1
-        · exact hv.elim
+        rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1.1
 
 /-- ...unless the function assumes `'v ⊑ imm`. -/
 example : HasType [] [] { mus := [(.param 0, .immutable)] } false (Ctx.empty.update 0 (.cell (.param 0) .int))
@@ -319,8 +317,23 @@ example (b : Bool) : HasType [peek] [] .none false Ctx.empty
     (.letE 0 (.new b (.int 1)) (.call 0 [] [] (.var 0))) .int := by
   refine .letE (.new .int trivial) ?_
   show HasType _ _ _ _ _ _ (peek.retTy.inst [] [])
-  refine .call rfl (sat_none _ _) (.varSub rfl (.ro ?_ (.refl _) trivial))
-  cases b <;> trivial
+  exact .call rfl (sat_none _ _) (.varSub rfl (.ro (.refl _) trivial))
+
+/-- `fn total(xs: 'm [i32]) -> i32 = peek(xs)`: an object whose mutability
+is a parameter can be seen as `ro` too, so a generic function can pass
+what it's given on to one that takes `ro`. -/
+def total : Fn :=
+  { assume := {}, param := 0, argTy := .cell (.param 0) .int, retTy := .int,
+    body := .call 0 [] [] (.var 0) }
+
+theorem total_ok : FnsOk [peek, total] := by
+  intro fn hfn
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hfn
+  rcases hfn with rfl | rfl
+  · exact ⟨trivial, .get (.var rfl)⟩
+  · refine ⟨trivial, ?_⟩
+    show HasType _ _ _ _ _ _ (peek.retTy.inst [] [])
+    exact .call rfl (sat_none _ _) (.varSub rfl (.ro (.refl _) trivial))
 
 /-- `xs[0] = 1` with `xs : ro [i32]` is rejected: a `ro` view can't change
 what it sees. -/
@@ -366,8 +379,8 @@ example : HasType [both] [] .none false Ctx.empty
   refine .letE (.new .int trivial) (.letE (.new .int trivial) ?_)
   show HasType _ _ _ _ _ _ (both.retTy.inst [] [.cell .readonly .int])
   refine .call rfl ⟨?_, ?_, ?_⟩
-    (.pair (.varSub (s := .cell .mutable .int) (by simp [Ctx.update, muOf]) (.ro trivial (.refl _) trivial))
-      (.varSub (s := .cell .immutable .int) (by simp [Ctx.update, muOf]) (.ro trivial (.refl _) trivial)))
+    (.pair (.varSub (s := .cell .mutable .int) (by simp [Ctx.update, muOf]) (.ro (.refl _) trivial))
+      (.varSub (s := .cell .immutable .int) (by simp [Ctx.update, muOf]) (.ro (.refl _) trivial)))
   · intro p h; simp [both] at h
   · intro p h; simp [both] at h
   · intro i

@@ -35,7 +35,7 @@ theorem HasType.newRo {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {�
     (hr : AtMost Δ .readonly t') :
     HasType fns σ Δ io Γ (Expr.newRo x e) (.cell .readonly t') :=
   .letE (.new he hm)
-    (.varSub (s := .cell .mutable t) (by simp [Ctx.update, muOf]) (.ro (m := .mutable) trivial hs hr))
+    (.varSub (s := .cell .mutable t) (by simp [Ctx.update, muOf]) (.ro (m := .mutable) hs hr))
 
 /-- What a `ro` literal can be typed as: its value's type `s`, with the
 object `mut`, or seen as `ro`. -/
@@ -81,7 +81,7 @@ theorem newRo_tparam {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {x y i
   have := HasType.var_tparam hy he
   subst this
   cases hs with
-  | ro _ hs hr =>
+  | ro hs hr =>
     have := hs.tparam_inv
     subst this
     obtain ⟨μ', hμ', hle⟩ := hr
@@ -99,7 +99,7 @@ example : HasType [] [] .none false Ctx.empty
   .letE (.new .int trivial)
     (.newRo (.pair (.var (t := .cell .mutable .int) (by simp [Ctx.update, muOf])) .int)
       ⟨⟨.refl _, trivial⟩, trivial⟩
-      (.prod (.ro trivial (.refl _) trivial) (.refl _))
+      (.prod (.ro (.refl _) trivial) (.refl _))
       ⟨⟨.refl _, trivial⟩, trivial⟩)
 
 /-- The same literal can't be `imm`: an `imm` object can't hold a `mut`

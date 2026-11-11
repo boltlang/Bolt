@@ -135,7 +135,7 @@ theorem Ty.Freezable.atMost {t : Ty} (h : t.Freezable) : AtMost .none .immutable
 theorem Sub.imm {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : s.imm = t.imm ∧ (t.Freezable → s.Freezable) := by
   induction h with
   | refl => exact ⟨rfl, id⟩
-  | ro _ _ _ ih => exact ⟨by simp [Ty.imm, ih.1], ih.2⟩
+  | ro _ _ ih => exact ⟨by simp [Ty.imm, ih.1], ih.2⟩
   | prod _ _ iha ihb => exact ⟨by simp [Ty.imm, iha.1, ihb.1], fun h => ⟨iha.2 h.1, ihb.2 h.2⟩⟩
 
 /-- A copy only adds to the heap. -/
@@ -286,7 +286,7 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
       | none =>
         -- What it holds has a type that `s` is, seen through `ro` or not.
         have hs : Sub .none s₀ s := by
-          rcases hsub.cell_inv with h | ⟨s', h, _, hs, _⟩
+          rcases hsub.cell_inv with h | ⟨s', h, hs, _⟩
           · cases h; exact .refl _
           · cases h; exact hs
         obtain ⟨h', m', w', hc⟩ := ih hh hwv hwt hs hf hmo
@@ -425,7 +425,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
         obtain ⟨_, hvm, v, hv, hvv, hvt⟩ := hh.2 _ _ _ hσ
         rw [hl] at hv
         cases hv
-        rcases hsub.cell_inv with h | ⟨s, h, _, hs, _⟩
+        rcases hsub.cell_inv with h | ⟨s, h, hs, _⟩
         · cases h
           exact ⟨σ, Extends.refl σ, hh, hvt⟩
         · cases h

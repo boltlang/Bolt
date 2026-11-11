@@ -223,7 +223,7 @@ def Ty.size : Ty → Nat
 theorem Sub.size {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : s.size = t.size := by
   induction h with
   | refl => rfl
-  | ro _ _ _ ih => simp [Ty.size, ih]
+  | ro _ _ ih => simp [Ty.size, ih]
   | prod _ _ iha ihb => simp [Ty.size, iha, ihb]
 
 /-- **What a copy copies is smaller than the value.** So an object isn't
