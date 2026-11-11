@@ -119,6 +119,7 @@ fn keyword_kind(name: &str) -> Option<SyntaxKind> {
         "package" => PACKAGE_KEYWORD,
         "pub" => PUB_KEYWORD,
         "return" => RETURN_KEYWORD,
+        "ro" => RO_KEYWORD,
         "struct" => STRUCT_KEYWORD,
         "super" => SUPER_KEYWORD,
         "type" => TYPE_KEYWORD,

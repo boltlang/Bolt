@@ -93,6 +93,7 @@ pub enum SyntaxKind {
     PACKAGE_KEYWORD,
     PUB_KEYWORD,
     RETURN_KEYWORD,
+    RO_KEYWORD,
     STRUCT_KEYWORD,
     SUPER_KEYWORD,
     TYPE_KEYWORD,
@@ -412,6 +413,7 @@ macro_rules! T {
     [package] => { $crate::SyntaxKind::PACKAGE_KEYWORD };
     [pub] => { $crate::SyntaxKind::PUB_KEYWORD };
     [return] => { $crate::SyntaxKind::RETURN_KEYWORD };
+    [ro] => { $crate::SyntaxKind::RO_KEYWORD };
     [struct] => { $crate::SyntaxKind::STRUCT_KEYWORD };
     [super] => { $crate::SyntaxKind::SUPER_KEYWORD };
     [class] => { $crate::SyntaxKind::CLASS_KEYWORD };
@@ -553,6 +555,7 @@ impl SyntaxKind {
             PACKAGE_KEYWORD => "'package'",
             PUB_KEYWORD => "'pub'",
             RETURN_KEYWORD => "'return'",
+            RO_KEYWORD => "'ro'",
             STRUCT_KEYWORD => "'struct'",
             SUPER_KEYWORD => "'super'",
             CLASS_KEYWORD => "'class'",

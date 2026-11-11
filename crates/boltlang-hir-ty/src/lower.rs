@@ -326,8 +326,14 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 Ty::tuple(tys.iter().map(|t| self.lower_ty(*t)).collect(), Ty::Unwritten)
             }
             TypeRef::Array { element, mutability, .. } => {
-                let mutability = mutability.map_or(Ty::Unwritten, Ty::Mutability);
-                Ty::array(mutability, self.lower_ty(*element))
+                let elem = self.lower_ty(*element);
+                match mutability {
+                    // A `ro` view is deep (#320): what's in it is seen as `ro`.
+                    Some(Mutability::ReadOnly) => {
+                        Ty::array(Ty::Mutability(Mutability::ReadOnly), elem.ro_inside())
+                    }
+                    _ => Ty::array(mutability.map_or(Ty::Unwritten, Ty::Mutability), elem),
+                }
             }
             TypeRef::Mut { mutability, inner } => {
                 let (ty, kind) = self.lower_ty_kinded(*inner);
@@ -347,7 +353,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 if deep && kind == Some(Kind::Type) && written == Ty::Mutability(Mutability::Imm) {
                     return (Ty::imm_of_unknown(ty), kind);
                 }
-                return (self.with_mutability(id, ty, written), kind);
+                let ty = self.with_mutability(id, ty, written.clone());
+                // A `ro` view is deep (#320): what's in it is seen as `ro`.
+                if written == Ty::Mutability(Mutability::ReadOnly) {
+                    return (ty.ro_inside(), kind);
+                }
+                return (ty, kind);
             }
             TypeRef::Never => Ty::Never,
             TypeRef::Mutability(_) => {

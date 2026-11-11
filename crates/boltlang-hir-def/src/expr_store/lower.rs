@@ -123,6 +123,8 @@ impl ExprCollector {
                     Some(Mutability::Mut)
                 } else if ty.imm_token().is_some() {
                     Some(Mutability::Imm)
+                } else if ty.ro_token().is_some() {
+                    Some(Mutability::ReadOnly)
                 } else {
                     None
                 };
@@ -133,6 +135,8 @@ impl ExprCollector {
                     MutabilityRef::Named(Name::new(name.text().trim_start_matches('\'')))
                 } else if ty.mut_token().is_some() {
                     MutabilityRef::Written(Mutability::Mut)
+                } else if ty.ro_token().is_some() {
+                    MutabilityRef::Written(Mutability::ReadOnly)
                 } else {
                     MutabilityRef::Written(Mutability::Imm)
                 };

@@ -418,8 +418,10 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
     /// looked into on its own.
     fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
         // A `mut` on its own is a mutability argument, like that of
-        // `VecIter[i32, mut]`, whose fields can have it.
-        if has(ty, Mutability::Mut) || *ty == Ty::Mutability(Mutability::Mut) {
+        // `VecIter[i32, mut]`, whose fields can have it. Something seen as
+        // `ro` may change too (#320).
+        let more_than_imm = [Mutability::Mut, Mutability::ReadOnly];
+        if more_than_imm.iter().any(|&m| has(ty, m) || *ty == Ty::Mutability(m)) {
             return Some(ty.clone());
         }
         match ty {
@@ -441,7 +443,10 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
                 .filter(|a| a.bound == imm)
                 .find_map(|a| match a.held {
                     Held::Type(t) => find_mut(&t),
-                    Held::Mutability(m) => (m == Ty::Mutability(Mutability::Mut)).then_some(m),
+                    Held::Mutability(m) => {
+                        matches!(m, Ty::Mutability(Mutability::Mut | Mutability::ReadOnly))
+                            .then_some(m)
+                    }
                 }),
             _ => None,
         }

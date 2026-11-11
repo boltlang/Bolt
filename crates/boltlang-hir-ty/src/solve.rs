@@ -1270,6 +1270,11 @@ impl<'db> Solver<'db> {
                     self.at_most_broken(source, origin);
                     true
                 }
+                // Something seen as `ro` in an `imm` value: it may change.
+                (Ty::Mutability(Mutability::ReadOnly), Ty::Mutability(Mutability::Imm)) => {
+                    self.at_most_broken(source, origin);
+                    true
+                }
                 (m, bound) => self.mutability_le(&m, bound),
             },
         }

@@ -304,6 +304,18 @@ impl<'db> Unifier<'db> {
             }
             // `!` and errors fit anywhere, without deciding a variable.
             (Ty::Never | Ty::Error, _) | (_, Ty::Never | Ty::Error) => Ok(()),
+            // A place written `ro` takes a value of any mutability, which is
+            // seen as `ro` (#320). Only the place that receives the value
+            // does: inside the parameters of a function type, that's the
+            // other side, and inside a `mut` value, where things are shared
+            // both ways (`share_if_mut`), the value is a place too. A
+            // variable is decided as usual.
+            (Ty::Mutability(_) | Ty::Param(_), Ty::Mutability(_) | Ty::Param(_))
+                if *(if self.flipped { &b } else { &a })
+                    == Ty::Mutability(Mutability::ReadOnly) =>
+            {
+                Ok(())
+            }
             (Ty::Var(x), Ty::Var(y)) if x == y => Ok(()),
             (Ty::Var(x), Ty::Var(y)) => {
                 let (Some(kx), Some(ky)) = (self.var_kind(*x), self.var_kind(*y)) else {

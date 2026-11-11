@@ -465,6 +465,14 @@ impl<'db> Ty<'db> {
 
     /// `imm T` of a type that `imm` can't take apart: `imm (imm T)` is
     /// `imm T`.
+    /// The type with each mutability inside it that isn't written seen as
+    /// `ro`, as in a type written `ro` (#320), whose view is deep.
+    pub fn ro_inside(&self) -> Ty<'db> {
+        self.fold(&mut |t| {
+            matches!(t, Ty::Unwritten).then_some(Ty::Mutability(Mutability::ReadOnly))
+        })
+    }
+
     pub fn imm_of_unknown(ty: Ty<'db>) -> Self {
         match ty {
             Ty::Imm(_) => ty,
@@ -1035,6 +1043,7 @@ impl<'db> TyNames<'db> {
         match m {
             Ty::Mutability(Mutability::Mut) => "mut".into(),
             Ty::Mutability(Mutability::Imm) => "imm".into(),
+            Ty::Mutability(Mutability::ReadOnly) => "ro".into(),
             Ty::Param(p) => match mutability_name(db, *p) {
                 Some(name) => format!("'{name}"),
                 None => named(Unknown::Param(*p)).unwrap_or_else(|| "'_".into()),
@@ -1193,6 +1202,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
             // Only inside an array, where it's shown by the array.
             Ty::Mutability(Mutability::Mut) => f.write_str("Mut"),
             Ty::Mutability(Mutability::Imm) => f.write_str("Imm"),
+            Ty::Mutability(Mutability::ReadOnly) => f.write_str("ReadOnly"),
             Ty::Unwritten => f.write_str("_"),
             Ty::ParamName(name) => f.write_str(name.as_ref().map_or("_", |n| n.as_str())),
             Ty::Fn(params, ret, mutability, effects) => {
@@ -1324,6 +1334,7 @@ impl DisplayTy<'_, '_> {
         match mutability {
             Ty::Mutability(Mutability::Mut) => Some("mut".into()),
             Ty::Mutability(Mutability::Imm) => Some("imm".into()),
+            Ty::Mutability(Mutability::ReadOnly) => Some("ro".into()),
             Ty::Param(p) => match mutability_name(self.db, *p) {
                 Some(name) => Some(format!("'{name}")),
                 None => shared(Unknown::Param(*p)),

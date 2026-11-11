@@ -581,11 +581,15 @@ pub enum GenericArg {
     Const(ExprId),
 }
 
-/// Whether an array can be changed, as written in `mut [T]` or `imm [T]`.
+/// Whether an array can be changed, as written in `mut [T]`, `imm [T]` or
+/// `ro [T]` (#320): a view that can read it but not change it, and that
+/// doesn't promise it won't change. A `mut` or `imm` value can be seen as
+/// `ro`; no value is made `ro`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Mutability {
     Mut,
     Imm,
+    ReadOnly,
 }
 
 /// A mutability written before a type: `mut`, `imm`, or a name like the

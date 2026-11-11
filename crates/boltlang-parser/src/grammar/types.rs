@@ -19,6 +19,7 @@ pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     T!['['],
     T![mut],
     T![imm],
+    T![ro],
     LABEL_IDENT,
     T![!],
     T![fn],
@@ -58,8 +59,8 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
     let m = match p.current() {
         T!['('] => tuple_type(p),
         T!['['] => array_type(p),
-        T![mut] | T![imm] if p.nth_at(1, T!['[']) => array_type(p),
-        T![mut] | T![imm] | LABEL_IDENT => mut_type(p),
+        T![mut] | T![imm] | T![ro] if p.nth_at(1, T!['[']) => array_type(p),
+        T![mut] | T![imm] | T![ro] | LABEL_IDENT => mut_type(p),
         T![!] => never_type(p),
         T![fn] | T![const] | T![extern] => fn_type(p),
         T![impl] => impl_trait_type(p),
@@ -294,12 +295,13 @@ fn tuple_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, TUPLE_TYPE)
 }
 
-/// `[T]` or `[T; N]`, maybe after `mut` or `imm`: `mut [T]` can be
-/// changed, and `imm [T]` never changes.
+/// `[T]` or `[T; N]`, maybe after `mut`, `imm` or `ro`: `mut [T]` can be
+/// changed, `imm [T]` never changes, and `ro [T]` can't be changed through
+/// it.
 fn array_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    if !p.eat(T![mut]) {
-        p.eat(T![imm]);
+    if !p.eat(T![mut]) && !p.eat(T![imm]) {
+        p.eat(T![ro]);
     }
     p.bump(T!['[']);
     type_(p);
@@ -317,8 +319,8 @@ fn array_type(p: &mut Parser) -> CompletedMarker {
 fn mut_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump_any();
-    if p.at(T![mut]) || p.at(T![imm]) || p.at(LABEL_IDENT) {
-        p.error("a type can have only one `mut` or `imm`");
+    if p.at(T![mut]) || p.at(T![imm]) || p.at(T![ro]) || p.at(LABEL_IDENT) {
+        p.error("a type can have only one `mut`, `imm` or `ro`");
     }
     // Without a type, it's a mutability on its own, which can only be a
     // bound; the type checker reports it anywhere else.

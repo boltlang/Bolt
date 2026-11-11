@@ -119,6 +119,9 @@ pub fn split<'db>(
                 split(db, arg, bound, out);
             }
         }
+        // A closure never changes once it's made, so something at least `ro`
+        // can hold any closure (#320, as `AtMost` in `lean/BoltMut`).
+        Ty::Fn(..) if matches!(bound, Ty::Mutability(Mutability::ReadOnly | Mutability::Mut)) => {}
         Ty::Fn(_, _, m, _) => push(out, Held::Mutability((**m).clone()), bound),
         // A row of effects holds no values, and `imm T` nothing that can be
         // changed.
