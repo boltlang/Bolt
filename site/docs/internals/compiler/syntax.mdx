@@ -1,0 +1,107 @@
+---
+sidebar_position: 1
+title: Syntax
+description: How boltlang-parser turns text into a lossless syntax tree, and how boltlang-syntax gives it types.
+---
+
+# Syntax
+
+The front of the compiler is laid out like rust-analyzer's: a lexer, a
+parser that only emits events, and a tree built from them that keeps every
+character of the source, whitespace and comments included. Two crates do
+this:
+
+- `boltlang-parser` has the lexer, the parser and the grammar.
+- `boltlang-syntax` has the kinds of tokens and nodes (`SyntaxKind`) and a
+  typed layer over the tree (`ast`).
+
+`boltlang-base-db` parses each file in a query, `parse_file`, so the tree
+of a file is only made again when its text changes. Parse errors are
+returned with the tree rather than reported, and the crates on top turn
+them into their own diagnostics.
+
+## The lexer
+
+`lexer.rs` reads characters one at a time, with `peek` and `get`, which
+return `None` at the end of the input. It gives each token a kind and a
+length, and reports what's wrong in a token, like an unknown escape or a
+string that doesn't end, without stopping.
+
+Some choices that the parser relies on:
+
+- **Runs of operator characters are one token.** `<$>`, `>>` and `||` are
+  each one `OPERATOR` token, or one of the kinds that have a role of their
+  own, like `->` or `|`. Operators aren't built in: they're functions of
+  `std`, so any run of operator characters can be one. Where the grammar
+  needs part of one, the parser splits it (see below).
+- **Contextual keywords are identifiers.** A word like `macro_rules` is
+  lexed as an `IDENT`, and the parser checks for it where it's a keyword
+  (`Parser::at_contextual_kw`) and gives the token its keyword's kind
+  (`Parser::bump_remap`).
+- **Whitespace and comments are tokens**, of the trivia kinds, so the tree
+  can keep them. The parser never sees them.
+
+## The parser
+
+The parser works on the tokens without trivia (`Input`), and doesn't build
+a tree itself. It emits a flat list of events: a node starts, a token is
+consumed, a node finishes, or there's an error (`event.rs`). This is the
+design of rust-analyzer's parser, and it makes the grammar easy to write:
+
+- `Parser::start` gives a `Marker`, which `complete` turns into a node of
+  a kind, or `abandon` drops, putting its children in the parent.
+- `CompletedMarker::precede` starts a node *before* one that's done, so a
+  binary expression can wrap its left operand after the operator is seen.
+- `Parser::err_recover` reports an error and skips a token, unless it's in
+  a recovery set, so a mistake doesn't swallow the rest of the file.
+- If the parser looks at the same position too many times without
+  consuming a token, it panics instead of hanging: that's a bug in the
+  grammar.
+
+The grammar is in `grammar/`, one module per area: items, expressions,
+patterns, types, parameters, paths, attributes and macros. Each rule is a
+function on the parser, so `parse` can run any one of them, like
+`grammar::parse_expr` in tests. A rule that leaves more than one node, or
+stops before the end, is wrapped in an `ERROR` node, so the tree always
+has one root.
+
+Binary expressions use Pratt parsing, with binding powers for the
+operators that the grammar knows. Other operators, like `<$>`, are
+left-associative and bind tighter than every built-in binary operator but
+`as`, as undeclared operators do in Haskell.
+
+### Splitting tokens
+
+Since the lexer joins operator characters, the parser sometimes needs
+part of a token. `Parser::split_bump` consumes the first bytes of the
+current token as a token of its own, and the rest stays the current
+token: the first `|` of `||` in a closure without parameters, `|| x`, or
+the float `0.1` in `t.0.1`, which is two field accesses. The splits are
+written back into the tokens before the tree is built, so the tree has
+the tokens the parser saw.
+
+## The tree
+
+`process_events` turns the events into a [rowan](https://github.com/rust-analyzer/rowan)
+`GreenNode`, adding the trivia between tokens (`intersperse_trivia`).
+Trivia between two nodes goes outside both, so a node starts at its first
+token and ends at its last one. The tree is lossless: printing it gives
+the source back, which the language server needs to point at text and to
+edit it.
+
+`boltlang-syntax/src/ast.rs` puts types on the untyped tree: each kind of
+node is a struct that wraps a `SyntaxNode`, with methods for its parts,
+like a function's parameters. The `Node` trait casts a node to its type,
+`simple_node!` makes the struct for one kind, and `ast_enum!` an enum over
+several, like `Expr`. Lowering to HIR (see [Definitions and names](./names.mdx))
+reads the tree through these types.
+
+## Tests
+
+The cases are in `tests/parser`, one file per area of the language, and
+they're shared with the tree-sitter grammar in `tree-sitter-bolt`. A case
+is a title and some code, with attributes like `:rule expr` for the rule
+to parse it with, or `:error` when it must not parse. There are no
+expected trees yet, since the two parsers don't make the same ones, so a
+case only says whether the code parses. `cargo test -p boltlang-parser
+--test parser` runs them.
