@@ -1,0 +1,97 @@
+---
+sidebar_position: 2
+title: Definitions and names
+description: How boltlang-hir-def summarises the items of a file, resolves names and imports, and lowers bodies and signatures.
+---
+
+# Definitions and names
+
+`boltlang-hir-def` turns the [syntax trees](./syntax.mdx) of files into
+definitions: the items of each file, what each name refers to, and the
+bodies and signatures of items in a form that the
+[type checker](./type-checking/index.mdx) can work on. It's modelled after
+rust-analyzer's `hir-def`, but much simpler, since every file is a module
+and imports name the file they import from.
+
+Everything is a Salsa query, and the queries are split so that an edit
+redoes as little as it can: editing the body of a function changes that
+body, but not the items of its file, so name resolution isn't done again.
+
+## Items
+
+The **item tree** of a file (`item_tree.rs`) is a summary of its items
+without their bodies: functions, structs, enums, classes, impls, effects,
+type aliases, consts and imports, each in a list per kind. An item refers
+back to its syntax by an `AstId`, its position among the items of its kind
+in the file. Unlike a text range, that doesn't change when a body is
+edited, so the item tree stays equal, and Salsa doesn't redo what depends
+on it.
+
+An item that `#[cfg(..)]` leaves out for the target isn't in the tree, nor
+are the items in it (`cfg.rs`). The keys and their values are a closed
+set, and one that's unknown is an error, not just false, so that a typo
+doesn't quietly leave an item out.
+
+The **IDs** of items (`ids.rs`) are interned locations, as in
+rust-analyzer: the file, or the class, effect or impl an item is in, and
+its index in the item tree. An ID is cheap to copy and compare, and stays
+the same across edits that don't change the items.
+
+## Names
+
+**Name resolution** (`nameres.rs`) finds what the names at the top level
+of each file are. It replaces rust-analyzer's `DefMap`:
+
+- `local_scope` has the items that a file defines.
+- `file_scope` adds what its imports bring in. That's also what other
+  files can import, so an imported name has the narrower of the
+  visibilities of the import and of the item: `import` keeps a name to the
+  file, and `pub import` exports it again.
+
+Files can import each other, so their scopes depend on each other. They're
+found by iterating to a fixed point, starting from the items of each file;
+since imports only add names, this ends. Each file also sees the names of
+its package's prelude (see [Packages](../tooling/packages.mdx)).
+
+The **resolver** (`resolver.rs`) resolves a path at a position, as a stack
+of scopes: the file's names, the generic parameters of the items around
+the position, and the local variables of a body, which `scope.rs` finds
+for each expression. The primitive types, like `i32`, and the values
+`True` and `False`, aren't keywords: they're found when nothing in scope
+has their name (`builtin_type.rs`), so a program can define its own.
+
+In an expression, `Color.Red` and `module.f` are parsed as field
+accesses, since that's what `point.x` is. The type checker resolves them:
+when the base of a field access isn't a value, it resolves the whole as a
+path instead.
+
+## Bodies and signatures
+
+The **expression store** (`expr_store.rs`) holds lowered expressions,
+patterns, types, bindings and labels in arenas, so each has an ID. The
+forms they're lowered to are in `hir.rs`. A store is shared by the body of
+an item and by its signature, since signatures can contain expressions
+too, like the default values of parameters and the lengths of arrays.
+
+**Lowering** (`expr_store/lower.rs`, like rust-analyzer's `ExprCollector`)
+turns syntax into these forms, and is where some of the language is
+decided before types:
+
+- `mut` before an array, a struct literal or a constructor call marks that
+  literal `mut`, and `mut` before a pattern makes its bindings mutable.
+- `..` in a list of patterns, like `(a, .., z)`, is recorded as the
+  position of the rest, and a tuple pattern with named fields becomes its
+  own form.
+- The alternatives of an or-pattern share their bindings by name, so the
+  `x` of `A(x) | B(x)` is one binding.
+- A macro call that isn't expanded stays a node of its own, so the
+  checker can skip it.
+
+**Bodies** (`body.rs`) are those of functions, consts and enum
+discriminants, and the statements at the top level of a file.
+**Signatures** (`signatures.rs`) are everything else about an item: its
+generic parameters, the types of its parameters and fields, its `where`
+clauses, and the defaults of its parameters.
+
+`manifest.rs` reads `bolt.toml`, the manifest of a package, and `arena.rs`
+is a small arena like `la-arena`, which Salsa can store.
