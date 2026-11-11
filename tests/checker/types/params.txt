@@ -65,7 +65,7 @@ fn count[*Ts](*args: *Ts) -> (*Ts) = args;
 fn fwd[*Ts](*args: *Ts) -> (*Ts) = count(*args);
 --------------------------------------------------------------------------------
 count: forall Ts. fn(*Ts) -> (*Ts)
-fwd: forall Ts a. fn(*Ts) -> (*Ts)
+fwd: forall Ts. fn(*Ts) -> (*Ts)
 
 ================================================================================
 A keyword-only parameter must be given by name

@@ -18,8 +18,8 @@ let h = same_named(());
 first: forall T Ts. fn(t: (T, *Ts)) -> T
 last: forall Ts U. fn(t: (*Ts, U)) -> U
 name_of: forall R. fn(p: (name: i32, **R)) -> i32
-same: forall Ts. fn(a: (*Ts)) -> (*Ts)
-same_named: forall Ks. fn(a: (**Ks)) -> (**Ks)
+same: forall Ts. fn(a: 'm (*Ts)) -> 'm (*Ts)
+same_named: forall Ks. fn(a: 'm (**Ks)) -> 'm (**Ks)
 let a: i32
 let b: i32
 let c: i32
@@ -44,7 +44,7 @@ Named packs on both sides take each other's fields
 fn both[**R](a: (x: i32, **R), b: (**R)) -> (x: i32, **R) = a;
 let c = both((x: 1, y: True), (y: False));
 --------------------------------------------------------------------------------
-both: forall R. fn(a: (x: i32, **R), b: (**R)) -> (x: i32, **R)
+both: forall R. fn(a: 'm (x: i32, **R), b: (**R)) -> 'm (x: i32, **R)
 let c: imm (x: i32, y: Bool)
 
 ================================================================================

@@ -955,6 +955,15 @@ impl<'db> TyNames<'db> {
                     mutability(db, m, found);
                     collect(db, elem, found);
                 }
+                Ty::Tuple(tys, m) => {
+                    mutability(db, m, found);
+                    tys.iter().for_each(|t| collect(db, t, found));
+                }
+                Ty::Record(tys, named, m) => {
+                    mutability(db, m, found);
+                    tys.iter().for_each(|t| collect(db, t, found));
+                    named.iter().for_each(|(_, t)| collect(db, t, found));
+                }
                 Ty::Adt(_, args, ms, m) => {
                     mutability(db, m, found);
                     args.iter().for_each(|t| collect(db, t, found));
