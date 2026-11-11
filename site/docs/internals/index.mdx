@@ -1,0 +1,61 @@
+---
+sidebar_position: 0
+title: Internals
+description: How the Bolt compiler works, why the language is the way it is, and how to build and run it.
+---
+
+# Internals
+
+These pages are for people working on Bolt itself. Each page answers one
+question, and that decides where it is:
+
+- **[Compiler](#the-compiler)**: how a stage of the compiler works.
+- **Designs**: why a feature of the language is the way it is, with what
+  was considered instead and what's still to decide.
+- **Tooling**: how packages are found and the compiler is run.
+
+A design that isn't fully built yet says so in a box at its top, so pages
+don't move when they're implemented.
+
+## The compiler
+
+A program goes through these stages, each a crate in `crates/`:
+
+| Stage | Crate | Pages |
+|---|---|---|
+| Lexing and parsing into a lossless tree | `boltlang-parser`, `boltlang-syntax` | |
+| Definitions, name resolution and bodies | `boltlang-hir-def` | |
+| Type checking | `boltlang-hir-ty` | [Type checking](./compiler/type-checking/index.mdx) |
+| Building MIR, with patterns as decision graphs | `boltlang-mir-build`, `boltlang-pattern` | |
+| Passes over MIR, like desugarings and shims | `boltlang-mir-transform` | |
+| Monomorphization | `boltlang-mir-mono` | |
+| Lowering to Conduit | `boltlang-codegen-conduit` | [Conduit](./compiler/conduit/index.mdx) |
+
+Conduit, the IR that Bolt compiles to, is a project of its own. It runs
+programs in an evaluator and compiles them to WebAssembly.
+
+Around the stages:
+
+- `boltlang-base-db` is the base of the [Salsa](https://github.com/salsa-rs/salsa)
+  database, with files and their syntax trees. Every stage is made of
+  queries on it, so the language server only redoes what an edit affects.
+- `boltlang-hir` is the semantic model of a program for tools, and
+  `boltlang-ide-diagnostics` turns what the stages report into diagnostics
+  with a code, a severity and a message.
+- `bolt-language-server` and `bolt-language-server-wasm` are the language
+  server, natively and in the browser. `boltlang-cli` is the `bolt`
+  command.
+- `boltlang-std` holds the `std` package (see
+  [Packages](./tooling/packages.mdx)), and `boltlang-corpus` the format of
+  the test files in `tests/`.
+
+## Designs
+
+| Design | Status |
+|---|---|
+| [Mutability](./designs/mutability/index.mdx) | implemented |
+| [Parameter names](./designs/parameter-names.mdx) | implemented, but for the warning for swapped names |
+| [Effects](./designs/effects.mdx) | checked and run; some of it is still to decide |
+| [Async](./designs/async.mdx) | partly: tasks and an executor in `std` |
+| [Reactive UI](./designs/reactive.mdx) | a proposal |
+| [Uniqueness](./compiler/conduit/uniqueness.mdx) | a proposal for an optimization in Conduit |
