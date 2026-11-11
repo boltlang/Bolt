@@ -1440,7 +1440,10 @@ impl<'db> Solver<'db> {
             // Overlapping impls, or one that may match: wait until the types
             // decide.
             ImplSearch::Unsure => return false,
-            ImplSearch::Missing if goal.args.iter().any(has_vars) => return false,
+            // As for class constraints, only unknown types can still make an
+            // impl fit, not unknown mutabilities.
+            ImplSearch::Missing if goal.args.iter().any(has_type_vars) => return false,
+            ImplSearch::Missing if assumed_class(self, &goal) => return false,
             // `C.Item` for a parameter `C` with `where Index[C]`.
             ImplSearch::Missing if self.assumptions.contains(&goal) => {
                 Ty::Assoc(constraint.alias, goal.args.clone())
@@ -1992,7 +1995,11 @@ impl<'db> Solver<'db> {
                     .collect();
                 Step::Solved(subgoals, at_most, equalities, Some(imp))
             }
-            ImplSearch::Missing if has_vars => Step::Wait,
+            // Only a type that's still unknown can make an impl fit: one
+            // that depends on a mutability, like `IndexMut[mut [T]]`, would
+            // be unsure. So with only mutabilities left, there's none.
+            ImplSearch::Missing if goal.args.iter().any(has_type_vars) => Step::Wait,
+            ImplSearch::Missing if assumed_class(self, goal) => Step::Wait,
             ImplSearch::Missing => Step::NoInstance,
         }
     }
@@ -2353,6 +2360,34 @@ pub fn prune_implied_errors<'db>(db: &'db dyn Db, errors: &mut Vec<TypeError<'db
 /// Whether a type has an inference variable in it.
 pub fn has_vars(ty: &Ty<'_>) -> bool {
     ty.any(&mut |t| matches!(t, Ty::Var(_)))
+}
+
+/// Whether a type has an inference variable in it other than as the
+/// mutability of an array, struct, tuple or function.
+pub fn has_type_vars(ty: &Ty<'_>) -> bool {
+    match ty {
+        Ty::Var(_) => true,
+        Ty::Adt(_, args, ..) => args.iter().any(has_type_vars),
+        Ty::Array(_, elem) => has_type_vars(elem),
+        Ty::Tuple(tys, _) => tys.iter().any(has_type_vars),
+        Ty::Record(tys, named, _) => {
+            tys.iter().any(has_type_vars) || named.iter().any(|(_, t)| has_type_vars(t))
+        }
+        Ty::Fn(params, ret, _, effects) => {
+            params.tys().any(has_type_vars) || has_type_vars(ret) || has_vars(effects)
+        }
+        _ => {
+            let mut found = false;
+            ty.walk_children(|t| found |= has_type_vars(t));
+            found
+        }
+    }
+}
+
+/// Whether a `where` clause of the class of `goal` could give it, once the
+/// variables in it are known.
+fn assumed_class<'db>(solver: &Solver<'db>, goal: &ClassConstraint<'db>) -> bool {
+    goal.args.iter().any(has_vars) && solver.assumptions.iter().any(|a| a.class == goal.class)
 }
 
 /// The inference variables in a type, in order of appearance.
