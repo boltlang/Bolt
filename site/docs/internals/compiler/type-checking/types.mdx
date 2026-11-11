@@ -285,6 +285,16 @@ Before generalizing, the solver settles the names
 (`Solver::settle_names`): a claimed slot has its claim, one whose set is a
 single name has that name, and every other slot has none.
 
+Since a written type renames, `copy(|dst, src| ...)` for `fn copy(f:
+fn(src: Path, dst: Path))` checks, and passes `src` to the lambda's `dst`.
+So the unifier records each function type that it finds given for
+another (`Unifier::given_fns`), in the case of two function types and when
+a variable takes a function's shape, and the solver keeps where
+(`Solver::unify_at`). Once the names are settled, it warns where a name of
+the given function is the name of another position in the type it was
+given for (`TypeError::SwappedNames`, W0005,
+[#433](https://github.com/boltlang/Bolt/issues/433)).
+
 A parameter before a `/` has no name (`ParamData::name` is `None`), so
 its type is the same as if the name were left out: `fn f(x: i32, /, y:
 i32)` has type `fn(i32, y: i32)`. A function type has no `/` for that

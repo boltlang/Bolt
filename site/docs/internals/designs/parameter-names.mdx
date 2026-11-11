@@ -6,13 +6,11 @@ description: What the names of a function type's parameters mean when functions 
 
 # Parameter names
 
-:::warning[Partly implemented]
-This is the design of [#411](https://github.com/boltlang/Bolt/issues/411),
-which is implemented, except for the warning for swapped names
+This is the design of [#411](https://github.com/boltlang/Bolt/issues/411)
+and of the warning for swapped names
 ([#433](https://github.com/boltlang/Bolt/issues/433)). How the checker
 does it is described in
 [Names of positional parameters](../compiler/type-checking/types.mdx#names-of-positional-parameters).
-:::
 
 A positional parameter can be passed by name, like `f(y: 2, x: 1)` for
 `fn f(x: i32, y: i32)`, so a function type has names: `fn(x: i32, y: i32)`.
@@ -228,10 +226,12 @@ fn w(k) = apply2(k) + k(b: 1, a: 2);   // rule 4 makes k fn(b: i32, a: i32)
 ```
 
 The checker warns when a function is given for a function type that has
-one of its parameter names at another position. Once the names are
-settled, it compares the names of the two function types at each place
-where one was given for the other. Names that differ but aren't swapped,
-like `|x| x` for `fn(item: i32) -> i32`, don't warn.
+one of its parameter names at another position (W0005). Once the names
+are settled, it compares the names of the two function types at each
+place where one was given for the other. Names that differ but aren't
+swapped, like `|x| x` for `fn(item: i32) -> i32`, don't warn, and neither
+do two functions that meet in a variable, like the branches of an `if`:
+neither is given for the other.
 
 ## What this doesn't cover
 
