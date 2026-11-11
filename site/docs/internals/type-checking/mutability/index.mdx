@@ -6,14 +6,9 @@ description: Arrays and structs that are shared, with whether they can be change
 
 # Mutability
 
-:::warning[Not compiled yet]
-The type checker and the evaluator implement this page
-([#195](https://github.com/boltlang/Bolt/issues/195)). The code generator
-doesn't compile arrays or structs yet: see
-[#177](https://github.com/boltlang/Bolt/issues/177) and
-[#179](https://github.com/boltlang/Bolt/issues/179). The design was decided
-in [#196](https://github.com/boltlang/Bolt/issues/196).
-:::
+The design was decided in
+[#196](https://github.com/boltlang/Bolt/issues/196) and implemented in
+[#195](https://github.com/boltlang/Bolt/issues/195).
 
 Arrays and structs are *shared*: `let ys = xs` makes `ys`
 another name for the same array, and `let q = p` another name for the same

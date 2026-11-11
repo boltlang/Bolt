@@ -140,15 +140,6 @@ description: Where the rules of mutability are in the checker, the tests and the
   solver's shortcuts for them (`Solver.lean`): how it splits a type, when
   it can decide an unknown mutability right away, and that
   `Solver::mutability_le` finds every chain of assumptions.
-- **Checked when running**: every array and struct in the evaluator knows
-  whether it was made `mut` or `imm` (`Object::mutability`). With
-  `Evaluator::with_mutability_checks`, which the evaluator's tests and
-  `tests/run` use, changing an `imm` one, or making an `imm` one that holds
-  a `mut` one, stops with `ErrorKind::MutabilityViolation`. A program the
-  type checker accepts never does, so a failure there is a bug in the
-  checker. A closure isn't tagged, so an `imm` value holding a `mut` closure
-  isn't caught there, but changing an `imm` array or struct through a
-  closure is.
 
 `Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197)) is
 a struct, so it gets a mutability like any other, and `[T]` is shorthand for

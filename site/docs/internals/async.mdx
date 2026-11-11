@@ -1,13 +1,13 @@
 ---
 sidebar_position: 3
-title: Async (design)
+title: Async
 description: A design for code that waits, as an Async effect instead of async and await, with tasks and an executor like tokio's.
 ---
 
-# Async (design)
+# Async
 
-:::warning[Not implemented]
-This page is a design sketch, and **only partly implemented**. `std/async`
+:::warning[Partly implemented]
+This page is a design sketch, and only partly implemented. `std/async`
 has the effect, tasks and an executor that runs them in one thread:
 [Tasks and the executor](#tasks-and-the-executor) says what it does.
 Waiting for the outside world, like `fetch`, and cancelling aren't
@@ -244,7 +244,7 @@ The `defer`s of a block run in the opposite order of their statements, so
 what was opened last is closed first. `defer` keeps the cleanup next to
 what it cleans up, which a `finally` doesn't, and Bolt has no `try` blocks
 for one anyway. Go, Swift and Zig have `defer` too. It's tracked in
-[#348](https://github.com/boltlang/bolt/issues/348).
+[#348](https://github.com/boltlang/Bolt/issues/348).
 
 ### `use`
 
@@ -273,23 +273,23 @@ the same connection a second name, so the end of `a`'s block can't know
 that nobody uses it anymore. With `use`, the programmer says so. The
 language server can warn about a value of a `Close` type that's bound with
 `let`, as C#'s tools do for `IDisposable`. It's tracked in
-[#349](https://github.com/boltlang/bolt/issues/349).
+[#349](https://github.com/boltlang/Bolt/issues/349).
 
 ### Still open
 
-- **Catching a cancel** ([#351](https://github.com/boltlang/bolt/issues/351)). Code that could catch "you're cancelled" could
+- **Catching a cancel** ([#351](https://github.com/boltlang/Bolt/issues/351)). Code that could catch "you're cancelled" could
   refuse to stop. Most designs let code see a cancel but not stop it.
-- **Waiting in cleanup** ([#352](https://github.com/boltlang/bolt/issues/352)). Closing a connection politely may need a network
+- **Waiting in cleanup** ([#352](https://github.com/boltlang/Bolt/issues/352)). Closing a connection politely may need a network
   call, so a `defer` may want to wait, and then it can hang. C# has a
   separate `IAsyncDisposable` for this. Bolt could allow waiting in a
   `defer`, but with a time limit.
-- **Blocks that can't be cancelled** ([#353](https://github.com/boltlang/bolt/issues/353)), for steps that must finish together
+- **Blocks that can't be cancelled** ([#353](https://github.com/boltlang/Bolt/issues/353)), for steps that must finish together
   even though they wait, like a database commit.
 - **Not losing what a task got.** Tokio's `select!` cancels the futures
   that lose, and one that had taken a value, like a message from a
   channel, loses it. A task should only be cancelled while it waits, and
   not between a waker giving it a value and the task taking it.
-- **Conduit** ([#350](https://github.com/boltlang/bolt/issues/350)). Unwinding needs a way to resume a continuation with an
+- **Conduit** ([#350](https://github.com/boltlang/Bolt/issues/350)). Unwinding needs a way to resume a continuation with an
   unwind instead of values, which OCaml 5 calls `discontinue`. Conduit only
   has `resume` so far. Wasm stack switching has `resume_throw`, which does
   this.
@@ -311,7 +311,7 @@ wait for a promise of JavaScript, which is enough for `suspend` around
 
 This design doesn't need `async`, `await` and `yield`, so they're no longer
 keywords, and can be names
-([#263](https://github.com/boltlang/bolt/issues/263)). The parser could
+([#263](https://github.com/boltlang/Bolt/issues/263)). The parser could
 still recognize `async fn` and `await x`, and say what to write instead:
 `does Async` after the parameters or the result type, and the call without
 `await`.

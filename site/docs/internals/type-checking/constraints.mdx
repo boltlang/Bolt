@@ -246,8 +246,8 @@ against its parameter types. So the number of arguments and the first
 argument usually decide early, as with methods in other languages, without
 making the first argument special.
 
-A choice is kept by expression in `InferenceResult::overloads`, which the
-evaluator and the code generator use instead of resolving the name again.
+A choice is kept by expression in `InferenceResult::overloads`, which MIR
+building uses instead of resolving the name again.
 
 Two functions with a name *overlap* when a call could fit both: they take as
 many arguments, and their parameter types unify once their parameters are

@@ -1,17 +1,18 @@
 ---
 sidebar_position: 1.5
-title: Effects (design)
-description: A design for effect types in Bolt, with does and +, effects with parameters, and how their kinds are inferred. Nothing of it is implemented.
+title: Effects
+description: The design of effect types in Bolt, with does and +, effects with parameters, and handlers.
 ---
 
-# Effects (design)
+# Effects
 
 :::warning[Partly implemented]
-The syntax parses, and the type checker infers and checks effects: rows,
-`does`, containment, combination, `Nothing` and handlers, with their
-arms for every operation and for every value of its arguments. **Not
-implemented yet**: running effects. Algebraic
-effects are tracked in [#40](https://github.com/boltlang/bolt/issues/40).
+The type checker infers and checks effects: rows, `does`, containment,
+combination, `Nothing` and handlers, with their arms for every operation
+and for every value of its arguments. Operations and handlers run through
+Conduit ([Conduit](./conduit.mdx#effects)), and `std` has `Fail` and
+`Async`. What's left is in [Still to decide](#still-to-decide). Algebraic
+effects are tracked in [#40](https://github.com/boltlang/Bolt/issues/40).
 :::
 
 An *effect* is something a function can do besides returning a value:
@@ -353,7 +354,7 @@ The arms run outside of the `match`, so the `get()` and `set(s)` in them
 go to the next handler, and the `match` still has `State` in its row. Arms
 like these always resume at the end, so Conduit compiles them to plain
 calls. A shorthand for passing on the rest is discussed in
-[#347](https://github.com/boltlang/bolt/issues/347).
+[#347](https://github.com/boltlang/Bolt/issues/347).
 
 The arms of each operation must be exhaustive, like value arms:
 `effect yield(0), k` alone doesn't handle `yield(1)`.
@@ -364,7 +365,7 @@ An arm names its operation by its bare name. When the effects of a `match`
 have two operations of the same name, the arm writes the effect too:
 `effect State.get(), k`. An operation without arguments keeps its
 parentheses, as in `effect get(), k`; whether `effect get, k` should mean
-the same is open in [#354](https://github.com/boltlang/bolt/issues/354).
+the same is open in [#354](https://github.com/boltlang/Bolt/issues/354).
 
 ### Several operations in one arm
 
@@ -426,7 +427,7 @@ fn quiet(f) = match f() {
 
 So `quiet` only takes functions that do `Log`. Keeping the predicate in
 the type instead is discussed in
-[#358](https://github.com/boltlang/bolt/issues/358).
+[#358](https://github.com/boltlang/Bolt/issues/358).
 
 `resume` and `Cont` are names of the prelude, like `Nothing`, and not
 keywords.
@@ -661,7 +662,7 @@ twice: forall a e. fn(fn() -> a does e) -> a does e
 - How to give `does` to the outer function of `fn(A) -> fn(B) -> C`. `(T)`
   is a one-element tuple type, so parentheses don't group types today.
 - A shorthand for passing operations on in a handler
-  ([#347](https://github.com/boltlang/bolt/issues/347)).
+  ([#347](https://github.com/boltlang/Bolt/issues/347)).
 - `discontinue(k)`, to unwind a continuation instead of resuming it, for
   [cancelling](./async.mdx#cancelling).
 - `match { … } { … }`, with a block as scrutinee: Bolt has record literals
