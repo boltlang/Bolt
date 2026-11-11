@@ -160,10 +160,32 @@ k(x: 1);
 k = |y: i32| y;    // error: expected fn(x: i32) -> i32, found fn(y: i32) -> i32
 ```
 
-A function that only reaches the variable through a generic function, like
-`ks[0] = |y: i32| y` through `IndexMut`, isn't related back to it, so that
-isn't an error. That's harmless, since the call still passes its argument by
-position.
+### Writes into containers
+
+A function written into a `mut` array, struct or tuple flows into what's
+stored there, however it's written
+([#436](https://github.com/boltlang/Bolt/issues/436)):
+
+```bolt
+fn put[T](xs: mut [T], x: T) = { xs[0] = x; };
+
+let ks = mut [|x: i32| x];
+ks[0] = |y: i32| y;   // directly
+put(ks, |y: i32| y);  // through a generic function
+let ys = ks;
+ys[0] = |y: i32| y;   // through another name for the same array
+ks[0](x: 1);          // error after any of them: no parameter x
+```
+
+Names normally flow one way, from what's read into what reads it. Inside a
+`mut` value they flow both ways: both sides share the value, and either can
+write to it, which is why mutable containers are invariant in languages
+with subtyping. A place, like `ks[0]` or `c.v`, shares its slot with what
+it denotes, so a write through it reaches the storage. A container that
+isn't `mut` keeps one-way flows, since nothing can write to it: in
+`pick(fs, |z: i32| z)` for `fn pick[T](xs: [T], d: T) -> T`, the elements
+of `fs` keep their names. A function that was copied into a container
+isn't changed by writes into it either.
 
 ## What changed in the checker
 
@@ -181,6 +203,12 @@ position.
   after the positional arguments, and makes an unknown callee's parameters
   positional, with open slots.
 - `infer_lambda` takes its names from its patterns only.
+- A field access and an associated type, like `Index.Item`, share their
+  slots with what they denote (`Solver::equal_shared`), and a pattern
+  takes the names of what it matches (`Solver::equal_into`). What's in a
+  `mut` array, struct or tuple shares its slots on both sides
+  (`Unifier::share_if_mut`), also when a variable copies the value
+  (`Unifier::bind_freshened`).
 
 Left to do: a clearer error for a function that comes after a call it
 doesn't fit, naming the call

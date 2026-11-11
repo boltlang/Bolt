@@ -271,6 +271,16 @@ a) -> a`. A slot that's claimed has one name, so `k(x: 1); k(y: 1)` is an
 error. A function that flows into a claimed slot after the call must have
 its name, or unifying it fails.
 
+Names normally flow from what's read into what reads it: a pattern takes
+the names of what it matches (`Solver::equal_into`). A place shares its
+slots with what it denotes (`Solver::equal_shared`): a field access with
+the field, and an associated type, like the `Index.Item` of `xs[i]`, with
+what the impl gives. What's in a `mut` array, struct or tuple shares its
+slots on both sides when the two are unified (`Unifier::share_if_mut`),
+since either side can write to it: after `put(ks, |y: i32| y)` for `fn
+put[T](xs: mut [T], x: T)`, the elements of `ks` can't be called `x`
+anymore ([#436](https://github.com/boltlang/Bolt/issues/436)).
+
 Before generalizing, the solver settles the names
 (`Solver::settle_names`): a claimed slot has its claim, one whose set is a
 single name has that name, and every other slot has none.
