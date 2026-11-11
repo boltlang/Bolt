@@ -264,6 +264,32 @@ impl<'db> Unifier<'db> {
         unified
     }
 
+    /// Unify `a` and `b` so that the names of parameters flow both ways:
+    /// they share their name slots, like a place and what it denotes.
+    pub fn unify_shared(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
+        self.unify(a, b)?;
+        self.unify_into(a, b)
+    }
+
+    /// What's in a `mut` array, struct or tuple, which `xs` and `ys` are
+    /// the contents of, can be written through either side, so their names
+    /// flow both ways (#436). In one that isn't `mut`, they only flow the
+    /// way the value does.
+    fn share_if_mut(
+        &mut self,
+        mutability: &Ty<'db>,
+        xs: &[Ty<'db>],
+        ys: &[Ty<'db>],
+    ) -> Result<(), UnifyError<'db>> {
+        if self.shallow_resolve(mutability) != Ty::Mutability(Mutability::Mut) {
+            return Ok(());
+        }
+        self.flipped = !self.flipped;
+        let shared = self.unify_all(xs, ys);
+        self.flipped = !self.flipped;
+        shared
+    }
+
     pub fn unify(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         let a = self.shallow_resolve(a);
         let b = self.shallow_resolve(b);
@@ -313,7 +339,8 @@ impl<'db> Unifier<'db> {
             (Ty::Adt(x, xs, ms, m), Ty::Adt(y, ys, ns, n)) if x == y && xs.len() == ys.len() => {
                 self.unify_all(xs, ys)?;
                 self.unify_all(ms, ns)?;
-                self.unify(m, n)
+                self.unify(m, n)?;
+                self.share_if_mut(m, xs, ys)
             }
             // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
             // the last arguments are equal, and so are the rest of each
@@ -342,7 +369,8 @@ impl<'db> Unifier<'db> {
             // doesn't fit.
             (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) if xs.len() == ys.len() => {
                 self.unify(m, n)?;
-                self.unify_all(xs, ys)
+                self.unify_all(xs, ys)?;
+                self.share_if_mut(m, xs, ys)
             }
             // The same names, which are in the same order in both.
             (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
@@ -355,11 +383,15 @@ impl<'db> Unifier<'db> {
                 for ((_, x), (_, y)) in xn.iter().zip(yn.iter()) {
                     self.unify(x, y)?;
                 }
-                Ok(())
+                let (xt, yt): (Vec<_>, Vec<_>) =
+                    xn.iter().zip(yn.iter()).map(|((_, x), (_, y))| (x.clone(), y.clone())).unzip();
+                self.share_if_mut(m, xs, ys)?;
+                self.share_if_mut(m, &xt, &yt)
             }
             (Ty::Array(m, x), Ty::Array(n, y)) => {
                 self.unify(x, y)?;
-                self.unify(m, n)
+                self.unify(m, n)?;
+                self.share_if_mut(m, std::slice::from_ref(x), std::slice::from_ref(y))
             }
             (Ty::Mutability(x), Ty::Mutability(y)) if x == y => Ok(()),
             // That of the parameters and the arguments of a call, as tuples.
@@ -602,8 +634,25 @@ impl<'db> Unifier<'db> {
             return self.bind(var, ty);
         }
         let low = expected != self.flipped;
-        let ty = self.freshen(&self.resolve(ty), low);
-        self.bind(var, &ty)
+        let original = self.resolve(ty);
+        let fresh = self.freshen(&original, low);
+        self.bind(var, &fresh)?;
+        // The copy and the original are one value, so what's in a `mut`
+        // array, struct or tuple of it shares its names (#436): unifying
+        // them again lets `share_if_mut` relate those the other way too.
+        let has_mut = |t: &Ty<'db>| match t {
+            Ty::Array(m, _) | Ty::Tuple(_, m) | Ty::Record(_, _, m) | Ty::Adt(_, _, _, m) => {
+                **m == Ty::Mutability(Mutability::Mut)
+            }
+            _ => false,
+        };
+        if original.any(&mut |t| has_mut(t)) {
+            match expected {
+                true => self.unify(&fresh, &original)?,
+                false => self.unify(&original, &fresh)?,
+            }
+        }
+        Ok(())
     }
 
     /// `ty` with a new variable for each name of a parameter, which that

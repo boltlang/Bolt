@@ -1405,7 +1405,7 @@ impl<'db> Solver<'db> {
             .cloned()
         {
             let ty = self.flatten_assoc(&assumed.ty, origin);
-            self.equal(&constraint.ty, &ty, origin);
+            self.equal_shared(&constraint.ty, &ty, origin);
             return true;
         }
         let ty = match find_impl(self.db, self.impls, &goal) {
@@ -1437,8 +1437,10 @@ impl<'db> Solver<'db> {
             self.unifier.set_error(&constraint.ty);
         } else {
             // The variable stands for the use, whose context decides what
-            // it should be: `let n: i32 = get(...)` expects an `i32`.
-            self.equal(&constraint.ty, &ty, origin);
+            // it should be: `let n: i32 = get(...)` expects an `i32`. It's
+            // what the impl gives, like the element `xs[i]` is, so names
+            // flow both ways, and what's assigned to it reaches it (#436).
+            self.equal_shared(&constraint.ty, &ty, origin);
         }
         true
     }
@@ -1533,9 +1535,10 @@ impl<'db> Solver<'db> {
             _ => None,
         };
         match field {
-            // What the field holds flows into the access, which is how a
-            // call by name through it is checked (#411).
-            Some(declared) => self.equal(&constraint.field, &declared, origin),
+            // The access is the field, so names flow both ways: a call by
+            // name through it is checked against what the field holds
+            // (#411), and what's assigned to it reaches the field (#436).
+            Some(declared) => self.equal_shared(&constraint.field, &declared, origin),
             None => {
                 let ty = self.unifier.resolve(&ty);
                 self.errors.push(TypeError::NoSuchField {
@@ -1578,6 +1581,13 @@ impl<'db> Solver<'db> {
     /// (#411).
     pub fn equal_into(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
         let unified = self.unifier.unify_into(expected, actual);
+        self.report_unified(unified, expected, actual, origin);
+    }
+
+    /// Like [`Solver::equal`], but the names of parameters flow both ways,
+    /// as between a place, like a field access, and what it denotes.
+    pub fn equal_shared(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
+        let unified = self.unifier.unify_shared(expected, actual);
         self.report_unified(unified, expected, actual, origin);
     }
 

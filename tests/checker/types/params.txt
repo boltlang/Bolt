@@ -487,3 +487,52 @@ error at `n`: no parameter zzz
 error at `n`: no parameter zzz
 error at `1`: no parameter zzz
 error at `1`: no parameter x, unnamed ones left
+
+================================================================================
+A function written into a mut container needs the names it's called by (#436)
+:test-prelude
+================================================================================
+fn put[T](xs: mut [T], x: T) = { xs[0] = x; };
+struct Cell[T] { v: T }
+fn put_cell[T](c: mut Cell[T], x: T) = { c.v = x; };
+fn index() = { let ks = mut [|x: i32| x]; ks[0] = |y: i32| y; ks[0](x: 1) };
+fn index_after() = { let ks = mut [|x: i32| x]; let a = ks[0](x: 1); ks[0] = |y: i32| y; a };
+fn field() = { let c = mut Cell { v: |x: i32| x }; c.v = |y: i32| y; c.v(x: 1) };
+fn field_after() = { let c = mut Cell { v: |x: i32| x }; let a = c.v(x: 1); c.v = |y: i32| y; a };
+fn generic() = { let ks = mut [|x: i32| x]; put(ks, |y: i32| y); ks[0](x: 1) };
+fn generic_field() = { let c = mut Cell { v: |x: i32| x }; put_cell(c, |y: i32| y); c.v(x: 1) };
+fn alias() = { let ks = mut [|x: i32| x]; let ys = ks; ys[0] = |y: i32| y; ks[0](x: 1) };
+fn same_name() = { let ks = mut [|x: i32| x]; ks[0] = |x: i32| x + 1; ks[0](x: 1) };
+--------------------------------------------------------------------------------
+put: forall T. fn(xs: mut [T], x: T) -> ()
+put_cell: forall T. fn(c: mut Cell[T], x: T) -> ()
+index: fn() -> i32
+index_after: fn() -> i32
+field: fn() -> i32
+field_after: fn() -> i32
+generic: fn() -> i32
+generic_field: fn() -> i32
+alias: fn() -> i32
+same_name: fn() -> i32
+--------------------------------------------------------------------------------
+error at `1`: no parameter x, unnamed ones left
+error at `|y: i32| y`: expected fn(x: i32) -> i32, found fn(y: i32) -> i32
+error at `1`: no parameter x, unnamed ones left
+error at `|y: i32| y`: expected fn(x: i32) -> i32, found fn(y: i32) -> i32
+error at `1`: no parameter x, unnamed ones left
+error at `1`: no parameter x, unnamed ones left
+error at `1`: no parameter x, unnamed ones left
+
+================================================================================
+Only what's written into a mut container loses names (#436)
+:test-prelude
+================================================================================
+fn put[T](xs: mut [T], x: T) = { xs[0] = x; };
+fn pick[T](xs: [T], d: T) -> T = d;
+fn imm_array() = { let fs = [|x: i32| x]; let a = pick(fs, |z: i32| z); fs[0](x: 1) + a(1) };
+fn copied() = { let k = |x: i32| x; let ks = mut [k]; put(ks, |y: i32| y); k(x: 1) };
+--------------------------------------------------------------------------------
+put: forall T. fn(xs: mut [T], x: T) -> ()
+pick: forall T. fn(xs: [T], d: T) -> T
+imm_array: fn() -> i32
+copied: fn() -> i32
