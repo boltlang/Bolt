@@ -6,6 +6,7 @@ import BoltMut.Soundness
 import BoltMut.Immutability
 import BoltMut.Purity
 import BoltMut.Examples
+import BoltMut.ReadOnly
 import BoltMut.Solver
 import BoltMut.Structs
 import BoltMut.Frame

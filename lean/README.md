@@ -73,6 +73,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   never takes one. A parameter's cell isn't seen as `ro`. Subtyping happens
   only at variables and locations (`varSub`, `locSub`): the other rules
   stay syntax-directed, and an argument is converted by naming it first.
+  A `ro` literal, like `(xs, 1)` for a `mut` `xs`, is a new `mut` object
+  whose only name is seen as `ro` from the start (`Expr.newRo`), so it
+  needs no rule of its own (`BoltMut/ReadOnly.lean`).
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -100,6 +103,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254). Both copy the same way when they reach `imm e` (`Freeze.sim`) |
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
+| `HasType.newRo`, `newRo_tparam` | `ReadOnly.lean` | a `ro` literal, `let x = mut e in x` seen as `ro`, has the type `ro t'` for what `e`'s type can be seen as (#320). Without an assumption, one holding a value of a type parameter can't be typed: a `T` can't be seen as `ro`, so it needs `T ⊑ ro`, as an `imm` one needs `T ⊑ imm` |
 | `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
 | `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, the region of what it makes `imm`, the `mut` objects it reaches (`Region`), is its own: the program has them only there, and no object outside the region holds one (`Expr.UniqToImm`). Freezing in place makes the region `imm` where it is. The simulation gives up the originals and relates each copy to its original (`region_freeze_step`), using what the copy is (`Freeze.shape`): exactly the region, each object copied to its own location (`Freeze.keys`, `Freeze.fresh`). No closure may have a `toImm` |
 | `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`; or a part of a tuple, like `push((xs, 1))`, which the body reaches with `fst` or `snd`. A variable can also hold what a function gives back new, like `make()`, when the function's body is `mut [e]` (`Returns`). Then the program with every `toImm` in place computes what it does. That what each `toImm` makes `imm` holds only what's `imm` already is a premise (`Shallow`): then its region is just the object (`Shallow.region`). The proof keeps an invariant of the running program (`Inv`): each object it owns is `mut`, consumed or gone from it, and no object holds it |
@@ -155,7 +159,10 @@ no `sorry`.
   for closures, whose types stay as they are; a parameter's cell can't be
   seen as `ro`; and there's no rule for other places, like
   `if` branches, which the core doesn't have. Impls and inference aren't
-  covered either.
+  covered either. A value of a type parameter can't be seen as `ro`
+  without an assumption, since there's no type for "`T` seen as `ro`", so
+  a `ro` literal of generic values, like the `match (a, b)` of #415, isn't
+  covered.
 - **The rest of uniqueness** (#284): a unique object can go to a function
   that borrows it as the whole argument or as one part of a pair, with
   the other part a value. A function that borrows part of a tuple reaches
