@@ -2,18 +2,18 @@
 What isn't supported yet
 :test-prelude
 ================================================================================
-struct P { x: i32 }
-fn f(xs: mut [i32], p: P) {
+enum E { A { x: i32 } }
+fn f(xs: mut [i32], e: E) {
   let ys = mut xs;
-  let q = P { ..p };
+  let q = E.A { ..e };
   ..;
   xs?;
 }
 fn g((a, b): (i32, i32)) = a;
 --------------------------------------------------------------------------------
-fn f(xs: mut [i32], p: P) -> () = {
+fn f(xs: mut [i32], e: E) -> () = {
   let ys = unsupported("`mut e` that isn't a literal");
-  let q = unsupported("`..` in a struct literal");
+  let q = unsupported("`..` in a variant literal (#431)");
   unsupported("a range without a start or an end");
   unsupported("`e?`");
 }

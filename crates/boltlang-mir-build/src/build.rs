@@ -27,7 +27,9 @@ use boltlang_hir_ty::{
     function_scheme, infer_body,
     instances::class_args,
     lang::LangClass,
-    lower::{ParamDefaults, VariantDef, declared_param_tys, field_types},
+    lower::{
+        ParamDefaults, VariantDef, declared_param_tys, field_types, struct_args, subst_params,
+    },
     scheme::generic_param_ids,
     ty::{ArgPlace, ArgPlaces, place_args},
 };
@@ -481,38 +483,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
                 let (value, count) = (self.expr(*value), self.expr(*count));
                 self.literal(e, ExprKind::ArrayRepeat { value, count })
             }
-            Expr::Record { path, fields, spread } => {
-                if spread.is_some() {
-                    return self.unsupported(e, "`..` in a struct literal");
-                }
-                let def = match path.as_ref().and_then(|p| self.resolve(e, p)) {
-                    Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
-                    Some(ValueResolution::Type(TypeResolution {
-                        ty: TypeNs::Variant(v), ..
-                    })) => VariantDef::Variant(v),
-                    _ => match self.literal_ty(e) {
-                        Ty::Adt(AdtId::Struct(s), ..) => VariantDef::Struct(s),
-                        _ => return self.unsupported(e, "this struct literal"),
-                    },
-                };
-                let declared = field_types(self.db, def);
-                let mut values: Vec<Option<ExprId>> = vec![None; declared.fields.len()];
-                for f in fields.iter() {
-                    let v = self.expr(f.expr);
-                    match declared.field(&f.name) {
-                        Some((i, _)) => values[i] = Some(v),
-                        None => return self.unsupported(e, "this field"),
-                    }
-                }
-                let Some(fields) = values.into_iter().collect::<Option<Box<[ExprId]>>>() else {
-                    return self.unsupported(e, "a struct literal without all its fields");
-                };
-                let ctor = match def {
-                    VariantDef::Struct(s) => Ctor::Struct(s),
-                    VariantDef::Variant(v) => Ctor::Variant(v),
-                };
-                self.literal(e, ExprKind::Construct { ctor, fields })
-            }
+            Expr::Record { path, fields, spread } => self.record(e, path.as_ref(), fields, *spread),
             Expr::If { condition, then_branch, else_branch } => {
                 let cond = self.cond(*condition);
                 let then = self.expr(*then_branch);
@@ -559,6 +530,79 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             Expr::Try { expr: inner, value, error } => self.try_expr(e, *inner, *value, *error),
             Expr::MacroCall { .. } => self.unsupported(e, "a macro"),
         }
+    }
+
+    /// A struct or variant literal. With `..base`, the fields given are
+    /// evaluated in the order they're written, then `base`, once, and the
+    /// fields not given are copied from it.
+    fn record(
+        &mut self,
+        e: hir::ExprId,
+        path: Option<&Path>,
+        fields: &[hir::RecordField],
+        spread: Option<hir::ExprId>,
+    ) -> ExprId {
+        let def = match path.and_then(|p| self.resolve(e, p)) {
+            Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
+            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Variant(v), .. })) => {
+                VariantDef::Variant(v)
+            }
+            _ => match self.literal_ty(e) {
+                Ty::Adt(AdtId::Struct(s), ..) => VariantDef::Struct(s),
+                _ => return self.unsupported(e, "this struct literal"),
+            },
+        };
+        let declared = field_types(self.db, def);
+        let mut stmts = Vec::new();
+        let mut values: Vec<Option<ExprId>> = vec![None; declared.fields.len()];
+        for f in fields.iter() {
+            let mut v = self.expr(f.expr);
+            // Before `base`, so the value goes in a temporary.
+            if spread.is_some() {
+                let ty = self.ty(f.expr);
+                let temp = self.let_temp(v, ty.clone(), &mut stmts);
+                v = self.mir.alloc(ExprKind::Local(temp), ty, Some(f.expr));
+            }
+            match declared.field(&f.name) {
+                Some((i, _)) => values[i] = Some(v),
+                None => return self.unsupported(e, "this field"),
+            }
+        }
+        if let Some(base) = spread {
+            let VariantDef::Struct(s) = def else {
+                return self.unsupported(e, "`..` in a variant literal (#431)");
+            };
+            let ty = self.ty(base);
+            let Ty::Adt(_, args, mutabilities, mutability) = &ty else {
+                return self.unsupported(e, "`..` of this type");
+            };
+            let subst = struct_args(args, mutabilities, mutability);
+            let value = self.expr(base);
+            let temp = self.let_temp(value, ty.clone(), &mut stmts);
+            for (i, (_, field_ty)) in declared.fields.iter().enumerate() {
+                if values[i].is_some() {
+                    continue;
+                }
+                let local = self.mir.alloc(ExprKind::Local(temp), ty.clone(), Some(base));
+                let kind = ExprKind::Field { base: local, ctor: Ctor::Struct(s), index: i as u32 };
+                let field_ty = subst_params(field_ty, GenericDefId::Struct(s), &subst);
+                values[i] = Some(self.mir.alloc(kind, field_ty, Some(base)));
+            }
+        }
+        let Some(fields) = values.into_iter().collect::<Option<Box<[ExprId]>>>() else {
+            return self.unsupported(e, "a struct literal without all its fields");
+        };
+        let ctor = match def {
+            VariantDef::Struct(s) => Ctor::Struct(s),
+            VariantDef::Variant(v) => Ctor::Variant(v),
+        };
+        let value = self.literal(e, ExprKind::Construct { ctor, fields });
+        if stmts.is_empty() {
+            return value;
+        }
+        let ty = self.literal_ty(e);
+        let block = ExprKind::Block { stmts: stmts.into(), tail: Some(value), label: None };
+        self.mir.alloc(block, ty, Some(e))
     }
 
     /// The type a literal makes: that of the `mut e` it's in, if any.

@@ -28,6 +28,23 @@ fn f() -> (Option[i32], Option[i32]) = (Some(1), None);
 fn f() -> imm (Option[i32], Option[i32]) = (Option.Some(1), Option.None)
 
 ================================================================================
+Struct update: the fields given, then the base
+================================================================================
+struct Point { x: i32, y: i32, z: i32 }
+fn f(p: Point, n: i32) = Point { z: n, ..p };
+fn g(p: Point) = Point { ..p };
+--------------------------------------------------------------------------------
+fn f(p: Point, n: i32) -> imm Point = {
+  let _t0 = n;
+  let _t1 = p;
+  Point(_t1.Point.0, _t1.Point.1, _t0)
+}
+fn g(p: Point) -> imm Point = {
+  let _t0 = p;
+  Point(_t0.Point.0, _t0.Point.1, _t0.Point.2)
+}
+
+================================================================================
 Tuple structs and unit structs
 ================================================================================
 struct Wrapper(i32);
