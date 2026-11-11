@@ -468,6 +468,15 @@ fn bound_mutabilities(ty: &Ty<'_>, bound: u32) -> Vec<bool> {
                 mark(own, out);
                 walk(elem, out);
             }
+            Ty::Tuple(tys, own) => {
+                mark(own, out);
+                tys.iter().for_each(|t| walk(t, out));
+            }
+            Ty::Record(tys, named, own) => {
+                mark(own, out);
+                tys.iter().for_each(|t| walk(t, out));
+                named.iter().for_each(|(_, t)| walk(t, out));
+            }
             Ty::Fn(params, ret, own, _) => {
                 mark(own, out);
                 params.tys().for_each(|t| walk(t, out));
