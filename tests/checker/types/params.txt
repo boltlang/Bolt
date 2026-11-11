@@ -161,6 +161,8 @@ one: fn(n: i32) -> i32
 let g: fn(y: i32, x: i32) -> i32
 let b: i32
 let a: i32
+--------------------------------------------------------------------------------
+warning at `f`: x is parameter 1 here and 2 expected
 
 ================================================================================
 A function type written without names can't be called by name
@@ -436,6 +438,8 @@ fn w(k) = apply2(k) + k(b: 1, a: 2);
 --------------------------------------------------------------------------------
 apply2: fn(k: fn(a: i32, b: i32) -> i32) -> i32
 w: fn(k: fn(b: i32, a: i32) -> i32) -> i32
+--------------------------------------------------------------------------------
+warning at `k`: b is parameter 1 here and 2 expected
 
 ================================================================================
 A call by name through a field needs the field's names (#411)
@@ -536,3 +540,45 @@ put: forall T. fn(xs: mut [T], x: T) -> ()
 pick: forall T. fn(xs: [T], d: T) -> T
 imm_array: fn() -> i32
 copied: fn() -> i32
+
+================================================================================
+A function given with its parameter names swapped warns (#433)
+:test-prelude
+================================================================================
+fn copy(f: fn(src: i32, dst: i32) -> i32) -> i32 = f(src: 1, dst: 2);
+fn swapped() = copy(|dst, src| dst - src);
+fn g(dst: i32, src: i32) -> i32 = dst;
+fn swapped_declared() = copy(g);
+fn swapped_with_more(f: fn(a: i32, b: i32, c: i32) -> i32) = f;
+fn three() = swapped_with_more(|c, b, a| a);
+--------------------------------------------------------------------------------
+copy: fn(f: fn(src: i32, dst: i32) -> i32) -> i32
+swapped: fn() -> i32
+g: fn(dst: i32, src: i32) -> i32
+swapped_declared: fn() -> i32
+swapped_with_more: fn(f: 'm fn(a: i32, b: i32, c: i32) -> i32) -> 'm fn(a: i32, b: i32, c: i32) -> i32
+three: fn() -> fn(a: i32, b: i32, c: i32) -> i32
+--------------------------------------------------------------------------------
+warning at `|dst, src| dst - src`: dst is parameter 1 here and 2 expected
+warning at `g`: dst is parameter 1 here and 2 expected
+warning at `|c, b, a| a`: c is parameter 1 here and 3 expected
+
+================================================================================
+Names that differ without being swapped don't warn (#433)
+:test-prelude
+================================================================================
+fn copy(f: fn(src: i32, dst: i32) -> i32) -> i32 = f(src: 1, dst: 2);
+fn apply(k: fn(item: i32) -> i32) -> i32 = k(item: 1);
+fn same() = copy(|src, dst| dst - src);
+fn other_names() = copy(|from, to| to - from) + apply(|x| x);
+fn one_shared() = copy(|src, to| to - src);
+fn no_names() = copy(|_, _| 0);
+fn plain(f: fn(i32, i32) -> i32) = copy(f);
+--------------------------------------------------------------------------------
+copy: fn(f: fn(src: i32, dst: i32) -> i32) -> i32
+apply: fn(k: fn(item: i32) -> i32) -> i32
+same: fn() -> i32
+other_names: fn() -> i32
+one_shared: fn() -> i32
+no_names: fn() -> i32
+plain: fn(f: fn(i32, i32) -> i32) -> i32

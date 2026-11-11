@@ -99,6 +99,10 @@ pub struct Unifier<'db> {
     names: Vec<NameEdge<'db>>,
     /// The names that calls passed name variables by.
     claims: std::collections::HashMap<TyVar, Name>,
+    /// Each function type that was given for another, as the one that
+    /// received it and the one given, for the warning about swapped names
+    /// (#433). The solver takes them with where they were unified.
+    pub(crate) given_fns: Vec<(Ty<'db>, Ty<'db>)>,
 }
 
 impl<'db> Unifier<'db> {
@@ -405,6 +409,11 @@ impl<'db> Unifier<'db> {
                 if !(xs.is_positional() && ys.is_positional())
                     || xs.positional.len() == ys.positional.len() =>
             {
+                if !xs.names.is_empty() && !ys.names.is_empty() {
+                    let given =
+                        if self.flipped { (b.clone(), a.clone()) } else { (a.clone(), b.clone()) };
+                    self.given_fns.push(given);
+                }
                 for (p, q) in xs.names.iter().zip(ys.names.iter()) {
                     let (lo, hi) = if self.flipped { (q, p) } else { (p, q) };
                     self.relate_names(lo, hi)
@@ -672,12 +681,15 @@ impl<'db> Unifier<'db> {
                 })
                 .collect();
             let params = params.map(|p| self.freshen(p, !low)).with_names(names);
-            Some(Ty::Fn(
+            let fresh = Ty::Fn(
                 Box::new(params),
                 Box::new(self.freshen(ret, low)),
                 m.clone(),
                 Box::new(self.freshen(e, low)),
-            ))
+            );
+            let given = if low { (fresh.clone(), t.clone()) } else { (t.clone(), fresh.clone()) };
+            self.given_fns.push(given);
+            Some(fresh)
         })
     }
 

@@ -430,6 +430,20 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         let unnamed = if *unnamed { ", unnamed ones left" } else { "" };
                         format!("error at `{}`: no parameter {name}{unnamed}", at(origin.node))
                     }
+                    InferenceDiagnostic::Type(TypeError::SwappedNames {
+                        origin,
+                        name,
+                        given,
+                        at: place,
+                        ..
+                    }) => {
+                        format!(
+                            "warning at `{}`: {name} is parameter {} here and {} expected",
+                            at(origin.node),
+                            given + 1,
+                            place + 1
+                        )
+                    }
                     InferenceDiagnostic::Type(TypeError::TooManyPatterns {
                         origin,
                         expected,

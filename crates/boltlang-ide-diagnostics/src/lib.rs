@@ -149,6 +149,7 @@ impl DiagnosticCode {
     pub const NO_VALUES: Self = Self("W0002");
     pub const NON_EXHAUSTIVE_MATCH: Self = Self("W0003");
     pub const UNREACHABLE_ARM: Self = Self("W0004");
+    pub const SWAPPED_NAMES: Self = Self("W0005");
 
     pub fn as_str(self) -> &'static str {
         self.0
@@ -676,6 +677,15 @@ fn describe(
         K::DuplicateArgument { name } => {
             (C::DUPLICATE_ARGUMENT, format!("the argument `{name}` is given more than once"))
         }
+        K::SwappedNames { expected, name, given, at } => (
+            C::SWAPPED_NAMES,
+            format!(
+                "this function's parameter {} is `{name}`, but `{}` has `{name}` as parameter {}, so an argument passed as `{name}` goes to another parameter",
+                given + 1,
+                expected.display_with(db, names),
+                at + 1
+            ),
+        ),
         K::TooManyPatterns { expected, found } => (
             C::TOO_MANY_PATTERNS,
             format!("expected at most {}, found {found}", count(expected, "pattern", "patterns")),

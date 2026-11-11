@@ -228,6 +228,14 @@ pub enum DiagnosticKind<'db> {
         expected: usize,
         found: usize,
     },
+    /// A function given for the function type `expected`, whose parameter
+    /// `given` has the name of the parameter `at` of `expected` (#433).
+    SwappedNames {
+        expected: Ty<'db>,
+        name: Name,
+        given: usize,
+        at: usize,
+    },
     /// A spread, like `*e` or `**e`, of something that isn't a tuple of
     /// its kind.
     NotSpreadable {
@@ -1671,6 +1679,9 @@ impl<'db> Collector<'db> {
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
                         TypeError::TooManyPatterns { origin, expected, found } => {
                             (origin, DiagnosticKind::TooManyPatterns { expected, found })
+                        }
+                        TypeError::SwappedNames { origin, expected, name, given, at } => {
+                            (origin, DiagnosticKind::SwappedNames { expected, name, given, at })
                         }
                         TypeError::DuplicateField { origin, name } => {
                             (origin, DiagnosticKind::DuplicateField { name })

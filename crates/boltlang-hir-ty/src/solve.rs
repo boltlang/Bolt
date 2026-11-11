@@ -371,6 +371,18 @@ pub enum TypeError<'db> {
     TypeNeeded {
         origin: Origin<'db>,
     },
+    /// A function was given for the function type `expected`, which has
+    /// the name `name` of its parameter `given` as the name of its
+    /// parameter `at`, like `|dst, src| ...` for `fn(src: Path, dst:
+    /// Path)`. A warning: the type renames the function's parameters, so a
+    /// call by `name` through it passes the argument to another one (#433).
+    SwappedNames {
+        origin: Origin<'db>,
+        expected: Ty<'db>,
+        name: Name,
+        given: usize,
+        at: usize,
+    },
     /// A pattern with `..`, like `(a, b, .., c)`, has `found` positional
     /// patterns for a tuple, variant or operation with only `expected` values.
     TooManyPatterns {
@@ -425,6 +437,7 @@ impl<'db> TypeError<'db> {
             | TypeError::AmbiguousOverload { origin, .. }
             | TypeError::Effects { origin, .. }
             | TypeError::TooManyPatterns { origin, .. }
+            | TypeError::SwappedNames { origin, .. }
             | TypeError::TypeNeeded { origin } => origin,
         }
     }
@@ -441,7 +454,8 @@ impl<'db> TypeError<'db> {
             | TypeError::NotSpreadable { ty, .. }
             | TypeError::CannotChange { ty, .. }
             | TypeError::NoOverload { ty, .. }
-            | TypeError::AmbiguousOverload { ty, .. } => *ty = f(ty),
+            | TypeError::AmbiguousOverload { ty, .. }
+            | TypeError::SwappedNames { expected: ty, .. } => *ty = f(ty),
             TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. } => {
                 *constraint = constraint.map(f)
             }
@@ -480,6 +494,9 @@ pub struct Solver<'db> {
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_spreads: Vec<(SpreadConstraint<'db>, Origin<'db>)>,
     pending_tuple_pats: Vec<(TuplePatConstraint<'db>, Origin<'db>)>,
+    /// The function types given for others, as the unifier found them, with
+    /// where: what received the function, and the function (#433).
+    given_fns: Vec<(Origin<'db>, Ty<'db>, Ty<'db>)>,
     pending_lacks: Vec<(LacksConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
@@ -520,6 +537,7 @@ impl<'db> Solver<'db> {
             pending_fields: Vec::new(),
             pending_spreads: Vec::new(),
             pending_tuple_pats: Vec::new(),
+            given_fns: Vec::new(),
             pending_lacks: Vec::new(),
             pending_assoc: Vec::new(),
             pending_at_most: Vec::new(),
@@ -637,7 +655,7 @@ impl<'db> Solver<'db> {
     pub fn add(&mut self, constraint: Constraint<'db>) {
         match constraint {
             Constraint::Equal { expected, actual, origin } => {
-                let unified = self.unifier.unify(&expected, &actual);
+                let unified = self.unify_at(origin, |u| u.unify(&expected, &actual));
                 self.report_unified(unified, &expected, &actual, origin);
             }
             Constraint::Class { constraint, origin } => self.pending.push((constraint, origin)),
@@ -1580,15 +1598,29 @@ impl<'db> Solver<'db> {
     /// pattern's parts, so that calls by name through them are checked
     /// (#411).
     pub fn equal_into(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
-        let unified = self.unifier.unify_into(expected, actual);
+        let unified = self.unify_at(origin, |u| u.unify_into(expected, actual));
         self.report_unified(unified, expected, actual, origin);
     }
 
     /// Like [`Solver::equal`], but the names of parameters flow both ways,
     /// as between a place, like a field access, and what it denotes.
     pub fn equal_shared(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
-        let unified = self.unifier.unify_shared(expected, actual);
+        let unified = self.unify_at(origin, |u| u.unify_shared(expected, actual));
         self.report_unified(unified, expected, actual, origin);
+    }
+
+    /// Unify with `unify`, and keep where the function types it found given
+    /// for others were.
+    fn unify_at(
+        &mut self,
+        origin: Origin<'db>,
+        unify: impl FnOnce(&mut Unifier<'db>) -> Result<(), UnifyError<'db>>,
+    ) -> Result<(), UnifyError<'db>> {
+        let start = self.unifier.given_fns.len();
+        let unified = unify(&mut self.unifier);
+        let given = self.unifier.given_fns.split_off(start);
+        self.given_fns.extend(given.into_iter().map(|(to, from)| (origin, to, from)));
+        unified
     }
 
     fn report_unified(
@@ -1844,6 +1876,50 @@ impl<'db> Solver<'db> {
     /// (#411). What doesn't fit a call is reported where it's unified.
     pub fn settle_names(&mut self) {
         self.unifier.settle_names();
+        self.unifier.given_fns.clear();
+        self.report_swapped_names();
+    }
+
+    /// Warn where a function was given for a function type that has one of
+    /// its parameter names at another position, like `|dst, src| ...` for
+    /// `fn(src: Path, dst: Path)`: the type renames the parameters, so the
+    /// names say the opposite of what's passed (#433). Names that differ
+    /// without being swapped, like `|x| x` for `fn(item: i32) -> i32`, are
+    /// fine.
+    fn report_swapped_names(&mut self) {
+        let names = |t: &Ty<'db>| -> Vec<Option<Name>> {
+            match t {
+                Ty::Fn(params, ..) => params
+                    .names
+                    .iter()
+                    .map(|n| match n {
+                        Ty::ParamName(name) => name.clone(),
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            }
+        };
+        let mut warned: Vec<Origin<'db>> = Vec::new();
+        for (origin, to, from) in std::mem::take(&mut self.given_fns) {
+            if warned.contains(&origin) {
+                continue;
+            }
+            let (to, from) = (self.unifier.resolve(&to), self.unifier.resolve(&from));
+            if to.has_error() || from.has_error() {
+                continue;
+            }
+            let (expected, given) = (names(&to), names(&from));
+            let swapped = given.iter().enumerate().find_map(|(j, name)| {
+                let name = name.as_ref()?;
+                let i = expected.iter().position(|n| n.as_ref() == Some(name))?;
+                (i != j).then(|| (name.clone(), j, i))
+            });
+            if let Some((name, given, at)) = swapped {
+                warned.push(origin);
+                self.errors.push(TypeError::SwappedNames { origin, expected: to, name, given, at });
+            }
+        }
     }
 
     /// Finish solving: default numeric variables and mutabilities, solve
