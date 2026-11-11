@@ -10,7 +10,7 @@ description: The design of effect types in Bolt, with does and +, effects with p
 The type checker infers and checks effects: rows, `does`, containment,
 combination, `Nothing` and handlers, with their arms for every operation
 and for every value of its arguments. Operations and handlers run through
-Conduit ([Conduit](../compiler/conduit/index.mdx#effects)), and `std` has `Fail` and
+Conduit ([Conduit](../compiler/conduit.mdx#effects)), and `std` has `Fail` and
 `Async`. What's left is in [Still to decide](#still-to-decide). Algebraic
 effects are tracked in [#40](https://github.com/boltlang/Bolt/issues/40).
 :::
@@ -421,7 +421,7 @@ scheduler above, `k` can only be resumed with a value of that type, which
 only `start` provides. Existential types of GADTs are checked the same way.
 
 A handler becomes a `handle` in Conduit, as
-[Conduit](../compiler/conduit/index.mdx#effects) describes.
+[Conduit](../compiler/conduit.mdx#effects) describes.
 
 ### Why `match`
 

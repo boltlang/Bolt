@@ -50,7 +50,7 @@ const config: Config = {
           {from: '/docs/internals/type-checking/mutability/functions', to: '/docs/internals/compiler/type-checking/mutability/functions'},
           {from: '/docs/internals/type-checking/mutability/implementation', to: '/docs/internals/compiler/type-checking/mutability/implementation'},
           {from: '/docs/internals/type-checking/mutability/errors', to: '/docs/internals/compiler/type-checking/mutability/errors'},
-          {from: '/docs/internals/type-checking/mutability/uniqueness', to: '/docs/internals/compiler/conduit/uniqueness'},
+          {from: '/docs/internals/type-checking/mutability/uniqueness', to: '/docs/internals/compiler/conduit'},
           {from: '/docs/internals/type-checking/mutability/regions', to: '/docs/internals/compiler/conduit'},
           {from: '/docs/internals/type-checking/mutability', to: '/docs/internals/designs/mutability'},
           {from: '/docs/internals/conduit', to: '/docs/internals/compiler/conduit'},

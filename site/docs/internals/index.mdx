@@ -29,7 +29,7 @@ A program goes through these stages, each a crate in `crates/`:
 | Building MIR, with patterns as decision graphs | `boltlang-mir-build`, `boltlang-pattern` | [MIR](./compiler/mir.mdx) |
 | Passes over MIR, like desugarings and shims | `boltlang-mir-transform` | [MIR](./compiler/mir.mdx#passes-and-shims) |
 | Monomorphization | `boltlang-mir-mono` | [MIR](./compiler/mir.mdx#monomorphization) |
-| Lowering to Conduit | `boltlang-codegen-conduit` | [Conduit](./compiler/conduit/index.mdx) |
+| Lowering to Conduit | `boltlang-codegen-conduit` | [Conduit](./compiler/conduit.mdx) |
 
 Conduit, the IR that Bolt compiles to, is a project of its own. It runs
 programs in an evaluator and compiles them to WebAssembly.
@@ -58,4 +58,3 @@ Around the stages:
 | [Effects](./designs/effects.mdx) | checked and run; some of it is still to decide |
 | [Async](./designs/async.mdx) | partly: tasks and an executor in `std` |
 | [Reactive UI](./designs/reactive.mdx) | a proposal |
-| [Uniqueness](./compiler/conduit/uniqueness.mdx) | a proposal for an optimization in Conduit |

@@ -75,7 +75,7 @@ parameters, each of its own operation, and a handler can't hand the result
 of a task from one to the other: nothing says they're the same. They're
 also `any` in the compiled operations, so each value of them would be
 converted on its way through (see
-[Conduit](../compiler/conduit/index.mdx)).
+[Conduit](../compiler/conduit.mdx)).
 
 Tokio splits it the same way: its scheduler runs untyped tasks, and the
 `JoinHandle<T>` that `spawn` gives back points at the task's typed result.
@@ -332,7 +332,7 @@ a highlight or an inlay hint, like it can mark inferred
 - Timeouts and racing, like `first(a, b)`, which need cancelling.
 - Tasks with other effects. `fork` takes a task that only does `Async`;
   taking one that does `Async + E` needs effects whose parameters are rows
-  (see [Conduit](../compiler/conduit/index.mdx)).
+  (see [Conduit](../compiler/conduit.mdx)).
 - Threads. Tokio needs `Send + 'static` for a task that can move to
   another thread. In Bolt, an `imm fn()` captures only what's `imm` all the
   way down, so it could run on another thread as it is.
