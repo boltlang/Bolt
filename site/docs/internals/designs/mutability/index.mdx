@@ -354,12 +354,18 @@ as above.
 The rules are proven in `lean/BoltMut`: in `Syntax.lean`, `Ty.ro` is the
 view, `Sub.to_ro` says a type fits its view, and `Ty.roParam` is `ro T`;
 `ReadOnly.lean` has the examples.
-`Variance.lean` proves when a struct's arguments can be seen as `ro` too,
-for [#440](https://github.com/boltlang/Bolt/issues/440): a parameter
-reached only through tuples and objects whose mutability is a parameter
-that becomes `ro`, like the `T` of `Box[T] { item: T }`, but not one in a
-closure's type or in an object whose mutability is written, like
-`imm [T]`.
+`Variance.lean` proves when a struct's arguments can change, for
+[#440](https://github.com/boltlang/Bolt/issues/440). A parameter in a
+tuple, or in an object that's `imm`, `ro`, or whose mutability is a
+parameter that becomes `ro`, is covariant, like the `T` of
+`Box[T] { item: T }`: `mut Box[mut [i32]]` can be seen as
+`ro Box[ro [i32]]`. One in a function's parameters is contravariant, like
+the `T` of `Handler[T] { f: fn(T) }`: an `imm Handler[ro [i32]]` can be
+used as an `imm Handler[mut [i32]]`. One in a `mut` object, or in one whose
+mutability is a parameter that's kept, is invariant. The model has
+function subtyping (`Sub.fn`), and what an `imm` object holds can be seen
+as a supertype of its type (`Sub.immCell`), as the checker does for an
+array that isn't `mut`.
 
 Conduit has a `ReadOnly` mutability too, but it isn't deep, and doesn't
 reach into function types, so the views above that see what a value holds
