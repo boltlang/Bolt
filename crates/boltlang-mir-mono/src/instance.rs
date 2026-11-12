@@ -14,6 +14,7 @@ use boltlang_hir_ty::{
     GenericParamId, Ty, function_scheme,
     lower::{ClassConstraint, const_ty, identity_args},
     scheme::generic_param_ids,
+    solve::{AtMostConstraint, Held},
     ty::is_hidden_param,
 };
 
@@ -178,6 +179,33 @@ impl<'db> Instance<'db> {
         most
     }
 
+    /// What the instance assumes about its mutability parameters: each
+    /// mutability in what its scheme says is at most one, with its type
+    /// arguments, like `mut ⊑ 'n` for `mk[mut [i32]]` of
+    /// `fn mk['n, T: 'n]`. Those that always hold are left out.
+    pub fn mut_assumes(self, db: &'db dyn Db) -> Vec<(MonoMut, MonoMut)> {
+        let Ok(generics) = instance_generics(db, self.def(db)) else { return Vec::new() };
+        let slots = self.slots(db, &generics);
+        let subst = Subst { db, root: self.root(db), params: &generics.params, slots: &slots };
+        let mut out = Vec::new();
+        for c in generics.bounds.iter() {
+            let Ok(bound) = subst.mutability(&c.bound) else { continue };
+            match &c.held {
+                Held::Mutability(m) => out.extend(subst.mutability(m).ok().map(|m| (m, bound))),
+                // What an object holds is at most its own mutability, so
+                // only the outermost objects' count.
+                Held::Type(t) => {
+                    if let Ok(t) = subst.ty(t) {
+                        out.extend(t.outer_mutability().map(|m| (m, bound)));
+                    }
+                }
+            }
+        }
+        out.retain(|&(m, bound)| m != bound && m != MonoMut::Imm && bound != MonoMut::Mut);
+        out.dedup();
+        out
+    }
+
     /// How many row parameters the instance has: those of its scheme, then
     /// those its type arguments have, which its uses give, as for
     /// mutabilities.
@@ -333,12 +361,21 @@ pub struct Generics<'db> {
     /// The kind of each parameter, then of each bound variable.
     pub kinds: Box<[Kind]>,
     pub predicates: Box<[ClassConstraint<'db>]>,
+    /// What its scheme says must be at most a mutability, like the `T: 'n`
+    /// of `fn mk['n, T: 'n]`.
+    pub bounds: Box<[AtMostConstraint<'db>]>,
     pub ty: Ty<'db>,
 }
 
 impl<'db> Generics<'db> {
     fn none(ty: Ty<'db>) -> Self {
-        Generics { params: Box::new([]), kinds: Box::new([]), predicates: Box::new([]), ty }
+        Generics {
+            params: Box::new([]),
+            kinds: Box::new([]),
+            predicates: Box::new([]),
+            bounds: Box::new([]),
+            ty,
+        }
     }
 }
 
@@ -380,7 +417,7 @@ pub fn instance_generics<'db>(
                 Some(p) => boltlang_hir_ty::lower::generic_predicates(db, p.def).predicates.clone(),
                 None => Box::default(),
             };
-            Ok(Generics { params: sig.params, kinds, predicates, ty: sig.ty })
+            Ok(Generics { params: sig.params, kinds, predicates, bounds: Box::new([]), ty: sig.ty })
         }
         // The operation's.
         InstanceDef::Shim(Shim::Op(op)) => {
@@ -399,7 +436,13 @@ pub fn instance_generics<'db>(
             });
             let ty = Ty::func([ty.clone()], Ty::Imm(Box::new(ty.clone())));
             let kinds = (0..bound).map(|_| Kind::Mut).collect();
-            Ok(Generics { params: Box::new([]), kinds, predicates: Box::new([]), ty })
+            Ok(Generics {
+                params: Box::new([]),
+                kinds,
+                predicates: Box::new([]),
+                bounds: Box::new([]),
+                ty,
+            })
         }
     }
 }
@@ -428,6 +471,7 @@ pub fn generics<'db>(
                 params: scheme.params.clone(),
                 kinds: kinds.into(),
                 predicates: scheme.predicates.clone(),
+                bounds: scheme.bounds.clone(),
                 ty: scheme.ty.clone(),
             }
         }
@@ -453,7 +497,7 @@ fn const_generics<'db>(db: &'db dyn Db, c: ConstId<'db>) -> Generics<'db> {
         }
         _ => boltlang_hir_ty::lower::generic_predicates(db, def).predicates.clone(),
     };
-    Generics { kinds: kinds.collect(), params, predicates, ty }
+    Generics { kinds: kinds.collect(), params, predicates, bounds: Box::new([]), ty }
 }
 
 /// Which of the `bound` variables of a scheme's type are mutabilities: those

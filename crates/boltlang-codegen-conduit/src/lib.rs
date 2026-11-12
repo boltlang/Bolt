@@ -789,9 +789,15 @@ fn instance_sig<'db>(
 }
 
 /// The mutability parameters of a function with those of `instance`, as
-/// the instance's own function and its lambdas have.
+/// the instance's own function and its lambdas have, and what it assumes
+/// about them, like `mut ⊑ 'n` for `mk[mut [i32]]` of `fn mk['n, T: 'n]`.
 fn own_mut_params(db: &dyn Db, instance: Instance<'_>) -> MutParams {
-    MutParams { count: instance.mut_params(db) as u32, assumes: Vec::new() }
+    let assumes = instance
+        .mut_assumes(db)
+        .into_iter()
+        .map(|(m, bound)| (ty::mutability(m), ty::mutability(bound)))
+        .collect();
+    MutParams { count: instance.mut_params(db) as u32, assumes }
 }
 
 /// The row of effects of a MIR body of the instance of `lcx`: that of its

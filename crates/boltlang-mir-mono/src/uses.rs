@@ -571,6 +571,7 @@ impl<'a, 'db> Cx<'a, 'db> {
             params: params.clone(),
             kinds: Box::new([]),
             predicates: Box::new([]),
+            bounds: Box::new([]),
             ty: Ty::unit(),
         };
         // The impl isn't erased further: its types are what `c` gives.
@@ -1030,8 +1031,13 @@ fn fill_slots<'db>(
     found: impl IntoIterator<Item = Option<Slot<'db>>>,
 ) -> Vec<Slot<'db>> {
     let kinds: Box<[Kind]> = params.iter().map(|&p| param_kind(db, p)).collect();
-    let generics =
-        Generics { params: params.into(), kinds, predicates: Box::new([]), ty: Ty::unit() };
+    let generics = Generics {
+        params: params.into(),
+        kinds,
+        predicates: Box::new([]),
+        bounds: Box::new([]),
+        ty: Ty::unit(),
+    };
     let mut found: Vec<Option<Slot<'db>>> = found.into_iter().collect();
     // Types given for an item's types only, in order: spread them over its
     // type parameters.

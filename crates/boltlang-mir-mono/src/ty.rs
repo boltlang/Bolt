@@ -179,6 +179,18 @@ pub enum MonoTy<'db> {
 }
 
 impl<'db> MonoTy<'db> {
+    /// The mutability of a value of this type, if it's an object, like the
+    /// `mut` of `mut [i32]`.
+    pub fn outer_mutability(&self) -> Option<MonoMut> {
+        match self {
+            MonoTy::Adt(_, _, _, m)
+            | MonoTy::Tuple(_, m)
+            | MonoTy::Record(_, _, m)
+            | MonoTy::Array(m, _) => Some(*m),
+            _ => None,
+        }
+    }
+
     pub fn unit() -> Self {
         MonoTy::Tuple(Box::new([]), MonoMut::Imm)
     }
