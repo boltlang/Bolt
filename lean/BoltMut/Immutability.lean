@@ -26,83 +26,82 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
   induction hs with
   | newCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | new he _ => exact ih hh he hl
+    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    exact ih hh he hl
   | newVal _ =>
     intro σ t l ty hh _ hl
     exact List.getElem?_append_left (hh.lt hl)
   | getCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | get he => exact ih hh he hl
+    obtain ⟨_, _, he, _⟩ := ht.get_inv
+    exact ih hh he hl
   | getLoc _ => intros; rfl
   | setCong₁ _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | set he₁ _ => exact ih hh he₁ hl
+    obtain ⟨_, he₁, _, _⟩ := ht.set_inv
+    exact ih hh he₁ hl
   | setCong₂ _ _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | set _ he₂ => exact ih hh he₂ hl
+    obtain ⟨_, _, he₂, _⟩ := ht.set_inv
+    exact ih hh he₂ hl
   | @setLoc l₀ v _ _ =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | set he₁ _ =>
-      -- A `ro` view isn't `mut`, so the location written is.
-      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
-      cases hl'
-      · -- The location written is `mut`, so it isn't `l`.
-        have hne : l₀ ≠ l := by
-          intro heq
-          subst heq
-          rw [hσ] at hl
-          cases hl
-        exact List.getElem?_set_ne hne
+    obtain ⟨_, he₁, _, _⟩ := ht.set_inv
+    -- A `ro` view isn't `mut`, so the location written is.
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    cases hl'
+    · -- The location written is `mut`, so it isn't `l`.
+      have hne : l₀ ≠ l := by
+        intro heq
+        subst heq
+        rw [hσ] at hl
+        cases hl
+      exact List.getElem?_set_ne hne
   | letCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | letE he₁ _ => exact ih hh he₁ hl
+    obtain ⟨_, _, he₁, _, _⟩ := ht.letE_inv
+    exact ih hh he₁ hl
   | letVal _ => intros; rfl
   | callCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | call _ _ he => exact ih hh he hl
+    obtain ⟨_, _, _, he, _⟩ := ht.call_inv
+    exact ih hh he hl
   | callVal _ _ => intros; rfl
   | appCong₁ _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | app he₁ _ => exact ih hh he₁ hl
+    obtain ⟨_, _, _, he₁, _, _⟩ := ht.app_inv
+    exact ih hh he₁ hl
   | appCong₂ _ _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | app _ he₂ => exact ih hh he₂ hl
+    obtain ⟨_, _, _, _, he₂, _⟩ := ht.app_inv
+    exact ih hh he₂ hl
   | appVal _ => intros; rfl
   | pairCong₁ _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | pair he₁ _ => exact ih hh he₁ hl
+    obtain ⟨_, _, he₁, _, _⟩ := ht.pair_inv
+    exact ih hh he₁ hl
   | pairCong₂ _ _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | pair _ he₂ => exact ih hh he₂ hl
+    obtain ⟨_, _, _, he₂, _⟩ := ht.pair_inv
+    exact ih hh he₂ hl
   | fstCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | fst he => exact ih hh he hl
+    obtain ⟨_, _, he, _⟩ := ht.fst_inv
+    exact ih hh he hl
   | sndCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | snd he => exact ih hh he hl
+    obtain ⟨_, _, he, _⟩ := ht.snd_inv
+    exact ih hh he hl
   | fstVal _ _ | sndVal _ _ => intros; rfl
   | toImmCong _ ih =>
     intro σ t l ty hh ht hl
-    cases ht with
-    | toImm he _ => exact ih hh he hl
+    obtain ⟨_, _, _, he, _, _⟩ := ht.toImm_inv
+    exact ih hh he hl
   | toImmVal _ hc =>
     -- A copy only adds to the heap.
     intro σ t l ty hh _ hl
     exact hc.keeps (hh.lt hl)
-  | toImmKeep _ _ => intro σ t l ty hh ht hl; cases ht
+  | toImmKeep _ _ => intro σ t l ty hh ht hl; exact nomatch ht.toImm_inv.1
 
 /-- One step of a well-typed program doesn't change whether an object is
 `mut`: only freezing in place does, which isn't typed. -/
@@ -110,19 +109,19 @@ theorem step_keeps_tag {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     ∀ {σ : HeapTy} {t : Ty} {l : Nat} {b : Bool} {w : Expr}, HasType fns σ .none false Ctx.empty e t →
       h[l]? = some (b, w) → ∃ w', h'[l]? = some (b, w') := by
   induction hs with
-  | newCong _ ih => intro σ t l b w ht hl; cases ht with | new he _ => exact ih he hl
-  | getCong _ ih => intro σ t l b w ht hl; cases ht with | get he => exact ih he hl
-  | setCong₁ _ ih => intro σ t l b w ht hl; cases ht with | set he _ => exact ih he hl
-  | setCong₂ _ _ ih => intro σ t l b w ht hl; cases ht with | set _ he => exact ih he hl
-  | letCong _ ih => intro σ t l b w ht hl; cases ht with | letE he _ => exact ih he hl
-  | callCong _ ih => intro σ t l b w ht hl; cases ht with | call _ _ he => exact ih he hl
-  | appCong₁ _ ih => intro σ t l b w ht hl; cases ht with | app he _ => exact ih he hl
-  | appCong₂ _ _ ih => intro σ t l b w ht hl; cases ht with | app _ he => exact ih he hl
-  | pairCong₁ _ ih => intro σ t l b w ht hl; cases ht with | pair he _ => exact ih he hl
-  | pairCong₂ _ _ ih => intro σ t l b w ht hl; cases ht with | pair _ he => exact ih he hl
-  | fstCong _ ih => intro σ t l b w ht hl; cases ht with | fst he => exact ih he hl
-  | sndCong _ ih => intro σ t l b w ht hl; cases ht with | snd he => exact ih he hl
-  | toImmCong _ ih => intro σ t l b w ht hl; cases ht with | toImm he _ => exact ih he hl
+  | newCong _ ih => intro σ t l b w ht hl; obtain ⟨_, he, _, _⟩ := ht.new_inv; exact ih he hl
+  | getCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _⟩ := ht.get_inv; exact ih he hl
+  | setCong₁ _ ih => intro σ t l b w ht hl; obtain ⟨_, he, _, _⟩ := ht.set_inv; exact ih he hl
+  | setCong₂ _ _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _⟩ := ht.set_inv; exact ih he hl
+  | letCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _, _⟩ := ht.letE_inv; exact ih he hl
+  | callCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, _, he, _⟩ := ht.call_inv; exact ih he hl
+  | appCong₁ _ ih => intro σ t l b w ht hl; obtain ⟨_, _, _, he, _, _⟩ := ht.app_inv; exact ih he hl
+  | appCong₂ _ _ ih => intro σ t l b w ht hl; obtain ⟨_, _, _, _, he, _⟩ := ht.app_inv; exact ih he hl
+  | pairCong₁ _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _, _⟩ := ht.pair_inv; exact ih he hl
+  | pairCong₂ _ _ ih => intro σ t l b w ht hl; obtain ⟨_, _, _, he, _⟩ := ht.pair_inv; exact ih he hl
+  | fstCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _⟩ := ht.fst_inv; exact ih he hl
+  | sndCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _⟩ := ht.snd_inv; exact ih he hl
+  | toImmCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, _, he, _, _⟩ := ht.toImm_inv; exact ih he hl
   | newVal _ =>
     intro σ t l b w _ hl
     exact ⟨w, by rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hl).1]; exact hl⟩
@@ -137,7 +136,7 @@ theorem step_keeps_tag {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
   | toImmVal _ hc =>
     intro σ t l b w _ hl
     exact ⟨w, by rw [hc.keeps (List.getElem?_eq_some_iff.mp hl).1]; exact hl⟩
-  | toImmKeep _ _ => intro σ t l b w ht; cases ht
+  | toImmKeep _ _ => intro σ t l b w ht; exact nomatch ht.toImm_inv.1
   | getLoc _ | letVal _ | callVal _ _ | appVal _ | fstVal _ _ | sndVal _ _ =>
     intro σ t l b w _ hl
     exact ⟨w, hl⟩

@@ -164,7 +164,8 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih hl
+  | new _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih =>
+    exact ih hl
   | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
 
 /-! ## Heaps that correspond -/
@@ -448,12 +449,11 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   induction hs with
   | newCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | new he _ =>
-      cases hr with
-      | new hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
-        exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr'⟩
+    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    cases hr with
+    | new hr =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+      exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr'⟩
   | @newVal e b hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -462,12 +462,11 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         .loc (.inr ⟨rfl, rfl⟩)⟩
   | getCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | get he =>
-      cases hr with
-      | get hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
-        exact ⟨ρ', h₂', _, .getCong s₂, hρ, hc', .get hr'⟩
+    obtain ⟨_, _, he, _⟩ := ht.get_inv
+    cases hr with
+    | get hr =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+      exact ⟨ρ', h₂', _, .getCong s₂, hρ, hc', .get hr'⟩
   | @getLoc l b v hl =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -480,64 +479,60 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         exact ⟨ρ, h₂, v₂, .getLoc h₂v, fun _ _ h => h, hc.widen, hrel⟩
   | setCong₁ _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | set he₁ _ =>
-      cases hr with
-      | set hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
-        exact ⟨ρ', h₂', _, .setCong₁ s₂, hρ, hc', .set hr' (hr₂.mono hρ)⟩
+    obtain ⟨_, he₁, _, _⟩ := ht.set_inv
+    cases hr with
+    | set hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+      exact ⟨ρ', h₂', _, .setCong₁ s₂, hρ, hc', .set hr' (hr₂.mono hρ)⟩
   | setCong₂ hv _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | set _ he₂ =>
-      cases hr with
-      | set hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
-        exact ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv) s₂, hρ, hc', .set (hr₁.mono hρ) hr'⟩
+    obtain ⟨_, _, he₂, _⟩ := ht.set_inv
+    cases hr with
+    | set hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
+      exact ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv) s₂, hρ, hc', .set (hr₁.mono hρ) hr'⟩
   | @setLoc l₀ b w v hl hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | set he₁ _ =>
-      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
-      cases hl'
-      · have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
-        cases hr with
-        | @set _ _ _ v' hr₁ hr₂ =>
-          cases hr₁ with
-          | @loc _ c hρ =>
-            have hc₂ : c < h₂.length := hc.lt₂ hρ
-            have hl₀ : l₀ < h₁.length := hc.lt₁ hρ
-            -- Both objects are `mut`, or both `imm`.
-            obtain ⟨b₀, w₁, w₂, h₁w, h₂w, _⟩ := hc.heap _ _ hρ
-            rw [hl] at h₁w
-            cases h₁w
-            refine ⟨ρ, h₂.set c (b, v'), .unit, .setLoc h₂w (hr₂.isValue hv), fun _ _ h => h, ?_, .unit⟩
-            have key : Corr M ρ (h₁.set l₀ (b, v)) (h₂.set c (b, v')) := by
-              refine ⟨?_, hc.inj, hc.func⟩
-              intro a d had
-              obtain ⟨b', v₁, v₂, h₁v, h₂v, hrel⟩ := hc.heap a d had
-              by_cases ha : a = l₀
-              · subst ha
-                have hd : d = c := hc.func _ _ _ had hρ hMl
-                subst hd
-                exact ⟨b, v, v', List.getElem?_set_self hl₀, List.getElem?_set_self hc₂, hr₂⟩
-              · have hd : d ≠ c := fun hd => ha (hc.inj l₀ a c hρ (hd ▸ had) hMl).symm
-                refine ⟨b', v₁, v₂, ?_, ?_, hrel⟩
-                · rw [List.getElem?_set_ne (Ne.symm ha)]
-                  exact h₁v
-                · rw [List.getElem?_set_ne (Ne.symm hd)]
-                  exact h₂v
-            have := key.widen
-            simp only [List.length_set] at this
-            exact this
+    obtain ⟨_, he₁, _, _⟩ := ht.set_inv
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    cases hl'
+    · have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
+      cases hr with
+      | @set _ _ _ v' hr₁ hr₂ =>
+        cases hr₁ with
+        | @loc _ c hρ =>
+          have hc₂ : c < h₂.length := hc.lt₂ hρ
+          have hl₀ : l₀ < h₁.length := hc.lt₁ hρ
+          -- Both objects are `mut`, or both `imm`.
+          obtain ⟨b₀, w₁, w₂, h₁w, h₂w, _⟩ := hc.heap _ _ hρ
+          rw [hl] at h₁w
+          cases h₁w
+          refine ⟨ρ, h₂.set c (b, v'), .unit, .setLoc h₂w (hr₂.isValue hv), fun _ _ h => h, ?_, .unit⟩
+          have key : Corr M ρ (h₁.set l₀ (b, v)) (h₂.set c (b, v')) := by
+            refine ⟨?_, hc.inj, hc.func⟩
+            intro a d had
+            obtain ⟨b', v₁, v₂, h₁v, h₂v, hrel⟩ := hc.heap a d had
+            by_cases ha : a = l₀
+            · subst ha
+              have hd : d = c := hc.func _ _ _ had hρ hMl
+              subst hd
+              exact ⟨b, v, v', List.getElem?_set_self hl₀, List.getElem?_set_self hc₂, hr₂⟩
+            · have hd : d ≠ c := fun hd => ha (hc.inj l₀ a c hρ (hd ▸ had) hMl).symm
+              refine ⟨b', v₁, v₂, ?_, ?_, hrel⟩
+              · rw [List.getElem?_set_ne (Ne.symm ha)]
+                exact h₁v
+              · rw [List.getElem?_set_ne (Ne.symm hd)]
+                exact h₂v
+          have := key.widen
+          simp only [List.length_set] at this
+          exact this
   | letCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | letE he₁ _ =>
-      cases hr with
-      | letE hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
-        exact ⟨ρ', h₂', _, .letCong s₂, hρ, hc', .letE hr' (hr₂.mono hρ)⟩
+    obtain ⟨_, _, he₁, _, _⟩ := ht.letE_inv
+    cases hr with
+    | letE hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+      exact ⟨ρ', h₂', _, .letCong s₂, hρ, hc', .letE hr' (hr₂.mono hρ)⟩
   | @letVal x v _ hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -545,12 +540,11 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
       exact ⟨ρ, h₂, _, .letVal (hr₁.isValue hv), fun _ _ h => h, hc.widen, hr₂.subst hr₁ x⟩
   | callCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | call _ _ he =>
-      cases hr with
-      | call hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
-        exact ⟨ρ', h₂', _, .callCong s₂, hρ, hc', .call hr'⟩
+    obtain ⟨_, _, _, he, _⟩ := ht.call_inv
+    cases hr with
+    | call hr =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+      exact ⟨ρ', h₂', _, .callCong s₂, hρ, hc', .call hr'⟩
   | @callVal f fn ms τs v hfn hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -562,20 +556,18 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
       exact ⟨ρ, h₂, _, .callVal hfn (hr.isValue hv), fun _ _ h => h, hc.widen, hbody.subst hr fn.param⟩
   | appCong₁ _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | app he₁ _ =>
-      cases hr with
-      | app hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
-        exact ⟨ρ', h₂', _, .appCong₁ s₂, hρ, hc', .app hr' (hr₂.mono hρ)⟩
+    obtain ⟨_, _, _, he₁, _, _⟩ := ht.app_inv
+    cases hr with
+    | app hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+      exact ⟨ρ', h₂', _, .appCong₁ s₂, hρ, hc', .app hr' (hr₂.mono hρ)⟩
   | appCong₂ hv _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | app _ he₂ =>
-      cases hr with
-      | app hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
-        exact ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv) s₂, hρ, hc', .app (hr₁.mono hρ) hr'⟩
+    obtain ⟨_, _, _, _, he₂, _⟩ := ht.app_inv
+    cases hr with
+    | app hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
+      exact ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv) s₂, hρ, hc', .app (hr₁.mono hρ) hr'⟩
   | @appVal b x body v hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -585,36 +577,32 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         exact ⟨ρ, h₂, _, .appVal (hr₂.isValue hv), fun _ _ h => h, hc.widen, hbody.subst hr₂ x⟩
   | pairCong₁ _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | pair he₁ _ =>
-      cases hr with
-      | pair hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
-        exact ⟨ρ', h₂', _, .pairCong₁ s₂, hρ, hc', .pair hr' (hr₂.mono hρ)⟩
+    obtain ⟨_, _, he₁, _, _⟩ := ht.pair_inv
+    cases hr with
+    | pair hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+      exact ⟨ρ', h₂', _, .pairCong₁ s₂, hρ, hc', .pair hr' (hr₂.mono hρ)⟩
   | pairCong₂ hv _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | pair _ he₂ =>
-      cases hr with
-      | pair hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
-        exact ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv) s₂, hρ, hc', .pair (hr₁.mono hρ) hr'⟩
+    obtain ⟨_, _, _, he₂, _⟩ := ht.pair_inv
+    cases hr with
+    | pair hr₁ hr₂ =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
+      exact ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv) s₂, hρ, hc', .pair (hr₁.mono hρ) hr'⟩
   | fstCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | fst he =>
-      cases hr with
-      | fst hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
-        exact ⟨ρ', h₂', _, .fstCong s₂, hρ, hc', .fst hr'⟩
+    obtain ⟨_, _, he, _⟩ := ht.fst_inv
+    cases hr with
+    | fst hr =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+      exact ⟨ρ', h₂', _, .fstCong s₂, hρ, hc', .fst hr'⟩
   | sndCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | snd he =>
-      cases hr with
-      | snd hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
-        exact ⟨ρ', h₂', _, .sndCong s₂, hρ, hc', .snd hr'⟩
+    obtain ⟨_, _, he, _⟩ := ht.snd_inv
+    cases hr with
+    | snd hr =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+      exact ⟨ρ', h₂', _, .sndCong s₂, hρ, hc', .snd hr'⟩
   | fstVal hv₁ hv₂ =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -631,12 +619,11 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         exact ⟨ρ, h₂, _, .sndVal (hr₁.isValue hv₁) (hr₂.isValue hv₂), fun _ _ h => h, hc.widen, hr₂⟩
   | toImmCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    cases ht with
-    | toImm he _ =>
-      cases hr with
-      | toImm hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
-        exact ⟨ρ', h₂', _, .toImmCong s₂, hρ, hc', .toImm hr'⟩
+    obtain ⟨_, _, _, he, _, _⟩ := ht.toImm_inv
+    cases hr with
+    | toImm hr =>
+      obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+      exact ⟨ρ', h₂', _, .toImmCong s₂, hρ, hc', .toImm hr'⟩
   | toImmVal hv hcp =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
@@ -646,7 +633,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         hcp.sim (m₂ := []) (fun a w ha => let ⟨_, hσ⟩ := hh.mut_of_tag ha; hM a _ _ hσ (by intro h; cases h)) hc hr
           ⟨fun _ _ _ _ => .inl ⟨rfl, rfl⟩, fun _ _ h => by simp at h⟩ (fun _ _ h => by simp at h)
       exact ⟨ρ', h₂', v₂', .toImmVal (hr.isValue hv) hf₂, hρ, hc', hr'⟩
-  | toImmKeep _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _; cases ht
+  | toImmKeep _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _; exact nomatch ht.toImm_inv.1
 
 /-- However many steps the first run takes, the second takes them too, and
 they still correspond. -/

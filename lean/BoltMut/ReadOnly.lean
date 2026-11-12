@@ -41,19 +41,12 @@ object `mut`, or seen as `ro`. -/
 theorem HasType.newRo_inv {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
     {x : Nat} {e : Expr} {t : Ty} (h : HasType fns σ Δ io Γ (Expr.newRo x e) t) :
     ∃ s, HasType fns σ Δ io Γ e s ∧ Sub Δ (.cell .mutable s) t := by
-  cases h with
-  | letE h₁ h₂ =>
-    cases h₁ with
-    | new he _ =>
-      cases h₂ with
-      | var hx =>
-        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-        subst hx
-        exact ⟨_, he, .refl _⟩
-      | varSub hx hs =>
-        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-        subst hx
-        exact ⟨_, he, hs⟩
+  obtain ⟨t₁, t₂, h₁, h₂, hs⟩ := h.letE_inv
+  obtain ⟨s, he, _, hs₁⟩ := h₁.new_inv
+  obtain ⟨s', hx, hs₂⟩ := h₂.var_inv
+  simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+  subst hx
+  exact ⟨s, he, hs₁.trans (hs₂.trans hs)⟩
 
 /-- A `ro` literal can hold a value of a type parameter, with no
 assumption: `x : T` is seen as `ro T`, which a `ro` object can hold. -/
@@ -81,19 +74,15 @@ example (t : Ty) : ¬ HasType [] [] .none false
     ((Ctx.empty.update 0 (.cell .mutable .int)))
     (.new false (.pair (.var 0) (.int 1))) t := by
   intro h
-  cases h with
-  | new hp hd =>
-    cases hp with
-    | pair hx _ =>
-      cases hx with
-      | var hx =>
-        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-        subst hx
-        exact nomatch Le.none_immutable hd.1.1
-      | varSub hx hs =>
-        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-        subst hx
-        rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1.1
+  obtain ⟨s, hp, hd, _⟩ := h.new_inv
+  obtain ⟨a, b, hx, _, hs⟩ := hp.pair_inv
+  -- Nothing is seen as `ro` in what's `imm` all the way down.
+  cases hs.eq_of_imm hd
+  obtain ⟨s₀, hx, hs₀⟩ := hx.var_inv
+  cases hs₀.eq_of_imm hd.1
+  simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+  subst hx
+  exact nomatch Le.none_immutable hd.1.1
 
 /-- A `ro` literal holding a `T` with nothing assumed: `ro (ro T)`, as in
 #415's `match (a, b)`. -/

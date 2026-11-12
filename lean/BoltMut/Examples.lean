@@ -16,28 +16,20 @@ example : HasType [] [] .none false Ctx.empty (.letE 0 (.new true (.int 1)) (.se
 example (t : Ty) :
     ¬ HasType [] [] .none false Ctx.empty (.letE 0 (.new false (.int 1)) (.set (.var 0) (.int 2))) t := by
   intro h
-  cases h with
-  | letE h₁ h₂ =>
-    cases h₁ with
-    | new _ _ =>
-      cases h₂ with
-      | set hx _ =>
-        cases hx with
-        | var hx => simp [Ctx.update, muOf] at hx
-        | varSub hx hs =>
-          -- Seeing it as `ro` doesn't make it changeable either.
-          simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-          subst hx
-          cases hs
+  obtain ⟨t₁, _, h₁, h₂, _⟩ := h.letE_inv
+  obtain ⟨_, _, _, hs₁⟩ := h₁.new_inv
+  obtain ⟨_, hx, _, _⟩ := h₂.set_inv
+  -- Seeing it as `ro` doesn't make it changeable either.
+  cases (hs₁.trans hx.var_update).to_cell_inv (by simp)
 
 /-- `[mut [1]]`: an `imm` object can't hold a `mut` one, since `imm` is
 deep. -/
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.new false (.new true (.int 1))) t := by
   intro h
-  cases h with
-  | new hin hd =>
-    cases hin with
-    | new _ _ => exact nomatch Le.none_immutable hd.1
+  obtain ⟨_, hin, hd, _⟩ := h.new_inv
+  obtain ⟨_, _, _, hs⟩ := hin.new_inv
+  cases hs.eq_of_imm hd
+  exact nomatch Le.none_immutable hd.1
 
 /-- A generic function that reads what it's given:
 `fn first(xs: 'm [i32]) -> i32 = xs[0]`, with the mutability `'m` as its
@@ -67,14 +59,8 @@ example : HasType [first] [] .none false Ctx.empty (.call 0 [.immutable] [] (.ne
 example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int)) (.set (.var 0) (.int 1)) t := by
   intro h
-  cases h with
-  | set hx _ =>
-    cases hx with
-    | var hx => simp [Ctx.update] at hx
-    | varSub hx hs =>
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-      subst hx
-      cases hs
+  obtain ⟨_, hx, _, _⟩ := h.set_inv
+  cases hx.var_update.to_cell_inv (by simp)
 
 /-! ## Closures -/
 
@@ -89,22 +75,13 @@ down, and `c` is `mut`. -/
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.lam false 1 (.set (.var 0) (.int 1)))) t := by
   intro h
-  cases h with
-  | letE h₁ h₂ =>
-    cases h₁ with
-    | new _ _ =>
-      cases h₂ with
-      | lam _ himm hb =>
-        cases hb with
-        | set hx _ =>
-          cases hx with
-          | var hx =>
-            simp only [Ctx.update] at hx
-            exact nomatch Le.none_immutable (himm rfl 0 _ hx).1
-          | varSub hx hs =>
-            cases hs.to_cell_inv (by simp)
-            simp only [Ctx.update] at hx
-            exact nomatch Le.none_immutable (himm rfl 0 _ hx).1
+  obtain ⟨_, _, _, h₂, _⟩ := h.letE_inv
+  obtain ⟨_, _, _, _, himm, hb, _⟩ := h₂.lam_inv
+  obtain ⟨_, hx, _, _⟩ := hb.set_inv
+  obtain ⟨s₀, hx, hs⟩ := hx.var_inv
+  cases hs.to_cell_inv (by simp)
+  simp only [Ctx.update] at hx
+  exact nomatch Le.none_immutable (himm rfl 0 _ hx).1
 
 /-- The hole from #244: `let c = mut [0]; [|| c[0] = 1]`, an `imm` object
 holding a closure that changes `c`, is rejected, since the closure is
@@ -112,12 +89,11 @@ holding a closure that changes `c`, is rejected, since the closure is
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.new false (.lam true 1 (.set (.var 0) (.int 1))))) t := by
   intro h
-  cases h with
-  | letE _ h₂ =>
-    cases h₂ with
-    | new hl hd =>
-      cases hl with
-      | lam _ _ _ => exact nomatch Le.none_immutable hd.none_fn
+  obtain ⟨_, _, _, h₂, _⟩ := h.letE_inv
+  obtain ⟨_, hl, hd, _⟩ := h₂.new_inv
+  obtain ⟨_, _, _, _, _, _, hs⟩ := hl.lam_inv
+  cases hs.eq_of_imm hd
+  exact nomatch Le.none_immutable hd.none_fn
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
@@ -153,39 +129,26 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.pair (.new true (.int 1)) (.int 0)))
       (.new false (.pair (.fst (.get (.var 0))) (.int 5)))) t := by
   intro h
-  cases h with
-  | letE h₁ h₂ =>
-    cases h₁ with
-    | new hl _ =>
-      cases hl with
-      | pair hp₁ _ =>
-        cases hp₁ with
-        | new _ _ =>
-          cases h₂ with
-          | new hp hd =>
-            cases hp with
-            | pair ha _ =>
-              cases ha with
-              | fst hg =>
-                cases hg with
-                | get hv =>
-                  cases hv with
-                  | var hx =>
-                    simp only [Ctx.update, ite_true, Option.some.injEq, Ty.cell.injEq, Ty.prod.injEq] at hx
-                    obtain ⟨_, rfl, _⟩ := hx
-                    exact nomatch Le.none_immutable hd.1.1
-                  | varSub hx hs =>
-                    -- Seeing `l.a` as `ro` doesn't help: an `imm` object
-                    -- can't hold a `ro` one either.
-                    simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-                    subst hx
-                    rcases hs.cell_inv with h | ⟨s, h, hs', _⟩
-                    · cases h
-                      exact nomatch Le.none_immutable hd.1.1
-                    · cases h
-                      obtain ⟨a', b', h', ha', _⟩ := hs'.prod_inv
-                      cases h'
-                      rcases ha'.cell_inv with h | ⟨_, h, _⟩ <;> (cases h; exact nomatch Le.none_immutable hd.1.1)
+  obtain ⟨t₁, _, h₁, h₂, _⟩ := h.letE_inv
+  obtain ⟨s, hl, _, hs₁⟩ := h₁.new_inv
+  obtain ⟨a, _, hp₁, _, hsp⟩ := hl.pair_inv
+  obtain ⟨_, _, _, hsa⟩ := hp₁.new_inv
+  obtain ⟨_, hp, hd, _⟩ := h₂.new_inv
+  obtain ⟨a', _, ha, _, hsp'⟩ := hp.pair_inv
+  cases hsp'.eq_of_imm hd
+  obtain ⟨a'', _, hg, hsa'⟩ := ha.fst_inv
+  obtain ⟨_, _, hv, hs''⟩ := hg.get_inv
+  obtain ⟨a₀, b₀, rfl, ha₀, _⟩ := hs''.to_prod_inv
+  -- Seeing `l.a` as `ro` doesn't help: an `imm` object can't hold a `ro`
+  -- one either.
+  have hss : Sub .none s (.prod a₀ b₀) := by
+    rcases (hs₁.trans hv.var_update).cell_inv with h | ⟨_, h, hs', _⟩
+    · cases h; exact .refl _
+    · cases h; exact hs'
+  obtain ⟨_, _, h, ha', _⟩ := (hsp.trans hss).prod_inv
+  cases h
+  cases (hsa.trans (ha'.trans (ha₀.trans hsa'))).eq_of_imm hd.1
+  exact nomatch Le.none_immutable hd.1.1
 
 /-- But `Line { a: Point { x: 0 }, ..l }` gives the shared field anew, and
 copies only the number. -/
@@ -207,27 +170,13 @@ whatever `wrap` is called with. -/
 example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.tparam 0)) (.new false (.var 0)) t := by
   intro h
-  cases h with
-  | new hx hd =>
-    cases hx with
-    | var hx =>
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-      subst hx
-      obtain ⟨μ', hμ', hle⟩ := hd
-      rcases hμ' with rfl | hmem
-      · exact nomatch Le.none_immutable hle
-      · simp [Assume.none] at hmem
-    | varSub hx hs =>
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-      subst hx
-      cases hs with
-      | refl =>
-        obtain ⟨μ', hμ', hle⟩ := hd
-        rcases hμ' with rfl | hmem
-        · exact nomatch Le.none_immutable hle
-        · simp [Assume.none] at hmem
-      -- Seen as `ro T`, it's still more than `imm`.
-      | tparam => exact nomatch Le.none_immutable hd
+  obtain ⟨_, hx, hd, _⟩ := h.new_inv
+  -- Seen as `ro T`, it would still be more than `imm`.
+  cases hx.var_update.eq_of_imm hd
+  obtain ⟨μ', hμ', hle⟩ := hd
+  rcases hμ' with rfl | hmem
+  · exact nomatch Le.none_immutable hle
+  · simp [Assume.none] at hmem
 
 /-- `mut Box { item: x }` is fine without one: a `mut` box can hold
 anything. -/
@@ -268,12 +217,11 @@ example : HasType [wrap] [] .none false Ctx.empty
 example (e : Expr) (t : Ty) :
     ¬ HasType [wrap] [] .none false Ctx.empty (.call 0 [] [.cell .mutable .int] e) t := by
   intro h
-  cases h with
-  | call hf hs _ =>
-    simp at hf
-    subst hf
-    have := hs.2.1 (0, .immutable) (by simp [wrap, wrapAssume])
-    exact nomatch Le.none_immutable this.1
+  obtain ⟨_, hf, hs, _, _⟩ := h.call_inv
+  simp at hf
+  subst hf
+  have := hs.2.1 (0, .immutable) (by simp [wrap, wrapAssume])
+  exact nomatch Le.none_immutable this.1
 
 /-- A field with a mutability of its own: `struct VecIter['v] { vec: 'v [i32],
 next: i32 }` is `cell m (prod (cell 'v int) int)`. A `mut` iterator can hold
@@ -286,20 +234,12 @@ example : HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int))
 example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int))
     (.new false (.pair (.var 0) (.int 0))) t := by
   intro h
-  cases h with
-  | new hp hd =>
-    cases hp with
-    | pair hx _ =>
-      cases hx with
-      | var hx =>
-        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-        subst hx
-        exact nomatch Le.none_immutable hd.1.1
-      | varSub hx hs =>
-        -- Seen as `ro`, it's still more than `imm`.
-        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-        subst hx
-        rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1.1
+  obtain ⟨_, hp, hd, _⟩ := h.new_inv
+  obtain ⟨_, _, hx, _, hs⟩ := hp.pair_inv
+  -- Seen as `ro`, it would still be more than `imm`.
+  cases hs.eq_of_imm hd
+  cases hx.var_update.eq_of_imm hd.1
+  exact nomatch Le.none_immutable hd.1.1
 
 /-- ...unless the function assumes `'v ⊑ imm`. -/
 example : HasType [] [] { mus := [(.param 0, .immutable)] } false (Ctx.empty.update 0 (.cell (.param 0) .int))
@@ -309,7 +249,7 @@ example : HasType [] [] { mus := [(.param 0, .immutable)] } false (Ctx.empty.upd
 /-! ## Read-only views (#320)
 
 A `mut` or `imm` object can be seen as `ro`, which reads it but can't
-change it. Subtyping happens at variables, so an argument is named first. -/
+change it. -/
 
 /-- `fn peek(xs: ro [i32]) -> i32 = xs[0]`. -/
 def peek : Fn :=
@@ -350,32 +290,18 @@ what it sees. -/
 example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.set (.var 0) (.int 1)) t := by
   intro h
-  cases h with
-  | set hx _ =>
-    cases hx with
-    | var hx => simp [Ctx.update] at hx
-    | varSub hx hs =>
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-      subst hx
-      cases hs
+  obtain ⟨_, hx, _, _⟩ := h.set_inv
+  cases hx.var_update.to_cell_inv (by simp)
 
 /-- `[xs]` with `xs : ro [i32]` is rejected: an `imm` object can't hold a
 `ro` one, since what's seen as `ro` may change. -/
 example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.new false (.var 0)) t := by
   intro h
-  cases h with
-  | new hx hd =>
-    cases hx with
-    | var hx =>
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-      subst hx
-      exact nomatch Le.none_immutable hd.1
-    | varSub hx hs =>
-      -- However it's seen, `xs` is still `ro`.
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-      subst hx
-      rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1
+  obtain ⟨_, hx, hd, _⟩ := h.new_inv
+  -- However it's seen, `xs` is still `ro`.
+  cases hx.var_update.eq_of_imm hd
+  exact nomatch Le.none_immutable hd.1
 
 /-- `fn first[T](xs: ro [T]) -> ro T = xs[0]`: a `ro` view of an array of
 any `T`, with nothing assumed. What's read through it is `ro T`. -/
@@ -451,11 +377,10 @@ example : HasType [] [] .none false Ctx.empty (.toImm false (.new true (.new tru
 must be `imm` already. -/
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.toImm false (.lam true 0 .unit)) t := by
   intro h
-  cases h with
-  | toImm he hd =>
-    cases he with
-    | lam _ _ _ =>
-      cases hd with
-      | asIs h => exact nomatch Le.none_immutable h.none_fn
+  obtain ⟨_, _, _, he, hd, _⟩ := h.toImm_inv
+  obtain ⟨_, _, _, _, _, _, hs⟩ := he.lam_inv
+  obtain ⟨_, _, rfl⟩ := hs.of_fn
+  cases hd with
+  | asIs h => exact nomatch Le.none_immutable h.none_fn
 
 end BoltMut

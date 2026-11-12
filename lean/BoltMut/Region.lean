@@ -204,15 +204,15 @@ theorem MemoShape.mono {h h' : Heap} {m m' : List (Nat × Nat)} (hs : MemoShape 
 theorem lam_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {io : Bool} {Γ : Ctx} {b : Bool}
     {x : Nat} {e : Expr} {t : Ty} (ht : HasType fns σ .none io Γ (.lam b x e) t) (hf : t.Freezable) :
     ∀ l, e.HasLoc l → ∃ w, h[l]? = some (false, w) := by
-  cases ht with
-  | lam _ _ hb =>
-    intro l hl
-    cases b with
-    | true => exact (nomatch (show Le .none .mutable .immutable from hf).none_immutable)
-    | false =>
-      obtain ⟨s, hσ⟩ := hb.hasLoc_imm (by simp) hl
-      obtain ⟨_, _, w, hw, _⟩ := hh.2 _ _ _ hσ
-      exact ⟨w, hw⟩
+  obtain ⟨_, _, _, _, _, hb, hs⟩ := ht.lam_inv
+  obtain ⟨_, _, rfl⟩ := hs.of_fn
+  intro l hl
+  cases b with
+  | true => exact (nomatch (show Le .none .mutable .immutable from hf).none_immutable)
+  | false =>
+    obtain ⟨s, hσ⟩ := hb.hasLoc_imm (by simp) hl
+    obtain ⟨_, _, w, hw, _⟩ := hh.2 _ _ _ hσ
+    exact ⟨w, hw⟩
 
 /-- A type's size: what an object holding a `t` is bigger than. -/
 def Ty.size : Ty → Nat
@@ -251,9 +251,8 @@ theorem Freeze.key_size {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)}
     cases hw₀
     -- `t` is `l`'s type, seen through `ro` or not.
     have hts : t.size = s.size + 1 := by
-      cases ht with
-      | loc h₁ _ => rw [hσ] at h₁; cases h₁; rfl
-      | locSub h₁ _ hsub => rw [hσ] at h₁; cases h₁; rw [← hsub.size]; rfl
+      obtain ⟨_, _, h₁, _, hsub⟩ := ht.loc_inv
+      rw [hσ] at h₁; cases h₁; rw [← hsub.size]; rfl
     rw [List.lookup_cons_nat] at ha
     split at ha
     · rename_i hal
@@ -265,26 +264,31 @@ theorem Freeze.key_size {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)}
     intro σ io Γ t hh hv ht hf hmo a c ha hn
     cases hv with
     | pair hv₁ hv₂ =>
-      cases ht with
-      | @pair _ _ _ _ ta tb ht₁ ht₂ =>
-        cases h₁a : m₁.lookup a with
-        | none =>
-          obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ hf.1 hmo
-          obtain ⟨s', h₁', h₂'⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf.2 hmo₁ a c ha h₁a
-          -- It's an old location, since it was copied.
-          have hlt : a < σ.length := by
-            rcases hc₂.keys ha with h₃ | ⟨hr, _, _⟩
-            · rw [h₁a] at h₃; cases h₃
-            · obtain ⟨w, hw⟩ := hr.mut
-              by_cases hge : a < h.length
-              · rw [hh.1] at hge; exact hge
-              · cases hc₁.ext_imm a (by omega) true w hw
-          obtain ⟨p, hp⟩ : ∃ p, σ[a]? = some p := ⟨_, List.getElem?_eq_getElem hlt⟩
-          rw [hx₁ _ _ hp] at h₁'
-          exact ⟨s', hp.trans h₁', by simp [Ty.size]; omega⟩
-        | some c₁ =>
-          obtain ⟨s', h₁', h₂'⟩ := ih₁ hh hv₁ ht₁ hf.1 hmo a c₁ h₁a hn
-          exact ⟨s', h₁', by simp [Ty.size]; omega⟩
+      -- At the types of its parts, whose sizes seeing them as `ro` keeps.
+      obtain ⟨ta, tb, ht₁, ht₂, hsp⟩ := ht.pair_inv
+      obtain ⟨_, _, rfl, hsa', hsb'⟩ := hsp.prod_inv
+      have hf₁ := hsa'.imm.2 hf.1
+      have hf₂ := hsb'.imm.2 hf.2
+      have hsa := hsa'.size
+      have hsb := hsb'.size
+      cases h₁a : m₁.lookup a with
+      | none =>
+        obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ hf₁ hmo
+        obtain ⟨s', h₁', h₂'⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf₂ hmo₁ a c ha h₁a
+        -- It's an old location, since it was copied.
+        have hlt : a < σ.length := by
+          rcases hc₂.keys ha with h₃ | ⟨hr, _, _⟩
+          · rw [h₁a] at h₃; cases h₃
+          · obtain ⟨w, hw⟩ := hr.mut
+            by_cases hge : a < h.length
+            · rw [hh.1] at hge; exact hge
+            · cases hc₁.ext_imm a (by omega) true w hw
+        obtain ⟨p, hp⟩ : ∃ p, σ[a]? = some p := ⟨_, List.getElem?_eq_getElem hlt⟩
+        rw [hx₁ _ _ hp] at h₁'
+        exact ⟨s', hp.trans h₁', by simp [Ty.size]; omega⟩
+      | some c₁ =>
+        obtain ⟨s', h₁', h₂'⟩ := ih₁ hh hv₁ ht₁ hf₁ hmo a c₁ h₁a hn
+        exact ⟨s', h₁', by simp [Ty.size]; omega⟩
 
 /-- **What a copy is.** The value's copy is the value with each copied
 object replaced by its copy, and each copy holds what its original does,
@@ -347,12 +351,14 @@ theorem Freeze.shape {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
     intro σ io Γ t hh hv ht hf hmo hs
     cases hv with
     | pair hv₁ hv₂ =>
-      cases ht with
-      | pair ht₁ ht₂ =>
-        obtain ⟨hr₁, hs₁⟩ := ih₁ hh hv₁ ht₁ hf.1 hmo hs
-        obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ hf.1 hmo
-        obtain ⟨hr₂, hs₂⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf.2 hmo₁ hs₁
-        exact ⟨.pair (hr₁.mono fun _ _ h => h.mono hc₂.prefix fun _ _ h => hc₂.lookup_keep h) hr₂, hs₂⟩
+      obtain ⟨_, _, ht₁, ht₂, hsp⟩ := ht.pair_inv
+      obtain ⟨_, _, rfl, ha, hb⟩ := hsp.prod_inv
+      have hf₁ := ha.imm.2 hf.1
+      have hf₂ := hb.imm.2 hf.2
+      obtain ⟨hr₁, hs₁⟩ := ih₁ hh hv₁ ht₁ hf₁ hmo hs
+      obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ hf₁ hmo
+      obtain ⟨hr₂, hs₂⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf₂ hmo₁ hs₁
+      exact ⟨.pair (hr₁.mono fun _ _ h => h.mono hc₂.prefix fun _ _ h => hc₂.lookup_keep h) hr₂, hs₂⟩
 
 /-- Two expressions related to the same one are related to each other,
 through it. -/

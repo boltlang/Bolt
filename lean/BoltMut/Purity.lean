@@ -106,8 +106,8 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   induction hs with
   | newCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | new he _ => exact ih hh he hn hc hhc
+    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    exact ih hh he hn hc hhc
   | @newVal e b _ =>
     intro σ t n A hh _ hn hc hhc
     refine ⟨fun l hl _ => List.getElem?_append_left (by omega), by simp; omega,
@@ -126,8 +126,8 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
       exact hc
   | getCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | get he => exact ih hh he hn hc hhc
+    obtain ⟨_, _, he, _⟩ := ht.get_inv
+    exact ih hh he hn hc hhc
   | @getLoc l b v hl =>
     intro σ t n A hh ht hn hc hhc
     refine ⟨fun _ _ _ => rfl, hn, ?_, hhc⟩
@@ -141,59 +141,55 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
       exact clean_of_deepImm hwv hwt hd
   | setCong₁ _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | set he₁ _ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
+    obtain ⟨_, he₁, _, _⟩ := ht.set_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
   | setCong₂ _ _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | set _ he₂ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
+    obtain ⟨_, _, he₂, _⟩ := ht.set_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
   | @setLoc l₀ b w₀ v hl _ =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | set he₁ _ =>
-      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
-      cases hl'
-      · -- The location written is `mut`, so it's new or allowed.
-        have hw : n ≤ l₀ ∨ A l₀ := by
-          rcases hc l₀ (.inl rfl) with h₁ | h₁ | ⟨t₀, ht₀⟩
-          · exact .inl h₁
-          · exact .inr h₁
-          · rw [hσ] at ht₀
-            cases ht₀
-        refine ⟨?_, by simp; omega, fun l hl => hl.elim, ?_⟩
-        · intro l hl hA
-          have hne : l₀ ≠ l := by
-            rintro rfl
-            rcases hw with h₁ | h₁
-            · omega
-            · exact hA h₁
-          exact List.getElem?_set_ne hne
-        · intro l b' w hA hw'
-          by_cases heq : l₀ = l
-          · subst heq
-            rw [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hl).1] at hw'
-            cases hw'
-            exact fun l' hl' => hc l' (.inr hl')
-          · rw [List.getElem?_set_ne heq] at hw'
-            exact hhc l b' w hA hw'
+    obtain ⟨_, he₁, _, _⟩ := ht.set_inv
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    cases hl'
+    · -- The location written is `mut`, so it's new or allowed.
+      have hw : n ≤ l₀ ∨ A l₀ := by
+        rcases hc l₀ (.inl rfl) with h₁ | h₁ | ⟨t₀, ht₀⟩
+        · exact .inl h₁
+        · exact .inr h₁
+        · rw [hσ] at ht₀
+          cases ht₀
+      refine ⟨?_, by simp; omega, fun l hl => hl.elim, ?_⟩
+      · intro l hl hA
+        have hne : l₀ ≠ l := by
+          rintro rfl
+          rcases hw with h₁ | h₁
+          · omega
+          · exact hA h₁
+        exact List.getElem?_set_ne hne
+      · intro l b' w hA hw'
+        by_cases heq : l₀ = l
+        · subst heq
+          rw [List.getElem?_set_self (List.getElem?_eq_some_iff.mp hl).1] at hw'
+          cases hw'
+          exact fun l' hl' => hc l' (.inr hl')
+        · rw [List.getElem?_set_ne heq] at hw'
+          exact hhc l b' w hA hw'
   | letCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | letE he₁ _ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
+    obtain ⟨_, _, he₁, _, _⟩ := ht.letE_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
   | letVal _ =>
     intro σ t n A _ _ hn hc hhc
     exact ⟨fun _ _ _ => rfl, hn,
       fun l hl => (Expr.hasLoc_subst hl).elim (fun h => hc l (.inr h)) (fun h => hc l (.inl h)), hhc⟩
   | callCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | call _ _ he => exact ih hh he hn hc hhc
+    obtain ⟨_, _, _, he, _⟩ := ht.call_inv
+    exact ih hh he hn hc hhc
   | @callVal f fn ms τs v hfn _ =>
     intro σ t n A _ _ hn hc hhc
     -- A function's body has no locations: only its argument does.
@@ -202,40 +198,36 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
       fun l hl => (Expr.hasLoc_subst hl).elim (fun h => (hb.not_hasLoc l h).elim) (hc l), hhc⟩
   | appCong₁ _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | app he₁ _ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
+    obtain ⟨_, _, _, he₁, _, _⟩ := ht.app_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
   | appCong₂ _ _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | app _ he₂ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
+    obtain ⟨_, _, _, _, he₂, _⟩ := ht.app_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
   | appVal _ =>
     intro σ t n A _ _ hn hc hhc
     exact ⟨fun _ _ _ => rfl, hn,
       fun l hl => (Expr.hasLoc_subst hl).elim (fun h => hc l (.inl h)) (fun h => hc l (.inr h)), hhc⟩
   | pairCong₁ _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | pair he₁ _ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
+    obtain ⟨_, _, he₁, _, _⟩ := ht.pair_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
   | pairCong₂ _ _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | pair _ he₂ =>
-      obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
-      exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
+    obtain ⟨_, _, _, he₂, _⟩ := ht.pair_inv
+    obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
+    exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
   | fstCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | fst he => exact ih hh he hn hc hhc
+    obtain ⟨_, _, he, _⟩ := ht.fst_inv
+    exact ih hh he hn hc hhc
   | sndCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | snd he => exact ih hh he hn hc hhc
+    obtain ⟨_, _, he, _⟩ := ht.snd_inv
+    exact ih hh he hn hc hhc
   | fstVal _ _ =>
     intro σ t n A _ _ hn hc hhc
     exact ⟨fun _ _ _ => rfl, hn, fun l hl => hc l (.inl hl), hhc⟩
@@ -244,8 +236,8 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     exact ⟨fun _ _ _ => rfl, hn, fun l hl => hc l (.inr hl), hhc⟩
   | toImmCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    cases ht with
-    | toImm he _ => exact ih hh he hn hc hhc
+    obtain ⟨_, _, _, he, _, _⟩ := ht.toImm_inv
+    exact ih hh he hn hc hhc
   | toImmVal _ hc' =>
     intro σ t n A hh _ hn hc hhc
     obtain ⟨hcv, hhc', _⟩ := Freeze.clean hh hn hc' ⟨[], by simp⟩ (fun _ _ h => by simp at h) hc hhc
@@ -254,7 +246,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     rw [he]
     simp
     omega
-  | toImmKeep _ _ => intro σ t n A hh ht; cases ht
+  | toImmKeep _ _ => intro σ t n A hh ht; exact nomatch ht.toImm_inv.1
 
 /-- However many steps a clean program takes, the locations that are old
 and not allowed keep their values. -/

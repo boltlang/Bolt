@@ -178,9 +178,8 @@ theorem MemoOk.extend {σ σ' : HeapTy} {m : List (Nat × Nat)} (hm : MemoOk σ 
 theorem loc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {l : Nat} {t : Ty}
     (ht : HasType fns σ .none io Γ (.loc l) t) :
     ∃ m s, σ[l]? = some (m, s) ∧ t.imm = Ty.imm (.cell m s) ∧ (t.Freezable → s.Freezable) := by
-  cases ht with
-  | loc h _ => exact ⟨_, _, h, rfl, id⟩
-  | locSub h _ hs => exact ⟨_, _, h, hs.imm.1.symm, hs.imm.2⟩
+  obtain ⟨_, _, h, _, hs⟩ := ht.loc_inv
+  exact ⟨_, _, h, hs.imm.1.symm, hs.imm.2⟩
 
 /-- **A copy is well-typed.** It has the value's type with each cell
 `imm`, in a heap typing that only grows. -/
@@ -193,16 +192,19 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
   induction hc with
   | unit =>
     intro σ io Γ t hh _ ht _ hmo
-    cases ht
+    cases ht.unit_inv
     exact ⟨σ, Extends.refl σ, hh, .unit, .unit, hmo⟩
   | int =>
     intro σ io Γ t hh _ ht _ hmo
-    cases ht
+    cases ht.int_inv
     exact ⟨σ, Extends.refl σ, hh, .int, .int, hmo⟩
   | lam =>
     intro σ io Γ t hh _ ht _ hmo
-    cases ht with
-    | lam hc himm hb => exact ⟨σ, Extends.refl σ, hh, .lam, .lam hc himm hb, hmo⟩
+    -- A closure isn't copied: its type is a function type, which `imm`
+    -- leaves as it is.
+    obtain ⟨_, _, _, _, _, _, hs⟩ := ht.lam_inv
+    obtain ⟨_, _, rfl⟩ := hs.of_fn
+    exact ⟨σ, Extends.refl σ, hh, .lam, ht, hmo⟩
   | @imm h m l w hw =>
     intro σ io Γ t hh _ ht _ hmo
     obtain ⟨μ, s, hσ, himm, _⟩ := loc_imm ht
@@ -260,18 +262,16 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
     intro σ io Γ t hh hv ht hf hmo
     cases hv with
     | pair hv₁ hv₂ =>
-      cases ht with
-      | pair ht₁ ht₂ =>
-        obtain ⟨σ₁, hx₁, hh₁, hv₁', ht₁', hmo₁⟩ := ih₁ hh hv₁ ht₁ hf.1 hmo
-        obtain ⟨σ₂, hx₂, hh₂, hv₂', ht₂', hmo₂⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf.2 hmo₁
-        exact ⟨σ₂, hx₁.trans hx₂, hh₂, .pair hv₁' hv₂', .pair (ht₁'.weaken_heap hx₂) ht₂', hmo₂⟩
-
-/-- What a type that isn't a cell or a tuple is a subtype of: only itself. -/
-theorem Sub.to_prod_inv {Δ : Assume} {t a b : Ty} (h : Sub Δ t (.prod a b)) :
-    ∃ a₀ b₀, t = .prod a₀ b₀ ∧ Sub Δ a₀ a ∧ Sub Δ b₀ b := by
-  cases h with
-  | refl => exact ⟨a, b, rfl, .refl _, .refl _⟩
-  | prod ha hb => exact ⟨_, _, rfl, ha, hb⟩
+      -- Copied at the types its parts have: seeing them as `ro` changes
+      -- neither what's copied nor the copy.
+      obtain ⟨a, b, ht₁, ht₂, hs⟩ := ht.pair_inv
+      obtain ⟨heq, hfs⟩ := hs.imm
+      have hf' := hfs hf
+      obtain ⟨σ₁, hx₁, hh₁, hv₁', ht₁', hmo₁⟩ := ih₁ hh hv₁ ht₁ hf'.1 hmo
+      obtain ⟨σ₂, hx₂, hh₂, hv₂', ht₂', hmo₂⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf'.2 hmo₁
+      refine ⟨σ₂, hx₁.trans hx₂, hh₂, .pair hv₁' hv₂', ?_, hmo₂⟩
+      rw [← heq]
+      exact .pair (ht₁'.weaken_heap hx₂) ht₂'
 
 /-- A well-typed value can always be copied, also when it's seen through
 `ro`. -/
@@ -300,21 +300,32 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
     intro σ h m io Γ v t₀ hh hv ht hs₀ hf hmo
     obtain ⟨a₀, b₀, rfl, ha, hb⟩ := hs₀.to_prod_inv
     obtain ⟨v₁, v₂, rfl, hv₁, hv₂⟩ := canonical_prod hv ht
-    cases ht with
-    | pair ht₁ ht₂ =>
-      obtain ⟨h₁, m₁, v₁', hc₁⟩ := iha hh hv₁ ht₁ ha hf.1 hmo
-      obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ (ha.imm.2 hf.1) hmo
-      obtain ⟨h₂, m₂, v₂', hc₂⟩ := ihb hh₁ hv₂ (ht₂.weaken_heap hx₁) hb hf.2 hmo₁
-      exact ⟨_, _, _, .pair hc₁ hc₂⟩
+    obtain ⟨a₁, b₁, ht₁, ht₂, hs₁⟩ := ht.pair_inv
+    obtain ⟨_, _, heq, ha₁, hb₁⟩ := hs₁.to_prod_inv
+    cases heq
+    have ha' := ha₁.trans ha
+    have hb' := hb₁.trans hb
+    obtain ⟨h₁, m₁, v₁', hc₁⟩ := iha hh hv₁ ht₁ ha' hf.1 hmo
+    obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ (ha'.imm.2 hf.1) hmo
+    obtain ⟨h₂, m₂, v₂', hc₂⟩ := ihb hh₁ hv₂ (ht₂.weaken_heap hx₁) hb' hf.2 hmo₁
+    exact ⟨_, _, _, .pair hc₁ hc₂⟩
   | unit | int =>
     intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
     have ht' := ht.value_sub hv hs₀
     cases hv with
     | unit => exact ⟨_, _, _, .unit⟩
     | int => exact ⟨_, _, _, .int⟩
-    | loc => cases ht' with | locSub _ _ hs => cases hs
-    | lam => cases ht'
-    | pair => cases ht'
+    | loc =>
+      obtain ⟨_, _, _, _, hs⟩ := ht'.loc_inv
+      rcases hs.cell_inv with h | ⟨_, h, _⟩ <;> cases h
+    | lam =>
+      obtain ⟨_, _, _, _, _, _, hs⟩ := ht'.lam_inv
+      obtain ⟨_, _, h⟩ := hs.of_fn
+      cases h
+    | pair =>
+      obtain ⟨_, _, _, _, hs⟩ := ht'.pair_inv
+      obtain ⟨_, _, h, _, _⟩ := hs.prod_inv
+      cases h
   | fn μ a r =>
     intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
     obtain ⟨b, x, body, rfl⟩ := canonical_fn hv (ht.value_sub hv hs₀)
@@ -334,6 +345,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
   | int => exact .inl .int
   | loc _ _ | locSub _ _ _ => exact .inl .loc
   | lam _ => exact .inl .lam
+  | sub _ _ ih => exact ih hΓ
   | app he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
@@ -390,7 +402,9 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     · exact .inr ⟨_, _, .callCong hs⟩
 
 /-- Preservation: a step keeps the heap matching a typing that only grew,
-and the program's type. -/
+and the program's type. Each case takes the typing apart up to `sub`
+(`HasType.app_inv` and the others), and makes what it gives a subtype of
+the program's type again. -/
 theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
@@ -398,163 +412,140 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   induction hs with
   | newCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | new he hd =>
-      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .new he' hd⟩
+    obtain ⟨s, he, hd, hs⟩ := ht.new_inv
+    obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+    exact ⟨σ', hx, hh', .sub (.new he' hd) hs⟩
   | @newVal e b hv =>
     intro σ t hh ht
-    cases ht with
-    | @new _ _ _ s _ he hd =>
-      refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, hh.alloc hd hv he, .loc ?_ (fun h => nomatch h)⟩
-      rw [hh.1, List.getElem?_concat_length]
+    obtain ⟨s, he, hd, hs⟩ := ht.new_inv
+    refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, hh.alloc hd hv he, .sub (.loc ?_ (fun h => nomatch h)) hs⟩
+    rw [hh.1, List.getElem?_concat_length]
   | getCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | get he =>
-      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .get he'⟩
+    obtain ⟨m, s, he, hs⟩ := ht.get_inv
+    obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+    exact ⟨σ', hx, hh', .sub (.get he') hs⟩
   | getLoc hl =>
     intro σ t hh ht
-    cases ht with
-    | get he =>
-      cases he with
-      | loc hσ _ =>
-        obtain ⟨_, _, v, hv, _, hvt⟩ := hh.2 _ _ _ hσ
-        rw [hl] at hv
-        cases hv
-        exact ⟨σ, Extends.refl σ, hh, hvt⟩
-      | locSub hσ _ hsub =>
-        -- Read through a `ro` view, the value is seen as `ro` too.
-        obtain ⟨_, hvm, v, hv, hvv, hvt⟩ := hh.2 _ _ _ hσ
-        rw [hl] at hv
-        cases hv
-        rcases hsub.cell_inv with h | ⟨s, h, hs, _⟩
-        · cases h
-          exact ⟨σ, Extends.refl σ, hh, hvt⟩
-        · cases h
-          exact ⟨σ, Extends.refl σ, hh, hvt.value_sub hvv hs⟩
+    obtain ⟨m, s, he, hs⟩ := ht.get_inv
+    obtain ⟨m₀, s₀, hσ, _, hsub⟩ := he.loc_inv
+    obtain ⟨_, _, v, hv, hvv, hvt⟩ := hh.2 _ _ _ hσ
+    rw [hl] at hv
+    cases hv
+    -- Read through a `ro` view, the value is seen as `ro` too.
+    have hs₀ : Sub .none s₀ s := by
+      rcases hsub.cell_inv with h | ⟨s', h, hs', _⟩
+      · cases h; exact .refl _
+      · cases h; exact hs'
+    exact ⟨σ, Extends.refl σ, hh, .sub (.sub hvt hs₀) hs⟩
   | setCong₁ _ ih =>
     intro σ t hh ht
-    cases ht with
-    | set he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
-      exact ⟨σ', hx, hh', .set he₁' (he₂.weaken_heap hx)⟩
+    obtain ⟨s, he₁, he₂, rfl⟩ := ht.set_inv
+    obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+    exact ⟨σ', hx, hh', .set he₁' (he₂.weaken_heap hx)⟩
   | setCong₂ _ _ ih =>
     intro σ t hh ht
-    cases ht with
-    | set he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
-      exact ⟨σ', hx, hh', .set (he₁.weaken_heap hx) he₂'⟩
+    obtain ⟨s, he₁, he₂, rfl⟩ := ht.set_inv
+    obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
+    exact ⟨σ', hx, hh', .set (he₁.weaken_heap hx) he₂'⟩
   | @setLoc l b w v hl hv =>
     intro σ t hh ht
-    cases ht with
-    | set he₁ he₂ =>
-      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
-      cases hl'
-      exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit⟩
+    obtain ⟨s, he₁, he₂, rfl⟩ := ht.set_inv
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    cases hl'
+    exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit⟩
   | letCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | letE he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
-      exact ⟨σ', hx, hh', .letE he₁' (he₂.weaken_heap hx)⟩
+    obtain ⟨t₁, t₂, he₁, he₂, hs⟩ := ht.letE_inv
+    obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+    exact ⟨σ', hx, hh', .sub (.letE he₁' (he₂.weaken_heap hx)) hs⟩
   | letVal hv =>
     intro σ t hh ht
-    cases ht with
-    | letE he₁ he₂ =>
-      exact ⟨σ, Extends.refl σ, hh, he₂.subst_update hv he₁⟩
+    obtain ⟨t₁, t₂, he₁, he₂, hs⟩ := ht.letE_inv
+    exact ⟨σ, Extends.refl σ, hh, .sub (he₂.subst_update hv he₁) hs⟩
   | callCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | call hf' hl he =>
-      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .call hf' hl he'⟩
+    obtain ⟨fn, hf', hl, he, hs⟩ := ht.call_inv
+    obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+    exact ⟨σ', hx, hh', .sub (.call hf' hl he') hs⟩
   | @callVal f fn ms τs v hfn hv =>
     intro σ t hh ht
-    cases ht with
-    | call hf' hs he =>
-      rw [hfn] at hf'
-      cases hf'
-      obtain ⟨hn, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
-      -- The arguments meet what the function assumes, so its body has the
-      -- type with them.
-      have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hs
-      rw [Ctx.inst_update, Ctx.inst_empty] at hb
-      exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he⟩
+    obtain ⟨fn', hf', hsat, he, hs⟩ := ht.call_inv
+    rw [hfn] at hf'
+    cases hf'
+    obtain ⟨hn, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
+    -- The arguments meet what the function assumes, so its body has the
+    -- type with them.
+    have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hsat
+    rw [Ctx.inst_update, Ctx.inst_empty] at hb
+    exact ⟨σ, Extends.refl σ, hh, .sub (hb.subst_update hv he) hs⟩
   | appCong₁ _ ih =>
     intro σ t hh ht
-    cases ht with
-    | app he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
-      exact ⟨σ', hx, hh', .app he₁' (he₂.weaken_heap hx)⟩
+    obtain ⟨m, a, r, he₁, he₂, hr⟩ := ht.app_inv
+    obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+    exact ⟨σ', hx, hh', .sub (.app he₁' (he₂.weaken_heap hx)) hr⟩
   | appCong₂ _ _ ih =>
     intro σ t hh ht
-    cases ht with
-    | app he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
-      exact ⟨σ', hx, hh', .app (he₁.weaken_heap hx) he₂'⟩
+    obtain ⟨m, a, r, he₁, he₂, hr⟩ := ht.app_inv
+    obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
+    exact ⟨σ', hx, hh', .sub (.app (he₁.weaken_heap hx) he₂') hr⟩
   | appVal hv =>
     intro σ t hh ht
-    cases ht with
-    | app he₁ he₂ =>
-      cases he₁ with
-      | lam hc _ hbody =>
-        -- The body of an `imm` closure is typed inside one; outside, it
-        -- has the same type. A closed closure saw nothing but its
-        -- parameter.
-        have hb := (hbody.weaken_ctx (hc.update _ _)).weaken_imm (io' := false) (fun h => nomatch h)
-        exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he₂⟩
+    obtain ⟨m, a, r, he₁, he₂, hr⟩ := ht.app_inv
+    obtain ⟨Γc, a₀, r₀, hc, _, hbody, hs⟩ := he₁.lam_inv
+    obtain ⟨_, rfl, rfl⟩ := hs.fn_inv
+    -- The body of an `imm` closure is typed inside one; outside, it has
+    -- the same type. A closed closure saw nothing but its parameter.
+    have hb := (hbody.weaken_ctx (hc.update _ _)).weaken_imm (io' := false) (fun h => nomatch h)
+    exact ⟨σ, Extends.refl σ, hh, .sub (hb.subst_update hv he₂) hr⟩
   | pairCong₁ _ ih =>
     intro σ t hh ht
-    cases ht with
-    | pair he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
-      exact ⟨σ', hx, hh', .pair he₁' (he₂.weaken_heap hx)⟩
+    obtain ⟨a, b, he₁, he₂, hs⟩ := ht.pair_inv
+    obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+    exact ⟨σ', hx, hh', .sub (.pair he₁' (he₂.weaken_heap hx)) hs⟩
   | pairCong₂ _ _ ih =>
     intro σ t hh ht
-    cases ht with
-    | pair he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
-      exact ⟨σ', hx, hh', .pair (he₁.weaken_heap hx) he₂'⟩
+    obtain ⟨a, b, he₁, he₂, hs⟩ := ht.pair_inv
+    obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
+    exact ⟨σ', hx, hh', .sub (.pair (he₁.weaken_heap hx) he₂') hs⟩
   | fstCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | fst he =>
-      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .fst he'⟩
+    obtain ⟨a, b, he, hs⟩ := ht.fst_inv
+    obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+    exact ⟨σ', hx, hh', .sub (.fst he') hs⟩
   | sndCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | snd he =>
-      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .snd he'⟩
+    obtain ⟨a, b, he, hs⟩ := ht.snd_inv
+    obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+    exact ⟨σ', hx, hh', .sub (.snd he') hs⟩
   | fstVal _ _ =>
     intro σ t hh ht
-    cases ht with
-    | fst he => cases he with
-      | pair h₁ _ => exact ⟨σ, Extends.refl σ, hh, h₁⟩
+    obtain ⟨a, b, he, hs⟩ := ht.fst_inv
+    obtain ⟨a₁, b₁, h₁, _, hs₁⟩ := he.pair_inv
+    obtain ⟨_, _, heq, ha, _⟩ := hs₁.to_prod_inv
+    cases heq
+    exact ⟨σ, Extends.refl σ, hh, .sub (.sub h₁ ha) hs⟩
   | sndVal _ _ =>
     intro σ t hh ht
-    cases ht with
-    | snd he => cases he with
-      | pair _ h₂ => exact ⟨σ, Extends.refl σ, hh, h₂⟩
+    obtain ⟨a, b, he, hs⟩ := ht.snd_inv
+    obtain ⟨a₁, b₁, _, h₂, hs₁⟩ := he.pair_inv
+    obtain ⟨_, _, heq, _, hb⟩ := hs₁.to_prod_inv
+    cases heq
+    exact ⟨σ, Extends.refl σ, hh, .sub (.sub h₂ hb) hs⟩
   | toImmCong _ ih =>
     intro σ t hh ht
-    cases ht with
-    | toImm he hd =>
-      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .toImm he' hd⟩
+    obtain ⟨rfl, s, s', he, hd, hs⟩ := ht.toImm_inv
+    obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+    exact ⟨σ', hx, hh', .sub (.toImm he' hd) hs⟩
   | toImmVal hv hc =>
     intro σ T hh ht
-    cases ht with
-    | toImm he hi =>
-      -- The copy has the type with each cell `imm`, in a heap typing that
-      -- only grew.
-      obtain ⟨heq, hf⟩ := hi.none_eq
-      subst heq
-      obtain ⟨σ', hx, hh', _, ht', _⟩ := hc.typed hh hv he hf (MemoOk.nil σ)
-      exact ⟨σ', hx, hh', ht'⟩
-  | toImmKeep _ _ => intro σ t hh ht; cases ht
+    obtain ⟨_, s, s', he, hi, hs⟩ := ht.toImm_inv
+    -- The copy has the type with each cell `imm`, in a heap typing that
+    -- only grew.
+    obtain ⟨heq, hf⟩ := hi.none_eq
+    subst heq
+    obtain ⟨σ', hx, hh', _, ht', _⟩ := hc.typed hh hv he hf (MemoOk.nil σ)
+    exact ⟨σ', hx, hh', .sub ht' hs⟩
+  | toImmKeep _ _ => intro σ t hh ht; exact nomatch ht.toImm_inv.1
 
 end BoltMut

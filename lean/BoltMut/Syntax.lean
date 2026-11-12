@@ -546,4 +546,55 @@ theorem Sub.eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
   | prod => exact (hp _ _ rfl).elim
   | tparam => exact (hq _ rfl).elim
 
+/-- What's a subtype of a tuple: a tuple. -/
+theorem Sub.to_prod_inv {Δ : Assume} {t a b : Ty} (h : Sub Δ t (.prod a b)) :
+    ∃ a₀ b₀, t = .prod a₀ b₀ ∧ Sub Δ a₀ a ∧ Sub Δ b₀ b := by
+  cases h with
+  | refl => exact ⟨a, b, rfl, .refl _, .refl _⟩
+  | prod ha hb => exact ⟨_, _, rfl, ha, hb⟩
+
+/-- What's a subtype of a cell: a cell. -/
+theorem Sub.to_cell {Δ : Assume} {t t' : Ty} {m : Mu} (h : Sub Δ t (.cell m t')) :
+    ∃ m₀ t₀, t = .cell m₀ t₀ := by
+  cases h with
+  | refl => exact ⟨_, _, rfl⟩
+  | ro => exact ⟨_, _, rfl⟩
+
+/-- What's a subtype of a function type: a function type. -/
+theorem Sub.to_fn {Δ : Assume} {t a r : Ty} {m : Mu} (h : Sub Δ t (.fn m a r)) :
+    ∃ a₀ r₀, t = .fn m a₀ r₀ := by
+  cases h with
+  | refl => exact ⟨_, _, rfl⟩
+
+/-- What a function type is a subtype of: a function type. -/
+theorem Sub.of_fn {Δ : Assume} {m : Mu} {a r t : Ty} (h : Sub Δ (.fn m a r) t) :
+    ∃ a' r', t = .fn m a' r' := by
+  cases h with
+  | refl => exact ⟨_, _, rfl⟩
+
+/-- A function type is a subtype of another when they're the same. -/
+theorem Sub.fn_inv {Δ : Assume} {m m' : Mu} {a a' r r' : Ty} (h : Sub Δ (.fn m a r) (.fn m' a' r')) :
+    m = m' ∧ a = a' ∧ r = r' := by
+  cases h with
+  | refl => exact ⟨rfl, rfl, rfl⟩
+
+/-- What's a subtype of a type with nothing to see as `ro` in it: that type. -/
+theorem Sub.to_eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
+    (hc : ∀ s, t' ≠ .cell .readonly s) (hp : ∀ a b, t' ≠ .prod a b) (hq : ∀ i, t' ≠ .roParam i) :
+    t = t' := by
+  cases h with
+  | refl => rfl
+  | ro => exact (hc _ rfl).elim
+  | prod => exact (hp _ _ rfl).elim
+  | tparam => exact (hq _ rfl).elim
+
+/-- Nothing is seen as `ro` in a type that's `imm` all the way down, so only
+that type is a subtype of it. -/
+theorem Sub.eq_of_imm {t t' : Ty} (h : Sub .none t t') (hd : AtMost .none .immutable t') : t = t' := by
+  induction h with
+  | refl => rfl
+  | ro _ _ => exact nomatch Le.none_immutable hd.1
+  | prod _ _ iha ihb => rw [iha hd.1, ihb hd.2]
+  | tparam => exact nomatch Le.none_immutable hd
+
 end BoltMut

@@ -114,7 +114,7 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     rw [hx] at h
     cases h
   | unit | int | loc | locSub => intro _ _ h; exact h
-  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih
+  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     intro x hx hf
     exact hf.elim (ih₁ x hx) (ih₂ x hx)
