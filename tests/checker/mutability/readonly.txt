@@ -215,3 +215,40 @@ first: forall T. fn(xs: ro [ro T]) -> ro T
 error at `xs[0]`: expected T, found ro T
 error at `[x]`: imm [ro T] holds ro T
 error at `ys`: can't change ro [i32]
+
+================================================================================
+A ro value can't hold a mut one (#442)
+:error
+:test-prelude
+================================================================================
+fn first(t: ro (mut [i32], i32)) { t.0[0] = 1; }
+fn nested(xs: ro [mut [i32]]) { xs[0][0] = 1; }
+--------------------------------------------------------------------------------
+first: fn(t: ro (mut [i32], i32)) -> ()
+nested: fn(xs: ro [mut [i32]]) -> ()
+--------------------------------------------------------------------------------
+error at `t`: ro (mut [i32], i32) holds mut [i32]
+error at `xs`: ro [mut [i32]] holds mut [i32]
+
+================================================================================
+A ro struct or enum can't hold a mut type argument (#443)
+:error
+:test-prelude
+================================================================================
+struct Box[T] { item: T }
+enum Opt[T] { No, Yes(T) }
+fn change(b: ro Box[mut [i32]]) { b.item[0] = 1; }
+fn inside(t: ro (Opt[mut [i32]], i32)) {}
+fn get[T](b: ro Box[T]) -> T = b.item;
+fn leak() = { let xs = get(mut Box { item: mut [1] }); xs[0] = 1; };
+fn fine() = get(mut Box { item: [1] });
+--------------------------------------------------------------------------------
+change: fn(b: ro Box[mut [i32]]) -> ()
+inside: fn(t: ro (Opt[mut [i32]], i32)) -> ()
+get: forall T. fn(b: ro Box[T]) -> T
+leak: fn() -> ()
+fine: fn() -> imm [i32]
+--------------------------------------------------------------------------------
+error at `b`: ro Box[mut [i32]] holds mut [i32]
+error at `t`: ro (Opt[mut [i32]], i32) holds mut [i32]
+error at `get`: ro Box[mut [i32]] holds mut [i32]

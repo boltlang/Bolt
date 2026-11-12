@@ -191,8 +191,9 @@ impl<'db> InferenceResult<'db> {
     }
 
     /// Report the expressions and patterns whose type has a `mut` array or
-    /// struct inside an `imm` one, like `[mut [1]]`: `imm` is deep, so what
-    /// an `imm` value holds can't be changed either. Each such type is
+    /// struct inside an `imm` or `ro` one, like `[mut [1]]`: `imm` and `ro`
+    /// are deep, so what an `imm` value holds can't be changed either, nor
+    /// what's seen as `ro` through it (`mut_inside`). Each such type is
     /// reported once, where it first appears, once the types are resolved.
     pub(crate) fn check_deep_immutability(&mut self, db: &'db dyn Db) {
         let mut seen = Vec::new();
@@ -215,12 +216,13 @@ impl<'db> InferenceResult<'db> {
         let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(outer(e)), t));
         let pats = self.pat_types.iter().map(|(p, t)| (ExprOrPat::Pat(p), t));
         for (at, ty) in exprs.chain(pats) {
-            if let Some((outer, inner)) = mut_inside_imm(db, ty)
-                && !seen.contains(&outer)
-                && !reported.contains(&inner)
+            if let Some(found) = mut_inside(db, ty)
+                && !seen.contains(&found.ty)
+                && !reported.contains(&found.inner)
             {
-                seen.push(outer.clone());
-                self.diagnostics.push(InferenceDiagnostic::MutInsideImm { at, ty: outer, inner });
+                seen.push(found.ty.clone());
+                let MutInside { ty, inner, bound } = found;
+                self.diagnostics.push(InferenceDiagnostic::MutInside { at, ty, inner, bound });
             }
         }
     }
@@ -293,11 +295,12 @@ pub enum InferenceDiagnostic<'db> {
         expr: ExprId,
     },
     /// A type `ty` with a `mut` array or struct, `inner`, inside an `imm`
-    /// one, which can't hold it: `imm` is deep.
-    MutInsideImm {
+    /// or `ro` one, `bound`, which can't hold it: `imm` and `ro` are deep.
+    MutInside {
         at: ExprOrPat,
         ty: Ty<'db>,
         inner: Ty<'db>,
+        bound: Mutability,
     },
     /// An assignment whose left side isn't a variable, a field or an
     /// element, like `1 = 2` or `f() = 3`. `expr` is the left side.
@@ -371,7 +374,7 @@ impl<'db> InferenceDiagnostic<'db> {
                 *from = f(from);
                 *to = f(to);
             }
-            InferenceDiagnostic::MutInsideImm { ty, inner, .. } => {
+            InferenceDiagnostic::MutInside { ty, inner, .. } => {
                 *ty = f(ty);
                 *inner = f(inner);
             }
@@ -402,66 +405,104 @@ struct Expectation<'a, 'db> {
     reason: Reason<'db>,
 }
 
-/// The first `mut` array, struct or function in `ty` that an `imm` array
-/// or struct holds, with the type that holds it. What a function takes and
-/// gives isn't looked into: its type says that, not what it holds, which
-/// its mutability covers. What a struct holds is what its fields do
-/// (`crate::holds`), not its type arguments: an `imm Handler[mut [i32]]`
-/// for `struct Handler[T] { f: fn(T) }` holds nothing `mut`, and a
+/// The first thing in `ty` that an `imm` or `ro` array or struct holds but
+/// can't, with the type that holds it and the bound it breaks:
+///
+/// - What an `imm` value holds can't change: it can't hold a `mut` array,
+///   struct or function, nor one seen as `ro`, which may change.
+/// - What's seen as `ro` can't be changed through it (#320, #442): it can't
+///   hold a `mut` array or struct. A `mut` function can be called through
+///   it, as a `ro` view leaves a closure as it is.
+///
+/// What a function takes is looked into, since a value is passed as it,
+/// like the `ro Box[mut [i32]]` of a `fn get[T](b: ro Box[T])` called
+/// with a `mut Box[mut [i32]]` (#443). What it gives is reported where
+/// it's given, and what it holds is covered by its mutability.
+///
+/// What a struct holds is what its fields do (`crate::holds`), not its
+/// type arguments: an `imm Handler[mut [i32]]` for
+/// `struct Handler[T] { f: fn(T) }` holds nothing `mut`, and a
 /// `mut VecIter[mut [i32], imm]` holds an `imm` array of `mut` ones.
-pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty<'db>)> {
+pub fn mut_inside<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<MutInside<'db>> {
     fn has(ty: &Ty<'_>, mutability: Mutability) -> bool {
         ty.held_mutability() == Some(&Ty::Mutability(mutability))
     }
-    /// Something `mut` that a value of type `ty` is, or holds as a value
-    /// does, in an enum. A struct, tuple or array that isn't `mut` is
-    /// looked into on its own.
-    fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
+    /// Something that a value of type `ty` is, or holds as a value does, in
+    /// an enum, that a value of mutability `bound` can't hold. A struct,
+    /// tuple or array that it can hold is looked into on its own.
+    fn find<'db>(ty: &Ty<'db>, bound: Mutability) -> Option<Ty<'db>> {
         // A `mut` on its own is a mutability argument, like that of
-        // `VecIter[i32, mut]`, whose fields can have it. Something seen as
-        // `ro` may change too (#320).
-        let more_than_imm = [Mutability::Mut, Mutability::ReadOnly];
-        if more_than_imm.iter().any(|&m| has(ty, m) || *ty == Ty::Mutability(m))
-            || matches!(ty, Ty::Ro(_))
-        {
+        // `VecIter[i32, mut]`, whose fields can have it.
+        let found = match bound {
+            // Something seen as `ro` may change too (#320).
+            Mutability::Imm => {
+                [Mutability::Mut, Mutability::ReadOnly]
+                    .iter()
+                    .any(|&m| has(ty, m) || *ty == Ty::Mutability(m))
+                    || matches!(ty, Ty::Ro(_))
+            }
+            Mutability::ReadOnly => {
+                !matches!(ty, Ty::Fn(..))
+                    && (has(ty, Mutability::Mut) || *ty == Ty::Mutability(Mutability::Mut))
+            }
+            Mutability::Mut => false,
+        };
+        if found {
             return Some(ty.clone());
         }
         match ty {
-            Ty::Adt(AdtId::Enum(_), args, ..) => args.iter().find_map(find_mut),
+            Ty::Adt(AdtId::Enum(_), args, ..) => args.iter().find_map(|t| find(t, bound)),
             _ => None,
         }
     }
-    /// Something `mut` that `ty` holds where it must be at most `imm`.
-    fn breaks<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Ty<'db>> {
-        let imm = Ty::Mutability(Mutability::Imm);
+    /// Something that `ty` holds where it must be at most `imm` or `ro`.
+    fn breaks<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<MutInside<'db>> {
+        let bounded = |m: &Ty<'db>| match m {
+            Ty::Mutability(m @ (Mutability::Imm | Mutability::ReadOnly)) => Some(*m),
+            _ => None,
+        };
+        let found = |inner: Option<Ty<'db>>, bound| {
+            inner.map(|inner| MutInside { ty: ty.clone(), inner, bound })
+        };
         match ty {
-            Ty::Array(m, elem) if **m == imm => find_mut(elem),
-            Ty::Tuple(tys, m) if **m == imm => tys.iter().find_map(find_mut),
-            Ty::Record(tys, named, m) if **m == imm => {
-                tys.iter().chain(named.iter().map(|(_, t)| t)).find_map(find_mut)
+            Ty::Array(m, elem) => bounded(m).and_then(|b| found(find(elem, b), b)),
+            Ty::Tuple(tys, m) => {
+                bounded(m).and_then(|b| found(tys.iter().find_map(|t| find(t, b)), b))
             }
-            Ty::Adt(AdtId::Struct(s), args, ms, m) => struct_atoms_of(db, *s, args, ms, m)
-                .into_iter()
-                .filter(|a| a.bound == imm)
-                .find_map(|a| match a.held {
-                    Held::Type(t) => find_mut(&t),
-                    Held::Mutability(m) => {
-                        matches!(m, Ty::Mutability(Mutability::Mut | Mutability::ReadOnly))
-                            .then_some(m)
-                    }
-                }),
+            Ty::Record(tys, named, m) => bounded(m).and_then(|b| {
+                found(tys.iter().chain(named.iter().map(|(_, t)| t)).find_map(|t| find(t, b)), b)
+            }),
+            Ty::Adt(AdtId::Struct(s), args, ms, m) => {
+                struct_atoms_of(db, *s, args, ms, m).into_iter().find_map(|a| {
+                    let bound = bounded(&a.bound)?;
+                    let inner = match a.held {
+                        Held::Type(t) => find(&t, bound),
+                        Held::Mutability(m) => find(&m, bound),
+                    };
+                    found(inner, bound)
+                })
+            }
             _ => None,
         }
     }
-    if matches!(ty, Ty::Fn(..)) {
-        return None;
+    if let Ty::Fn(params, ..) = ty {
+        return params.tys().find_map(|t| mut_inside(db, t));
     }
-    if let Some(inner) = breaks(db, ty) {
-        return Some((ty.clone(), inner));
+    if let Some(found) = breaks(db, ty) {
+        return Some(found);
     }
     let mut found = None;
-    ty.walk_children(|t| found = found.take().or_else(|| mut_inside_imm(db, t)));
+    ty.walk_children(|t| found = found.take().or_else(|| mut_inside(db, t)));
     found
+}
+
+/// What [`mut_inside`] finds: `ty` holds `inner`, which a value of
+/// mutability `bound`, `imm` or `ro`, can't hold.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MutInside<'db> {
+    pub ty: Ty<'db>,
+    pub inner: Ty<'db>,
+    pub bound: Mutability,
 }
 
 /// Whether the values of `def` are always `imm`: a variant, or an `imm

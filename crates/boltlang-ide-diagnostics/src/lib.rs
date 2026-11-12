@@ -29,7 +29,9 @@ use boltlang_hir_def::{
     manifest::manifest_problems,
     nameres::{package_of, prelude_file, resolve_import_path},
 };
-use boltlang_hir_ty::{AdtId, NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
+use boltlang_hir_ty::{
+    AdtId, NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint, ty::Mutability,
+};
 use boltlang_syntax::{
     SyntaxKind, SyntaxNode,
     rowan::{TextRange, TextSize},
@@ -98,7 +100,7 @@ impl DiagnosticCode {
     pub const NOT_A_PLACE: Self = Self("E0220");
     pub const CANNOT_CHANGE: Self = Self("E0221");
     pub const NO_MUTABILITY: Self = Self("E0222");
-    pub const MUT_INSIDE_IMM: Self = Self("E0223");
+    pub const MUT_INSIDE: Self = Self("E0223");
     pub const MUT_FIELD: Self = Self("E0224");
     pub const UNKNOWN_MUTABILITY: Self = Self("E0225");
     pub const NO_ASSOC_TYPE: Self = Self("E0226");
@@ -470,7 +472,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NotSpreadable { ty }
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
-        DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
+        DiagnosticKind::MutInside { ty, inner, .. } => vec![ty, inner],
         DiagnosticKind::Effects { found, allowed } => vec![found, allowed],
         DiagnosticKind::InvalidCast { from, to } => vec![from, to],
         DiagnosticKind::BadTry { reason } => match reason {
@@ -498,6 +500,24 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
 /// before others, like `mut Point`.
 fn article(word: &str) -> &'static str {
     if word.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
+}
+
+/// The keyword of a mutability, like `ro`.
+fn mutability_keyword(m: Mutability) -> &'static str {
+    match m {
+        Mutability::Mut => "mut",
+        Mutability::Imm => "imm",
+        Mutability::ReadOnly => "ro",
+    }
+}
+
+/// Why a value of mutability `bound` can't hold something `mut`: `imm` and
+/// `ro` are deep.
+fn why_deep(bound: Mutability) -> &'static str {
+    match bound {
+        Mutability::ReadOnly => "what's seen as `ro` can't be changed through it either",
+        _ => "what an `imm` value holds can't be changed either",
+    }
 }
 
 /// The code and message of a diagnostic about `source`, the text it's at.
@@ -744,29 +764,31 @@ fn describe(
         }
         K::NoMutability => (C::NO_MUTABILITY, "only an array, a struct or a function can be `mut` or `imm`".into()),
         // A `mut` mutability argument, like that of `imm VecIter[i32, mut]`.
-        K::MutInsideImm { ty, inner: Ty::Mutability(_) } => {
+        K::MutInside { ty, inner: Ty::Mutability(_), bound } => {
             let ty = ty.display_with(db, names).to_string();
             let message = format!(
-                "{} `{ty}` can't have a `mut` mutability argument: what an `imm` value holds can't be changed either",
-                article(&ty)
+                "{} `{ty}` can't have a `mut` mutability argument: {}",
+                article(&ty),
+                why_deep(bound)
             );
-            (C::MUT_INSIDE_IMM, message)
+            (C::MUT_INSIDE, message)
         }
-        K::MutInsideImm { ty, inner } => {
-            // A struct that isn't `imm` itself holds it in a field that is,
-            // like the `data` of a `mut VecIter[mut [i32], imm]`.
-            let within = if ty.mutability() == Some(&Ty::Mutability(boltlang_hir_ty::ty::Mutability::Imm)) {
-                ""
+        K::MutInside { ty, inner, bound } => {
+            // A struct that isn't `imm` or `ro` itself holds it in a field
+            // that is, like the `data` of a `mut VecIter[mut [i32], imm]`.
+            let within = if ty.mutability() == Some(&Ty::Mutability(bound)) {
+                String::new()
             } else {
-                " in a field that's `imm`"
+                format!(" in a field that's `{}`", mutability_keyword(bound))
             };
             let (ty, inner) = (ty.display_with(db, names).to_string(), inner.display_with(db, names).to_string());
             let message = format!(
-                "{} `{ty}` can't hold {} `{inner}`{within}: what an `imm` value holds can't be changed either",
+                "{} `{ty}` can't hold {} `{inner}`{within}: {}",
                 article(&ty),
-                article(&inner)
+                article(&inner),
+                why_deep(bound)
             );
-            (C::MUT_INSIDE_IMM, message)
+            (C::MUT_INSIDE, message)
         }
         K::NotAtMost { held, is_mutability, bound, .. } => {
             let bound = names.mutability_name(db, &bound);

@@ -15,7 +15,7 @@ use boltlang_hir_def::{
     Name,
     body::{Body, DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
-    hir::{BindingId, Expr, MutabilityRef, PatId, TypeRef, TypeRefId},
+    hir::{BindingId, Expr, Mutability, MutabilityRef, PatId, TypeRef, TypeRefId},
     ids::{
         ClassId, ConstId, EffectId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId,
         StructId, TypeAliasId,
@@ -35,7 +35,7 @@ use boltlang_hir_ty::{
     builtin::Builtin,
     check::{unmet_assoc_bounds, unmet_assoc_equalities},
     function_scheme,
-    infer::mut_inside_imm,
+    infer::{MutInside, mut_inside},
     infer_body,
     inhabited::{field_without_values, has_values},
     kind::Kind,
@@ -328,10 +328,12 @@ pub enum DiagnosticKind<'db> {
     },
     /// `mut` or `imm` before something that isn't an array or a struct.
     NoMutability,
-    /// An `imm` array or struct of type `ty` that holds a `mut` one, `inner`.
-    MutInsideImm {
+    /// An `imm` or `ro` array or struct of type `ty` that holds a `mut`
+    /// one, `inner`, which a value of mutability `bound` can't hold.
+    MutInside {
         ty: Ty<'db>,
         inner: Ty<'db>,
+        bound: Mutability,
     },
     /// `held`, a type or a mutability, isn't at most the mutability `bound`
     /// (#243), like a value of a type parameter in an `imm` array.
@@ -1516,9 +1518,9 @@ impl<'db> Collector<'db> {
         type_ref: Option<TypeRefId>,
         ty: &Ty<'db>,
     ) {
-        if let Some((ty, inner)) = mut_inside_imm(self.db, ty) {
+        if let Some(MutInside { ty, inner, bound }) = mut_inside(self.db, ty) {
             let range = type_ref.and_then(|t| map.type_syntax(t)).map(ptr_range);
-            self.push(range, DiagnosticKind::MutInsideImm { ty, inner });
+            self.push(range, DiagnosticKind::MutInside { ty, inner, bound });
         }
     }
 
@@ -1777,11 +1779,11 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::NoMutability { expr } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoMutability)
                 }
-                InferenceDiagnostic::MutInsideImm { at: node, ty, inner } => {
+                InferenceDiagnostic::MutInside { at: node, ty, inner, bound } => {
                     if has_error(&ty) {
                         continue;
                     }
-                    (at(node), DiagnosticKind::MutInsideImm { ty, inner })
+                    (at(node), DiagnosticKind::MutInside { ty, inner, bound })
                 }
                 InferenceDiagnostic::NotAPlace { expr } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace)

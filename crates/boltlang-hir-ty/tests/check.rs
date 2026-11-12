@@ -531,7 +531,7 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::NoMutability { expr } => {
                         format!("error at `{}`: can't be mut", at(ExprOrPat::Expr(*expr)))
                     }
-                    InferenceDiagnostic::MutInsideImm { at: node, ty, inner } => {
+                    InferenceDiagnostic::MutInside { at: node, ty, inner, .. } => {
                         let tys = show(&[ty, inner]);
                         format!("error at `{}`: {} holds {}", at(*node), tys[0], tys[1])
                     }

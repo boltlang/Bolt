@@ -107,3 +107,9 @@ fn f() {
   g() = 3;
 //^^^ error: cannot assign to this; only a variable, a field or an element can be assigned to
 }
+
+================================================================================
+A ro value holding a mut one
+================================================================================
+fn f(t: ro (mut [i32], i32)) {}
+   //^ error: a `ro (mut [i32], i32)` can't hold a `mut [i32]`: what's seen as `ro` can't be changed through it either
