@@ -328,6 +328,7 @@ seen as `ro Box[ro [i32]]`. `StructDecl.sub_imm`: and an
 | `Ty.least_ro`, `Sub.no_fn_join` | `Least.lean` |
 | `Problem.principal`, `Problem.principal_lit`, `no_least_lit` | `Principal.lean` |
 | `Problem.principal_lit_ir` | `Principal.lean` |
+| `LinkedProblem.principal`, `Sub.none_meet` | `Linked.lean` |
 
 At a call, a type parameter gets the types of the arguments, which must
 fit it, and what it must be at most. It should be given the least type
@@ -375,8 +376,24 @@ out what another would allow.
   whatever the function assumes: `imm` and `ro` are in a line. In `f`,
   `(x, y)` is then `ro`.
 
-Constraints between two type variables, and those of a function's
-parameters, aren't covered.
+A signature links variables. In `fn f[T](a: [T], b: [T])`, the array's
+mutability and `T` must be solved together:
+
+```bolt
+f(mut [mut [1]], mut [[1]]);  // T = ro [i32], so the array must be ro too:
+                              // a mut [mut [i32]] doesn't fit a mut [ro [i32]]
+```
+
+- `LinkedProblem.principal`: with `T` given the shape of what it's given,
+  and a variable for each mutability in it, what a call says about the
+  mutabilities of its signature has a least solution whenever it has one.
+  Each variable is what it's given, or `ro` only where it must be.
+- `Sub.none_meet`: that's because below any two solutions there's
+  another, which takes each variable from one where it isn't `ro`.
+
+This is with nothing assumed, and without function types. What a call's
+value flows into, constraints between two type variables, and a type
+parameter given as both `T` and `ro T` aren't covered.
 
 ## The checker's solver
 

@@ -11,6 +11,7 @@ import BoltMut.ReadOnly
 import BoltMut.Solver
 import BoltMut.Least
 import BoltMut.Principal
+import BoltMut.Linked
 import BoltMut.Structs
 import BoltMut.Frame
 import BoltMut.Sharing
