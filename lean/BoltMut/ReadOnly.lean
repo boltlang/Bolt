@@ -34,7 +34,7 @@ theorem HasType.newRo {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {�
     (hr : AtMost Δ .readonly t') :
     HasType fns σ Δ io Γ (Expr.newRo x e) (.cell .readonly t') :=
   .letE (.new he hm)
-    (.varSub (s := .cell .mutable t) (by simp [Ctx.update, muOf]) (.ro (m := .mutable) hs hr))
+    (.sub (.var (t := .cell .mutable t) (by simp [Ctx.update, muOf])) (.ro (m := .mutable) hs hr))
 
 /-- What a `ro` literal can be typed as: its value's type `s`, with the
 object `mut`, or seen as `ro`. -/

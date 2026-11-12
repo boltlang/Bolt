@@ -42,11 +42,9 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
     {t : Ty} (ht : HasType fns σ Δ io Γ e t) (hx : Extends σ σ') : HasType fns σ' Δ io Γ e t := by
   induction ht with
   | var h => exact .var h
-  | varSub h hs => exact .varSub h hs
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc (hx _ _ h) hio
-  | locSub h hio hs => exact .locSub (hx _ _ h) hio hs
   | new _ hd ih => exact .new ih hd
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
@@ -80,11 +78,9 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
     {t : Ty} (ht : HasType fns σ Δ io Γ e t) (hΓ : Γ.Sub Γ') : HasType fns σ Δ io Γ' e t := by
   induction ht generalizing Γ' with
   | var h => exact .var (hΓ _ _ h)
-  | varSub h hs => exact .varSub (hΓ _ _ h) hs
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc h hio
-  | locSub h hio hs => exact .locSub h hio hs
   | new _ hd ih => exact .new (ih hΓ) hd
   | get _ ih => exact .get (ih hΓ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ) (ih₂ hΓ)
@@ -106,9 +102,7 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | var h => exact .var h
   | unit => exact .unit
   | int => exact .int
-  | varSub h hs => exact .varSub h hs
   | loc h hm => exact .loc h (fun h' => hm (hio h'))
-  | locSub h hm hs => exact .locSub h (fun h' => hm (hio h')) hs
   | new _ hd ih => exact .new (ih hio) hd
   | get _ ih => exact .get (ih hio)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hio) (ih₂ hio)
@@ -141,7 +135,6 @@ theorem HasType.var_inv {x : Nat} (h : HasType fns σ Δ io Γ (.var x) t) :
   generalize hE : Expr.var x = E at h
   induction h <;> cases hE
   case var => exact ⟨_, by assumption, .refl _⟩
-  case varSub => exact ⟨_, by assumption, by assumption⟩
   case sub => rename_i hs _ ih; obtain ⟨s, hx, hs'⟩ := ih rfl; exact ⟨s, hx, hs'.trans hs⟩
 
 /-- A variable just put in scope has a supertype of the type it was given. -/
@@ -168,7 +161,6 @@ theorem HasType.loc_inv {l : Nat} (h : HasType fns σ Δ io Γ (.loc l) t) :
   generalize hE : Expr.loc l = E at h
   induction h <;> cases hE
   case loc => exact ⟨_, _, by assumption, by assumption, .refl _⟩
-  case locSub => exact ⟨_, _, by assumption, by assumption, by assumption⟩
   case sub =>
     rename_i hs _ ih
     obtain ⟨m, s, hl, hio, hs'⟩ := ih rfl
@@ -311,14 +303,11 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
   | unit => exact .unit
   | int => exact .int
   | loc h _ => exact .loc h (fun _ => Le.none_immutable hd.1)
-  | locSub h _ hs =>
-    -- Nothing seen as `ro` is `imm` all the way down.
-    exact .locSub h (fun _ => Le.none_immutable (hs.atMost_imm hd).1) hs
   | lam hc himm hb =>
     cases muOf_immutable (Le.none_immutable hd.none_fn)
     exact .lam hc himm (hb.weaken_imm (fun _ => by simp))
   | sub _ hs ih => exact .sub (ih hv (hs.atMost_imm hd)) hs
-  | var | varSub | new | get | set | letE | call | app | fst | snd | toImm => cases hv
+  | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- A value of a cell type is a location, whose type is a subtype of it. -/
 theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
@@ -327,14 +316,13 @@ theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   generalize hT : Ty.cell m t = T at ht
   induction ht generalizing m t with
   | loc h _ => cases hT; exact ⟨_, _, _, rfl, h, .refl _⟩
-  | locSub h _ hs => subst hT; exact ⟨_, _, _, rfl, h, hs⟩
   | sub _ hs ih =>
     subst hT
     obtain ⟨m₀, t₀, rfl⟩ := hs.to_cell
     obtain ⟨l, m', t', rfl, h, hs'⟩ := ih hv rfl
     exact ⟨l, m', t', rfl, h, hs'.trans hs⟩
   | unit | int | lam | pair => cases hT
-  | var | varSub | new | get | set | letE | call | app | fst | snd | toImm => cases hv
+  | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- A value of a `mut` cell type is a location of that type. -/
 theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
@@ -350,13 +338,12 @@ theorem canonical_fn {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
   generalize hT : Ty.fn m a r = T at ht
   induction ht generalizing a r with
   | lam => exact ⟨_, _, _, rfl⟩
-  | locSub _ _ hs => subst hT; cases hs
   | sub _ hs ih =>
     subst hT
     obtain ⟨a₀, r₀, rfl⟩ := hs.to_fn
     exact ih hv rfl
   | unit | int | loc | pair => cases hT
-  | var | varSub | new | get | set | letE | call | app | fst | snd | toImm => cases hv
+  | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- A value of a tuple type is a pair of values. -/
 theorem canonical_prod {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {a b : Ty}
@@ -365,19 +352,12 @@ theorem canonical_prod {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
   generalize hT : Ty.prod a b = T at ht
   induction ht generalizing a b with
   | pair => cases hv with | pair h₁ h₂ => exact ⟨_, _, rfl, h₁, h₂⟩
-  | locSub _ _ hs => subst hT; cases hs
   | sub _ hs ih =>
     subst hT
     obtain ⟨a₀, b₀, rfl, _, _⟩ := hs.to_prod_inv
     exact ih hv rfl
   | unit | int | loc | lam => cases hT
-  | var | varSub | new | get | set | letE | call | app | fst | snd | toImm => cases hv
-
-/-- A value can be used at any supertype of its type. -/
-theorem HasType.value_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
-    {t t' : Ty} (_hv : v.IsValue) (ht : HasType fns σ Δ io Γ v t) (hs : Sub Δ t t') :
-    HasType fns σ Δ io Γ v t' :=
-  .sub ht hs
+  | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- `Γ` without `x`. -/
 def Ctx.drop (Γ : Ctx) (x : Nat) : Ctx := fun z => if z = x then none else Γ z
@@ -411,15 +391,8 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
       subst hyx
       exact .inr ⟨⟨s, hy⟩, h⟩
     · exact h.elim
-  | @varSub _ _ y s _ hy _ =>
-    simp only [Expr.subst] at h
-    split at h
-    · rename_i hyx
-      subst hyx
-      exact .inr ⟨⟨s, hy⟩, h⟩
-    · exact h.elim
   | unit | int => exact h.elim
-  | loc | locSub => exact .inl h
+  | loc => exact .inl h
   | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
@@ -463,18 +436,9 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
       exact (hx _ h).weaken_ctx (Ctx.Sub.empty Γ)
     · simp only [hyx, ite_false]
       exact .var (hΓ y hyx ▸ h)
-  | @varSub _ _ y s _ h hsub =>
-    simp only [Expr.subst]
-    by_cases hyx : y = x
-    · subst hyx
-      simp only [ite_true]
-      exact ((hx _ h).value_sub hv hsub).weaken_ctx (Ctx.Sub.empty Γ)
-    · simp only [hyx, ite_false]
-      exact .varSub (hΓ y hyx ▸ h) hsub
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc h hio
-  | locSub h hio hsub => exact .locSub h hio hsub
   | new _ hd ih => exact .new (ih hΓ hx) hd
   | get _ ih => exact .get (ih hΓ hx)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ hx) (ih₂ hΓ hx)
@@ -578,10 +542,9 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     HasType fns σ Δ' io (Γ.inst ms τs) (e.inst ms τs) (t.inst ms τs) := by
   induction ht with
   | var h => exact .var (by simp [Ctx.inst, h])
-  | varSub h hsub => exact .varSub (by simp [Ctx.inst, h]) (Sub.inst hs hsub)
   | unit => exact .unit
   | int => exact .int
-  | loc _ _ | locSub _ _ _ => exact hn.elim
+  | loc _ _ => exact hn.elim
   | @new _ _ _ s b _ hd ih =>
     simp only [Expr.inst, Ty.inst, Mu.subst_muOf]
     have h := AtMost.inst hs hd
@@ -634,8 +597,8 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
     (ht : HasType fns σ Δ io Γ e t) (hio : io = true) {l : Nat} (hl : e.HasLoc l) :
     ∃ t', σ[l]? = some (.immutable, t') := by
   induction ht with
-  | var | varSub | unit | int => exact hl.elim
-  | loc h hm | locSub h hm _ =>
+  | var | unit | int => exact hl.elim
+  | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
   | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih =>

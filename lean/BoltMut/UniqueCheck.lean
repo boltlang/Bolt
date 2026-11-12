@@ -107,13 +107,13 @@ theorem Expr.subst_comm (e : Expr) {x y : Nat} {v w : Expr} (hxy : x ≠ y) (hv 
 theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
     (ht : HasType fns σ Δ io Γ e t) : ∀ x, Γ x = none → ¬ e.Free x := by
   induction ht with
-  | var h | varSub h _ =>
+  | var h =>
     intro x hx hf
     simp only [Expr.Free] at hf
     subst hf
     rw [hx] at h
     cases h
-  | unit | int | loc | locSub => intro _ _ h; exact h
+  | unit | int | loc => intro _ _ h; exact h
   | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     intro x hx hf

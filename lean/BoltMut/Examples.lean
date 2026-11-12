@@ -260,7 +260,7 @@ example (b : Bool) : HasType [peek] [] .none false Ctx.empty
     (.letE 0 (.new b (.int 1)) (.call 0 [] [] (.var 0))) .int := by
   refine .letE (.new .int trivial) ?_
   show HasType _ _ _ _ _ _ (peek.retTy.inst [] [])
-  exact .call rfl (sat_none _ _) (.varSub rfl (.ro (.refl _) trivial))
+  exact .call rfl (sat_none _ _) (.sub (.var rfl) (.ro (.refl _) trivial))
 
 /-- `fn total(xs: 'm [i32]) -> i32 = peek(xs)`: an object whose mutability
 is a parameter can be seen as `ro` too, so a generic function can pass
@@ -276,7 +276,7 @@ theorem total_ok : FnsOk [peek, total] := by
   · exact ⟨trivial, .get (.var rfl)⟩
   · refine ⟨trivial, ?_⟩
     show HasType _ _ _ _ _ _ (peek.retTy.inst [] [])
-    exact .call rfl (sat_none _ _) (.varSub rfl (.ro (.refl _) trivial))
+    exact .call rfl (sat_none _ _) (.sub (.var rfl) (.ro (.refl _) trivial))
 
 /-- `xs[0] = 1` with `xs : ro [i32]` is rejected: a `ro` view can't change
 what it sees. -/
@@ -318,7 +318,7 @@ example : HasType [firstRo] [] .none false Ctx.empty
     (.letE (.new (.var (t := .cell .mutable .int) (by simp [Ctx.update, muOf])) ⟨.refl _, trivial⟩) ?_)
   show HasType _ _ _ _ _ _ (firstRo.retTy.inst [] [.cell .mutable .int])
   refine .call rfl ⟨?_, ?_, ?_⟩
-    (.varSub (s := .cell .mutable (.cell .mutable .int)) (by simp [Ctx.update, muOf])
+    (.sub (.var (t := .cell .mutable (.cell .mutable .int)) (by simp [Ctx.update, muOf]))
       (.ro (.ro (.refl _) trivial) ⟨.refl _, trivial⟩))
   · intro p h; simp [firstRo] at h
   · intro p h; simp [firstRo] at h
@@ -339,8 +339,8 @@ example : HasType [both] [] .none false Ctx.empty
   refine .letE (.new .int trivial) (.letE (.new .int trivial) ?_)
   show HasType _ _ _ _ _ _ (both.retTy.inst [] [.cell .readonly .int])
   refine .call rfl ⟨?_, ?_, ?_⟩
-    (.pair (.varSub (s := .cell .mutable .int) (by simp [Ctx.update, muOf]) (.ro (.refl _) trivial))
-      (.varSub (s := .cell .immutable .int) (by simp [Ctx.update, muOf]) (.ro (.refl _) trivial)))
+    (.pair (.sub (.var (t := .cell .mutable .int) (by simp [Ctx.update, muOf])) (.ro (.refl _) trivial))
+      (.sub (.var (t := .cell .immutable .int) (by simp [Ctx.update, muOf])) (.ro (.refl _) trivial)))
   · intro p h; simp [both] at h
   · intro p h; simp [both] at h
   · intro i

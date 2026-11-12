@@ -159,8 +159,8 @@ theorem Rel.subst {ρ : Nat → Nat → Prop} {e₁ e₂ v₁ v₂ : Expr} (h : 
 theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
     (ht : HasType fns σ Δ io Γ e t) {l : Nat} (hl : e.HasLoc l) : l < σ.length := by
   induction ht with
-  | var | varSub | unit | int => exact hl.elim
-  | loc hσ _ | locSub hσ _ _ =>
+  | var | unit | int => exact hl.elim
+  | loc hσ _ =>
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1

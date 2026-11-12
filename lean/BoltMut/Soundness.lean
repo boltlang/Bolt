@@ -278,7 +278,7 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
   induction t with
   | cell μ s ih =>
     intro σ h m io Γ v t₀ hh hv ht hs₀ hf hmo
-    obtain ⟨l, m₀, s₀, rfl, hσ, hsub⟩ := canonical_cell_sub hv (ht.value_sub hv hs₀)
+    obtain ⟨l, m₀, s₀, rfl, hσ, hsub⟩ := canonical_cell_sub hv (.sub ht hs₀)
     obtain ⟨hμ, _, w, hw, hwv, hwt⟩ := hh.2 _ _ _ hσ
     rcases hμ with rfl | rfl
     · cases hlk : m.lookup l with
@@ -306,7 +306,7 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
     exact ⟨_, _, _, .pair hc₁ hc₂⟩
   | unit | int =>
     intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
-    have ht' := ht.value_sub hv hs₀
+    have ht' := HasType.sub ht hs₀
     cases hv with
     | unit => exact ⟨_, _, _, .unit⟩
     | int => exact ⟨_, _, _, .int⟩
@@ -324,7 +324,7 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
       cases h
   | fn μ a r =>
     intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
-    obtain ⟨b, x, body, rfl⟩ := canonical_fn hv (ht.value_sub hv hs₀)
+    obtain ⟨b, x, body, rfl⟩ := canonical_fn hv (.sub ht hs₀)
     exact ⟨_, _, _, .lam⟩
   | tparam | roParam => intro _ _ _ _ _ _ _ _ _ _ _ hf _; exact hf.elim
 
@@ -334,12 +334,12 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     e.IsValue ∨ ∃ h' e', Step fns h e h' e' := by
   generalize hΓ : Ctx.empty = Γ at ht
   induction ht with
-  | var hx | varSub hx _ =>
+  | var hx =>
     subst hΓ
     cases hx
   | unit => exact .inl .unit
   | int => exact .inl .int
-  | loc _ _ | locSub _ _ _ => exact .inl .loc
+  | loc _ _ => exact .inl .loc
   | lam _ => exact .inl .lam
   | sub _ _ ih => exact ih hΓ
   | app he₁ _ ih₁ ih₂ =>
