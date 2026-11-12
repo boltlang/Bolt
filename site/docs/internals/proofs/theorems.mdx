@@ -316,6 +316,7 @@ seen as `ro Box[ro [i32]]`. `StructDecl.sub_imm`: and an
 | `Ty.lub_sound`, `Ty.lub_least` | `Least.lean` |
 | `Ty.least_ro`, `Sub.no_fn_join` | `Least.lean` |
 | `Problem.principal`, `Problem.principal_lit`, `no_least_lit` | `Principal.lean` |
+| `Problem.principal_lit_ir` | `Principal.lean` |
 
 At a call, a type parameter gets the types of the arguments, which must
 fit it, and what it must be at most. It should be given the least type
@@ -358,6 +359,10 @@ out what another would allow.
   `fn f['a, 'b, 'c, 'd]` with `'a` and `'b` below both `'c` and `'d`, and
   both of those below `ro`, the literal `(x, y)` of an `x: 'a [i32]` and a
   `y: 'b [i32]` can be `'c` or `'d`, and nothing it can be is below both.
+- `Problem.principal_lit_ir`: if a literal's mutability can only be `imm`
+  or `ro`, not any mutability below `ro`, there's a least one again,
+  whatever the function assumes: `imm` and `ro` are in a line. In `f`,
+  `(x, y)` is then `ro`.
 
 Constraints between two type variables, and those of a function's
 parameters, aren't covered.

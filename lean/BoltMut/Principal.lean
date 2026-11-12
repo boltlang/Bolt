@@ -201,4 +201,58 @@ theorem no_least_lit :
   simp only [List.mem_cons, List.not_mem_nil, or_false] at up0 up1 dn2 dn3
   rcases up0 with rfl | rfl | rfl | rfl | rfl <;> simp_all
 
+/-! ## A literal's mutability as `imm` or `ro` only -/
+
+/-- What an inferred literal must be when its mutability can only be `imm`
+or `ro`, not anything below `ro`, whatever the function assumes. -/
+def Problem.SolvesLitIR (Δ : Assume) (P : Problem) (m : Mu) (t : Ty) : Prop :=
+  (m = .immutable ∨ m = .readonly) ∧ P.Solves Δ t ∧ AtMost Δ m t
+
+/-- **With `imm` and `ro` the only choices, there's a least one again**,
+whatever the function assumes: they're in a line. -/
+theorem Problem.principal_lit_ir {Δ : Assume} (hΔ : ¬ Le Δ .readonly .immutable) (P : Problem)
+    (hl : P.lower ≠ [] ∨ P.eqs ≠ []) (hn : ∀ τ ∈ P.lower, τ.NoFn) {m' : Mu} {t' : Ty}
+    (h' : P.SolvesLitIR Δ m' t') :
+    ∃ m t, P.SolvesLitIR Δ m t ∧ ∀ μ u, P.SolvesLitIR Δ μ u → Le Δ m μ ∧ Sub Δ t u := by
+  let P' : Problem := { P with ro := true }
+  have lift : ∀ {μ u}, P.SolvesLitIR Δ μ u → P'.Solves Δ u := fun ⟨hμ, hs, ha⟩ =>
+    ⟨hs.1, hs.2.1, hs.2.2.1, fun _ => by
+      rcases hμ with rfl | rfl
+      · exact ha.mono (.bot _)
+      · exact ha⟩
+  obtain ⟨t, ht, hleast⟩ := Problem.principal hΔ P' hl hn (lift h')
+  have hP : P.Solves Δ t := ⟨ht.1, ht.2.1, ht.2.2.1, fun _ => ht.2.2.2 rfl⟩
+  by_cases hi : AtMost Δ .immutable t
+  · exact ⟨.immutable, t, ⟨.inl rfl, hP, hi⟩, fun μ u hu => ⟨.bot _, hleast u (lift hu)⟩⟩
+  · refine ⟨.readonly, t, ⟨.inr rfl, hP, ht.2.2.2 rfl⟩, fun μ u hu => ⟨?_, hleast u (lift hu)⟩⟩
+    rcases hu.1 with rfl | rfl
+    · exact absurd ((hleast u (lift hu)).atMost_imm_of hΔ hu.2.2) hi
+    · exact .refl _
+
+/-- `no_least_lit`'s function doesn't assume `ro ⊑ imm`. -/
+theorem twoAbove_sane : ¬ Le twoAbove .readonly .immutable := fun h => by
+  have := Le.closed (· ∈ [.readonly, .mutable]) (by simp) (by simp) (by decide) h (by simp)
+  simp at this
+
+/-- In `no_least_lit`'s function, with only `imm` and `ro` to choose from,
+`(x, y)` is `ro`: it can't be `imm`, so `ro` is the least. -/
+example : Problem.SolvesLitIR twoAbove { lower := [twoCells] } .readonly twoCells ∧
+    ¬ ∃ u, Problem.SolvesLitIR twoAbove { lower := [twoCells] } .immutable u := by
+  have below : ∀ i, i = 0 ∨ i = 1 → Le twoAbove (.param i) .readonly := by
+    rintro i (rfl | rfl) <;>
+      exact .trans (m₂ := .param 2) (.assume (by simp [twoAbove])) (.assume (by simp [twoAbove]))
+  refine ⟨⟨.inr rfl, ⟨by simp [Sub.refl], by simp, by simp, by simp⟩,
+    ⟨below 0 (.inl rfl), trivial⟩, below 1 (.inr rfl), trivial⟩, ?_⟩
+  rintro ⟨u, hsol⟩
+  obtain ⟨-, hs, ha⟩ := hsol
+  -- `u` is above `twoCells`, so it holds `'a` as it is or seen as `ro`.
+  have hu : Sub twoAbove twoCells u := hs.1 _ (by simp)
+  obtain ⟨a, _, rfl, ha₁, -⟩ := hu.of_prod
+  rcases ha₁.of_cell' with rfl | ⟨_, rfl, -, -⟩ | ⟨h, -⟩
+  · have := Le.closed (Δ := twoAbove) (· ≠ Mu.immutable) (by simp) (by simp) (by decide) ha.1.1
+      (by simp)
+    simp at this
+  · exact twoAbove_sane ha.1.1
+  · cases h
+
 end BoltMut
