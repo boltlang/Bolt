@@ -183,12 +183,14 @@ pub enum Expr {
     Imm {
         expr: ExprId,
     },
-    /// `mut e`. Before an array, a struct literal or a call of a tuple
-    /// struct's constructor, like `mut [1]`, it makes that one `mut`, which
-    /// the type checker finds. Before anything else, it's an error: a copy
-    /// is `to_mut(e)` or `to_mut_deep(e)`.
+    /// `mut e`, or `'n e` with `mutability`, the named mutability `'n`.
+    /// Before an array, a struct literal or a call of a tuple struct's
+    /// constructor, like `mut [1]` or `'n [1]`, it makes that one `mut`, or
+    /// of mutability `'n`, which the type checker finds. Before anything
+    /// else, it's an error: a copy is `to_mut(e)` or `to_mut_deep(e)`.
     Mut {
         expr: ExprId,
+        mutability: Option<TypeRefId>,
     },
     Binary {
         op: BinaryOp,
@@ -449,7 +451,7 @@ impl Expr {
             | Expr::Cast { expr, .. }
             | Expr::Prefix { expr, .. }
             | Expr::Imm { expr }
-            | Expr::Mut { expr }
+            | Expr::Mut { expr, .. }
             | Expr::Let { expr, .. } => out.push(*expr),
             Expr::Index { base, index } => out.extend([*base, *index]),
             Expr::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),

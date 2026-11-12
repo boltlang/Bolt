@@ -142,12 +142,16 @@ impl Printer<'_> {
             Expr::Imm { expr } => format!("(imm {})", self.expr(*expr)),
             // As the literals were written before `mut e`: `mut [1]` and
             // `(mut record ...)`.
-            Expr::Mut { expr } => {
+            Expr::Mut { expr, mutability } => {
                 let inner = self.expr(*expr);
+                let m = match mutability.map(|t| &self.0[t]) {
+                    Some(TypeRef::Mutability(MutabilityRef::Named(name))) => format!("'{name}"),
+                    _ => "mut".to_owned(),
+                };
                 match &self.0[*expr] {
-                    Expr::Array { .. } | Expr::ArrayRepeat { .. } => format!("mut {inner}"),
-                    Expr::Record { .. } | Expr::Call { .. } => format!("(mut {}", &inner[1..]),
-                    _ => format!("(mut {inner})"),
+                    Expr::Array { .. } | Expr::ArrayRepeat { .. } => format!("{m} {inner}"),
+                    Expr::Record { .. } | Expr::Call { .. } => format!("({m} {}", &inner[1..]),
+                    _ => format!("({m} {inner})"),
                 }
             }
             Expr::Cast { expr, type_ref } => {

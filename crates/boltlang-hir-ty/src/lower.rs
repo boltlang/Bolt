@@ -252,6 +252,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         })
     }
 
+    /// The mutability on its own that `id` is, like the `'n` of `'n [1]`.
+    /// A name that isn't the item's is reported, and gives `None`.
+    pub fn lower_mutability_alone(&mut self, id: TypeRefId) -> Option<Ty<'db>> {
+        self.lower_mutability(id).flatten()
+    }
+
     /// A bound `bound` of `target`: an "at most" bound if `bound` is a
     /// mutability, and a class otherwise.
     fn lower_bound(&mut self, held: Held<'db>, bound: TypeRefId) -> Option<ClassConstraint<'db>> {

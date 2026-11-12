@@ -517,8 +517,16 @@ fn is_always_imm<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> bool {
 
 /// The mutability of an array literal: `Mut` for `mut [a, b]`, and `Imm`
 /// for `[a, b]`.
-fn literal_mutability<'db>(is_mut: bool) -> Ty<'db> {
-    Ty::Mutability(if is_mut { Mutability::Mut } else { Mutability::Imm })
+/// The mutability of a literal written with the mutability `written`, like
+/// the `mut` of `mut [1]` or the `'n` of `'n [1]`: that one, or `imm` when
+/// none is written.
+fn literal_mutability<'db>(written: Option<&Ty<'db>>) -> Ty<'db> {
+    written.cloned().unwrap_or(Ty::Mutability(Mutability::Imm))
+}
+
+/// `mut`, as written before a literal.
+fn written_mut<'db>() -> Option<Ty<'db>> {
+    Some(Ty::Mutability(Mutability::Mut))
 }
 
 /// The reason for the `index`th of several expressions that must have the
@@ -558,7 +566,7 @@ pub(crate) struct InferenceContext<'a, 'db> {
     /// Whether the callee being inferred is that of `mut Wrapper(x)`, so
     /// that the tuple struct it makes is `mut`. Taken by the struct's
     /// constructor; if nothing takes it, `mut` was before something else.
-    mut_constructor: bool,
+    mut_constructor: Option<Ty<'db>>,
     /// The closures being inferred, innermost last.
     closures: Vec<ClosureFrame>,
     /// The effects the code being inferred can do: those of its function or
@@ -593,7 +601,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return_reason: Reason::None,
             breakables: Vec::new(),
             uninitialized: Vec::new(),
-            mut_constructor: false,
+            mut_constructor: None,
             closures: Vec::new(),
             effects: Ty::nothing(),
         }
@@ -768,6 +776,20 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let row = ctx.lower_row(terms);
         self.result.diagnostics.extend(ctx.diagnostics.into_iter().map(InferenceDiagnostic::Lower));
         row
+    }
+
+    /// A named mutability on its own, like the `'n` of `'n [1]`: the
+    /// function's mutability parameter, or the error type if it has none of
+    /// that name.
+    fn lower_mutability(&mut self, expr: ExprId, type_ref: TypeRefId) -> Ty<'db> {
+        let resolver = self.resolver(expr);
+        let mut ctx = TyLoweringContext::new(self.db, &resolver, &self.body.store);
+        if let DefWithBody::Function(f) = self.def.def(self.db) {
+            ctx = ctx.with_mutabilities(GenericDefId::Function(f));
+        }
+        let m = ctx.lower_mutability_alone(type_ref);
+        self.result.diagnostics.extend(ctx.diagnostics.into_iter().map(InferenceDiagnostic::Lower));
+        m.unwrap_or(Ty::Error)
     }
 
     fn lower_ty(&mut self, expr: ExprId, type_ref: TypeRefId) -> Ty<'db> {
@@ -1012,10 +1034,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
             Expr::Call { callee, args } => {
-                self.infer_call(expr, *callee, CallArgs::Positional(args), false)
+                self.infer_call(expr, *callee, CallArgs::Positional(args), None)
             }
             Expr::CallWith { callee, args } => {
-                self.infer_call(expr, *callee, CallArgs::Items(args), false)
+                self.infer_call(expr, *callee, CallArgs::Items(args), None)
             }
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
             Expr::Try { expr: inner, value, error } => self.infer_try(expr, *inner, *value, *error),
@@ -1059,7 +1081,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             | Expr::ArrayRepeat { .. }
             | Expr::Record { .. }
             | Expr::Tuple { .. }
-            | Expr::NamedTuple { .. } => self.infer_literal(expr, expr, expected, false),
+            | Expr::NamedTuple { .. } => self.infer_literal(expr, expr, expected, None),
             Expr::If { .. } => self.infer_if(expr, expected),
             Expr::Let { pat, expr: value } => {
                 let ty = self.infer_expr(*value);
@@ -1393,10 +1415,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     Ty::Error
                 })
             }
-            Literal::ByteString(_) => Ty::array(
-                literal_mutability(false),
-                Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
-            ),
+            Literal::ByteString(_) => {
+                Ty::array(literal_mutability(None), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)))
+            }
         }
     }
 
@@ -1489,7 +1510,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             ValueNs::Const(c) => self.const_value_ty(expr, c),
             // Const generics aren't supported yet.
             ValueNs::ConstParam { .. } => Ty::Error,
-            ValueNs::Variant(v) => self.constructor_ty(expr, VariantDef::Variant(v), false),
+            ValueNs::Variant(v) => self.constructor_ty(expr, VariantDef::Variant(v), None),
             ValueNs::Builtin(v) => Ty::Builtin(v.ty()),
         }
     }
@@ -1513,12 +1534,17 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// tuple struct, the type itself for a unit one. A struct is `imm`, or
     /// `mut` when it's made by `mut Wrapper(x)`. `expr` is where it's used,
     /// which must meet the bounds of the struct or enum.
-    fn constructor_ty(&mut self, expr: ExprId, def: VariantDef<'db>, is_mut: bool) -> Ty<'db> {
+    fn constructor_ty(
+        &mut self,
+        expr: ExprId,
+        def: VariantDef<'db>,
+        written: Option<Ty<'db>>,
+    ) -> Ty<'db> {
         let (_, generic_def) = def.adt();
-        if is_mut && is_always_imm(self.db, def) {
+        if written.is_some() && is_always_imm(self.db, def) {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
-        let (adt_ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
+        let (adt_ty, args) = self.fresh_adt(def, literal_mutability(written.as_ref()));
         self.struct_holds(&adt_ty, expr);
         self.require_bounds(def, &args, expr);
         let fields = field_types(self.db, def);
@@ -1586,7 +1612,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return Ty::Error;
         };
         let def = VariantDef::Struct(s);
-        let (ty, args) = self.fresh_adt(def, literal_mutability(false));
+        let (ty, args) = self.fresh_adt(def, literal_mutability(None));
         self.struct_holds(&ty, expr);
         let fields = field_types(self.db, def);
         for (name, e) in [("start", start), ("end", end)] {
@@ -1602,10 +1628,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     fn type_as_value(&mut self, expr: ExprId, resolution: TypeResolution<'db>) -> Ty<'db> {
         match (resolution.ty, resolution.unresolved) {
             (TypeNs::Struct(s), None) => {
-                let is_mut = std::mem::take(&mut self.mut_constructor);
-                self.constructor_ty(expr, VariantDef::Struct(s), is_mut)
+                let written = self.mut_constructor.take();
+                self.constructor_ty(expr, VariantDef::Struct(s), written)
             }
-            (TypeNs::Variant(v), None) => self.constructor_ty(expr, VariantDef::Variant(v), false),
+            (TypeNs::Variant(v), None) => self.constructor_ty(expr, VariantDef::Variant(v), None),
             _ => {
                 self.unresolved(ExprOrPat::Expr(expr));
                 Ty::Error
@@ -1650,11 +1676,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// `mut [1]`, `mut Point { x: 1 }` and `mut Wrapper(1)` make an array
-    /// or struct `mut`. `mut` before anything else is an error: a copy is
+    /// or struct `mut`, and `'n [1]` one of the named mutability `'n`, which
+    /// can be `mut` too. Before anything else, either is an error: a copy is
     /// `to_mut(e)` or `to_mut_deep(e)`.
     fn infer_mut(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
         let body = self.body;
-        let Expr::Mut { expr: inner } = &body[expr] else { unreachable!("only called for a mut") };
+        let Expr::Mut { expr: inner, mutability } = &body[expr] else {
+            unreachable!("only called for a mut")
+        };
+        let written = match mutability {
+            Some(type_ref) => Some(self.lower_mutability(expr, *type_ref)),
+            None => written_mut(),
+        };
         let literal = match &body[*inner] {
             Expr::Array { .. }
             | Expr::ArrayRepeat { .. }
@@ -1666,7 +1699,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         };
         if literal {
             self.result.mut_literals.push((expr, *inner));
-            let ty = self.infer_literal(expr, *inner, expected, true);
+            let ty = self.infer_literal(expr, *inner, expected, written);
             self.result.expr_types.insert(*inner, ty.clone());
             ty
         } else {
@@ -1676,7 +1709,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// The array, tuple, struct literal or call `literal`, made `mut` with
-    /// `is_mut`, as `mut [1]`, `mut (1, 2)`, `mut Point { x: 1 }` or
+    /// `written`, as `mut [1]`, `mut (1, 2)`, `mut Point { x: 1 }` or
     /// `mut Wrapper(1)` do.
     /// `expr` is where it's reported: the `mut` around it, if there is one.
     fn infer_literal(
@@ -1684,11 +1717,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         expr: ExprId,
         literal: ExprId,
         expected: Option<Expectation<'_, 'db>>,
-        is_mut: bool,
+        written: Option<Ty<'db>>,
     ) -> Ty<'db> {
         let body = self.body;
         let reason = expected.map_or(Reason::None, |e| e.reason);
-        let mutability = literal_mutability(is_mut);
+        let mutability = literal_mutability(written.as_ref());
         match &body[literal] {
             Expr::Array { exprs } => {
                 let elem = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
@@ -1708,10 +1741,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::array(mutability, elem)
             }
             Expr::Record { path, fields, spread } => {
-                self.infer_record(expr, path.as_ref(), fields, *spread, is_mut)
+                self.infer_record(expr, path.as_ref(), fields, *spread, written)
             }
             Expr::Call { callee, args } => {
-                self.infer_call(expr, *callee, CallArgs::Positional(args), is_mut)
+                self.infer_call(expr, *callee, CallArgs::Positional(args), written)
             }
             // A tuple with named fields or spreads, which the solver makes
             // once it knows what's spread.
@@ -1800,7 +1833,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         expr: ExprId,
         callee: ExprId,
         args: CallArgs<'_>,
-        is_mut: bool,
+        written: Option<Ty<'db>>,
     ) -> Ty<'db> {
         // `x.f(y)`: a field holding a function, a longer path, or `f(x, y)`.
         if let Expr::Field { expr: receiver, name } = &self.body[callee] {
@@ -1819,7 +1852,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     _ => false,
                 };
                 if !is_field {
-                    if is_mut {
+                    if written.is_some() {
                         self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
                     }
                     return self.infer_method_call(
@@ -1834,9 +1867,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         }
         // A tuple struct's constructor takes `mut_constructor`.
-        self.mut_constructor = is_mut;
+        self.mut_constructor = written;
         let callee_ty = self.infer_expr(callee);
-        if std::mem::take(&mut self.mut_constructor) {
+        if self.mut_constructor.take().is_some() {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
         let function = match &self.body[callee] {
@@ -2480,7 +2513,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         path: Option<&Path>,
         fields: &[RecordField],
         spread: Option<ExprId>,
-        is_mut: bool,
+        written: Option<Ty<'db>>,
     ) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let def = match path.and_then(|p| resolver.resolve_path_in_type_ns(self.db, p)) {
@@ -2508,10 +2541,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let (_, generic_def) = def.adt();
         // A variant can't be `mut`: an enum's values can't be changed; nor
         // can those of an `imm struct`.
-        if is_mut && is_always_imm(self.db, def) {
+        if written.is_some() && is_always_imm(self.db, def) {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
-        let (ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
+        let (ty, args) = self.fresh_adt(def, literal_mutability(written.as_ref()));
         let field_tys = field_types(self.db, def);
         let mut seen = Vec::new();
         for field in fields {

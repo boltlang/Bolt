@@ -302,6 +302,14 @@ fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> 
         expr_bp(p, None, r, 255);
         return Some((m.complete(p, kind), BlockLike::NotBlock));
     }
+    // `'n [1]`: a literal of the named mutability `'n`, which binds like
+    // `mut`. With a `:` after it, `'a` labels a loop or a block instead.
+    if p.at(LABEL_IDENT) && !p.nth_at(1, T![:]) {
+        let m = p.start();
+        p.bump(LABEL_IDENT);
+        expr_bp(p, None, r, 255);
+        return Some((m.complete(p, MUT_EXPR), BlockLike::NotBlock));
+    }
     let (lhs, blocklike) = atom_expr(p, r)?;
     let (lhs, blocklike) =
         postfix_expr(p, lhs, blocklike, !(r.prefer_stmt && blocklike.is_block()));

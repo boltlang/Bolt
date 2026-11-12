@@ -454,7 +454,7 @@ impl<'a, 'c, 'db> Builder<'a, 'c, 'db> {
             }
             // `mut` before a literal makes it `mut`, which the literal's type
             // says: the type of the `mut e`.
-            Expr::Mut { expr: inner } if self.cx.infer.is_mut_literal(e) => self.expr(*inner),
+            Expr::Mut { expr: inner, .. } if self.cx.infer.is_mut_literal(e) => self.expr(*inner),
             Expr::Mut { .. } => self.unsupported(e, "`mut e` that isn't a literal"),
             Expr::Range { lhs: Some(start), rhs: Some(end), .. } => {
                 let fields = Box::new([self.expr(*start), self.expr(*end)]);

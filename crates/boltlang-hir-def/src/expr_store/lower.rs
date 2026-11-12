@@ -352,7 +352,16 @@ impl ExprCollector {
                 Expr::Try { expr, value, error }
             }
             E::Imm(e) => Expr::Imm { expr: self.lower_opt_expr(e.expr()) },
-            E::Mut(e) => Expr::Mut { expr: self.lower_opt_expr(e.expr()) },
+            E::Mut(e) => {
+                // `'n [1]` names its mutability, which is resolved where the
+                // literal is checked.
+                let mutability = e.name_token().map(|token| {
+                    let name = Name::new(token.text().trim_start_matches('\''));
+                    let type_ref = TypeRef::Mutability(MutabilityRef::Named(name));
+                    self.alloc_type(type_ref, Some(e.syntax()))
+                });
+                Expr::Mut { expr: self.lower_opt_expr(e.expr()), mutability }
+            }
             E::Cast(e) => {
                 let expr = self.lower_opt_expr(e.expr());
                 let type_ref = self.lower_opt_type(e.type_expr());

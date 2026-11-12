@@ -1285,8 +1285,9 @@ impl ImmExpr {
     }
 }
 
-/// `mut e`: `e` made `mut`, copying what's `imm` in it, or an array or a
-/// struct made `mut`, like `mut [1]` or `mut Point { x: 1 }`.
+/// `mut e`: an array or a struct made `mut`, like `mut [1]` or
+/// `mut Point { x: 1 }`, or `'n e`: one of the named mutability `'n`, like
+/// `'n [1]`.
 pub struct MutExpr(SyntaxNode);
 
 simple_node!(MutExpr, MUT_EXPR);
@@ -1294,6 +1295,11 @@ simple_node!(MutExpr, MUT_EXPR);
 impl MutExpr {
     pub fn expr(&self) -> Option<Expr> {
         self.find_node()
+    }
+
+    /// The `'n` of `'n [1]`, or `None` for `mut [1]`.
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        self.find_token(LABEL_IDENT)
     }
 }
 
