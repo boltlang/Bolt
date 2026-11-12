@@ -105,7 +105,11 @@ description: Where the rules of mutability are in the checker, the tests and the
   known, `Unifier::shallow_resolve` and `Unifier::resolve` give its view
   instead (`Ty::ro_view`, `Ty::normalize_ro`). The view goes into a
   struct's or enum's arguments where its variance lets them become a
-  supertype, so `ro Box[[i32]]` is `ro Box[ro [i32]]`. `holds.rs` sees `ro T` as
+  supertype, so `ro Box[[i32]]` is `ro Box[ro [i32]]`. A type parameter
+that must be at most `ro`, like the `T` of `fn pass[T: ro](x: T) -> T`, is
+given what may change seen as `ro`, and what can't as it is
+(`Unifier::see_as_ro`): `pass(mut [1])` is a `ro [i32]`, and `pass([1])` an
+`imm [i32]`. `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
   an error (E0223). A `mut` array or struct held by `ro` is the same error
   (`infer::mut_inside`, with the bound it breaks), also in the parameters

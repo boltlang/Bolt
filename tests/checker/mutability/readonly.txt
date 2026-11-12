@@ -315,3 +315,37 @@ error at `b`: expected mut Box[ro [i32]], found mut Box[mut [i32]]
 error at `Handler { f: writes }`: expected imm Handler[ro [i32]], found imm Handler[mut [i32]]
 error at `mut Both { item: mut [1], f: |xs| xs[0] }`: expected ro Both[ro [i32]], found mut Both[mut [i32]]
 error at `b.item`: can't change ro [i32]
+
+================================================================================
+A type parameter at most ro is given what may change seen as ro
+:test-prelude
+================================================================================
+fn pass[T: ro](x: T) -> T = x;
+fn wrap[U](u: U) -> ro U = pass(u);
+fn go() = {
+  let a = pass(mut [1]);
+  let b = pass([1]);
+  let c = pass(mut [mut [1]]);
+  let n = pass(1);
+  mut (a, b, c, n)
+};
+--------------------------------------------------------------------------------
+pass: forall T. T: ro => fn(x: T) -> T
+wrap: forall U. fn(u: U) -> ro U
+go: fn() -> mut (ro [i32], imm [i32], ro [ro [i32]], i32)
+
+================================================================================
+What a type parameter at most ro is given as ro can't be changed
+:error
+:test-prelude
+================================================================================
+fn pass[T: ro](x: T) -> T = x;
+fn go() = {
+  let a = pass(mut [1]);
+  a[0] = 2;
+};
+--------------------------------------------------------------------------------
+pass: forall T. T: ro => fn(x: T) -> T
+go: fn() -> ()
+--------------------------------------------------------------------------------
+error at `a`: can't change ro [i32]

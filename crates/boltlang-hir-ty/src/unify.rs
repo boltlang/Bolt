@@ -39,6 +39,9 @@ struct Var<'db> {
     /// type, so that type errors can say it's a number: see
     /// [`Unifier::resolve_literals`].
     defaulted: Option<NumberKind>,
+    /// Whether it must be at most `ro`, so that a value it receives that
+    /// holds what may change is seen as `ro`: see [`Unifier::see_as_ro`].
+    seen_as_ro: bool,
 }
 
 /// That a function whose name slot is `hi` flows into the variable `lo`,
@@ -125,7 +128,12 @@ impl<'db> Unifier<'db> {
 
     pub fn new_var(&mut self, kind: VarKind) -> Ty<'db> {
         let var = TyVar(self.vars.len() as u32);
-        self.vars.push(Var { state: VarState::Unbound(kind), met_error: false, defaulted: None });
+        self.vars.push(Var {
+            state: VarState::Unbound(kind),
+            met_error: false,
+            defaulted: None,
+            seen_as_ro: false,
+        });
         Ty::Var(var)
     }
 
@@ -165,6 +173,13 @@ impl<'db> Unifier<'db> {
             Ty::Var(_) => match self.shallow_resolve(t) {
                 Ty::Var(var) => Some(Ty::Var(var)),
                 resolved => Some(self.resolve(&resolved)),
+            },
+            // A number holds nothing, so it's its own view.
+            Ty::Ro(inner) => match self.shallow_resolve(inner) {
+                Ty::Var(v) if matches!(self.var_kind(v), Some(VarKind::Int | VarKind::Float)) => {
+                    Some(Ty::Var(v))
+                }
+                _ => None,
             },
             _ => None,
         })
@@ -295,6 +310,40 @@ impl<'db> Unifier<'db> {
     /// into `b`, like from the value a pattern matches into its parts.
     pub fn unify_into(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         self.reversed(|u| u.unify(a, b))
+    }
+
+    /// Let the variable `var`, of a type that must be at most `ro`, like the
+    /// `T` of `fn pass[T: ro](x: T)`, receive what it's given seen as `ro`
+    /// when that holds what may change: `pass(mut [1])` makes `T` a
+    /// `ro [i32]`, which a `mut [i32]` fits, and `pass([1])` an `imm [i32]`.
+    /// What's still unknown is taken as it is, and checked by the bound.
+    pub(crate) fn see_as_ro(&mut self, var: TyVar) {
+        self.vars[var.0 as usize].seen_as_ro = true;
+    }
+
+    /// `ty` seen as `ro`, if it holds what may change, and `ty` otherwise.
+    fn view_if_it_may_change(&self, ty: &Ty<'db>) -> Ty<'db> {
+        fn may_change(ty: &Ty<'_>) -> bool {
+            match ty {
+                // A closure never changes once it's made, and `ro T` and
+                // `imm T` aren't changed through.
+                Ty::Fn(..) | Ty::Ro(_) | Ty::Imm(_) => false,
+                Ty::Mutability(Mutability::Mut) => true,
+                // A type parameter may be `mut`.
+                Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => true,
+                ty => {
+                    let mut found = false;
+                    ty.walk_children(|t| found = found || may_change(t));
+                    found
+                }
+            }
+        }
+        let resolved = self.resolve(ty);
+        if may_change(&resolved) {
+            resolved.ro_view(self.variances, false).normalize_ro(self.variances)
+        } else {
+            ty.clone()
+        }
     }
 
     /// `f` the other way round: with what receives a value and what gives
@@ -747,6 +796,13 @@ impl<'db> Unifier<'db> {
         ty: &Ty<'db>,
         expected: bool,
     ) -> Result<(), UnifyError<'db>> {
+        let viewed;
+        let ty = if self.vars[var.0 as usize].seen_as_ro && expected != self.flipped {
+            viewed = self.view_if_it_may_change(ty);
+            &viewed
+        } else {
+            ty
+        };
         let has_names = |t: &Ty<'db>| matches!(t, Ty::Fn(p, ..) if !p.names.is_empty());
         if self.var_kind(var) != Some(VarKind::General) || !ty.any(&mut |t| has_names(t)) {
             return self.bind(var, ty);
