@@ -68,21 +68,25 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   rejected, and `imm x` with `x : T` and `T ⊑ imm` is a `T`.
 - **Read-only views** (#320): `ro` is a fifth mutability. For holding it
   sits between the two, `imm ⊑ ro ⊑ mut`, so an `imm` object can't hold a
-  `ro` one, which may change. For subtyping it's above both: `Sub` sees a
-  `mut`, `imm` or `ro` cell as `ro`, and its contents too, as long as they
-  are at most `ro`, so the view is deep. No object is made `ro`, and `set`
-  never takes one. A cell of any mutability, a parameter too, can be seen
-  as `ro`. Subtyping happens
-  only at variables and locations (`varSub`, `locSub`): the other rules
-  stay syntax-directed, and an argument is converted by naming it first.
-  A value of a type parameter `T` can be seen as `ro T`, which is at most
-  `ro`, so `ro [T]` needs nothing assumed about `T`. A view leaves a
-  closure as it is: a closure never changes once it's made, and its
+  `ro` one, which may change. For subtyping it's above both: `Sub`
+  (`BoltMut/Subtyping.lean`) sees a `mut`, `imm` or `ro` cell as `ro`, and
+  its contents too, as long as they are at most `ro`, so the view is deep.
+  No object is made `ro`, and `set` never takes one. A cell of any
+  mutability, a parameter too, can be seen as `ro`. A value of a type
+  parameter `T` can be seen as `ro T`, which is at most `ro`, so `ro [T]`
+  needs nothing assumed about `T`. A view leaves a closure's own
+  mutability as it is: a closure never changes once it's made, and its
   mutability doesn't keep it from being called, so an object at least
   `ro` can hold any closure. A `ro` literal, like `(xs, 1)` for a `mut`
-  `xs`, is a new `mut` object whose only name is seen as `ro` from the
-  start (`Expr.newRo`), so it needs no rule of its own
-  (`BoltMut/ReadOnly.lean`).
+  `xs`, is a new `mut` object used at a `ro` type from the start, so it
+  needs no rule of its own (`BoltMut/ReadOnly.lean`).
+- **Subtyping** (#444): any expression can be used at a supertype of its
+  type (`sub`). A function fits where one that takes less and gives more
+  is expected, like one that takes `ro` where one that takes `mut` is
+  (`Sub.fn`), and what an `imm` object holds can be seen as a supertype of
+  its type, since it never changes (`Sub.immCell`). The proofs take a
+  typing apart up to `sub` (`HasType.app_inv` and the others in
+  `Lemmas.lean`).
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -110,8 +114,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254). Both copy the same way when they reach `imm e` (`Freeze.sim`) |
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
-| `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` | a `ro` literal, `let x = mut e in x` seen as `ro`, has the type `ro t'` for what `e`'s type can be seen as (#320). One holding a value of a type parameter is `ro (ro T)`, with nothing assumed, as #415's `match (a, b)` needs |
-| `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
+| `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` | a `ro` literal, `new true e` used at a `ro` type, has the type `ro t'` for what `e`'s type can be seen as (#320). One holding a value of a type parameter is `ro (ro T)`, with nothing assumed, as #415's `match (a, b)` needs |
+| `Sub.trans`, `Sub.imm` | `Subtyping.lean`, `Soundness.lean` | subtyping composes, also through a function's parameters, which are related the other way round; and the copy `imm e` makes of a value seen at a supertype fits the copy of that type |
+| `Ty.sub_var`, `StructDecl.sub_view`, `StructDecl.sub_imm` | `Variance.lean` | a struct type with its arguments changed is a subtype of it when each changed parameter is only where it can change that way: covariant in tuples and in `imm` and `ro` objects, contravariant in a function's parameters, invariant in `mut` objects (#440). So `mut Box[mut [i32]]` can be seen as `ro Box[ro [i32]]`, and an `imm Handler[ro [i32]]` used as an `imm Handler[mut [i32]]` |
 | `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, the region of what it makes `imm`, the `mut` objects it reaches (`Region`), is its own: the program has them only there, and no object outside the region holds one (`Expr.UniqToImm`). Freezing in place makes the region `imm` where it is. The simulation gives up the originals and relates each copy to its original (`region_freeze_step`), using what the copy is (`Freeze.shape`): exactly the region, each object copied to its own location (`Freeze.keys`, `Freeze.fresh`). No closure may have a `toImm` |
 | `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`; or a part of a tuple, like `push((xs, 1))`, which the body reaches with `fst` or `snd`. A variable can also hold what a function gives back new, like `make()`, when the function's body is `mut [e]` (`Returns`). Then the program with every `toImm` in place computes what it does. That what each `toImm` makes `imm` holds only what's `imm` already is a premise (`Shallow`): then its region is just the object (`Shallow.region`). The proof keeps an invariant of the running program (`Inv`): each object it owns is `mut`, consumed or gone from it, and no object holds it |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
@@ -160,14 +165,16 @@ no `sorry`.
   only share a field at the type it has in the base; Bolt's checker gets
   the same rule from the declared field types (#246). `Structs.lean` adds
   declarations with type and mutability parameters, but only to say which
-  of their types are well-formed, not to type programs with them.
+  of their types are well-formed, and `Variance.lean` how their arguments
+  can change, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
 - **Borrowed parameters** (#283).
-- **The rest of `ro`** (#320): subtyping is only for cells and tuples, not
-  for closures, whose types stay as they are; and there's no rule for
-  other places, like
-  `if` branches, which the core doesn't have. Impls and inference aren't
+- **The rest of `ro`** (#320): a closure's own mutability isn't seen as
+  `ro`, so a struct whose closure field has the struct's mutability can't
+  be seen as `ro` in the model, though the checker allows it; and there's
+  no rule for other places, like `if` branches, which the core doesn't
+  have. Impls and inference aren't
   covered either. `imm e` of a `ro T` can't be typed: it has no type
   like the checker's `imm T`.
 - **The rest of uniqueness** (#284): a unique object can go to a function
