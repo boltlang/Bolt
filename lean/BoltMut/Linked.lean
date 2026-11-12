@@ -20,6 +20,11 @@ and what's left to solve are mutabilities, `σ`.
   each variable is as given, or `ro`, and only `ro` when it must be.
 - It follows from `LinkedProblem.Solves.meet`: below two solutions there's
   always another, which takes each variable from one that isn't `ro`.
+- That holds with where values go too, like the result of a call where a
+  `mut [i32]` is expected (`Sub.none_meet_upper`). So the checker can take
+  that into account and still find the least solution: for
+  `fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32]`, `longer(mut [1], [2])`
+  is a `ro [i32]`, and where a `mut [i32]` is expected, it has no solution.
 
 With nothing assumed, and without function types. A variable that isn't
 in what's given has no least choice, which the checker defaults.
@@ -242,6 +247,54 @@ theorem Sub.none_meet {σ₁ σ₂ : Nat → Mu} :
     -- Both `imm` cells.
     · exact .immCell (ih hwt s₁ s₂)
 
+/-- **Where a value goes doesn't stop the meet either**: the meet of two
+choices that fit a type fits it too. Where it's `ro`, any choice fits;
+elsewhere, a choice that fits is exactly what it is. -/
+theorem Sub.none_meet_upper {σ₁ σ₂ : Nat → Mu} :
+    ∀ {p U : Ty}, p.NoFn → Sub .none (p.instF σ₁) U → Sub .none (p.instF σ₂) U →
+      Sub .none (p.instF (meetF σ₁ σ₂)) U
+  | .unit, _, _, h, _ | .int, _, _, h, _ | .tparam _, _, _, h, _ | .roParam _, _, _, h, _ => h
+  | .fn .., _, h, _, _ => h.elim
+  | .prod a b, U, hn, h₁, h₂ => by
+    obtain ⟨a₁, b₁, rfl, ha₁, hb₁⟩ := h₁.of_prod
+    obtain ⟨_, _, he, ha₂, hb₂⟩ := h₂.of_prod
+    cases he
+    exact .prod (Sub.none_meet_upper hn.1 ha₁ ha₂) (Sub.none_meet_upper hn.2 hb₁ hb₂)
+  | .cell m s, U, hn, h₁, h₂ => by
+    have ih : ∀ {t'}, Sub .none (s.instF σ₁) t' → Sub .none (s.instF σ₂) t' →
+        Sub .none (s.instF (meetF σ₁ σ₂)) t' :=
+      fun a b => Sub.none_meet_upper (σ₁ := σ₁) (σ₂ := σ₂) (p := s) hn a b
+    simp only [Ty.instF, Mu.substF_meet] at h₁ h₂ ⊢
+    obtain ⟨u, t, rfl, -, -⟩ := h₁.of_cell
+    generalize m.substF σ₁ = a at h₁ ⊢
+    generalize m.substF σ₂ = b at h₂ ⊢
+    rcases Sub.cell_cases h₁ with ⟨rfl, e₁⟩ | ⟨rfl, s₁, r₁⟩ | ⟨rfl, rfl, s₁⟩ <;>
+      rcases Sub.cell_cases h₂ with ⟨hb, e₂⟩ | ⟨hb, s₂, r₂⟩ | ⟨hb, hb', s₂⟩
+    -- Both exactly what it is.
+    · subst hb; subst e₁
+      rw [Mu.meet_self, Ty.instF_meet_left (s := s) hn (by rw [e₂]; exact .refl _)]
+      exact .refl _
+    -- Exactly a `ro` cell, and one seen as `ro`.
+    · subst e₁; subst hb
+      exact .ro (ih (.refl _) s₂) r₂
+    -- Exactly an `imm` cell, and one holding less.
+    · subst hb'; subst e₁
+      exact .immCell (ih (.refl _) s₂)
+    -- Seen as `ro`, and exactly a `ro` cell.
+    · subst hb; subst e₂
+      exact .ro (ih s₁ (.refl _)) r₁
+    -- Both seen as `ro`.
+    · exact .ro (ih s₁ s₂) r₁
+    -- Seen as `ro`, and an `imm` cell: `ro` isn't `imm`.
+    · cases hb'
+    -- An `imm` cell, and exactly one.
+    · subst hb; subst e₂
+      exact .immCell (ih s₁ (.refl _))
+    -- An `imm` cell, and one seen as `ro`: `imm` isn't `ro`.
+    · cases hb
+    -- Both `imm` cells.
+    · exact .immCell (ih s₁ s₂)
+
 /-- Two choices that what's given fits agree on a variable in the pattern,
 unless one of them makes it `ro`. -/
 theorem Sub.none_agree {σ₁ σ₂ : Nat → Mu} {j : Nat} :
@@ -288,9 +341,13 @@ mutability. -/
 structure LinkedProblem where
   lower : List (Ty × Ty)
   bounds : List (Mu × Ty) := []
+  /-- Where values go: each pattern fits its type, `p[σ] ≤ U`, like the
+  result of a call where a `mut [i32]` is expected. -/
+  upper : List (Ty × Ty) := []
 
 def LinkedProblem.Solves (P : LinkedProblem) (σ : Nat → Mu) : Prop :=
-  (∀ c ∈ P.lower, Sub .none c.1 (c.2.instF σ)) ∧ (∀ b ∈ P.bounds, AtMost .none b.1 (b.2.instF σ))
+  (∀ c ∈ P.lower, Sub .none c.1 (c.2.instF σ)) ∧
+    (∀ b ∈ P.bounds, AtMost .none b.1 (b.2.instF σ)) ∧ ∀ c ∈ P.upper, Sub .none (c.1.instF σ) c.2
 
 /-- The variables that something is given for. -/
 def LinkedProblem.vars (P : LinkedProblem) : List Nat := P.lower.flatMap (·.2.muVars)
@@ -298,13 +355,15 @@ def LinkedProblem.vars (P : LinkedProblem) : List Nat := P.lower.flatMap (·.2.m
 /-- Patterns and bounds without function types, and what's given
 well-formed. -/
 def LinkedProblem.Ok (P : LinkedProblem) : Prop :=
-  (∀ c ∈ P.lower, c.2.NoFn ∧ AtMost .none .mutable c.1) ∧ ∀ b ∈ P.bounds, b.2.NoFn
+  (∀ c ∈ P.lower, c.2.NoFn ∧ AtMost .none .mutable c.1) ∧ (∀ b ∈ P.bounds, b.2.NoFn) ∧
+    ∀ c ∈ P.upper, c.1.NoFn
 
 theorem LinkedProblem.Solves.meet {P : LinkedProblem} (hP : P.Ok) {σ₁ σ₂ : Nat → Mu}
     (h₁ : P.Solves σ₁) (h₂ : P.Solves σ₂) : P.Solves (meetF σ₁ σ₂) := by
-  refine ⟨fun c hc => ?_, fun b hb => ?_⟩
+  refine ⟨fun c hc => ?_, fun b hb => ?_, fun c hc => ?_⟩
   · exact Sub.none_meet (hP.1 c hc).1 (hP.1 c hc).2 (h₁.1 c hc) (h₂.1 c hc)
-  · simpa [Mu.meet] using AtMost.none_meet (hP.2 b hb) (h₁.2 b hb) (h₂.2 b hb)
+  · simpa [Mu.meet] using AtMost.none_meet (hP.2.1 b hb) (h₁.2.1 b hb) (h₂.2.1 b hb)
+  · exact Sub.none_meet_upper (hP.2.2 c hc) (h₁.2.2 c hc) (h₂.2.2 c hc)
 
 /-- A solution that isn't `ro` wherever any solution isn't, for the
 variables in `L`. -/
@@ -353,7 +412,7 @@ def twoArrays : LinkedProblem :=
 
 /-- Both `ro`: `ro [ro [i32]]`. -/
 example : twoArrays.Solves (fun _ => .readonly) := by
-  refine ⟨fun c hc => ?_, by simp [twoArrays]⟩
+  refine ⟨fun c hc => ?_, by simp [twoArrays], by simp [twoArrays]⟩
   simp only [twoArrays, List.mem_cons, List.not_mem_nil, or_false] at hc
   rcases hc with rfl | rfl <;> simp only [Ty.instF, Mu.substF] <;>
     exact .ro (.ro (.refl _) trivial) ⟨.refl _, trivial⟩
@@ -374,5 +433,40 @@ example (σ : Nat → Mu) (h : twoArrays.Solves σ) : σ 0 = .readonly := by
     · cases h
   · exact h0
   · cases h
+
+/-! ## Where the result goes -/
+
+/-- `longer(mut [1], [2])` for `fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32]`,
+with `'m` as `?0`, the second array of mutability `second`, and `ups` where
+its result goes. -/
+def longer (second : Mu) (ups : List (Ty × Ty)) : LinkedProblem :=
+  { lower := [(.cell .mutable .int, .cell (.param 0) .int), (.cell second .int, .cell (.param 0) .int)],
+    upper := ups }
+
+/-- Read only, `'m` is `ro`. -/
+example : (longer .immutable []).Solves (fun _ => .readonly) := by
+  refine ⟨fun c hc => ?_, by simp [longer], by simp [longer]⟩
+  simp only [longer, List.mem_cons, List.not_mem_nil, or_false] at hc
+  rcases hc with rfl | rfl <;> exact .ro (.refl _) trivial
+
+/-- Where a `mut [i32]` is expected, there's no solution: `'m` would have
+to be `mut`, which `[2]` isn't. -/
+example (σ : Nat → Mu) :
+    ¬ (longer .immutable [(.cell (.param 0) .int, .cell .mutable .int)]).Solves σ := by
+  rintro ⟨hl, -, hu⟩
+  have h₁ := hl (.cell .immutable .int, .cell (.param 0) .int) (by simp [longer])
+  have h₂ := hu (.cell (.param 0) .int, .cell .mutable .int) (by simp [longer])
+  simp only [Ty.instF, Mu.substF] at h₁ h₂
+  rw [h₂.to_mut_cell] at h₁
+  rcases Sub.cell_cases h₁ with ⟨h, -⟩ | ⟨h, -⟩ | ⟨-, h, -⟩ <;> cases h
+
+/-- With two `mut` arrays, it's `mut` there. -/
+example : (longer .mutable [(.cell (.param 0) .int, .cell .mutable .int)]).Solves
+    (fun _ => .mutable) := by
+  refine ⟨fun c hc => ?_, by simp [longer], fun c hc => ?_⟩
+  · simp only [longer, List.mem_cons, List.not_mem_nil, or_false] at hc
+    rcases hc with rfl | rfl <;> exact .refl _
+  · simp only [longer, List.mem_cons, List.not_mem_nil, or_false] at hc
+    subst hc; exact .refl _
 
 end BoltMut
