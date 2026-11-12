@@ -20,7 +20,7 @@ example (t : Ty) :
   obtain ⟨_, _, _, hs₁⟩ := h₁.new_inv
   obtain ⟨_, hx, _, _⟩ := h₂.set_inv
   -- Seeing it as `ro` doesn't make it changeable either.
-  cases (hs₁.trans hx.var_update).to_cell_inv (by simp)
+  cases (hs₁.trans hx.var_update).to_mut_cell
 
 /-- `[mut [1]]`: an `imm` object can't hold a `mut` one, since `imm` is
 deep. -/
@@ -59,7 +59,7 @@ example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int)) (.set (.var 0) (.int 1)) t := by
   intro h
   obtain ⟨_, hx, _, _⟩ := h.set_inv
-  cases hx.var_update.to_cell_inv (by simp)
+  cases hx.var_update.to_mut_cell
 
 /-! ## Closures -/
 
@@ -78,7 +78,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   obtain ⟨_, _, _, _, himm, hb, _⟩ := h₂.lam_inv
   obtain ⟨_, hx, _, _⟩ := hb.set_inv
   obtain ⟨s₀, hx, hs⟩ := hx.var_inv
-  cases hs.to_cell_inv (by simp)
+  cases hs.to_mut_cell
   simp only [Ctx.update] at hx
   exact nomatch Le.none_immutable (himm rfl 0 _ hx).1
 
@@ -136,13 +136,13 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   have hd₁ := (hsp'.atMost_imm hd).1
   obtain ⟨a'', _, hg, hsa'⟩ := ha.fst_inv
   obtain ⟨_, _, hv, hs''⟩ := hg.get_inv
-  obtain ⟨a₀, b₀, rfl, ha₀, _⟩ := hs''.to_prod_inv
+  obtain ⟨a₀, b₀, rfl, ha₀, _⟩ := hs''.to_prod
   -- Seeing `l.a` as `ro` doesn't help: an `imm` object can't hold a `ro`
   -- one either.
   have hss : Sub .none s (.prod a₀ b₀) := by
-    obtain ⟨_, _, h, hs', _⟩ := (hs₁.trans hv.var_update).cell_inv
+    obtain ⟨_, _, h, hs', _⟩ := (hs₁.trans hv.var_update).of_cell
     cases h; exact hs'
-  obtain ⟨_, _, h, ha', _⟩ := (hsp.trans hss).prod_inv
+  obtain ⟨_, _, h, ha', _⟩ := (hsp.trans hss).of_prod
   cases h
   exact nomatch Le.none_immutable ((hsa.trans (ha'.trans (ha₀.trans hsa'))).atMost_imm hd₁).1
 
@@ -284,7 +284,7 @@ example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.set (.var 0) (.int 1)) t := by
   intro h
   obtain ⟨_, hx, _, _⟩ := h.set_inv
-  cases hx.var_update.to_cell_inv (by simp)
+  cases hx.var_update.to_mut_cell
 
 /-- `[xs]` with `xs : ro [i32]` is rejected: an `imm` object can't hold a
 `ro` one, since what's seen as `ro` may change. -/
@@ -371,7 +371,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.toImm false (.lam tr
   intro h
   obtain ⟨_, _, _, he, hd, _⟩ := h.toImm_inv
   obtain ⟨_, _, _, _, _, _, hs⟩ := he.lam_inv
-  obtain ⟨_, _, rfl⟩ := hs.of_fn
+  obtain ⟨_, _, rfl, _⟩ := hs.of_fn
   cases hd with
   | asIs h => exact nomatch Le.none_immutable h.none_fn
 

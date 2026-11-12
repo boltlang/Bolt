@@ -148,13 +148,13 @@ theorem HasType.unit_inv (h : HasType fns σ Δ io Γ .unit t) : t = .unit := by
   generalize hE : Expr.unit = E at h
   induction h <;> cases hE
   case unit => rfl
-  case sub => rename_i hs _ ih; cases ih rfl; exact (hs.eq_of_not (by simp) (by simp) (by simp) (by simp))
+  case sub => rename_i hs _ ih; cases ih rfl; exact hs.of_unit
 
 theorem HasType.int_inv {n : Int} (h : HasType fns σ Δ io Γ (.int n) t) : t = .int := by
   generalize hE : Expr.int n = E at h
   induction h <;> cases hE
   case int => rfl
-  case sub => rename_i hs _ ih; cases ih rfl; exact (hs.eq_of_not (by simp) (by simp) (by simp) (by simp))
+  case sub => rename_i hs _ ih; cases ih rfl; exact hs.of_int
 
 theorem HasType.loc_inv {l : Nat} (h : HasType fns σ Δ io Γ (.loc l) t) :
     ∃ m s, σ[l]? = some (m, s) ∧ (io = true → m = .immutable) ∧ Sub Δ (.cell m s) t := by
@@ -193,7 +193,7 @@ theorem HasType.set_inv {e₁ e₂ : Expr} (h : HasType fns σ Δ io Γ (.set e�
   case sub =>
     rename_i hs _ ih
     obtain ⟨s, h₁, h₂, rfl⟩ := ih rfl
-    exact ⟨s, h₁, h₂, hs.eq_of_not (by simp) (by simp) (by simp) (by simp)⟩
+    exact ⟨s, h₁, h₂, hs.of_unit⟩
   all_goals exact ⟨_, by assumption, by assumption, rfl⟩
 
 theorem HasType.letE_inv {x : Nat} {e₁ e₂ : Expr} (h : HasType fns σ Δ io Γ (.letE x e₁ e₂) t) :
@@ -325,11 +325,11 @@ theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- A value of a `mut` cell type is a location of that type. -/
-theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
-    {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) (hm : m = .mutable) :
-    ∃ l, v = .loc l ∧ σ[l]? = some (m, t) := by
+theorem canonical_mut_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
+    {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell .mutable t)) :
+    ∃ l, v = .loc l ∧ σ[l]? = some (.mutable, t) := by
   obtain ⟨l, m', t', rfl, h, hs⟩ := canonical_cell_sub hv ht
-  cases hs.to_cell_inv hm
+  cases hs.to_mut_cell
   exact ⟨l, rfl, h⟩
 
 /-- A value of a function type is a closure. -/
@@ -354,7 +354,7 @@ theorem canonical_prod {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
   | pair => cases hv with | pair h₁ h₂ => exact ⟨_, _, rfl, h₁, h₂⟩
   | sub _ hs ih =>
     subst hT
-    obtain ⟨a₀, b₀, rfl, _, _⟩ := hs.to_prod_inv
+    obtain ⟨a₀, b₀, rfl, _, _⟩ := hs.to_prod
     exact ih hv rfl
   | unit | int | loc | lam => cases hT
   | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv

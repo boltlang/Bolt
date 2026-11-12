@@ -207,7 +207,7 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
     -- A closure isn't copied: its type is a function type, which `imm`
     -- leaves as it is.
     obtain ⟨_, _, _, _, _, _, hs⟩ := ht.lam_inv
-    obtain ⟨_, _, rfl⟩ := hs.of_fn
+    obtain ⟨_, _, rfl, _⟩ := hs.of_fn
     exact ⟨σ, Extends.refl σ, hh, .lam, ht, hmo⟩
   | @imm h m l w hw =>
     intro σ io Γ t hh _ ht _ hmo
@@ -286,17 +286,17 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
       | none =>
         -- What it holds has a type that `s` is, seen through `ro` or not.
         have hs : Sub .none s₀ s := by
-          obtain ⟨_, _, h, hs, _⟩ := hsub.cell_inv
+          obtain ⟨_, _, h, hs, _⟩ := hsub.of_cell
           cases h; exact hs
         obtain ⟨h', m', w', hc⟩ := ih hh hwv hwt hs hf hmo
         exact ⟨_, _, _, .cell hw hlk hc⟩
     · exact ⟨_, _, _, .imm hw⟩
   | prod a b iha ihb =>
     intro σ h m io Γ v t₀ hh hv ht hs₀ hf hmo
-    obtain ⟨a₀, b₀, rfl, ha, hb⟩ := hs₀.to_prod_inv
+    obtain ⟨a₀, b₀, rfl, ha, hb⟩ := hs₀.to_prod
     obtain ⟨v₁, v₂, rfl, hv₁, hv₂⟩ := canonical_prod hv ht
     obtain ⟨a₁, b₁, ht₁, ht₂, hs₁⟩ := ht.pair_inv
-    obtain ⟨_, _, heq, ha₁, hb₁⟩ := hs₁.to_prod_inv
+    obtain ⟨_, _, heq, ha₁, hb₁⟩ := hs₁.to_prod
     cases heq
     have ha' := ha₁.trans ha
     have hb' := hb₁.trans hb
@@ -312,15 +312,15 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
     | int => exact ⟨_, _, _, .int⟩
     | loc =>
       obtain ⟨_, _, _, _, hs⟩ := ht'.loc_inv
-      obtain ⟨_, _, h, _⟩ := hs.cell_inv
+      obtain ⟨_, _, h, _⟩ := hs.of_cell
       cases h
     | lam =>
       obtain ⟨_, _, _, _, _, _, hs⟩ := ht'.lam_inv
-      obtain ⟨_, _, h⟩ := hs.of_fn
+      obtain ⟨_, _, h, _⟩ := hs.of_fn
       cases h
     | pair =>
       obtain ⟨_, _, _, _, hs⟩ := ht'.pair_inv
-      obtain ⟨_, _, h, _, _⟩ := hs.prod_inv
+      obtain ⟨_, _, h, _, _⟩ := hs.of_prod
       cases h
   | fn μ a r =>
     intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
@@ -378,7 +378,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
   | set he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
-      · obtain ⟨l, rfl, hl⟩ := canonical_cell hv₁ he₁ (by simp)
+      · obtain ⟨l, rfl, hl⟩ := canonical_mut_cell hv₁ he₁
         obtain ⟨_, _, w, hw, _⟩ := hh.2 _ _ _ hl
         exact .inr ⟨_, _, .setLoc hw hv₂⟩
       · exact .inr ⟨_, _, .setCong₂ hv₁ hs⟩
@@ -429,7 +429,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     rw [hl] at hv
     cases hv
     -- Read through a `ro` view, the value is seen as `ro` too.
-    obtain ⟨_, _, h, hs₀, _⟩ := hsub.cell_inv
+    obtain ⟨_, _, h, hs₀, _⟩ := hsub.of_cell
     cases h
     exact ⟨σ, Extends.refl σ, hh, .sub (.sub hvt hs₀) hs⟩
   | setCong₁ _ ih =>
@@ -445,7 +445,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   | @setLoc l b w v hl hv =>
     intro σ t hh ht
     obtain ⟨s, he₁, he₂, rfl⟩ := ht.set_inv
-    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    obtain ⟨_, hl', hσ⟩ := canonical_mut_cell .loc he₁
     cases hl'
     exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit⟩
   | letCong _ ih =>
@@ -490,7 +490,8 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     -- The closure may be used at a function type that takes less and gives
     -- more than its own: the argument is seen as what it takes, and what
     -- it gives as what's expected.
-    obtain ⟨_, ha, hr₀⟩ := hs.fn_inv
+    obtain ⟨_, _, h, ha, hr₀⟩ := hs.of_fn
+    cases h
     -- The body of an `imm` closure is typed inside one; outside, it has
     -- the same type. A closed closure saw nothing but its parameter.
     have hb := (hbody.weaken_ctx (hc.update _ _)).weaken_imm (io' := false) (fun h => nomatch h)
@@ -519,14 +520,14 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     intro σ t hh ht
     obtain ⟨a, b, he, hs⟩ := ht.fst_inv
     obtain ⟨a₁, b₁, h₁, _, hs₁⟩ := he.pair_inv
-    obtain ⟨_, _, heq, ha, _⟩ := hs₁.to_prod_inv
+    obtain ⟨_, _, heq, ha, _⟩ := hs₁.to_prod
     cases heq
     exact ⟨σ, Extends.refl σ, hh, .sub (.sub h₁ ha) hs⟩
   | sndVal _ _ =>
     intro σ t hh ht
     obtain ⟨a, b, he, hs⟩ := ht.snd_inv
     obtain ⟨a₁, b₁, _, h₂, hs₁⟩ := he.pair_inv
-    obtain ⟨_, _, heq, _, hb⟩ := hs₁.to_prod_inv
+    obtain ⟨_, _, heq, _, hb⟩ := hs₁.to_prod
     cases heq
     exact ⟨σ, Extends.refl σ, hh, .sub (.sub h₂ hb) hs⟩
   | toImmCong _ ih =>

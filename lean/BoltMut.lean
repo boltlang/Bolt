@@ -1,4 +1,5 @@
 import BoltMut.Syntax
+import BoltMut.Subtyping
 import BoltMut.Typing
 import BoltMut.Semantics
 import BoltMut.Lemmas

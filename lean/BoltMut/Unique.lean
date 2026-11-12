@@ -615,7 +615,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln
     simp only [Expr.inPlace, (hv.noToImm hln.2).inPlace] at hr
     obtain ⟨_, he₁, _, _⟩ := ht.set_inv
-    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    obtain ⟨_, hl', hσ⟩ := canonical_mut_cell .loc he₁
     cases hl'
     · have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
       cases hr with

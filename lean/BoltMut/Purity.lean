@@ -152,7 +152,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | @setLoc l₀ b w₀ v hl _ =>
     intro σ t n A hh ht hn hc hhc
     obtain ⟨_, he₁, _, _⟩ := ht.set_inv
-    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    obtain ⟨_, hl', hσ⟩ := canonical_mut_cell .loc he₁
     cases hl'
     · -- The location written is `mut`, so it's new or allowed.
       have hw : n ≤ l₀ ∨ A l₀ := by

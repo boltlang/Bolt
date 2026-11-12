@@ -48,7 +48,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     intro σ t l ty hh ht hl
     obtain ⟨_, he₁, _, _⟩ := ht.set_inv
     -- A `ro` view isn't `mut`, so the location written is.
-    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+    obtain ⟨_, hl', hσ⟩ := canonical_mut_cell .loc he₁
     cases hl'
     · -- The location written is `mut`, so it isn't `l`.
       have hne : l₀ ≠ l := by

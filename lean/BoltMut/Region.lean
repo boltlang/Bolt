@@ -205,7 +205,7 @@ theorem lam_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) 
     {x : Nat} {e : Expr} {t : Ty} (ht : HasType fns σ .none io Γ (.lam b x e) t) (hf : t.Freezable) :
     ∀ l, e.HasLoc l → ∃ w, h[l]? = some (false, w) := by
   obtain ⟨_, _, _, _, _, hb, hs⟩ := ht.lam_inv
-  obtain ⟨_, _, rfl⟩ := hs.of_fn
+  obtain ⟨_, _, rfl, _⟩ := hs.of_fn
   intro l hl
   cases b with
   | true => exact (nomatch (show Le .none .mutable .immutable from hf).none_immutable)
@@ -266,7 +266,7 @@ theorem Freeze.key_size {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)}
     | pair hv₁ hv₂ =>
       -- At the types of its parts, whose sizes seeing them as `ro` keeps.
       obtain ⟨ta, tb, ht₁, ht₂, hsp⟩ := ht.pair_inv
-      obtain ⟨_, _, rfl, hsa', hsb'⟩ := hsp.prod_inv
+      obtain ⟨_, _, rfl, hsa', hsb'⟩ := hsp.of_prod
       have hf₁ := hsa'.imm.2 hf.1
       have hf₂ := hsb'.imm.2 hf.2
       have hsa := hsa'.size
@@ -352,7 +352,7 @@ theorem Freeze.shape {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
     cases hv with
     | pair hv₁ hv₂ =>
       obtain ⟨_, _, ht₁, ht₂, hsp⟩ := ht.pair_inv
-      obtain ⟨_, _, rfl, ha, hb⟩ := hsp.prod_inv
+      obtain ⟨_, _, rfl, ha, hb⟩ := hsp.of_prod
       have hf₁ := ha.imm.2 hf.1
       have hf₂ := hb.imm.2 hf.2
       obtain ⟨hr₁, hs₁⟩ := ih₁ hh hv₁ ht₁ hf₁ hmo hs

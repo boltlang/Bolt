@@ -1,4 +1,4 @@
-import BoltMut.Syntax
+import BoltMut.Subtyping
 
 /-!
 # Typing

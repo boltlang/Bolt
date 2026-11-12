@@ -1,4 +1,5 @@
 import BoltMut.Structs
+import BoltMut.Subtyping
 
 /-!
 # Variance: how a struct's arguments can change (#440)
@@ -107,15 +108,6 @@ def Sub.dir (Δ : Assume) : Bool → Ty → Ty → Prop
 
 theorem Sub.dir_refl (Δ : Assume) (pos : Bool) (t : Ty) : Sub.dir Δ pos t t := by
   cases pos <;> exact .refl _
-
-/-- Seeing two types as `ro` keeps them related. -/
-theorem Sub.ro_mono {Δ : Assume} {t t' : Ty} (h : Sub Δ t t') : Sub Δ t.ro t'.ro := by
-  induction h with
-  | refl => exact .refl _
-  | ro _ _ ih | immCell _ ih => exact .ro ih (AtMost.of_ro _ _)
-  | prod _ _ iha ihb => exact .prod iha ihb
-  | fn ha hr => exact .fn ha hr
-  | tparam => exact .refl _
 
 theorem Mu.subst_fixed {c : Changed} {Δ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (hv : c.Rel Δ ms ms' τs τs') {m : Mu} (h : m.fixedIn c = true) : m.subst ms' = m.subst ms := by
