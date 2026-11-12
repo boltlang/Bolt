@@ -108,13 +108,13 @@ fit, which is why `Sub.immCell` came with `Sub.fn`.
 - **Generic closures.** A closure can't take a type argument.
 - **Struct declarations**, mostly. A struct is the tuple of its fields, so
   a struct update shares a field at the type it has in the base; the
-  checker gets the same rule from the declared field types (#246).
+  checker gets the same rule from the declared field types.
   `Structs.lean` and `Variance.lean` add declarations, but programs aren't
   typed with them.
 - **Bounds checks, enums, classes and `let mut`.** A cell is one element,
   so an index can't be out of bounds, and enums are values, like tuples.
 - **Borrowed parameters** (#283).
-- **The rest of `ro`** (#320). A closure's own mutability isn't seen as
+- **The rest of `ro`**. A closure's own mutability isn't seen as
   `ro`, so a struct whose closure field has the struct's mutability can't
   be seen as `ro`, though the checker allows it. There's no rule for `if`
   branches, which the model doesn't have. `imm e` of a `ro T` can't be

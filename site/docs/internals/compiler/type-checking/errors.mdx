@@ -122,8 +122,7 @@ code, a range and labels, for the CLI and the language server.
 A file's diagnostics are about the file itself. The files it uses, through
 its prelude and its imports (`files_used_by`), have their own, and what's
 in a file with errors can't be relied on: a program over a broken prelude
-could fail when it runs in ways the checker rules out
-([#249](https://github.com/boltlang/Bolt/issues/249)). So they're shown
+could fail when it runs in ways the checker rules out. So they're shown
 once, where they are:
 
 - **The CLI** adds one error (E0112) to the diagnostics of the file it

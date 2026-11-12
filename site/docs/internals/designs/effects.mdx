@@ -354,8 +354,8 @@ match body() {
 The arms run outside of the `match`, so the `get()` and `set(s)` in them
 go to the next handler, and the `match` still has `State` in its row. Arms
 like these always resume at the end, so Conduit compiles them to plain
-calls. A shorthand for passing on the rest is discussed in
-[#347](https://github.com/boltlang/Bolt/issues/347).
+calls. A shorthand for passing on the rest is
+[still to decide](#still-to-decide).
 
 The arms of each operation must be exhaustive, like value arms:
 `effect yield(0), k` alone doesn't handle `yield(1)`.

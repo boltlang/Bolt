@@ -235,8 +235,7 @@ inferred. At runtime nothing changes: a name only decides a position, which
 the checker and MIR find the same way (`place_args`), and monomorphization
 drops the names.
 
-Only a call by name checks a name
-([#411](https://github.com/boltlang/Bolt/issues/411); the reasons are in
+Only a call by name checks a name (the reasons are in
 [Arguments and parameter names](../../designs/parameter-names.mdx)). A name in a function
 type says how whoever holds a value of that type can call it by name, so
 names never make unification fail, and instance matching ignores them. A
@@ -279,7 +278,7 @@ what the impl gives. What's in a `mut` array, struct or tuple shares its
 slots on both sides when the two are unified (`Unifier::share_if_mut`),
 since either side can write to it: after `put(ks, |y: i32| y)` for `fn
 put[T](xs: mut [T], x: T)`, the elements of `ks` can't be called `x`
-anymore ([#436](https://github.com/boltlang/Bolt/issues/436)).
+anymore.
 
 Before generalizing, the solver settles the names
 (`Solver::settle_names`): a claimed slot has its claim, one whose set is a
@@ -292,8 +291,7 @@ another (`Unifier::given_fns`), in the case of two function types and when
 a variable takes a function's shape, and the solver keeps where
 (`Solver::unify_at`). Once the names are settled, it warns where a name of
 the given function is the name of another position in the type it was
-given for (`TypeError::SwappedNames`, W0005,
-[#433](https://github.com/boltlang/Bolt/issues/433)).
+given for (`TypeError::SwappedNames`, W0005).
 
 A parameter before a `/` has no name (`ParamData::name` is `None`), so
 its type is the same as if the name were left out: `fn f(x: i32, /, y:
@@ -336,7 +334,7 @@ method's defaults work the same way, since its declaration has a scheme.
 A default with a lambda or a handler in it isn't lowered yet.
 
 What's left: lambdas with keyword parameters, and
-passing a pack on, like `f(*args)` in a generic body (#405).
+passing a pack on, like `f(*args)` in a generic body.
 
 ## References
 

@@ -7,8 +7,7 @@ description: What the names of a function type's parameters mean when functions 
 # Parameter names
 
 This is the design of [#411](https://github.com/boltlang/Bolt/issues/411)
-and of the warning for swapped names
-([#433](https://github.com/boltlang/Bolt/issues/433)). How the checker
+and of the warning for swapped names. How the checker
 does it is described in
 [Names of positional parameters](../compiler/type-checking/types.mdx#names-of-positional-parameters).
 
@@ -161,8 +160,7 @@ k = |y: i32| y;    // error: expected fn(x: i32) -> i32, found fn(y: i32) -> i32
 ### Writes into containers
 
 A function written into a `mut` array, struct or tuple flows into what's
-stored there, however it's written
-([#436](https://github.com/boltlang/Bolt/issues/436)):
+stored there, however it's written:
 
 ```bolt
 fn put[T](xs: mut [T], x: T) = { xs[0] = x; };
@@ -214,8 +212,7 @@ doesn't fit, naming the call
 
 ## Swapped names
 
-Renaming makes one mistake easy to write
-([#433](https://github.com/boltlang/Bolt/issues/433)):
+Renaming makes one mistake easy to write:
 
 ```bolt
 fn copy(f: fn(src: Path, dst: Path)) = f(src: a, dst: b);
@@ -249,18 +246,12 @@ neither is given for the other.
 - **Checking impl methods against their class**
   ([#154](https://github.com/boltlang/Bolt/issues/154)), where a renamed
   parameter could get the same warning as a swapped one.
-- **Mutabilities.** Function parameters without annotations have hidden
-  mutabilities of their own, so `fn pick(c, f: fn(x: i32) -> i32, g: fn(x:
-  i32) -> i32) = if c { f } else { g }` fails for that reason
-  ([#320](https://github.com/boltlang/Bolt/issues/320)). Its read-only
-  mutability, `ro`, is the same idea as rule 2: a value that's one of
-  several only allows what all of them allow.
 
 ## Prior art
 
 - **OCaml** has labels in function types, and a function with other labels
   doesn't fit: `~x:int -> int` isn't `~item:int -> int`. That's what Bolt
-  did before #411.
+  did before this design.
 - **Swift** took argument labels out of function types (SE-0111), so a
   function value can't be called by name at all. This design keeps names
   in the types, for calls through a value.

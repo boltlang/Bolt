@@ -158,7 +158,7 @@ That's why a `ro` value can't hold a `mut` one, like a written
 ## How a program runs
 
 `Semantics.lean` has a small-step semantics, `Step`, over a heap of
-objects. Each object knows whether it's `mut`, as in the evaluator. Nothing
+objects. Each object knows whether it's `mut`, as in Conduit's evaluator. Nothing
 at run time stops a write to an `imm` object: `set` writes to any
 location. Ruling that out is the type system's job, and the theorems show
 it does.

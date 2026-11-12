@@ -31,8 +31,8 @@ mismatch, which shows both:
 ```
 
 These can show up far from their cause: the `push` fails because of where
-the array was made, maybe much earlier. The error should point at where the
-`Imm` came from: the literal, the annotation, or the function whose result
-it is. That's what the labels for the causes of constraints in
-[#127](https://github.com/boltlang/Bolt/issues/127) are for, and why
-unification will have to remember the origin of `Imm` and `Mut`.
+the array was made, maybe much earlier. The error has a label for what
+expected `mut`, like a parameter, but not yet for where the `Imm` came
+from: the literal, the annotation, or the function whose result it is.
+For that, unification would have to remember the origin of `Imm` and
+`Mut`.

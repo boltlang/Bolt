@@ -90,7 +90,7 @@ ys[0] = 3;   // E0221
 | `imm_fn_changes_only_through_handler` | `Frame.lean` |
 
 A program changes only what's reachable from the locations in it that
-aren't `imm`, its *frame* (`changes_only_frame`, #255). For a call, that's
+aren't `imm`, its *frame* (`changes_only_frame`). For a call, that's
 what the function and its argument reach, and what's `imm` all the way
 down adds nothing. So the types of a call say what it can change:
 
@@ -149,7 +149,7 @@ let ys = imm xs;   // `imm [imm [i32]]`: both arrays copied
 ```
 
 Since an `imm` value never changes, a copy of it can't be told apart from
-it (#254). So the code generator may store small `imm` structs by value,
+it. So the code generator may store small `imm` structs by value,
 and make `imm` literals constants that are shared:
 
 ```bolt
@@ -183,7 +183,7 @@ let frozen = imm xs;
 ```
 
 The copy `imm xs` makes is wasted here: nothing else has `xs`, so it could
-be made `imm` where it is. That's what #335 is about.
+be made `imm` where it is.
 
 - `Region.lean` says what the copy does: it copies exactly the `mut`
   objects the value reaches, its *region* (`Freeze.keys`), each to a
@@ -216,7 +216,7 @@ ys[0] = 1;
 | `Sub.to_ro`, `Sub.trans` | `Subtyping.lean` |
 | `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` |
 
-A `mut` or `imm` value can be seen as `ro` (#320), and the view is deep:
+A `mut` or `imm` value can be seen as `ro`, and the view is deep:
 
 ```bolt
 fn first(xs: ro [[i32]]) -> ro [i32] = xs[0];
@@ -254,7 +254,7 @@ fn same[T](a: Opt[T], b: Opt[T]) -> Bool = match (a, b) {   // E0230
 | `Ty.sub_var`, `StructDecl.sub_view`, `StructDecl.sub_imm` | `Variance.lean` |
 
 A function that takes `ro` fits where one that takes `mut` is expected
-(#444), and what an `imm` array holds can be seen as a supertype of its
+and what an `imm` array holds can be seen as a supertype of its
 type. The checker allows both:
 
 ```bolt
@@ -267,7 +267,7 @@ let n = call_all([reads]);
 copy of that type, which is why `imm` arrays need to be covariant once
 functions are.
 
-`Variance.lean` proves when a struct's type arguments can change (#440).
+`Variance.lean` proves when a struct's type arguments can change.
 A parameter can change as it is where it's only held, like `T` in
 `struct Box[T] { item: T }`, the other way round in a function's
 parameters, like `T` in `struct Handler[T] { f: fn(T) -> () }`, and not at
@@ -345,12 +345,12 @@ about a small program:
 - changing a `mut` object, but not an `imm` one;
 - an `imm` object can't hold a `mut` one;
 - a generic function that reads what it's given, but can't change it;
-- #244: an `imm` object can't hold a closure that changes what it
+- an `imm` object can't hold a closure that changes what it
   captured;
-- #246: `Line { a: l.a, n: 5 }` with a `mut` `l` can't be an `imm Line`,
+- `Line { a: l.a, n: 5 }` with a `mut` `l` can't be an `imm Line`,
   since it would share `l.a`, a `mut Point`;
-- #247: an `imm Box` holding a `T` needs `T ⊑ imm`;
+- an `imm Box` holding a `T` needs `T ⊑ imm`;
 - an iterator whose array has a mutability `'v` of its own;
-- #320: `fn peek(xs: ro [i32])` taking a `mut` and an `imm` array,
+- `fn peek(xs: ro [i32])` taking a `mut` and an `imm` array,
   `fn total(xs: 'm [i32]) = peek(xs)` passing what it's given on as `ro`,
   and one type parameter for a `mut` and an `imm` value, as `ro [i32]`.

@@ -62,8 +62,7 @@ where `array_freeze` lowers to an `array_clone` to `imm`. Conduit's
   `v`, and no object outside the region holds one, making the region `imm`
   where it is can't be told apart from copying it: the
   [Lean proof](https://github.com/boltlang/Bolt/tree/main/lean) shows this
-  (`region_freeze_step` in `Unique.lean`,
-  [#335](https://github.com/boltlang/Bolt/issues/335)).
+  (`region_freeze_step` in `Unique.lean`).
 
 The last doesn't fire on `to_imm` of a fresh `mut` `Vec` yet: the impl
 reads `v.len` after cloning the buffer, so `v` is still used and the
@@ -127,7 +126,7 @@ Bolt's are: `Effect20`.
   which each call and closure of it gives rows for, and its lambdas and
   handlers have them too. A row parameter of the caller in a type
   argument, like `T = fn() does E`, becomes one of the callee's instance,
-  as for mutabilities (#371).
+  as for mutabilities.
 - **Data types** get an effect parameter for each row in their type
   arguments, like that of the closure in `Option[fn() does Log]`, as they
   do for mutabilities.

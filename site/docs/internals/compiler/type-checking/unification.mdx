@@ -8,8 +8,9 @@ description: How the unifier of boltlang-hir-ty solves equalities between types.
 
 The `Unifier` in `unify.rs` solves equalities $\tau_1 \doteq \tau_2$ by
 binding inference variables. It's syntactic, first-order unification
-[Robinson 1965], and it knows nothing about where types come
-from. It returns a `UnifyError`, and the [solver](./constraints.mdx) turns
+[Robinson 1965], with a direction for the few places where a type can fit
+where another is expected ([Where a value is received](#where-a-value-is-received)),
+and it knows nothing about where types come from. It returns a `UnifyError`, and the [solver](./constraints.mdx) turns
 that into a diagnostic with an origin.
 
 ## The variable table
@@ -91,7 +92,7 @@ These kinds are a small case of what the type class literature calls
 ### Mutabilities
 
 A [mutability](../../designs/mutability/index.mdx) is a type of its own kind:
-`Ty::Mutability(Mut)` or `Ty::Mutability(Imm)`, a variable of kind
+`Ty::Mutability(Mut)`, `Imm` or `ReadOnly`, a variable of kind
 `VarKind::Mutability`, a parameter, or the error type. Arrays, structs
 and function types unify their mutabilities like any other argument, and
 `Mut` only unifies with `Mut`. A mutability variable can only be bound to
@@ -106,8 +107,8 @@ either kind. In a function whose type comes from its class or impl, or
 that has no body, it's a hidden parameter of the function instead: inside
 the body a `Ty::Param`, which only unifies with itself. This table shows whether
 two parameter types unify once their functions are instantiated, which
-is how [#275](https://github.com/boltlang/Bolt/issues/275) proposes to
-find overloads that a call could fit both of:
+is how the checker finds overloads that a call could fit both of
+(`overlap.rs`):
 
 | A | B | Unify? |
 |---|---|---|
@@ -115,6 +116,29 @@ find overloads that a call could fit both of:
 | `Vec[i32]`, with a hidden mutability | `mut Vec[i32]` | yes: the hidden mutability's variable becomes `Mut` |
 | `Vec[T]`, with `T` a type parameter | `Vec[i32]` | yes: `T`'s variable becomes `i32` |
 | `(Vec[i32], String)` | `(Vec[i32], i32)` | no: `String` and `i32` don't unify |
+
+### Where a value is received
+
+`unify(a, b)` has a direction: `a` receives what `b` gives, like a
+parameter receiving an argument. Inside the parameters of a function type
+it's the other way round, which `flipped` says (`Unifier::reversed`). Most
+types are the same either way. Three rules aren't:
+
+- **`ro`**: a place that receives `ro` takes any mutability, so `ro [i32]`
+  takes a `mut [i32]` and an `imm [i32]`. What a `mut` array, struct or
+  tuple holds is unified both ways (`share_if_mut`), since it's written as
+  well as read.
+- **A struct's or enum's arguments** are unified as its variance says
+  (`variance.rs`): as they are, the other way round, or both ways. In a
+  struct that's `mut`, or whose mutability isn't known yet, they're always
+  unified both ways, as what's in a `mut` array.
+- **Effects**: when the rows of two function types are both known, the
+  given one only has to fit in the received one (`Ty::row_fit`), so a
+  function that does less fits where one that does more is expected. When
+  either is still a variable, they're made the same row.
+
+Whether impls overlap (`overlap.rs`) is about equality, so it unifies with
+`Unifier::new()`, where a struct's arguments are always unified both ways.
 
 ## Never and error
 

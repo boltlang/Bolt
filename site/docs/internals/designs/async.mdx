@@ -145,7 +145,7 @@ handler's arms don't run the next task themselves: they put the rest of
 the current one on the queue and return to the loop. So switching tasks
 doesn't make the stack deeper, however often it happens. A handler whose
 arms resume the next task directly gets deeper with each switch, since
-nothing returns until the end (#392).
+nothing returns until the end.
 
 - **`pause`** puts the task at the end of the queue.
 - **`fork`** puts the new task, then the rest of the current one, on the

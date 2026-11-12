@@ -9,7 +9,7 @@ description: How the compiler finds packages, and the std that comes with it.
 An import whose path doesn't start with `./` or `../`, like
 `import "shapes/circle"`, names a *package*. This page is about how the
 compiler finds packages, and in particular `std`, which comes with the
-compiler ([#98](https://github.com/boltlang/Bolt/issues/98)).
+compiler.
 
 ## Finding a package
 
@@ -36,7 +36,7 @@ Every file is reached by its real path, with symbolic links resolved
 (`Files::resolve`), and a package is its real directory (`package_of`), so
 a file is one file, and in one package, however it's reached: by an
 import, as an argument of `bolt check`, or as a document the editor opens
-through a link ([#238](https://github.com/boltlang/Bolt/issues/238)). The
+through a link. The
 language server reports a document's errors under the path it was opened
 with. `pub(package)` items are visible in the files of the same package.
 

@@ -50,7 +50,7 @@ description: Where the rules of mutability are in the checker, the tests and the
   `adt_variance`): as they are where they're only held, the other way round
   in a closure's parameters, and not at all where they're both, or in a
   struct that's `mut` or whose mutability isn't known yet
-  (`variance::arg_variance`, #440). The variance is a fixed point over the
+  (`variance::arg_variance`). The variance is a fixed point over the
   fields, like `struct_atoms`, and is found from the fields lowered without
   it (`lower::raw_field_types`). `Ty::Fn` holds its mutability last, and `fn(...)`
   lowers with `Ty::Unwritten` like an array, so it's a hidden parameter in
@@ -98,7 +98,7 @@ description: Where the rules of mutability are in the checker, the tests and the
     at are reported where they're written, the same way: those of a
     function without a body, like a class method, of a type alias, and of
     an impl's instance (`written_type` in `boltlang-hir`).
-- **`ro`** (#320): a written `ro` lowers to `Mutability::ReadOnly`, and
+- **`ro`**: a written `ro` lowers to `Mutability::ReadOnly`, and
   `Ty::ro_inside` makes the mutabilities that aren't written inside it
   `ReadOnly` too, since a `ro` view is deep. A type parameter under it is
   `Ty::Ro`, `ro T`, which a `T` fits where it's received. Once `T` is
@@ -146,28 +146,15 @@ description: Where the rules of mutability are in the checker, the tests and the
   `tests/checker/mutability/readonly.txt` and
   `tests/checker/mutability/closures.txt` have a case for each rule in this
   chapter.
-- **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a
-  Lean proof ([Proofs](../../../proofs/index.mdx) lists what it covers), for a core of these rules with closures, structs and type
-  parameters, that nothing reachable from an `imm` value ever changes, that
-  a well-typed program never gets stuck, and that calling an `imm` function
-  with `imm` arguments changes nothing that existed before. More
-  generally, a call changes only what its arguments that aren't `imm` all
-  the way down can reach (`Frame.lean`), which the reactive design needs.
-  And an `imm` value can be copied, or two equal ones shared, without
-  changing what a program computes (`Sharing.lean`), so the code
-  generator may store them however it likes. `imm e` is a copy of what's
-  `mut` in its value, which shares what's `imm`, as `Value::freeze` does
-  (`Freeze` in `Semantics.lean`), and it gets the type `solve_imm` gives
-  it (`ImmTy`). Leaving the copy out, by making the value's region `imm`
-  where it is, can't be noticed when nothing outside the region has its
-  objects (`region_freeze_step` in `Unique.lean`). A local check of the
-  program gives that for one object whose contents are `imm` already
-  (`UniqueCheck.lean`).
-  It includes the
-  "at most" assumptions that #243 proposes, like `T: imm`, and proves the
-  solver's shortcuts for them (`Solver.lean`): how it splits a type, when
-  it can decide an unknown mutability right away, and that
+- **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has
+  a Lean proof of a core of these rules: that nothing reachable from an
+  `imm` value ever changes, that a well-typed program never gets stuck, and
+  what a call can change. It covers `ro`, variance, `imm e`, and the
+  solver's shortcuts for "at most" (`Solver.lean`): how it splits a type,
+  when it can decide an unknown mutability right away, and that
   `Solver::mutability_le` finds every chain of assumptions.
+  [Proofs](../../../proofs/index.mdx) has each theorem, with how it links
+  to Bolt.
 
 `Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197)) is
 a struct, so it gets a mutability like any other, and `[T]` is shorthand for

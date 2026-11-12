@@ -181,14 +181,12 @@ hidden parameter of the struct: `struct Line { a: Point, b: Point }` is
 `Line^m` with `a: Point^m`. A field can be `imm`, but not `mut` (E0224),
 since a `mut` field in an `imm` struct would break the rule. The fields of
 an enum, which has no mutability, are `imm`.
-([#271](https://github.com/boltlang/Bolt/issues/271): in a field like
-`imm [Point]`, the `Point` gets the struct's mutability too, so the struct
-can only be `imm`.)
+In a field like `imm [Point]`, the `Point` is `imm` too, since an `imm`
+array can only hold `imm` ones.
 
 **An `imm` value can't hold a `mut` one through a type parameter**
 (E0223): `Box { item: mut Point { .. } }` is an `imm Box[mut Point]`. What
-a struct holds is what its fields hold, not its type arguments
-([#256](https://github.com/boltlang/Bolt/issues/256)): with
+a struct holds is what its fields hold, not its type arguments: with
 `struct Handler[T] { f: fn(T) -> () }`, an `imm Handler[mut [i32]]` is
 fine, since a closure doesn't hold what it takes, and with
 `struct Frozen[T] { items: imm [T] }`, only an `imm` `T` can be held, in
@@ -197,8 +195,7 @@ a `Frozen` of either mutability. That's the same as Rust inferring
 well-formed (`StructDecl.atMost_ty_iff` in `lean/BoltMut/Structs.lean`).
 
 Unification can't express this, since it's about a type and what's
-inside it. It's an "at most" constraint instead, with `imm ⊑ mut`
-([#243](https://github.com/boltlang/Bolt/issues/243)): an array or struct
+inside it. It's an "at most" constraint instead, with `imm ⊑ mut`: an array or struct
 holds only what's at most its own mutability. So `[x]` needs nothing in
 the type of `x` to be more `mut` than `imm`. What an array or struct holds
 must in turn be at most *its* mutability, and a function's mutability
@@ -298,8 +295,7 @@ as `imm`, which is what makes `imm` worth having:
 - an `imm` struct can't be told apart from a copy, so the code generator
   can store small ones by value;
 - the [reactive design](../reactive.mdx) knows what can change, and which
-  calls change it, from the types
-  ([#200](https://github.com/boltlang/Bolt/issues/200)).
+  calls change it, from the types.
 
 It doesn't guarantee what Rust does, that nothing else changes a `mut`
 value while you have it. `mut` values are shared on purpose.
@@ -307,7 +303,7 @@ value while you have it. `mut` values are shared on purpose.
 ## Read-only views: `ro`
 
 **`ro` is a view of a value that may or may not change, through which it
-isn't changed** ([#320](https://github.com/boltlang/Bolt/issues/320)).
+isn't changed**.
 Without it, a function that only reads takes values of one mutability per
 call, and two values of different mutabilities can't meet: `if c { a }
 else { b }` with a `mut` and an `imm` `Money` is an error. With `ro`,
@@ -332,8 +328,7 @@ expected, but a `ro T` isn't a `T`, so a generic function can't give back
 what it read through `ro [T]` as a `T`. Once `T` is known, `ro T` is its
 view: `ro (mut [i32])` is `ro [i32]`, and `ro i32` is `i32`.
 
-**A struct's arguments change as its fields use them** (its *variance*,
-[#440](https://github.com/boltlang/Bolt/issues/440)). The `T` of
+**A struct's arguments change as its fields use them**, its *variance*. The `T` of
 `struct Box[T] { item: T }` is only held, so a `mut Box[mut [i32]]` can be
 seen as a `ro Box[ro [i32]]`, and a written `ro Box[[i32]]` is that type.
 The `T` of `struct Handler[T] { f: fn(T) }` is in a closure's parameters,
@@ -344,9 +339,7 @@ parameter that's both held and taken can't change at all. A `mut` struct
 keeps its arguments as they are, like the elements of a `mut` array, since
 what it holds is read and written.
 
-**A `ro` value can't hold a `mut` one** (E0223,
-[#442](https://github.com/boltlang/Bolt/issues/442),
-[#443](https://github.com/boltlang/Bolt/issues/443)). Otherwise what's
+**A `ro` value can't hold a `mut` one** (E0223). Otherwise what's
 read through it could be changed: through a `ro (mut [i32], i32)`, `t.0`
 would be a `mut [i32]`, and through a `ro Box[mut [i32]]`, so would
 `b.item`. Seen as `ro`, both are `ro [i32]` instead. A written
@@ -359,8 +352,7 @@ The rules are proven in `lean/BoltMut`: in `Syntax.lean`, `Ty.ro` is the
 view and `Ty.roParam` is `ro T`; in `Subtyping.lean`, `Sub` says where a
 type fits, and `Sub.to_ro` that a type fits its view. `ReadOnly.lean` has
 the examples.
-`Variance.lean` proves when a struct's arguments can change, for
-[#440](https://github.com/boltlang/Bolt/issues/440). A parameter in a
+`Variance.lean` proves when a struct's arguments can change. A parameter in a
 tuple, or in an object that's `imm`, `ro`, or whose mutability is a
 parameter that becomes `ro`, is covariant, like the `T` of
 `Box[T] { item: T }`: `mut Box[mut [i32]]` can be seen as
@@ -372,8 +364,7 @@ function subtyping (`Sub.fn`), and what an `imm` object holds can be seen
 as a supertype of its type (`Sub.immCell`), as the checker does for an
 array that isn't `mut`.
 
-Conduit has a `ReadOnly` mutability too, which is deep in the same way
-([conduit#57](https://github.com/boltlang/conduit/issues/57)): under it, an
+Conduit has a `ReadOnly` mutability too, which is deep in the same way: under it, an
 array's elements and a data type's fields fit covariantly, and so does
 what an `imm` object holds, while a closure takes its parameters
 contravariantly. A function called at `ro` gets an instance of its own,
@@ -420,8 +411,7 @@ shows how to use them; this section is about how the checker treats them.
 
 ### Names in structs
 
-A struct declares its names after its type parameters
-([#243](https://github.com/boltlang/Bolt/issues/243)), like
+A struct declares its names after its type parameters, like
 `struct VecIter[T, 'v] { data: 'v Vec[T], index: i32 }`. A type gives
 them after its type arguments, like `VecIter[i32, imm]`. One that isn't
 given is decided like the mutability before a type: a parameter in a
