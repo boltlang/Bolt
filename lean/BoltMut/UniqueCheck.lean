@@ -150,27 +150,6 @@ theorem Expr.subst_inst (e : Expr) (x : Nat) (v : Expr) (ms : List Mu) (τs : Li
     simp only [Expr.subst, Expr.inst]
     split <;> simp [ih]
 
-/-- Substituting doesn't remove locations. -/
-theorem Expr.hasLoc_subst_of {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : e.HasLoc l) :
-    (e.subst x v).HasLoc l := by
-  induction e with
-  | var | unit | int => exact h.elim
-  | loc => exact h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
-  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ ih₂
-  | letE y _ _ ih₁ ih₂ =>
-    simp only [Expr.subst, Expr.HasLoc]
-    rcases h with h | h
-    · exact .inl (ih₁ h)
-    · split
-      · exact .inr h
-      · exact .inr (ih₂ h)
-  | lam b y _ ih =>
-    simp only [Expr.subst, Expr.HasLoc]
-    split
-    · exact h
-    · exact ih h
-
 /-! ## The check -/
 
 /-- `e` is `l`, or a projection of a tuple that holds it, `fst (l, w)`: what a

@@ -24,16 +24,6 @@ theorem Extends.append (σ : HeapTy) (p : Mu × Ty) : Extends σ (σ ++ [p]) := 
   rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp h).1]
   exact h
 
-/-- A heap typing that has every location of another is at least as long. -/
-theorem Extends.length_le {σ σ' : HeapTy} (hx : Extends σ σ') : σ.length ≤ σ'.length := by
-  cases e : σ.length with
-  | zero => exact Nat.zero_le _
-  | succ n =>
-    have hn : n < σ.length := by omega
-    have := hx n _ (List.getElem?_eq_getElem hn)
-    have := (List.getElem?_eq_some_iff.mp this).1
-    omega
-
 theorem Extends.nil (σ : HeapTy) : Extends [] σ := by
   intro l p h
   simp at h

@@ -366,52 +366,6 @@ theorem Rel.beside {h : Heap} {ρ ρ' : Nat → Nat → Prop} {a b₁ b₂ : Exp
     Rel ρ' b₁.inPlace b₂ :=
   hr.mono_on fun x c hx hxc => hρ x c hxc fun hfx => hd x hfx ((Expr.hasLoc_inPlace b₁ x).mp hx)
 
-/-- Where nothing is `mut`, a copy copies nothing. -/
-theorem Freeze.of_imm {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr} (hc : Freeze h m v h' m' v')
-    (hi : ∀ l, v.HasLoc l → ∃ w, h[l]? = some (false, w)) : h' = h ∧ m' = m ∧ v' = v := by
-  induction hc with
-  | unit | int | lam | imm => exact ⟨rfl, rfl, rfl⟩
-  | seen hw _ =>
-    obtain ⟨w', hw'⟩ := hi _ rfl
-    rw [hw] at hw'
-    cases hw'
-  | cell hw _ _ _ =>
-    obtain ⟨w', hw'⟩ := hi _ rfl
-    rw [hw] at hw'
-    cases hw'
-  | pair _ _ ih₁ ih₂ =>
-    obtain ⟨rfl, rfl, rfl⟩ := ih₁ fun l hl => hi l (.inl hl)
-    obtain ⟨rfl, rfl, rfl⟩ := ih₂ fun l hl => hi l (.inr hl)
-    exact ⟨rfl, rfl, rfl⟩
-
-/-- And it can always be made. -/
-theorem Freeze.self_of_imm {h : Heap} {m : List (Nat × Nat)} {v : Expr} (hv : v.IsValue)
-    (hi : ∀ l, v.HasLoc l → ∃ w, h[l]? = some (false, w)) : Freeze h m v h m v := by
-  induction hv with
-  | unit => exact .unit
-  | int => exact .int
-  | loc =>
-    obtain ⟨w, hw⟩ := hi _ rfl
-    exact .imm hw
-  | lam => exact .lam
-  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ fun l hl => hi l (.inl hl)) (ih₂ fun l hl => hi l (.inr hl))
-
-/-- A location of the second of two related expressions corresponds to one
-of the first. -/
-theorem Rel.hasLoc_inv {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) {c : Nat} (hc : e₂.HasLoc c) :
-    ∃ a, e₁.HasLoc a ∧ ρ a c := by
-  induction h with
-  | var | unit | int => exact hc.elim
-  | loc h =>
-    simp only [Expr.HasLoc] at hc
-    subst hc
-    exact ⟨_, rfl, h⟩
-  | new _ ih | get _ ih | call _ ih | lam _ ih | fst _ ih | snd _ ih | toImm _ ih => exact ih hc
-  | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
-    rcases hc with hc | hc
-    · obtain ⟨a, ha, h⟩ := ih₁ hc; exact ⟨a, .inl ha, h⟩
-    · obtain ⟨a, ha, h⟩ := ih₂ hc; exact ⟨a, .inr ha, h⟩
-
 theorem Heap.freezeAt_none {h : Heap} {m : List (Nat × Nat)} {i : Nat} (hi : m.lookup i = none) :
     (h.freezeAt m)[i]? = h[i]? := by
   rw [Heap.freezeAt_get, hi]
@@ -421,9 +375,6 @@ theorem Heap.freezeAt_some {h : Heap} {m : List (Nat × Nat)} {i c : Nat} (hi : 
     {b : Bool} {w : Expr} (hw : h[i]? = some (b, w)) : (h.freezeAt m)[i]? = some (false, w) := by
   rw [Heap.freezeAt_get, hi, hw]
   simp
-
-theorem Heap.freezeAt_nil (h : Heap) : h.freezeAt [] = h :=
-  List.ext_getElem? fun _ => Heap.freezeAt_none (by simp)
 
 /-- **Freezing a region in place**: the step of `toImm` itself. The other
 program makes the region's objects `imm` where they are; each copy
