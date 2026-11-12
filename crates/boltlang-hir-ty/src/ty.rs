@@ -437,6 +437,24 @@ pub enum Ty<'db> {
     Error,
 }
 
+/// How one row fits in another ([`Ty::row_fit`]): the effects of the one
+/// that the other has too, paired with the other's, whose arguments must be
+/// the same, and what it has that the other doesn't, as effects and as
+/// rows that stand for any row.
+#[derive(Debug, Default)]
+pub struct RowFit<'a, 'db> {
+    pub same: Vec<(&'a EffectTy<'db>, EffectTy<'db>)>,
+    pub missing_effects: Vec<EffectTy<'db>>,
+    pub missing_parts: Vec<Ty<'db>>,
+}
+
+impl RowFit<'_, '_> {
+    /// Whether it fits: nothing is missing.
+    pub fn fits(&self) -> bool {
+        self.missing_effects.is_empty() && self.missing_parts.is_empty()
+    }
+}
+
 impl<'db> Ty<'db> {
     pub fn unit() -> Self {
         Ty::tuple(Box::new([]), Ty::Mutability(Mutability::Imm))
@@ -617,6 +635,32 @@ impl<'db> Ty<'db> {
             Ty::Param(_) | Ty::Bound(_) => Some((&[], vec![self.clone()])),
             _ => None,
         }
+    }
+
+    /// How the row `self` fits in `sup`, when neither is a variable. A row
+    /// fits in itself and in one made of it, and no effects fit anywhere.
+    pub fn row_fit(&self, sup: &Ty<'db>) -> Option<RowFit<'_, 'db>> {
+        if *self == Ty::Error || *sup == Ty::Error || self == sup {
+            return Some(RowFit::default());
+        }
+        if let Ty::Row(_, rest) = sup
+            && rest.contains(self)
+        {
+            return Some(RowFit::default());
+        }
+        let (effects, parts) = self.row_parts()?;
+        let (allowed, allowed_parts) = sup.row_parts()?;
+        let mut fit = RowFit::default();
+        for e in effects {
+            match allowed.iter().find(|a| a.effect == e.effect) {
+                Some(a) => fit.same.push((e, a.clone())),
+                None => fit.missing_effects.push(e.clone()),
+            }
+        }
+        // A row that stands for any row fits only in a row made of it: a
+        // parameter like `E` isn't known to be in any other row.
+        fit.missing_parts = parts.into_iter().filter(|p| !allowed_parts.contains(p)).collect();
+        Some(fit)
     }
 
     /// The effects of both lists, with the arguments of an effect in both

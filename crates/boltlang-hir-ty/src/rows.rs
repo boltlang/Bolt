@@ -130,38 +130,20 @@ impl<'db> Solver<'db> {
     fn solve_contains(&mut self, sub: &Ty<'db>, sup: &Ty<'db>, origin: Origin<'db>) -> bool {
         let sub = self.unifier.resolve(sub);
         let sup = self.unifier.resolve(sup);
-        // No effects fit anywhere, and a row fits in itself.
-        if sub == Ty::Error || sup == Ty::Error || sub == sup || sub == Ty::nothing() {
+        // No effects fit anywhere, also in a row that's still a variable.
+        if sub == Ty::nothing() {
             return true;
         }
-        // A row that the other is made of fits in it, whatever it is.
-        if let Ty::Row(_, rest) = &sup
-            && rest.contains(&sub)
-        {
-            return true;
+        // A variable on either side: wait until it's known, or until the row
+        // is settled.
+        let Some(fit) = sub.row_fit(&sup) else { return false };
+        for (e, a) in &fit.same {
+            self.same_args(e, a, origin);
         }
-        let (Some((effects, parts)), Some((allowed, allowed_parts))) =
-            (sub.row_parts(), sup.row_parts())
-        else {
-            // A variable on either side: wait until it's known, or until the
-            // row is settled.
-            return false;
-        };
-        let mut missing_effects = Vec::new();
-        for e in effects {
-            match allowed.iter().find(|a| a.effect == e.effect) {
-                Some(a) => self.same_args(e, a, origin),
-                None => missing_effects.push(e.clone()),
-            }
-        }
-        // A row that stands for any row fits only in a row made of it: a
-        // parameter like `E` isn't known to be in any other row.
-        let missing_parts: Vec<Ty<'db>> =
-            parts.into_iter().filter(|p| !allowed_parts.contains(p)).collect();
-        if !missing_effects.is_empty() || !missing_parts.is_empty() {
+        if !fit.fits() {
             self.errors.push(TypeError::Effects {
                 origin,
-                found: Ty::row_of(missing_effects, missing_parts),
+                found: Ty::row_of(fit.missing_effects, fit.missing_parts),
                 allowed: sup.clone(),
             });
         }
