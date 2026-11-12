@@ -315,6 +315,7 @@ seen as `ro Box[ro [i32]]`. `StructDecl.sub_imm`: and an
 |---|---|
 | `Ty.lub_sound`, `Ty.lub_least` | `Least.lean` |
 | `Ty.least_ro`, `Sub.no_fn_join` | `Least.lean` |
+| `Problem.principal`, `Problem.principal_lit`, `no_least_lit` | `Principal.lean` |
 
 At a call, a type parameter gets the types of the arguments, which must
 fit it, and what it must be at most. It should be given the least type
@@ -342,6 +343,24 @@ parameters. Two closures of different mutabilities have no type above both
 (`Sub.no_fn_join`). The checker doesn't find least types yet: it takes the
 first argument's type, and sees all of it as `ro` once anything in it may
 change.
+
+A solution that's below every other is *principal*: taking it never rules
+out what another would allow.
+
+- `Problem.principal`: what a call says about one type variable, what
+  flows into it, where its value goes, what it must be exactly and whether
+  it's at most `ro`, has a least solution whenever it has one, if something
+  flows in or it's given exactly, and no function type flows in.
+- `Problem.principal_lit`: so does an inferred literal, its type and its
+  mutability together, with nothing assumed. The mutability is `imm` when
+  the least type is `imm` all the way down, and `ro` otherwise.
+- `no_least_lit`: but not with what a function assumes. In
+  `fn f['a, 'b, 'c, 'd]` with `'a` and `'b` below both `'c` and `'d`, and
+  both of those below `ro`, the literal `(x, y)` of an `x: 'a [i32]` and a
+  `y: 'b [i32]` can be `'c` or `'d`, and nothing it can be is below both.
+
+Constraints between two type variables, and those of a function's
+parameters, aren't covered.
 
 ## The checker's solver
 
