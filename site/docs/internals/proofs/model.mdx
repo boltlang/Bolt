@@ -18,7 +18,7 @@ object with mutability `m` that holds a `t`, at a location in the heap.
 
 | Bolt | The model |
 |---|---|
-| `mut [x]`, `[x]` | `new .mutable x`, `new .immutable x`: a `mut` or an `imm` cell. `new .readonly x` is a `ro` literal, and `new m x` with `m` a parameter one whose function's caller decides it (`Mu.Lit`) |
+| `mut [x]`, `[x]` | `new .mutable x`, `new .immutable x`: a `mut` or an `imm` cell. `new .readonly x` is a `ro` literal, and `new m x` with `m` a mutability parameter of its function, like `'n [x]`, one whose caller decides it (`Mu.Lit`) |
 | `xs[i]`, `xs[i] = y` | `get e`, `set e y`. A cell is one element, so there's no index |
 | `[[i32]]` | a cell holding a cell |
 | `(a, b)`, a value | `pair a b`, of type `prod a b` |

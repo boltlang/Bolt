@@ -70,8 +70,8 @@ inductive Ty where
 /-- Expressions. `loc` only appears while running: it's a location in the
 heap. `new m e` makes an object of mutability `m`: `new .mutable e` is
 `mut [e]`, `new .immutable e` is `[e]`, and `new .readonly e` a `ro`
-literal (#415). It can be a parameter whose caller decides it, which must
-be assumed to be at most `ro` (`Mu.Lit`). A call gives the mutability and
+literal (#415). It can be one of the function's own mutability parameters,
+which its caller decides, like the `'n` of `'n [e]` (`Mu.Lit`). A call gives the mutability and
 type arguments of the function explicitly, as the type checker finds
 them. -/
 inductive Expr where
@@ -223,6 +223,9 @@ that nothing in `T` is more `mut` than `μ`. -/
 structure Assume where
   mus : List (Mu × Mu) := []
   tys : List (Nat × Mu) := []
+  /-- How many of its own mutability parameters are in scope, `param 0`
+  to `param (nmu - 1)`: those its literals can have. -/
+  nmu : Nat := 0
 
 /-- Nothing assumed, as for the program that's running. -/
 def Assume.none : Assume := {}
@@ -236,12 +239,15 @@ inductive Le (Δ : Assume) : Mu → Mu → Prop where
   | assume {m μ : Mu} : (m, μ) ∈ Δ.mus → Le Δ m μ
   | trans {m₁ m₂ m₃ : Mu} : Le Δ m₁ m₂ → Le Δ m₂ m₃ → Le Δ m₁ m₃
 
-/-- What a literal's mutability can be: `mut`, or what's at most `ro`, as
-`imm`, `ro`, or a parameter assumed to be at most `ro`, like the `'m` of
-`fn mk['m ⊑ ro](x)` that `[x]` gets when it's inferred (#415). So a
-literal's mutability is never inferred to be `mut`, and since a program
-that runs assumes nothing, none of its literals has a parameter. -/
-def Mu.Lit (Δ : Assume) (m : Mu) : Prop := m = .mutable ∨ Le Δ m .readonly
+/-- What a literal's mutability can be: a written one, or a mutability
+parameter in scope, like the `'n` of `'n [x]` in `fn mk['n](x)`, which may
+be anything, `mut` too (#415). A program that runs has no parameters in
+scope, so none of its literals has one. That a literal without a written
+mutability is only `imm` or `ro` is a rule about what the checker infers,
+not about typing (`Problem.principal_lit_ir`). -/
+def Mu.Lit (Δ : Assume) : Mu → Prop
+  | .param j => j < Δ.nmu
+  | _ => True
 
 /-- Nothing in a value of type `t` is more `mut` than `μ`: what an object of
 mutability `μ` can hold. A cell or a closure in it is at most `μ`, what a
@@ -262,7 +268,8 @@ the objects in it are well-formed. -/
 def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
   (∀ p ∈ Δ.mus, Le Δ' (p.1.subst ms) (p.2.subst ms)) ∧
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
-    (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit))
+    (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit)) ∧
+    (∀ j < Δ.nmu, ((Mu.param j).subst ms).Lit Δ')
 
 /-- With nothing assumed, `m ⊑ μ` only by the order itself. -/
 theorem Le.none_inv {m μ : Mu} (h : Le .none m μ) : m = .immutable ∨ μ = .mutable ∨ m = μ := by
@@ -308,21 +315,26 @@ theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' �
   | assume h => exact hs.1 _ h
   | trans _ _ ih₁ ih₂ => exact ih₁.trans ih₂
 
-/-- Show `Mu.Lit` of a written mutability, or one that's assumed. -/
+/-- A function with no mutability parameters in scope has no literals to
+give one. -/
+theorem Sat.noLit {Δ Δ' : Assume} {ms : List Mu} (h : Δ.nmu = 0 := by rfl) :
+    ∀ j < Δ.nmu, ((Mu.param j).subst ms).Lit Δ' :=
+  fun j hj => absurd (h ▸ hj) (Nat.not_lt_zero j)
+
+/-- Show `Mu.Lit` of a written mutability, or of a parameter in scope. -/
 macro "lit_mu" : tactic =>
   `(tactic| first
-    | exact Or.inl rfl
-    | exact Or.inr (Le.bot _)
-    | exact Or.inr (Le.refl _)
+    | exact trivial
+    | (simp [Mu.Lit]; done)
     | assumption)
 
 /-- What a literal's mutability can be survives instantiating: a parameter
-assumed to be at most `ro` is given an argument that's at most `ro`. -/
+in scope is given a mutability in scope where it's called. -/
 theorem Mu.Lit.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
     (h : m.Lit Δ) : (m.subst ms).Lit Δ' := by
-  rcases h with rfl | h
-  · exact .inl rfl
-  · exact .inr (Le.inst hs h)
+  cases m with
+  | param j => exact hs.2.2.2 j h
+  | _ => trivial
 
 /-- With nothing assumed, a closure at most `imm` is an `imm` one: `ro`
 isn't at most `imm`. -/
@@ -351,7 +363,7 @@ theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat �
   | tparam i =>
     obtain ⟨μ', hmem, hle⟩ := h
     rcases hmem with rfl | hmem
-    · exact (hs.2.2 i).mono (Le.inst hs hle)
+    · exact (hs.2.2.1 i).mono (Le.inst hs hle)
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
   | roParam i => exact (AtMost.of_ro Δ' _).mono (Le.inst hs h)
 
@@ -416,13 +428,15 @@ instantiated still meets the callee's assumptions. -/
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (h₁ : Sat Δ₁ Δ₂ ms' τs') (h₀ : Sat Δ₀ Δ₁ ms τs) :
     Sat Δ₀ Δ₂ (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
-  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun j hj => ?_⟩
   · have := Le.inst h₀ (h₁.1 p hp)
     rwa [Mu.subst_subst, Mu.subst_subst] at this
   · have := AtMost.inst h₀ (h₁.2.1 p hp)
     rwa [Mu.subst_subst, Ty.getD_inst] at this
-  · have := AtMost.inst h₀ (h₁.2.2 i)
+  · have := AtMost.inst h₀ (h₁.2.2.1 i)
     rwa [Ty.getD_inst] at this
+  · have := Mu.Lit.inst h₀ (h₁.2.2.2 j hj)
+    rwa [Mu.subst_subst] at this
 
 theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs) : (e.inst ms τs).NoLocs := by
   induction e with

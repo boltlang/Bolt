@@ -37,12 +37,10 @@ that holds what it must, and whose type is a subtype of the literal's: a
 `ro` literal is a new `mut` object, which is seen as `ro`. -/
 theorem Mu.Lit.alloc {m : Mu} {s : Ty} (hl : m.Lit .none) (hd : AtMost .none m s) :
     AtMost .none (muOf m.allocMut) s ∧ Sub .none (.cell (muOf m.allocMut) s) (.cell m s) := by
-  rcases hl with rfl | hl
-  · exact ⟨hd, .refl _⟩
-  · rcases hl.none_inv with rfl | h | rfl
-    · exact ⟨hd, .refl _⟩
-    · cases h
-    · exact ⟨hd.mono (.top _), .ro (.refl _) hd⟩
+  cases m with
+  | mutable | immutable => exact ⟨hd, .refl _⟩
+  | readonly => exact ⟨hd.mono (.top _), .ro (.refl _) hd⟩
+  | param j => exact absurd hl (Nat.not_lt_zero j)
 
 /-- Adding a location that holds a value of its type keeps the heap
 matching its typing. -/

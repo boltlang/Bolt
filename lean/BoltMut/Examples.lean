@@ -41,7 +41,8 @@ theorem sat_none (Δ : Assume) (ms : List Mu) : Sat Δ {} ms [] := by
   refine ⟨?_, ?_, ?_⟩
   · intro p h; simp at h
   · intro p h; simp at h
-  · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
+  · refine ⟨?_, Sat.noLit⟩
+    intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
 
 /-- It can be called with a `mut` object and with an `imm` one. -/
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new .mutable (.int 1))) .int := by
@@ -208,7 +209,8 @@ example : HasType [wrap] [] .none false Ctx.empty
     simp [wrap, wrapAssume] at hp
     subst hp
     exact ⟨.refl _, trivial⟩
-  · intro i
+  · refine ⟨?_, Sat.noLit⟩
+    intro i
     cases i with
     | zero => exact ⟨.bot _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
@@ -327,7 +329,8 @@ example : HasType [firstRo] [] .none false Ctx.empty
       (.ro (.ro (.refl _) trivial) ⟨.refl _, trivial⟩))
   · intro p h; simp [firstRo] at h
   · intro p h; simp [firstRo] at h
-  · intro i
+  · refine ⟨?_, Sat.noLit⟩
+    intro i
     cases i with
     | zero => exact ⟨.top _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
@@ -348,7 +351,8 @@ example : HasType [both] [] .none false Ctx.empty
       (.sub (.var (t := .cell .immutable .int) (by simp [Ctx.update])) (.ro (.refl _) trivial)))
   · intro p h; simp [both] at h
   · intro p h; simp [both] at h
-  · intro i
+  · refine ⟨?_, Sat.noLit⟩
+    intro i
     cases i with
     | zero => exact ⟨.top _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial

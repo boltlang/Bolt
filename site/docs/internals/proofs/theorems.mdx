@@ -247,13 +247,22 @@ fn same[T](a: Opt[T], b: Opt[T]) -> Bool = match (a, b) {   // E0230
 with nothing assumed. At run time, a `ro` literal makes a `mut` object,
 which the program only sees as `ro`.
 
-In the model, a literal's mutability can be `mut`, or anything at most
-`ro` (`Mu.Lit`): `imm`, `ro`, or a parameter assumed to be at most `ro`, as
-an inferred literal's would be in its function's type:
+Nothing is `mut` unless it's asked for. A literal is `mut` only if its
+mutability is written: as `mut [x]`, or as a mutability parameter of its
+function, like `'n [x]`, which a call can make `mut`. A literal without a
+written mutability is only `imm` or `ro`, the least that works, and in an
+inferred signature that can be a parameter at most `ro`:
 
 ```bolt
-fn mk(x) = [x];   // `fn mk['m ⊑ ro, T ⊑ 'm](x: T) -> 'm [T]`
+fn mk(x) = [x];                              // fn mk['m ⊑ ro, T ⊑ 'm](x: T) -> 'm [T]
+fn mkAny['n, T: 'n](x: T) -> 'n [T] = 'n [x];
+let a = mkAny(mut [1]);                      // 'n = mut: mut [mut [i32]]
+a[0] = mut [2];
 ```
+
+In the model, a literal's mutability is a written one or a mutability
+parameter in scope (`Mu.Lit`). That an unwritten one is only `imm` or
+`ro` is a rule of inference, which `Problem.principal_lit_ir` covers.
 
 - `HasType.lit_ro`: a literal can always be `ro`, with what it holds seen
   as `ro`, and `HasType.lit_imm` `imm` when that's `imm` all the way down.
@@ -262,8 +271,10 @@ fn mk(x) = [x];   // `fn mk['m ⊑ ro, T ⊑ 'm](x: T) -> 'm [T]`
   mutability is the one to infer.
 - `mk` can be called at `imm` and at `ro`, with a `mut` argument seen as
   `ro`, but not at `mut`, and its body can't change what it makes.
-- `HasType.new_param_none`: a program that runs assumes nothing, so none
-  of its literals has a parameter as its mutability.
+  `mkAny` can be called at `mut` too, and its caller can then change what
+  it returns.
+- `HasType.new_param_none`: a program that runs has no mutability
+  parameters in scope, so none of its literals has one.
 
 ## Function subtyping and variance
 

@@ -67,8 +67,8 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   | loc {io : Bool} {Γ : Ctx} {l : Nat} {m : Mu} {t : Ty} :
       σ[l]? = some (m, t) → (io = true → m = .immutable) →
       HasType fns σ Δ io Γ (.loc l) (.cell m t)
-  /-- A literal holds what's at most its mutability, which is `mut` or at
-  most `ro` (`Mu.Lit`). -/
+  /-- A literal holds what's at most its mutability, which is written, or a
+  mutability parameter in scope (`Mu.Lit`). -/
   | new {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {m : Mu} :
       HasType fns σ Δ io Γ e t → AtMost Δ m t → (hl : m.Lit Δ := by lit_mu) →
       HasType fns σ Δ io Γ (.new m e) (.cell m t)
