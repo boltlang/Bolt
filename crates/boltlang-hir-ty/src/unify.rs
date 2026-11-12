@@ -142,6 +142,9 @@ pub struct Unifier<'db> {
     /// lower bound recorded inside one was: see [`Unifier::force_linked`].
     under: Vec<TyVar>,
     pub(crate) links: Vec<(TyVar, TyVar, Ty<'db>)>,
+    /// Whether a flexible variable that gives a value is bound to what
+    /// receives it, rather than settled: see [`Unifier::unify_binding`].
+    binding: bool,
 }
 
 impl<'db> Unifier<'db> {
@@ -758,6 +761,42 @@ impl<'db> Unifier<'db> {
         u.resolve(&Ty::Var(var)) != u.resolve(lower)
     }
 
+    /// Bind those of the flexible variables `vars` that are mutabilities in
+    /// `actual`, like the `'m` of `'m [i32]`, to what `expected` makes them,
+    /// rather than settle them from what flowed into them: the unifications
+    /// that gave them lower bounds check that when they're done again, and
+    /// report an argument that doesn't fit. Nothing else is decided:
+    /// `actual` is unified with `expected` where it's checked, which reports
+    /// the call when a type doesn't fit.
+    pub(crate) fn decide_by(&mut self, vars: &[TyVar], expected: &Ty<'db>, actual: &Ty<'db>) {
+        let actual = self.resolve(actual);
+        let mut mutabilities = Vec::new();
+        mutability_vars(&actual, &mut mutabilities);
+        let open: Vec<TyVar> = vars
+            .iter()
+            .copied()
+            .filter(|&v| self.is_flexible(v) && mutabilities.contains(&v))
+            .collect();
+        if open.is_empty() {
+            return;
+        }
+        let mut u = self.clone();
+        u.binding = true;
+        if u.unify_flipped(expected, &actual, false).is_err() {
+            return;
+        }
+        for v in open {
+            let ty = u.resolve(&Ty::Var(v));
+            // A variable the copy made, like a parameter's name, isn't here.
+            let known = self.vars.len() as u32;
+            let new = ty.any(&mut |t| matches!(t, Ty::Var(w) if w.0 >= known));
+            if !u.is_flexible(v) && !new {
+                self.vars[v.0 as usize].flexible = false;
+                let _ = self.bind(v, &ty);
+            }
+        }
+    }
+
     /// Unify `a` and `b` as [`Unifier::unify`] does, with what receives a
     /// value on the side `flipped` says.
     pub(crate) fn unify_flipped(
@@ -791,6 +830,7 @@ impl<'db> Unifier<'db> {
             }
             if let Ty::Var(v) = gives
                 && self.is_flexible(*v)
+                && !self.binding
             {
                 self.settle(*v);
                 return self.unify_inner(&a, &b);
@@ -1321,6 +1361,25 @@ impl<'db> Unifier<'db> {
         self.vars[var.0 as usize].state = VarState::Bound(ty);
         Ok(())
     }
+}
+
+/// The variables in `ty` where a mutability goes, like the `?m` of
+/// `?m [i32]`.
+fn mutability_vars(ty: &Ty<'_>, out: &mut Vec<TyVar>) {
+    let mut push = |m: &Ty<'_>| {
+        if let Ty::Var(v) = m {
+            out.push(*v);
+        }
+    };
+    match ty {
+        Ty::Array(m, _) | Ty::Tuple(_, m) | Ty::Record(_, _, m) | Ty::Fn(_, _, m, _) => push(m),
+        Ty::Adt(_, _, ms, m) => {
+            push(m);
+            ms.iter().for_each(&mut push);
+        }
+        _ => {}
+    }
+    ty.walk_children(|t| mutability_vars(t, out));
 }
 
 /// Whether something in a value of type `ty` may change: something `mut`,

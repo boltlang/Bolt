@@ -586,7 +586,19 @@ impl<'db> Solver<'db> {
     /// Settle the variables of a call once its arguments are checked, and
     /// unify again what gave them lower bounds, reporting what doesn't fit
     /// where it was, or at the call, `origin`.
-    pub(crate) fn end_call(&mut self, mark: CallMark, origin: Origin<'db>) {
+    pub(crate) fn end_call(
+        &mut self,
+        mark: CallMark,
+        origin: Origin<'db>,
+        expected: Option<(Ty<'db>, Ty<'db>)>,
+    ) {
+        // What the call is expected to be decides its variables first, so
+        // that `longer(mut [1], [2])` where a `mut [i32]` is expected makes
+        // `'m` `mut`, and reports the `[2]`. It's unified again where it's
+        // checked, which reports what doesn't fit.
+        if let Some((expected, ty)) = expected {
+            self.unifier.decide_by(&mark.vars, &expected, &ty);
+        }
         let links = self.unifier.links.split_off(mark.links.min(self.unifier.links.len()));
         self.unifier.force_linked(&links);
         for v in mark.vars {

@@ -567,6 +567,9 @@ pub(crate) struct InferenceContext<'a, 'db> {
     /// that the tuple struct it makes is `mut`. Taken by the struct's
     /// constructor; if nothing takes it, `mut` was before something else.
     mut_constructor: Option<Ty<'db>>,
+    /// The type the call being checked is expected to have, which its
+    /// variables are settled to fit: see `apply`.
+    next_call_expected: Option<(ExprId, Option<Ty<'db>>)>,
     /// The closures being inferred, innermost last.
     closures: Vec<ClosureFrame>,
     /// The effects the code being inferred can do: those of its function or
@@ -602,6 +605,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             breakables: Vec::new(),
             uninitialized: Vec::new(),
             mut_constructor: None,
+            next_call_expected: None,
             closures: Vec::new(),
             effects: Ty::nothing(),
         }
@@ -1034,10 +1038,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
             Expr::Call { callee, args } => {
-                self.infer_call(expr, *callee, CallArgs::Positional(args), None)
+                let expected = expected.map(|e| e.ty.clone());
+                self.infer_call_expecting(expr, *callee, CallArgs::Positional(args), expected)
             }
             Expr::CallWith { callee, args } => {
-                self.infer_call(expr, *callee, CallArgs::Items(args), None)
+                let expected = expected.map(|e| e.ty.clone());
+                self.infer_call_expecting(expr, *callee, CallArgs::Items(args), expected)
             }
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
             Expr::Try { expr: inner, value, error } => self.infer_try(expr, *inner, *value, *error),
@@ -1837,6 +1843,22 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         )
     }
 
+    /// A call that's expected to have the type `expected`, which its
+    /// variables are settled to fit, so that a call where something `mut`
+    /// is expected is `mut` where it can be.
+    fn infer_call_expecting(
+        &mut self,
+        expr: ExprId,
+        callee: ExprId,
+        args: CallArgs<'_>,
+        expected: Option<Ty<'db>>,
+    ) -> Ty<'db> {
+        let saved = self.next_call_expected.replace((expr, expected));
+        let ty = self.infer_call(expr, callee, args, None);
+        self.next_call_expected = saved;
+        ty
+    }
+
     fn infer_call(
         &mut self,
         expr: ExprId,
@@ -1955,9 +1977,19 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let origin = self.origin(callee);
         let vars = self.solver.instantiations.iter().rev().find(|(o, _)| *o == origin);
         let vars = vars.map(|(_, args)| args.clone()).unwrap_or_default();
+        // Only the call that was expected to have a type, not one made on
+        // the way, like that of `f(x)` in `f(x)(y)`.
+        let expected = match self.next_call_expected.take() {
+            Some((e, expected)) if e == expr => expected,
+            other => {
+                self.next_call_expected = other;
+                None
+            }
+        };
         let mark = self.solver.begin_call(&vars);
         let ty = self.apply_args(expr, callee, callee_ty, function, args, receiver);
-        self.solver.end_call(mark, self.origin(expr));
+        let expected = expected.map(|e| (e, ty.clone()));
+        self.solver.end_call(mark, self.origin(expr), expected);
         ty
     }
 

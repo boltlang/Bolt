@@ -128,7 +128,14 @@ the mutability of an object whose contents are widened is made `ro`, and
 what a `ro` object holds at most `ro`, until that changes nothing
 (`Unifier::force_linked`, as `LinkedProblem.principal` in
 `lean/BoltMut/Linked.lean`). So `f(mut [mut [1]], mut [[1]])` for
-`fn f[T](a: [T], b: [T]) -> [T]` is a `ro [ro [i32]]`. `holds.rs` sees `ro T` as
+`fn f[T](a: [T], b: [T]) -> [T]` is a `ro [ro [i32]]`.
+
+What a call is expected to be decides its mutabilities before that
+(`Unifier::decide_by`), as `Sub.none_meet_upper` in `Linked.lean` shows
+keeps the least solution: `longer(mut [1], [2])` for
+`fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32]` is a `ro [i32]`, but
+where a `mut [i32]` is expected, `'m` is `mut`, and the `[2]` is reported.
+Only mutabilities: a type that doesn't fit is reported at the call. `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
   an error (E0223). A `mut` array or struct held by `ro` is the same error
   (`infer::mut_inside`, with the bound it breaks), also in the parameters

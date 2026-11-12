@@ -325,6 +325,16 @@ l[0] = 9;
 [E0221] Error: cannot change an element of `l`, which is `ro [i32]`; only a `mut` array can be changed
 ```
 
+Where a `mut` array is expected, `'m` is `mut`, so both arrays must be:
+
+```bolt
+let k: mut [i32] = longer(mut [1, 2], [3]);
+```
+
+```text
+[E0201] Error: expected `mut [i32]`, found `imm [i32]`
+```
+
 Different names are independent of each other:
 
 ```bolt
