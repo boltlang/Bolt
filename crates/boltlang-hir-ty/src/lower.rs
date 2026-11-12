@@ -1642,6 +1642,16 @@ pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes
     lower_fields(&mut ctx, &sig.fields, &own)
 }
 
+/// The types of the fields of every variant of `adt`, which
+/// [`crate::variance`] finds where each parameter is used from.
+pub(crate) fn raw_field_types<'db>(db: &'db dyn Db, adt: AdtId<'db>) -> Vec<Ty<'db>> {
+    let fields = match adt {
+        AdtId::Struct(s) => std::slice::from_ref(struct_field_types(db, s)),
+        AdtId::Enum(e) => &enum_field_types(db, e)[..],
+    };
+    fields.iter().flat_map(|f| f.fields.iter().map(|(_, t)| t.clone())).collect()
+}
+
 /// The mutability of a struct as seen from its fields: its hidden
 /// parameter, after its type parameters and the mutabilities it declares,
 /// which [`struct_args`] gives the value of.

@@ -30,6 +30,7 @@ pub mod scheme;
 pub mod solve;
 pub mod ty;
 pub mod unify;
+pub mod variance;
 
 pub use check::{InferenceCycle, function_scheme, infer_body};
 pub use infer::{InferenceDiagnostic, InferenceResult};
