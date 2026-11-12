@@ -16,3 +16,4 @@ import BoltMut.Region
 import BoltMut.Unique
 import BoltMut.UniqueCheck
 import BoltMut.Variance
+import BoltMut.Literals

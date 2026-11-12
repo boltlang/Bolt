@@ -215,6 +215,7 @@ ys[0] = 1;
 |---|---|
 | `Sub.to_ro`, `Sub.trans` | `Subtyping.lean` |
 | `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` |
+| `HasType.lit_ro`, `HasType.lit_imm_fits`, `HasType.new_param_none` | `Literals.lean` |
 
 A `mut` or `imm` value can be seen as `ro`, and the view is deep:
 
@@ -229,10 +230,10 @@ The theorems about `imm` values hold with `ro` in the model, so seeing a
 value as `ro` can't be used to change an `imm` one. `Sub.to_ro`: every type
 fits its `ro` view. `Sub.trans`: subtyping composes.
 
-`ReadOnly.lean` is groundwork for literals that are `ro`
-([#415](https://github.com/boltlang/Bolt/issues/415)). A tuple of generic
-values can't be `imm`, since its parts may be `mut`, which is why the
-checker rejects this today:
+`ReadOnly.lean` and `Literals.lean` are groundwork for literals whose
+mutability is inferred ([#415](https://github.com/boltlang/Bolt/issues/415)).
+A tuple of generic values can't be `imm`, since its parts may be `mut`,
+which is why the checker rejects this today:
 
 ```bolt
 enum Opt[T] { No, Yes(T) }
@@ -242,9 +243,27 @@ fn same[T](a: Opt[T], b: Opt[T]) -> Bool = match (a, b) {   // E0230
 };
 ```
 
-`HasType.newRo_tparam`: a new object holding a `T` can be used as
-`ro (ro T)` with nothing assumed. `HasType.newRo`: a `ro` literal is a new
-`mut` object used at a `ro` type, so it needs no rule of its own.
+`HasType.newRo_tparam`: a `ro` literal holding a `T` is a `ro (ro T)`,
+with nothing assumed. At run time, a `ro` literal makes a `mut` object,
+which the program only sees as `ro`.
+
+In the model, a literal's mutability can be `mut`, or anything at most
+`ro` (`Mu.Lit`): `imm`, `ro`, or a parameter assumed to be at most `ro`, as
+an inferred literal's would be in its function's type:
+
+```bolt
+fn mk(x) = [x];   // `fn mk['m ⊑ ro, T ⊑ 'm](x: T) -> 'm [T]`
+```
+
+- `HasType.lit_ro`: a literal can always be `ro`, with what it holds seen
+  as `ro`, and `HasType.lit_imm` `imm` when that's `imm` all the way down.
+- `HasType.lit_imm_fits`: making it `imm` when it can be loses nothing,
+  since the `imm` literal fits wherever the `ro` one does. So the least
+  mutability is the one to infer.
+- `mk` can be called at `imm` and at `ro`, with a `mut` argument seen as
+  `ro`, but not at `mut`, and its body can't change what it makes.
+- `HasType.new_param_none`: a program that runs assumes nothing, so none
+  of its literals has a parameter as its mutability.
 
 ## Function subtyping and variance
 
