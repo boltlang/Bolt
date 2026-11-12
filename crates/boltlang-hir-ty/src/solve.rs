@@ -693,6 +693,21 @@ impl<'db> Solver<'db> {
             // Solved right away when possible, so that what it decides is
             // known for what follows.
             Constraint::AtMost { constraint, source, origin } => {
+                // What a function needs of its caller to be at most `ro`,
+                // like the `T` of `fn pass[T: ro](x: T) -> T`, is what the
+                // caller gives seen as `ro` when that may change: any type's
+                // view is at most `ro`, and a value fits where its view is
+                // expected, as for `mk` in `lean/BoltMut/Literals.lean`. So
+                // `pass(mut [1])` is a `ro [i32]`, and `pass([1])` an
+                // `imm [i32]`. Not for what an object holds: a value put in a
+                // `ro` literal can still be changed through its own name.
+                if let AtMostSource::Needed(_) = source
+                    && constraint.bound == Ty::Mutability(Mutability::ReadOnly)
+                    && let Held::Type(t) = &constraint.held
+                    && let Ty::Var(v) = self.unifier.shallow_resolve(t)
+                {
+                    self.unifier.see_as_ro(v);
+                }
                 if !self.solve_at_most(&constraint, &source, origin) {
                     self.pending_at_most.push((constraint, source, origin));
                 }

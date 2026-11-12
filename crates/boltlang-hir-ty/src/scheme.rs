@@ -125,12 +125,6 @@ impl<'db> Scheme<'db> {
                 Some(Kind::NamedPack) => VarKind::NamedPack,
                 _ => VarKind::General,
             };
-        // A type that must be at most `ro`, like the `T` of `[T: ro]`, is
-        // what it's given seen as `ro` when that may change: any type's view
-        // is at most `ro`, and a value fits where its view is expected. So
-        // `pass(mut [1])` for `fn pass[T: ro](x: T) -> T` gives a
-        // `ro [i32]`, as `mk` does in `lean/BoltMut/Literals.lean`, and
-        // `pass([1])` an `imm [i32]` (`Unifier::see_as_ro`).
         let args: Vec<Ty<'db>> = self.params.iter().map(|p| solver.new_var(kind_of(p))).collect();
         let params: HashMap<_, _> = self.params.iter().copied().zip(args.iter().cloned()).collect();
         let bound: Vec<_> = (0..self.bound)
@@ -140,19 +134,6 @@ impl<'db> Scheme<'db> {
                 solver.new_var(kind)
             })
             .collect();
-        let ro = Ty::Mutability(crate::ty::Mutability::ReadOnly);
-        let at_most_ro = |t: &Ty<'db>| {
-            self.bounds.iter().any(|b| b.bound == ro && b.held == Held::Type(t.clone()))
-        };
-        let declared = self.params.iter().map(|p| Ty::Param(*p)).zip(&args);
-        let bound_vars = (0..self.bound).map(Ty::Bound).zip(&bound);
-        for (t, var) in declared.chain(bound_vars) {
-            if let Ty::Var(v) = var
-                && at_most_ro(&t)
-            {
-                solver.unifier.see_as_ro(*v);
-            }
-        }
         solver.instantiations.push((origin, args.iter().chain(&bound).cloned().collect()));
         let subst = |t: &Ty<'db>| {
             t.fold(&mut |t| match t {
