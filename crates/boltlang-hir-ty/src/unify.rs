@@ -306,9 +306,33 @@ impl<'db> Unifier<'db> {
         out
     }
 
+    /// Unify `a`, which receives a value, with `b`, where a row that's
+    /// smaller fits, as the effects of a function type: one that does less
+    /// fits where one that does more is expected, and an effect in both has
+    /// the same arguments. When either row is still a variable, they're the
+    /// same row, so that inferring one gives the other. Other types are
+    /// unified as they are.
+    fn unify_contained(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
+        let (sub, sup) = if self.flipped { (a, b) } else { (b, a) };
+        let (sub, sup) = (self.resolve(sub), self.resolve(sup));
+        // Only rows: a type parameter could otherwise be taken for one.
+        let rows = matches!(sub, Ty::Row(..)) || matches!(sup, Ty::Row(..));
+        let Some(fit) = sub.row_fit(&sup).filter(|_| rows) else { return self.unify(a, b) };
+        if !fit.fits() {
+            return Err(UnifyError::Mismatch(a.clone(), b.clone()));
+        }
+        for (given, expected) in &fit.same {
+            let (x, y) = if self.flipped { (*given, expected) } else { (expected, *given) };
+            self.unify_all(&x.args, &y.args)?;
+        }
+        Ok(())
+    }
+
     /// Unify `a`, which receives a value, with `b`, as `variance` says it
     /// can change: as it is, the other way round, or both ways when it
-    /// can't change at all.
+    /// can't change at all. A row that can change takes a smaller one, as
+    /// the effects of a function do, like the `E` of
+    /// `struct Lazy[E] { run: fn() does E }`.
     fn unify_by(
         &mut self,
         variance: Variance,
@@ -316,8 +340,8 @@ impl<'db> Unifier<'db> {
         b: &Ty<'db>,
     ) -> Result<(), UnifyError<'db>> {
         match variance {
-            Variance::Unused | Variance::Co => self.unify(a, b),
-            Variance::Contra => self.reversed(|u| u.unify(a, b)),
+            Variance::Unused | Variance::Co => self.unify_contained(a, b),
+            Variance::Contra => self.reversed(|u| u.unify_contained(a, b)),
             Variance::Inv => {
                 self.unify(a, b)?;
                 self.reversed(|u| u.unify(a, b))
@@ -507,7 +531,7 @@ impl<'db> Unifier<'db> {
                 })?;
                 self.unify(x, y)?;
                 self.unify(m, n)?;
-                self.unify(e, f)
+                self.unify_contained(e, f)
             }
             // Rows are equal when they have the same effects, with the same
             // arguments, and are made of the same other rows. Rows are in

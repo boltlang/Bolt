@@ -24,6 +24,7 @@
 use crate::{
     solve::{Constraint, Origin, Solver, TypeError, vars_in},
     ty::{EffectTy, Ty, TyVar, VarKind},
+    variance::{Variance, Variances, arg_variance},
 };
 
 /// A predicate on rows.
@@ -526,36 +527,58 @@ fn var_as_row(row: Ty<'_>) -> Ty<'_> {
 }
 
 /// The row variables of `ty` that are only in positive positions: the
-/// effects of a function type, but not those of a parameter's, nor a row
-/// inside a struct or an array. Such a row can be given its least solution
-/// without making the type less general, since a smaller row fits wherever
-/// a bigger one does through `≲`.
-pub(crate) fn positive_rows(ty: &Ty<'_>, is_row: impl Fn(TyVar) -> bool) -> Vec<TyVar> {
+/// effects of a function type, but not those of a parameter's, and the
+/// arguments of a struct or enum where they can change as they are, like
+/// the `E` of `imm Lazy[E]` for `struct Lazy[E] { run: fn() does E }`. Such a
+/// row can be given its least solution without making the type less
+/// general, since a smaller row fits wherever a bigger one does.
+pub(crate) fn positive_rows<'db>(
+    ty: &Ty<'db>,
+    variances: Variances<'db>,
+    is_row: impl Fn(TyVar) -> bool,
+) -> Vec<TyVar> {
     // The polarity of each place a variable is found: 1 for positive, -1
     // for negative, and 0 for both.
-    fn walk(ty: &Ty<'_>, polarity: i8, out: &mut Vec<(TyVar, i8)>) {
+    fn walk<'db>(
+        ty: &Ty<'db>,
+        polarity: i8,
+        variances: Variances<'db>,
+        out: &mut Vec<(TyVar, i8)>,
+    ) {
+        let mut go = |t: &Ty<'db>, p: i8| walk(t, p, variances, out);
         match ty {
             Ty::Var(v) => out.push((*v, polarity)),
             Ty::Fn(params, ret, _, effects) => {
                 for p in params.tys() {
-                    walk(p, -polarity, out);
+                    go(p, -polarity);
                 }
-                walk(ret, polarity, out);
-                walk(effects, polarity, out);
+                go(ret, polarity);
+                go(effects, polarity);
             }
             Ty::Tuple(tys, mutability) => {
-                tys.iter().for_each(|t| walk(t, polarity, out));
-                walk(mutability, 0, out);
+                tys.iter().for_each(|t| go(t, polarity));
+                go(mutability, 0);
             }
             Ty::Record(tys, named, mutability) => {
-                tys.iter().chain(named.iter().map(|(_, t)| t)).for_each(|t| walk(t, polarity, out));
-                walk(mutability, 0, out);
+                tys.iter().chain(named.iter().map(|(_, t)| t)).for_each(|t| go(t, polarity));
+                go(mutability, 0);
             }
-            _ => ty.walk_children(|t| walk(t, 0, out)),
+            Ty::Adt(adt, args, ms, own) => {
+                go(own, 0);
+                for (i, t) in args.iter().chain(ms.iter()).enumerate() {
+                    let p = match arg_variance(variances, *adt, own, i) {
+                        Variance::Unused | Variance::Co => polarity,
+                        Variance::Contra => -polarity,
+                        Variance::Inv => 0,
+                    };
+                    go(t, p);
+                }
+            }
+            _ => ty.walk_children(|t| go(t, 0)),
         }
     }
     let mut found = Vec::new();
-    walk(ty, 1, &mut found);
+    walk(ty, 1, variances, &mut found);
     let mut out: Vec<TyVar> = Vec::new();
     for &(v, _) in &found {
         if is_row(v) && !out.contains(&v) && found.iter().all(|(w, p)| *w != v || *p == 1) {

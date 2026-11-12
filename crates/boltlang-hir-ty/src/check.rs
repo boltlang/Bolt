@@ -35,6 +35,7 @@ use crate::{
     },
     ty::{Mutability, Ty, TyVar, VarKind},
     unify::Unifier,
+    variance::Variances,
 };
 
 /// Why a function's type can't be inferred: files that import each other
@@ -406,7 +407,8 @@ fn infer_group<'db>(
     let is_row = |v| solver.unifier.var_kind(v) == Some(VarKind::Effect);
     let mut positive = Vec::new();
     for f in group {
-        positive.extend(positive_rows(&solver.unifier.resolve(&env.mono[f]), is_row));
+        let ty = solver.unifier.resolve(&env.mono[f]);
+        positive.extend(positive_rows(&ty, Variances::of(db), is_row));
     }
     let mut candidates = positive.clone();
     candidates.extend(solver.pending_row_vars());

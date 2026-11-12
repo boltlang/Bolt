@@ -165,3 +165,21 @@ const M: Bool = True;
 print(show(if M { N } else { 0 }));
 --------------------------------------------------------------------------------
 42
+
+================================================================================
+A function that does less is given where one that does more is expected (#446)
+:test-prelude
+================================================================================
+effect Yield { fn yield(value: i32); }
+fn produce() does Yield { yield(1); yield(2); }
+fn nothing() {}
+fn sum(body: fn() does Yield) -> i32 =
+  match body() {
+    () => 0,
+    effect yield(x), k => x + resume(k, ()),
+  };
+print(show(sum(produce)));
+print(show(sum(nothing)));
+--------------------------------------------------------------------------------
+3
+0

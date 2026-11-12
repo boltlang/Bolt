@@ -197,3 +197,94 @@ fn retry[T, E](f: fn() -> T does E) -> T does Log + E {
 retry: forall T E. fn(f: fn() -> T does E) -> T does Log + E
 --------------------------------------------------------------------------------
 error at `wait()`: does Async, only Log + E allowed
+
+================================================================================
+A function that does less fits where one that does more is expected (#446)
+:test-prelude
+================================================================================
+effect Log { fn log(n: i32); }
+effect State[S] { fn get() -> S; }
+fn run(f: fn() -> () does Log) does Log = f();
+fn both(f: fn() -> () does Log + State[i32]) does Log + State[i32] = f();
+fn takes(k: fn(fn() -> ()) -> ()) = ();
+fn quiet() = ();
+fn loud() does Log = log(1);
+fn any(g: fn() -> () does Log) = ();
+fn go() does Log + State[i32] = { run(quiet); both(loud); takes(any) };
+let fs: imm [fn() -> () does Log] = [quiet, loud];
+--------------------------------------------------------------------------------
+run: fn(f: fn() -> () does Log) -> () does Log
+both: fn(f: fn() -> () does Log + State[i32]) -> () does Log + State[i32]
+takes: fn(k: fn(fn() -> ()) -> ()) -> ()
+quiet: fn() -> ()
+loud: fn() -> () does Log
+any: fn(g: fn() -> () does Log) -> ()
+go: fn() -> () does Log + State[i32]
+let fs: imm [fn() -> () does Log]
+
+================================================================================
+A function that does more doesn't fit where one that does less is expected
+:test-prelude
+:error
+================================================================================
+effect Log { fn log(n: i32); }
+effect State[S] { fn get() -> S; }
+fn run(f: fn() -> ()) = f();
+fn reads(f: fn() -> i32 does State[i32]) -> i32 does State[i32] = f();
+fn takes(k: fn(fn() -> () does Log) -> ()) = ();
+fn loud() does Log = log(1);
+fn other() -> i32 does State[String] = 0;
+fn pure_only(g: fn() -> ()) = g();
+fn quiet() = ();
+fn go() -> i32 does State[i32] = { run(loud); takes(pure_only); reads(other) };
+let a: mut [fn() -> ()] = mut [quiet];
+let b: mut [fn() -> () does Log] = a;
+--------------------------------------------------------------------------------
+run: fn(f: fn() -> ()) -> ()
+reads: fn(f: fn() -> i32 does State[i32]) -> i32 does State[i32]
+takes: fn(k: fn(fn() -> () does Log) -> ()) -> ()
+loud: fn() -> () does Log
+other: fn() -> i32 does State[String]
+pure_only: fn(g: fn() -> ()) -> ()
+quiet: fn() -> ()
+go: fn() -> i32 does State[i32]
+let a: mut [fn() -> ()]
+let b: mut [fn() -> () does Log]
+--------------------------------------------------------------------------------
+error at `loud`: expected fn() -> (), found fn() -> () does Log
+error at `pure_only`: expected fn('m fn() -> () does Log) -> (), found fn(g: 'm fn() -> ()) -> ()
+error at `other`: expected fn() -> i32 does State[i32], found fn() -> i32 does State[String]
+error at `a`: expected mut [fn() -> () does Log], found mut [fn() -> ()]
+
+================================================================================
+A struct's row that's only given gets the least one, and fits a bigger one (#446)
+:test-prelude
+================================================================================
+effect Log { fn log(n: i32); }
+struct Lazy[E] { run: fn() -> () does E }
+fn mk() = Lazy { run: || () };
+fn force(l: imm Lazy[Log]) does Log = (l.run)();
+fn quiet() = ();
+fn go() does Log = { force(mk()); force(Lazy { run: quiet }) };
+--------------------------------------------------------------------------------
+mk: fn() -> imm Lazy[Nothing]
+force: fn(l: imm Lazy[Log]) -> () does Log
+quiet: fn() -> ()
+go: fn() -> () does Log
+
+================================================================================
+A struct's row doesn't fit a smaller one
+:test-prelude
+:error
+================================================================================
+effect Log { fn log(n: i32); }
+struct Lazy[E] { run: fn() -> () does E }
+fn force(l: imm Lazy[Nothing]) = (l.run)();
+fn loud() does Log = log(1);
+fn go() = force(Lazy { run: loud });
+--------------------------------------------------------------------------------
+force: fn(l: imm Lazy[Nothing]) -> ()
+loud: fn() -> () does Log
+go: fn() -> ()
+--------------------------------------------------------------------------------
+error at `Lazy { run: loud }`: expected imm Lazy[Nothing], found imm Lazy[Log]
