@@ -24,17 +24,6 @@ pub enum Shape {
   Rect { w: f64, h: f64 },
 }
 
-class Show[T] {
-  fn show(x: T) -> String;
-}
-
-impl Show[Shape] {
-  fn show(s) = match s {
-    Shape.Circle(_) => "circle",
-    Shape.Rect { .. } => "rectangle",
-  };
-}
-
 const PI: f64 = 3.14159;
 
 fn area(s: Shape) -> f64 = match s {
@@ -44,17 +33,14 @@ fn area(s: Shape) -> f64 = match s {
 
 struct Vec2 { x: f64, y: f64 }
 
-fn (a: Vec2) + (b: Vec2) -> Vec2 = Vec2 { x: a.x + b.x, y: a.y + b.y };
-
-let shapes = [Shape.Circle(1.0), Shape.Rect { w: 2.0, h: 3.0 }];
-for s in shapes {
-  if area(s) > 1.0 {
-    print(s.show());
-  }
+impl Add[imm Vec2] {
+  fn add(a, b) = Vec2 { x: a.x + b.x, y: a.y + b.y };
 }
 
-macro_rules! twice {
-  ($e:expr) => { ($e, $e) };
+let shapes = [Shape.Circle(1.0), Shape.Rect { w: 2.0, h: 3.0 }];
+let mut total_area = 0.0;
+for s in shapes {
+   total_area += s.area();
 }
 `;
 
