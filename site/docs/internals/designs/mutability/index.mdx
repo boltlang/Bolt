@@ -368,12 +368,12 @@ function subtyping (`Sub.fn`), and what an `imm` object holds can be seen
 as a supertype of its type (`Sub.immCell`), as the checker does for an
 array that isn't `mut`.
 
-Conduit has a `ReadOnly` mutability too, but it isn't deep, and doesn't
-reach into function types, so the views above that see what a value holds
-as `ro` can't be compiled yet
-([#439](https://github.com/boltlang/Bolt/issues/439)). A function called
-at `ro` gets an instance of its own, since Conduit doesn't take `ReadOnly`
-as a mutability argument.
+Conduit has a `ReadOnly` mutability too, which is deep in the same way
+([conduit#57](https://github.com/boltlang/conduit/issues/57)): under it, an
+array's elements and a data type's fields fit covariantly, and so does
+what an `imm` object holds, while a closure takes its parameters
+contravariantly. A function called at `ro` gets an instance of its own,
+since Conduit doesn't take `ReadOnly` as a mutability argument.
 
 ## Named mutabilities
 
