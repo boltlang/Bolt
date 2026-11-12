@@ -90,6 +90,7 @@ fit, which is why `Sub.immCell` came with `Sub.fn`.
 | assumptions like `T: imm` and `'v: 'm` | `Assume`, `Le`, `Sat` in `Syntax.lean` |
 | `Solver::mutability_le` | `leSearch` in `Solver.lean` |
 | deciding an unknown mutability early | `Le.eq_immutable`, `Le.eq_mutable` in `Solver.lean` |
+| what a type parameter `T: ro` is given (`Unifier::see_as_ro`) | `Ty.lub`, `Ty.least_ro` in `Least.lean` |
 | a written `ro`, and unifying with it (`unify.rs`) | `Sub` in `Subtyping.lean` |
 | `ro T`, `Ty::Ro` | `Ty.roParam` |
 | a `ro` value can't hold `mut` (`infer::mut_inside`) | the `AtMost` premise of `Sub.ro` |

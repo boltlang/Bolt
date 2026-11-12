@@ -309,6 +309,40 @@ is a subtype of it. `StructDecl.sub_view`: so `mut Box[mut [i32]]` can be
 seen as `ro Box[ro [i32]]`. `StructDecl.sub_imm`: and an
 `imm Handler[ro [i32]]` used as an `imm Handler[mut [i32]]`.
 
+## Least solutions
+
+| Theorem | File |
+|---|---|
+| `Ty.lub_sound`, `Ty.lub_least` | `Least.lean` |
+| `Ty.least_ro`, `Sub.no_fn_join` | `Least.lean` |
+
+At a call, a type parameter gets the types of the arguments, which must
+fit it, and what it must be at most. It should be given the least type
+that all of them fit, within its bound:
+
+```bolt
+fn pass[T: ro](x: T) -> T = x;
+pass(mut [1]);            // T = ro [i32]
+pass([1]);                // T = imm [i32]: already at most ro
+pass(mut ([1], mut [2])); // T = ro (imm [i32], ro [i32])
+
+fn both[T](a: T, b: T) -> T = a;
+both([1], mut [2]);       // T = ro [i32], whichever comes first
+```
+
+`Ty.lub` finds that type for two types, and for one type with a bound of
+`ro`. `Ty.lub_sound`: what it finds is above both. `Ty.lub_least`: it's
+below every other type that is, so if there's any solution, it finds the
+least one. `Ty.least_ro`: there's always a least type at most `ro` above a
+type. It isn't the view: what's already at most `ro`, like an `imm` array,
+is kept.
+
+`Ty.lub_least` needs that function types in the same place take the same
+parameters. Two closures of different mutabilities have no type above both
+(`Sub.no_fn_join`). The checker doesn't find least types yet: it takes the
+first argument's type, and sees all of it as `ro` once anything in it may
+change.
+
 ## The checker's solver
 
 | Theorem | File |
