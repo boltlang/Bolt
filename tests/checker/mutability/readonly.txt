@@ -149,7 +149,7 @@ call: fn(h: ro Handler) -> i32
 go: fn() -> i32
 
 ================================================================================
-ro doesn't reach into the type arguments of a struct
+A ro view doesn't see what a closure takes as ro
 :error
 :test-prelude
 ================================================================================
@@ -252,3 +252,16 @@ fine: fn() -> imm [i32]
 error at `b`: ro Box[mut [i32]] holds mut [i32]
 error at `t`: ro (Opt[mut [i32]], i32) holds mut [i32]
 error at `get`: ro Box[mut [i32]] holds mut [i32]
+
+================================================================================
+A closure's parameters are seen the other way round (#440)
+:test-prelude
+================================================================================
+struct Handler[T] { f: fn(T) -> i32 }
+fn call(h: imm Handler[mut [i32]]) -> i32 = (h.f)(mut [1]);
+fn reads(xs: ro [i32]) -> i32 = xs[0];
+fn go() = call(Handler { f: reads });
+--------------------------------------------------------------------------------
+call: fn(h: imm Handler[mut [i32]]) -> i32
+reads: fn(xs: ro [i32]) -> i32
+go: fn() -> i32

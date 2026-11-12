@@ -10,7 +10,10 @@ use boltlang_hir_def::{
     builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType},
 };
 
-use crate::ty::{Mutability, NumberKind, PackHalf, TupleParts, Ty, TyVar, VarKind};
+use crate::{
+    ty::{Mutability, NumberKind, PackHalf, TupleParts, Ty, TyVar, VarKind},
+    variance::{Variance, Variances, arg_variance},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnifyError<'db> {
@@ -93,6 +96,8 @@ pub enum SlotNow {
 #[derive(Debug, Clone, Default)]
 pub struct Unifier<'db> {
     vars: Vec<Var<'db>>,
+    /// How the arguments of structs and enums can change (#440).
+    variances: Variances<'db>,
     /// Inside the parameters of a function type, an odd number of times:
     /// functions flow the other way around there.
     flipped: bool,
@@ -106,8 +111,16 @@ pub struct Unifier<'db> {
 }
 
 impl<'db> Unifier<'db> {
+    /// A unifier where the arguments of every struct and enum are the same
+    /// both ways, as for unit tests and for whether impls overlap.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A unifier where the arguments of structs and enums change as their
+    /// variance says.
+    pub fn with_variances(variances: Variances<'db>) -> Self {
+        Unifier { variances, ..Self::default() }
     }
 
     pub fn new_var(&mut self, kind: VarKind) -> Ty<'db> {
@@ -281,10 +294,35 @@ impl<'db> Unifier<'db> {
     /// Like [`Unifier::unify`], but the names of parameters flow from `a`
     /// into `b`, like from the value a pattern matches into its parts.
     pub fn unify_into(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
+        self.reversed(|u| u.unify(a, b))
+    }
+
+    /// `f` the other way round: with what receives a value and what gives
+    /// it swapped, as in the parameters of a function type.
+    fn reversed<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         self.flipped = !self.flipped;
-        let unified = self.unify(a, b);
+        let out = f(self);
         self.flipped = !self.flipped;
-        unified
+        out
+    }
+
+    /// Unify `a`, which receives a value, with `b`, as `variance` says it
+    /// can change: as it is, the other way round, or both ways when it
+    /// can't change at all.
+    fn unify_by(
+        &mut self,
+        variance: Variance,
+        a: &Ty<'db>,
+        b: &Ty<'db>,
+    ) -> Result<(), UnifyError<'db>> {
+        match variance {
+            Variance::Unused | Variance::Co => self.unify(a, b),
+            Variance::Contra => self.reversed(|u| u.unify(a, b)),
+            Variance::Inv => {
+                self.unify(a, b)?;
+                self.reversed(|u| u.unify(a, b))
+            }
+        }
     }
 
     /// Unify `a` and `b` so that the names of parameters flow both ways:
@@ -307,10 +345,7 @@ impl<'db> Unifier<'db> {
         if self.shallow_resolve(mutability) != Ty::Mutability(Mutability::Mut) {
             return Ok(());
         }
-        self.flipped = !self.flipped;
-        let shared = self.unify_all(xs, ys);
-        self.flipped = !self.flipped;
-        shared
+        self.reversed(|u| u.unify_all(xs, ys))
     }
 
     pub fn unify(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
@@ -371,19 +406,23 @@ impl<'db> Unifier<'db> {
                 }
             }
             (Ty::Spread(h1, x), Ty::Spread(h2, y)) if h1 == h2 => self.unify(x, y),
-            (Ty::Adt(x, xs, ms, m), Ty::Adt(y, ys, ns, n)) if x == y && xs.len() == ys.len() => {
-                self.unify_all(xs, ys)?;
-                self.unify_all(ms, ns)?;
+            // The own mutability first: whether the arguments can change
+            // depends on it. They change as the struct's variance says when
+            // what receives the value isn't `mut`, like the `T` of
+            // `struct Box[T] { item: T }`, seen as `ro` in a `ro Box`, and
+            // the `T` of `struct Handler[T] { f: fn(T) }`, the other way
+            // round. In a `mut` one, or one whose mutability isn't known,
+            // they're the same both ways, as in a `mut` array (#440).
+            (Ty::Adt(x, xs, ms, m), Ty::Adt(y, ys, ns, n))
+                if x == y && xs.len() == ys.len() && ms.len() == ns.len() =>
+            {
                 self.unify(m, n)?;
-                // A type or mutability argument can be anywhere in the
-                // fields, like the `T` of `struct Handler[T] { f: fn(T) }`:
-                // seen as `ro`, a function that changes what it's given could
-                // be given a `ro` value. So the arguments are the same both
-                // ways, as in a `mut` value, and `ro` doesn't reach into them.
-                self.flipped = !self.flipped;
-                let shared = self.unify_all(xs, ys).and_then(|()| self.unify_all(ms, ns));
-                self.flipped = !self.flipped;
-                shared
+                let own = self.shallow_resolve(if self.flipped { n } else { m });
+                let args = xs.iter().zip(ys.iter()).chain(ms.iter().zip(ns.iter()));
+                for (i, (a, b)) in args.enumerate() {
+                    self.unify_by(arg_variance(self.variances, *x, &own, i), a, b)?;
+                }
+                Ok(())
             }
             // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
             // the last arguments are equal, and so are the rest of each
@@ -458,15 +497,14 @@ impl<'db> Unifier<'db> {
                     self.relate_names(lo, hi)
                         .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))?;
                 }
-                self.flipped = !self.flipped;
-                let params = if xs.is_positional() && ys.is_positional() {
-                    self.unify_all(&xs.positional, &ys.positional)
-                } else {
-                    self.unify(&xs.as_tuple(), &ys.as_tuple())
-                        .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))
-                };
-                self.flipped = !self.flipped;
-                params?;
+                self.reversed(|u| {
+                    if xs.is_positional() && ys.is_positional() {
+                        u.unify_all(&xs.positional, &ys.positional)
+                    } else {
+                        u.unify(&xs.as_tuple(), &ys.as_tuple())
+                            .map_err(|_| UnifyError::Mismatch(a.clone(), b.clone()))
+                    }
+                })?;
                 self.unify(x, y)?;
                 self.unify(m, n)?;
                 self.unify(e, f)

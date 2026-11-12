@@ -25,6 +25,7 @@ use crate::{
     rows::RowConstraint,
     ty::{AdtId, GenericParamId, Mutability, PackHalf, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
+    variance::Variances,
 };
 
 /// Where a constraint comes from.
@@ -527,7 +528,7 @@ impl<'db> Solver<'db> {
     pub fn new(db: &'db dyn Db, file: File) -> Self {
         Solver {
             db,
-            unifier: Unifier::new(),
+            unifier: Unifier::with_variances(Variances::of(db)),
             assumptions: Vec::new(),
             at_most_assumptions: Vec::new(),
             assoc_assumptions: Vec::new(),

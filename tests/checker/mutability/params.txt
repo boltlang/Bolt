@@ -266,5 +266,5 @@ drain(b): ()
 drain(a): ()
 --------------------------------------------------------------------------------
 error at `a.vec`: expected mut Vec[{integer}], found imm Vec[{integer}]
-error at `a`: expected VecIter[{integer}, mut], found mut VecIter[{integer}, imm]
+error at `a`: expected mut VecIter[{integer}, mut], found mut VecIter[{integer}, imm]
 error at `VecIter { vec: growing, next: 0 }`: imm VecIter[i32, mut] holds Mut

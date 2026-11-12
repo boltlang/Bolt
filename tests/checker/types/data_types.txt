@@ -71,7 +71,7 @@ let p: imm Pair[i32, String]
 p.first: i32
 let q: imm Pair[Bool, i32]
 --------------------------------------------------------------------------------
-error at `Pair { first: 1, second: True }`: expected Pair[Bool, i32], found imm Pair[{integer}, Bool]
+error at `Pair { first: 1, second: True }`: expected imm Pair[Bool, i32], found imm Pair[{integer}, Bool]
 
 ================================================================================
 Tuple structs and unit structs
@@ -232,7 +232,7 @@ let a: imm Tag[a]
 let b: imm Tag[Bool]
 let c: imm Tag[String]
 --------------------------------------------------------------------------------
-error at `b`: expected Tag[String], found imm Tag[Bool]
+error at `b`: expected imm Tag[String], found imm Tag[Bool]
 
 ================================================================================
 A field given twice
@@ -253,7 +253,7 @@ Box { value: True, ..Box { value: 1 } };
 --------------------------------------------------------------------------------
 Box { value: True, ..Box { value: 1 } }: imm Box[Bool]
 --------------------------------------------------------------------------------
-error at `Box { value: 1 }`: expected Box[Bool], found imm Box[{integer}]
+error at `Box { value: 1 }`: expected imm Box[Bool], found imm Box[{integer}]
 
 ================================================================================
 Fields of what a function returns
