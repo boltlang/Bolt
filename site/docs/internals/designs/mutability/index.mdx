@@ -339,6 +339,18 @@ function that changes its argument be given an `imm` array. So they're the
 same both ways, which is too strict for `struct Box[T] { item: T }`
 ([#440](https://github.com/boltlang/Bolt/issues/440)).
 
+**A `ro` value can't hold a `mut` one** (E0223,
+[#442](https://github.com/boltlang/Bolt/issues/442),
+[#443](https://github.com/boltlang/Bolt/issues/443)). Otherwise what's
+read through it could be changed: through a `ro (mut [i32], i32)`, `t.0`
+would be a `mut [i32]`, and through a `ro Box[mut [i32]]`, so would
+`b.item`. Since the type arguments of a struct or enum aren't seen as
+`ro`, a `fn get[T](b: ro Box[T]) -> T` can't be called with a
+`mut Box[mut [i32]]`: `get` itself would be a
+`fn(ro Box[mut [i32]])`, so the error is at `get`. With an `imm` argument,
+like a `mut Box[imm [i32]]`, it's fine. A `mut` closure can still be held,
+as above.
+
 The rules are proven in `lean/BoltMut`: in `Syntax.lean`, `Ty.ro` is the
 view, `Sub.to_ro` says a type fits its view, and `Ty.roParam` is `ro T`;
 `ReadOnly.lean` has the examples.

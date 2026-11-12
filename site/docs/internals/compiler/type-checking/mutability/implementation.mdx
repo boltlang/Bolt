@@ -99,7 +99,10 @@ description: Where the rules of mutability are in the checker, the tests and the
   known, `Unifier::shallow_resolve` and `Unifier::resolve` give its view
   instead (`Ty::ro_view`, `Ty::normalize_ro`). `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
-  an error (E0223). Monomorphization gives a function called at `ro` an
+  an error (E0223). A `mut` array or struct held by `ro` is the same error
+  (`infer::mut_inside`, with the bound it breaks), also in the parameters
+  of a function's type, so that a generic function called with what makes
+  one of them a `ro` that holds `mut` is reported where it's used. Monomorphization gives a function called at `ro` an
   instance of its own (`Instance::ro`), and finds the `T` of a `ro T` from
   where `T` is written as it is first (`uses.rs`).
 - **`imm e`** (`solve.rs`): an `ImmConstraint` from the type of `e` to
