@@ -26,7 +26,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
   induction hs with
   | newCong _ ih =>
     intro σ t l ty hh ht hl
-    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    obtain ⟨_, he, _, _, _⟩ := ht.new_inv
     exact ih hh he hl
   | newVal _ =>
     intro σ t l ty hh _ hl
@@ -109,7 +109,7 @@ theorem step_keeps_tag {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     ∀ {σ : HeapTy} {t : Ty} {l : Nat} {b : Bool} {w : Expr}, HasType fns σ .none false Ctx.empty e t →
       h[l]? = some (b, w) → ∃ w', h'[l]? = some (b, w') := by
   induction hs with
-  | newCong _ ih => intro σ t l b w ht hl; obtain ⟨_, he, _, _⟩ := ht.new_inv; exact ih he hl
+  | newCong _ ih => intro σ t l b w ht hl; obtain ⟨_, he, _, _, _⟩ := ht.new_inv; exact ih he hl
   | getCong _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _⟩ := ht.get_inv; exact ih he hl
   | setCong₁ _ ih => intro σ t l b w ht hl; obtain ⟨_, he, _, _⟩ := ht.set_inv; exact ih he hl
   | setCong₂ _ _ ih => intro σ t l b w ht hl; obtain ⟨_, _, he, _⟩ := ht.set_inv; exact ih he hl

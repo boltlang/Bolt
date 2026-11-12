@@ -35,7 +35,7 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc (hx _ _ h) hio
-  | new _ hd ih => exact .new ih hd
+  | new _ hd hl ih => exact .new ih hd hl
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
@@ -71,7 +71,7 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc h hio
-  | new _ hd ih => exact .new (ih hΓ) hd
+  | new _ hd hl ih => exact .new (ih hΓ) hd hl
   | get _ ih => exact .get (ih hΓ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ) (ih₂ hΓ)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hΓ) (ih₂ (hΓ.update _ _))
@@ -93,7 +93,7 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | unit => exact .unit
   | int => exact .int
   | loc h hm => exact .loc h (fun h' => hm (hio h'))
-  | new _ hd ih => exact .new (ih hio) hd
+  | new _ hd hl ih => exact .new (ih hio) hd hl
   | get _ ih => exact .get (ih hio)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hio) (ih₂ hio)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hio) (ih₂ hio)
@@ -156,15 +156,15 @@ theorem HasType.loc_inv {l : Nat} (h : HasType fns σ Δ io Γ (.loc l) t) :
     obtain ⟨m, s, hl, hio, hs'⟩ := ih rfl
     exact ⟨m, s, hl, hio, hs'.trans hs⟩
 
-theorem HasType.new_inv {b : Bool} {e : Expr} (h : HasType fns σ Δ io Γ (.new b e) t) :
-    ∃ s, HasType fns σ Δ io Γ e s ∧ AtMost Δ (muOf b) s ∧ Sub Δ (.cell (muOf b) s) t := by
-  generalize hE : Expr.new b e = E at h
+theorem HasType.new_inv {m : Mu} {e : Expr} (h : HasType fns σ Δ io Γ (.new m e) t) :
+    ∃ s, HasType fns σ Δ io Γ e s ∧ AtMost Δ m s ∧ m.Lit Δ ∧ Sub Δ (.cell m s) t := by
+  generalize hE : Expr.new m e = E at h
   induction h <;> cases hE
   case sub =>
     rename_i hs _ ih
-    obtain ⟨s, he, hd, hs'⟩ := ih rfl
-    exact ⟨s, he, hd, hs'.trans hs⟩
-  all_goals exact ⟨_, by assumption, by assumption, .refl _⟩
+    obtain ⟨s, he, hd, hl, hs'⟩ := ih rfl
+    exact ⟨s, he, hd, hl, hs'.trans hs⟩
+  all_goals exact ⟨_, by assumption, by assumption, by assumption, .refl _⟩
 
 theorem HasType.get_inv {e : Expr} (h : HasType fns σ Δ io Γ (.get e) t) :
     ∃ m s, HasType fns σ Δ io Γ e (.cell m s) ∧ Sub Δ s t := by
@@ -373,7 +373,7 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih h
+  | new _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -419,7 +419,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc h hio
-  | new _ hd ih => exact .new (ih hΓ hx) hd
+  | new _ hd hl ih => exact .new (ih hΓ hx) hd hl
   | get _ ih => exact .get (ih hΓ hx)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ hx) (ih₂ hΓ hx)
   | @letE _ Γ₀ y e₁ e₂ s t₂ _ he₂ ih₁ ih₂ =>
@@ -525,11 +525,9 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
   | unit => exact .unit
   | int => exact .int
   | loc _ _ => exact hn.elim
-  | @new _ _ _ s b _ hd ih =>
-    simp only [Expr.inst, Ty.inst, Mu.subst_muOf]
-    have h := AtMost.inst hs hd
-    rw [Mu.subst_muOf] at h
-    exact .new (ih hn) h
+  | new _ hd hl ih =>
+    simp only [Expr.inst, Ty.inst]
+    exact .new (ih hn) (AtMost.inst hs hd) (hl.inst hs)
   | get _ ih =>
     have := ih hn
     simp only [Ty.inst] at this
@@ -581,7 +579,7 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih =>
+  | new _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih =>
     exact ih hio hl
   | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)

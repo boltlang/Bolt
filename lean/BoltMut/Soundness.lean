@@ -32,6 +32,18 @@ theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h
   rw [hh.1]
   exact (List.getElem?_eq_some_iff.mp hl).1
 
+/-- A literal of mutability `m`, in the program that runs, makes an object
+that holds what it must, and whose type is a subtype of the literal's: a
+`ro` literal is a new `mut` object, which is seen as `ro`. -/
+theorem Mu.Lit.alloc {m : Mu} {s : Ty} (hl : m.Lit .none) (hd : AtMost .none m s) :
+    AtMost .none (muOf m.allocMut) s ∧ Sub .none (.cell (muOf m.allocMut) s) (.cell m s) := by
+  rcases hl with rfl | hl
+  · exact ⟨hd, .refl _⟩
+  · rcases hl.none_inv with rfl | h | rfl
+    · exact ⟨hd, .refl _⟩
+    · cases h
+    · exact ⟨hd.mono (.top _), .ro (.refl _) hd⟩
+
 /-- Adding a location that holds a value of its type keeps the heap
 matching its typing. -/
 theorem HeapOk.alloc {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {b : Bool} {s : Ty}
@@ -360,7 +372,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     · obtain ⟨v₁, v₂, rfl, h₁, h₂⟩ := canonical_prod hv he
       exact .inr ⟨_, _, .sndVal h₁ h₂⟩
     · exact .inr ⟨_, _, .sndCong hs⟩
-  | new _ _ ih =>
+  | new _ _ _ ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .newVal hv⟩
     · exact .inr ⟨_, _, .newCong hs⟩
@@ -403,13 +415,16 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   induction hs with
   | newCong _ ih =>
     intro σ t hh ht
-    obtain ⟨s, he, hd, hs⟩ := ht.new_inv
+    obtain ⟨s, he, hd, hl, hs⟩ := ht.new_inv
     obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-    exact ⟨σ', hx, hh', .sub (.new he' hd) hs⟩
-  | @newVal e b hv =>
+    exact ⟨σ', hx, hh', .sub (.new he' hd hl) hs⟩
+  | @newVal e m hv =>
     intro σ t hh ht
-    obtain ⟨s, he, hd, hs⟩ := ht.new_inv
-    refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, hh.alloc hd hv he, .sub (.loc ?_ (fun h => nomatch h)) hs⟩
+    obtain ⟨s, he, hd, hl, hs⟩ := ht.new_inv
+    -- A `ro` literal is a new `mut` object, seen as `ro`.
+    obtain ⟨hd', hsub⟩ := hl.alloc hd
+    refine ⟨σ ++ [(muOf m.allocMut, s)], Extends.append σ _, hh.alloc hd' hv he,
+      .sub (.sub (.loc ?_ (fun h => nomatch h)) hsub) hs⟩
     rw [hh.1, List.getElem?_concat_length]
   | getCong _ ih =>
     intro σ t hh ht

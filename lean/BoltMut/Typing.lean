@@ -6,7 +6,7 @@ import BoltMut.Subtyping
 The rules that matter for mutability:
 
 * An object holds only what's at most its mutability (`AtMost`). So
-  `new false e`, an `imm` object, can only hold a type that's `imm` all the
+  `new .immutable e`, an `imm` object, can only hold a type that's `imm` all the
   way down: what an `imm` value holds can't be changed either.
 * `set e₁ e₂` needs `e₁` to be exactly `cell mutable t`. A mutability
   parameter isn't enough: a generic function can read what it's given, but
@@ -67,9 +67,11 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   | loc {io : Bool} {Γ : Ctx} {l : Nat} {m : Mu} {t : Ty} :
       σ[l]? = some (m, t) → (io = true → m = .immutable) →
       HasType fns σ Δ io Γ (.loc l) (.cell m t)
-  | new {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {b : Bool} :
-      HasType fns σ Δ io Γ e t → AtMost Δ (muOf b) t →
-      HasType fns σ Δ io Γ (.new b e) (.cell (muOf b) t)
+  /-- A literal holds what's at most its mutability, which is `mut` or at
+  most `ro` (`Mu.Lit`). -/
+  | new {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {m : Mu} :
+      HasType fns σ Δ io Γ e t → AtMost Δ m t → (hl : m.Lit Δ := by lit_mu) →
+      HasType fns σ Δ io Γ (.new m e) (.cell m t)
   | get {io : Bool} {Γ : Ctx} {e : Expr} {m : Mu} {t : Ty} :
       HasType fns σ Δ io Γ e (.cell m t) → HasType fns σ Δ io Γ (.get e) t
   | set {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {t : Ty} :

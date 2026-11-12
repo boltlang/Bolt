@@ -114,7 +114,7 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     rw [hx] at h
     cases h
   | unit | int | loc => intro _ _ h; exact h
-  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih
+  | new _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih => exact ih
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     intro x hx hf
     exact hf.elim (ih₁ x hx) (ih₂ x hx)
@@ -171,7 +171,7 @@ inductive Bor (B : Nat → Pos → Prop) (l : Nat) : Expr → Prop where
   /-- The other part of a tuple that holds `l`. -/
   | fstD {w : Expr} : w.IsValue → ¬ w.HasLoc l → Bor B l (.fst (.pair w (.loc l)))
   | sndD {w : Expr} : w.IsValue → ¬ w.HasLoc l → Bor B l (.snd (.pair (.loc l) w))
-  | new {b : Bool} {e : Expr} : Bor B l e → Bor B l (.new b e)
+  | new {m : Mu} {e : Expr} : Bor B l e → Bor B l (.new m e)
   | get {e : Expr} : Bor B l e → Bor B l (.get e)
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Bor B l e → Bor B l (.call f ms τs e)
   | fst {e : Expr} : Bor B l e → Bor B l (.fst e)
@@ -195,7 +195,7 @@ it. -/
 inductive Con (B : Nat → Pos → Prop) (l : Nat) : Expr → Prop where
   | toImm : Con B l (.toImm false (.loc l))
   | toImmC {b : Bool} {e : Expr} : Con B l e → Con B l (.toImm b e)
-  | new {b : Bool} {e : Expr} : Con B l e → Con B l (.new b e)
+  | new {m : Mu} {e : Expr} : Con B l e → Con B l (.new m e)
   | get {e : Expr} : Con B l e → Con B l (.get e)
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Con B l e → Con B l (.call f ms τs e)
   | fst {e : Expr} : Con B l e → Con B l (.fst e)
@@ -220,7 +220,7 @@ inductive Ok (B : Nat → Pos → Prop) : Nat → (Nat → Prop) → Expr → Pr
   | int {n : Nat} {L : Nat → Prop} {i : Int} : Ok B n L (.int i)
   | loc {n : Nat} {L : Nat → Prop} {l : Nat} : Ok B n L (.loc l)
   | lam {n : Nat} {L : Nat → Prop} {b : Bool} {x : Nat} {e : Expr} : e.NoToImm → Ok B n L (.lam b x e)
-  | new {n : Nat} {L : Nat → Prop} {b : Bool} {e : Expr} : Ok B n L e → Ok B n L (.new b e)
+  | new {n : Nat} {L : Nat → Prop} {m : Mu} {e : Expr} : Ok B n L e → Ok B n L (.new m e)
   | get {n : Nat} {L : Nat → Prop} {e : Expr} : Ok B n L e → Ok B n L (.get e)
   | call {n : Nat} {L : Nat → Prop} {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} :
       Ok B n L e → Ok B n L (.call f ms τs e)
@@ -235,7 +235,7 @@ inductive Ok (B : Nat → Pos → Prop) : Nat → (Nat → Prop) → Expr → Pr
   | own {n : Nat} {L : Nat → Prop} {x : Nat} {e₀ b : Expr} : Ok B n L e₀ →
       (∀ l, n ≤ l → Con B l (b.subst x (.loc l))) →
       (∀ l, n ≤ l → Ok B (l + 1) (fun l' => l' = l ∨ L l') (b.subst x (.loc l))) →
-      Ok B n L (.letE x (.new true e₀) b)
+      Ok B n L (.letE x (.new .mutable e₀) b)
   /-- `let x = f(e) in b`, where `f` gives back a new `mut` object and `b`
   consumes it. -/
   | ownCall {n : Nat} {L : Nat → Prop} {x f : Nat} {ms : List Mu} {τs : List Ty} {e b : Expr} :
@@ -1220,7 +1220,7 @@ body is `mut [e₀]`, with `e₀` checked. -/
 def Returns (B : Nat → Pos → Prop) (fns : List Fn) : Prop :=
   ∀ f fn, B f .ret → fns[f]? = some fn → ∀ ms τs (v : Expr) (n : Nat) (L : Nat → Prop), v.IsValue → v.NoToImm →
     v.NoFree → (∀ l, v.HasLoc l → l < n) →
-    ∃ e₀, (fn.body.inst ms τs).subst fn.param v = .new true e₀ ∧ Ok B n L e₀
+    ∃ e₀, (fn.body.inst ms τs).subst fn.param v = .new .mutable e₀ ∧ Ok B n L e₀
 
 /-- Something new isn't in what's old. -/
 theorem noLoc_of_lt {e : Expr} {n l : Nat} (he : ∀ l, e.HasLoc l → l < n) (hl : n ≤ l) : ¬ e.HasLoc l :=
@@ -1499,7 +1499,7 @@ theorem checked_toImms_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns)
 /-- `let xs = mut [0]; xs[0] = 1; array_freeze(xs)` is checked: `xs` is
 written, then made `imm` last, so the `toImm` can be in place. -/
 example : Ok B 0 (fun _ => False)
-    (.letE 0 (.new true (.int 0)) (.letE 1 (.set (.var 0) (.int 1)) (.toImm false (.var 0)))) := by
+    (.letE 0 (.new .mutable (.int 0)) (.letE 1 (.set (.var 0) (.int 1)) (.toImm false (.var 0)))) := by
   refine .own .int (fun l _ => ?_) (fun l _ => ?_)
   · show Con B l (.letE 1 (.set (.loc l) (.int 1)) (.toImm false (.loc l)))
     exact .let₂ (.setP .loc (.none id)) .toImm
@@ -1532,7 +1532,7 @@ theorem fill₁_borrows : Borrows (fun f p => f = 0 ∧ p = .whole) [fill₁] :=
 /-- `let xs = mut [0]; fill(xs); array_freeze(xs)` is checked: `fill` only
 borrows `xs`, so the `toImm` can be in place. -/
 example : Ok (fun f p => f = 0 ∧ p = .whole) 0 (fun _ => False)
-    (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [] [] (.var 0)) (.toImm false (.var 0)))) := by
+    (.letE 0 (.new .mutable (.int 0)) (.letE 1 (.call 0 [] [] (.var 0)) (.toImm false (.var 0)))) := by
   refine .own .int (fun l _ => ?_) (fun l _ => ?_)
   · show Con _ l (.letE 1 (.call 0 [] [] (.loc l)) (.toImm false (.loc l)))
     exact .let₂ (.callL ⟨rfl, rfl⟩ .loc) .toImm
@@ -1556,7 +1556,7 @@ theorem push₁_borrows : Borrows (fun f p => f = 0 ∧ p = .fst) [push₁] := b
 /-- `let xs = mut [0]; push(xs, 1); array_freeze(xs)` is checked: the call
 borrows `xs` in a tuple, so the `toImm` can be in place. -/
 example : Ok (fun f p => f = 0 ∧ p = .fst) 0 (fun _ => False)
-    (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [] [] (.pair (.var 0) (.int 1))) (.toImm false (.var 0)))) := by
+    (.letE 0 (.new .mutable (.int 0)) (.letE 1 (.call 0 [] [] (.pair (.var 0) (.int 1))) (.toImm false (.var 0)))) := by
   refine .own .int (fun l _ => ?_) (fun l _ => ?_)
   · show Con _ l (.letE 1 (.call 0 [] [] (.pair (.loc l) (.int 1))) (.toImm false (.loc l)))
     exact .let₂ (.callT₁ ⟨rfl, rfl⟩ .int id) .toImm
@@ -1573,7 +1573,7 @@ example : ¬ Borrows (fun f p => f = 0 ∧ p = .whole) [id₁] :=
 
 /-- `fn make() -> mut [i32] = mut [0]` gives back a new object. -/
 def make₁ : Fn :=
-  { assume := {}, param := 0, argTy := .unit, retTy := .cell .mutable .int, body := .new true (.int 0) }
+  { assume := {}, param := 0, argTy := .unit, retTy := .cell .mutable .int, body := .new .mutable (.int 0) }
 
 theorem make₁_returns : Returns (fun f p => f = 0 ∧ p = .ret) [make₁] := by
   intro f fn hp hfn ms τs v n L _ _ _ _

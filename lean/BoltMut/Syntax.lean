@@ -16,7 +16,7 @@ A type can be a type parameter of a generic function too, like `T`.
 A tuple is a value: `prod a b`. A struct is a cell that holds the tuple
 of its fields, so one mutability covers all of them, and a field
 that's a struct is a cell in that tuple. Changing a field replaces the
-tuple, and `S { a: x, ..base }` is `new b (pair x (snd (get base)))`: the
+tuple, and `S { a: x, ..base }` is `new m (pair x (snd (get base)))`: the
 fields it doesn't give are shared with `base`, at the types they have
 there. A generic struct like `Box[T]` is a cell holding a `T`, and a field
 with a mutability of its own (`'v`, #243) is a cell with a mutability
@@ -68,16 +68,18 @@ inductive Ty where
   deriving DecidableEq, Repr
 
 /-- Expressions. `loc` only appears while running: it's a location in the
-heap. `new true e` is `mut` and `new false e` is `imm`, like `mut [e]` and
-`[e]`; a literal can't have a parameter as its mutability. A call gives the
-mutability and type arguments of the function explicitly, as the type
-checker finds them. -/
+heap. `new m e` makes an object of mutability `m`: `new .mutable e` is
+`mut [e]`, `new .immutable e` is `[e]`, and `new .readonly e` a `ro`
+literal (#415). It can be a parameter whose caller decides it, which must
+be assumed to be at most `ro` (`Mu.Lit`). A call gives the mutability and
+type arguments of the function explicitly, as the type checker finds
+them. -/
 inductive Expr where
   | var (x : Nat)
   | unit
   | int (n : Int)
   | loc (l : Nat)
-  | new (isMut : Bool) (e : Expr)
+  | new (m : Mu) (e : Expr)
   | get (e : Expr)
   | set (e₁ e₂ : Expr)
   | letE (x : Nat) (e₁ e₂ : Expr)
@@ -96,8 +98,14 @@ inductive Expr where
   | toImm (inPlace : Bool) (e : Expr)
   deriving Repr
 
-/-- The mutability of `new isMut _`. -/
+/-- The mutability of `lam isMut _ _`, and of an object at run time. -/
 def muOf (isMut : Bool) : Mu := if isMut then .mutable else .immutable
+
+/-- Whether a literal of mutability `m` makes a `mut` object at run time:
+one that's `mut`, or `ro`, which is a new `mut` object seen as `ro`. -/
+@[simp] def Mu.allocMut : Mu → Bool
+  | .immutable => false
+  | _ => true
 
 /-- Values: what an expression evaluates to. -/
 inductive Expr.IsValue : Expr → Prop where
@@ -176,7 +184,7 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .unit => .unit
   | .int n => .int n
   | .loc l => .loc l
-  | .new b e => .new b (e.inst ms τs)
+  | .new m e => .new (m.subst ms) (e.inst ms τs)
   | .get e => .get (e.inst ms τs)
   | .set e₁ e₂ => .set (e₁.inst ms τs) (e₂.inst ms τs)
   | .letE x e₁ e₂ => .letE x (e₁.inst ms τs) (e₂.inst ms τs)
@@ -195,7 +203,7 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .unit, _, _ => .unit
   | .int n, _, _ => .int n
   | .loc l, _, _ => .loc l
-  | .new b e, x, v => .new b (e.subst x v)
+  | .new m e, x, v => .new m (e.subst x v)
   | .get e, x, v => .get (e.subst x v)
   | .set e₁ e₂, x, v => .set (e₁.subst x v) (e₂.subst x v)
   | .letE y e₁ e₂, x, v => .letE y (e₁.subst x v) (if y = x then e₂ else e₂.subst x v)
@@ -227,6 +235,13 @@ inductive Le (Δ : Assume) : Mu → Mu → Prop where
   | refl (m : Mu) : Le Δ m m
   | assume {m μ : Mu} : (m, μ) ∈ Δ.mus → Le Δ m μ
   | trans {m₁ m₂ m₃ : Mu} : Le Δ m₁ m₂ → Le Δ m₂ m₃ → Le Δ m₁ m₃
+
+/-- What a literal's mutability can be: `mut`, or what's at most `ro`, as
+`imm`, `ro`, or a parameter assumed to be at most `ro`, like the `'m` of
+`fn mk['m ⊑ ro](x)` that `[x]` gets when it's inferred (#415). So a
+literal's mutability is never inferred to be `mut`, and since a program
+that runs assumes nothing, none of its literals has a parameter. -/
+def Mu.Lit (Δ : Assume) (m : Mu) : Prop := m = .mutable ∨ Le Δ m .readonly
 
 /-- Nothing in a value of type `t` is more `mut` than `μ`: what an object of
 mutability `μ` can hold. A cell or a closure in it is at most `μ`, what a
@@ -292,6 +307,22 @@ theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' �
   | refl => exact .refl _
   | assume h => exact hs.1 _ h
   | trans _ _ ih₁ ih₂ => exact ih₁.trans ih₂
+
+/-- Show `Mu.Lit` of a written mutability, or one that's assumed. -/
+macro "lit_mu" : tactic =>
+  `(tactic| first
+    | exact Or.inl rfl
+    | exact Or.inr (Le.bot _)
+    | exact Or.inr (Le.refl _)
+    | assumption)
+
+/-- What a literal's mutability can be survives instantiating: a parameter
+assumed to be at most `ro` is given an argument that's at most `ro`. -/
+theorem Mu.Lit.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
+    (h : m.Lit Δ) : (m.subst ms).Lit Δ' := by
+  rcases h with rfl | h
+  · exact .inl rfl
+  · exact .inr (Le.inst hs h)
 
 /-- With nothing assumed, a closure at most `imm` is an `imm` one: `ro`
 isn't at most `imm`. -/

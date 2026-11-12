@@ -23,7 +23,7 @@ is its own: the program has the region's objects only in the value, and no
 object outside the region holds one (`Expr.UniqToImm`). Then each copy can
 be the original (`region_freeze_step`). A closure has no `toImm` (`Expr.LamNoToImm`),
 so values, and the heap, have none: a closure that makes an `imm` copy uses
-`new false (get xs)` instead. -/
+`new .immutable (get xs)` instead. -/
 
 /-- `e` with every `toImm` in place. -/
 def Expr.inPlace : Expr → Expr
@@ -31,7 +31,7 @@ def Expr.inPlace : Expr → Expr
   | .unit => .unit
   | .int n => .int n
   | .loc l => .loc l
-  | .new b e => .new b e.inPlace
+  | .new m e => .new m e.inPlace
   | .get e => .get e.inPlace
   | .set a b => .set a.inPlace b.inPlace
   | .letE x a b => .letE x a.inPlace b.inPlace
@@ -508,18 +508,18 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
   | newCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln
     simp only [Expr.inPlace] at hr
-    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    obtain ⟨_, he, _, _, _⟩ := ht.new_inv
     cases hr with
     | new hr =>
       obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ :=
         ih hh he hM hc hr (hu.sub (fun _ => rfl) (fun _ h => h)) hnh hln
       exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr'⟩
-  | @newVal e b hv =>
+  | @newVal e m hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln
     simp only [Expr.inPlace, (hv.noToImm hln).inPlace] at hr
     cases hr with
     | @new _ _ e' hr =>
-      refine ⟨_, h₂ ++ [(b, e')], .loc h₂.length, .newVal (hr.isValue hv), fun _ _ h _ => .inl h, hc.alloc hr,
+      refine ⟨_, h₂ ++ [(m.allocMut, e')], .loc h₂.length, .newVal (hr.isValue hv), fun _ _ h _ => .inl h, hc.alloc hr,
         .loc (.inr ⟨rfl, rfl⟩)⟩
   | getCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln

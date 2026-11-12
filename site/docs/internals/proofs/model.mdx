@@ -18,7 +18,7 @@ object with mutability `m` that holds a `t`, at a location in the heap.
 
 | Bolt | The model |
 |---|---|
-| `mut [x]`, `[x]` | `new true x`, `new false x`: a `mut` or an `imm` cell |
+| `mut [x]`, `[x]` | `new .mutable x`, `new .immutable x`: a `mut` or an `imm` cell |
 | `xs[i]`, `xs[i] = y` | `get e`, `set e y`. A cell is one element, so there's no index |
 | `[[i32]]` | a cell holding a cell |
 | `(a, b)`, a value | `pair a b`, of type `prod a b` |
@@ -43,7 +43,7 @@ let p = mut Point { x: 1 };
 p.x = 2;
 ```
 
-is, in the model, `let p = new true 1 in set p 2`: a `mut` cell holding the
+is, in the model, `let p = new .mutable 1 in set p 2`: a `mut` cell holding the
 one field.
 
 ## Types and mutabilities
@@ -84,7 +84,7 @@ let c = [mut [1]];       // E0223: an `imm` array can't hold a `mut` one
 assumes, and `Γ` the variables in scope. `io` says `e` is in the body of an
 `imm` closure. The rules that matter for mutability:
 
-- **An object holds what's at most its mutability.** `new false e` is an
+- **An object holds what's at most its mutability.** `new .immutable e` is an
   `imm` cell, so `e`'s type must be `imm` all the way down. That's E0223.
 - **Only `mut` can be changed.** `set e₁ e₂` needs `e₁ : cell mutable t`.
   A mutability parameter isn't enough, since the function may be called

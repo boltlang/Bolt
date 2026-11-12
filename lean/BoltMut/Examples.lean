@@ -9,25 +9,25 @@ What the rules accept and reject, as in Bolt.
 namespace BoltMut
 
 /-- `let xs = mut [1]; xs[0] = 2`: a `mut` object can be changed. -/
-example : HasType [] [] .none false Ctx.empty (.letE 0 (.new true (.int 1)) (.set (.var 0) (.int 2))) .unit :=
+example : HasType [] [] .none false Ctx.empty (.letE 0 (.new .mutable (.int 1)) (.set (.var 0) (.int 2))) .unit :=
   .letE (.new .int trivial) (.set (.var rfl) .int)
 
 /-- `let xs = [1]; xs[0] = 2`: an `imm` one can't. -/
 example (t : Ty) :
-    ¬ HasType [] [] .none false Ctx.empty (.letE 0 (.new false (.int 1)) (.set (.var 0) (.int 2))) t := by
+    ¬ HasType [] [] .none false Ctx.empty (.letE 0 (.new .immutable (.int 1)) (.set (.var 0) (.int 2))) t := by
   intro h
   obtain ⟨t₁, _, h₁, h₂, _⟩ := h.letE_inv
-  obtain ⟨_, _, _, hs₁⟩ := h₁.new_inv
+  obtain ⟨_, _, _, _, hs₁⟩ := h₁.new_inv
   obtain ⟨_, hx, _, _⟩ := h₂.set_inv
   -- Seeing it as `ro` doesn't make it changeable either.
   cases (hs₁.trans hx.var_update).to_mut_cell
 
 /-- `[mut [1]]`: an `imm` object can't hold a `mut` one, since `imm` is
 deep. -/
-example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.new false (.new true (.int 1))) t := by
+example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.new .immutable (.new .mutable (.int 1))) t := by
   intro h
-  obtain ⟨_, hin, hd, _⟩ := h.new_inv
-  obtain ⟨_, _, _, hs⟩ := hin.new_inv
+  obtain ⟨_, hin, hd, _, _⟩ := h.new_inv
+  obtain ⟨_, _, _, _, hs⟩ := hin.new_inv
   exact nomatch Le.none_immutable (hs.atMost_imm hd).1
 
 /-- A generic function that reads what it's given:
@@ -44,11 +44,11 @@ theorem sat_none (Δ : Assume) (ms : List Mu) : Sat Δ {} ms [] := by
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
 
 /-- It can be called with a `mut` object and with an `imm` one. -/
-example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new true (.int 1))) .int := by
+example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new .mutable (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.mutable] [])
   exact .call rfl (sat_none _ _) (.new .int trivial)
 
-example : HasType [first] [] .none false Ctx.empty (.call 0 [.immutable] [] (.new false (.int 1))) .int := by
+example : HasType [first] [] .none false Ctx.empty (.call 0 [.immutable] [] (.new .immutable (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.immutable] [])
   exact .call rfl (sat_none _ _) (.new .int trivial)
 
@@ -66,13 +66,13 @@ example (t : Ty) :
 /-- `let c = mut [0]; || c[0] = 1`: a closure that changes what it captured
 is `mut`. -/
 example : HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1)))) (.fn .mutable .unit .unit) :=
+    (.letE 0 (.new .mutable (.int 0)) (.lam true 1 (.set (.var 0) (.int 1)))) (.fn .mutable .unit .unit) :=
   .letE (.new .int trivial) (.lam (fun _ _ h => h) (fun h => nomatch h) (.set (.var rfl) .int))
 
 /-- It can't be `imm`: an `imm` closure only sees what's `imm` all the way
 down, and `c` is `mut`. -/
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 0)) (.lam false 1 (.set (.var 0) (.int 1)))) t := by
+    (.letE 0 (.new .mutable (.int 0)) (.lam false 1 (.set (.var 0) (.int 1)))) t := by
   intro h
   obtain ⟨_, _, _, h₂, _⟩ := h.letE_inv
   obtain ⟨_, _, _, _, himm, hb, _⟩ := h₂.lam_inv
@@ -86,17 +86,17 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
 holding a closure that changes `c`, is rejected, since the closure is
 `mut`. -/
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 0)) (.new false (.lam true 1 (.set (.var 0) (.int 1))))) t := by
+    (.letE 0 (.new .mutable (.int 0)) (.new .immutable (.lam true 1 (.set (.var 0) (.int 1))))) t := by
   intro h
   obtain ⟨_, _, _, h₂, _⟩ := h.letE_inv
-  obtain ⟨_, hl, hd, _⟩ := h₂.new_inv
+  obtain ⟨_, hl, hd, _, _⟩ := h₂.new_inv
   obtain ⟨_, _, _, _, _, _, hs⟩ := hl.lam_inv
   exact nomatch Le.none_immutable (hs.atMost_imm hd).none_fn
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
 example : HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new false (.int 1)) (.new false (.lam false 1 (.get (.var 0)))))
+    (.letE 0 (.new .immutable (.int 1)) (.new .immutable (.lam false 1 (.get (.var 0)))))
     (.cell .immutable (.fn .immutable .unit .int)) := by
   refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_ (.get (.var rfl))) (.inl (.refl _)))
   intro _ y s hy
@@ -116,7 +116,7 @@ field `a` has the struct's mutability. -/
 /-- `let p = mut Line { a: mut Point { x: 1 }, n: 0 }; p.n = 5`: changing a
 field replaces the tuple, keeping the other field. -/
 example : HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.pair (.new true (.int 1)) (.int 0)))
+    (.letE 0 (.new .mutable (.pair (.new .mutable (.int 1)) (.int 0)))
       (.set (.var 0) (.pair (.fst (.get (.var 0))) (.int 5)))) .unit :=
   .letE (.new (.pair (.new .int trivial) .int) ⟨⟨.top _, trivial⟩, trivial⟩)
     (.set (.var rfl) (.pair (.fst (.get (.var rfl))) .int))
@@ -124,16 +124,16 @@ example : HasType [] [] .none false Ctx.empty
 /-- #246: `Line { n: 5, ..l }` with a `mut` `l` copies `l.a`, a `mut Point`,
 into an `imm Line`, so it's rejected: what's shared keeps its type. -/
 example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.pair (.new true (.int 1)) (.int 0)))
-      (.new false (.pair (.fst (.get (.var 0))) (.int 5)))) t := by
+    (.letE 0 (.new .mutable (.pair (.new .mutable (.int 1)) (.int 0)))
+      (.new .immutable (.pair (.fst (.get (.var 0))) (.int 5)))) t := by
   intro h
   obtain ⟨tl, _, hl, hbody, _⟩ := h.letE_inv
   -- `l` is a `mut` line holding `(p, 0)`, with `p` a `mut` point.
-  obtain ⟨line, hpair, _, hline⟩ := hl.new_inv
+  obtain ⟨line, hpair, _, _, hline⟩ := hl.new_inv
   obtain ⟨pt, _, hpt, _, hfields⟩ := hpair.pair_inv
-  obtain ⟨_, _, _, hmut⟩ := hpt.new_inv
+  obtain ⟨_, _, _, _, hmut⟩ := hpt.new_inv
   -- The new line is `imm` all the way down, and so is its first field.
-  obtain ⟨_, hnew, hd, _⟩ := hbody.new_inv
+  obtain ⟨_, hnew, hd, _, _⟩ := hbody.new_inv
   obtain ⟨a, _, ha, _, hnew'⟩ := hnew.pair_inv
   have hda := (hnew'.atMost_imm hd).1
   -- That field is `l.a`, read through `l`.
@@ -154,8 +154,8 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
 /-- But `Line { a: Point { x: 0 }, ..l }` gives the shared field anew, and
 copies only the number. -/
 example : HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.pair (.new true (.int 1)) (.int 0)))
-      (.new false (.pair (.new false (.int 0)) (.snd (.get (.var 0))))))
+    (.letE 0 (.new .mutable (.pair (.new .mutable (.int 1)) (.int 0)))
+      (.new .immutable (.pair (.new .immutable (.int 0)) (.snd (.get (.var 0))))))
     (.cell .immutable (.prod (.cell .immutable .int) .int)) :=
   .letE (.new (.pair (.new .int trivial) .int) ⟨⟨.top _, trivial⟩, trivial⟩)
     (.new (.pair (.new .int trivial) (.snd (.get (.var rfl)))) ⟨⟨.refl _, trivial⟩, trivial⟩)
@@ -169,9 +169,9 @@ the type parameter `T`, `tparam 0`. -/
 `mut`. Without an assumption about `T`, that's rejected where it's made,
 whatever `wrap` is called with. -/
 example (t : Ty) :
-    ¬ HasType [] [] .none false (Ctx.empty.update 0 (.tparam 0)) (.new false (.var 0)) t := by
+    ¬ HasType [] [] .none false (Ctx.empty.update 0 (.tparam 0)) (.new .immutable (.var 0)) t := by
   intro h
-  obtain ⟨_, hx, hd, _⟩ := h.new_inv
+  obtain ⟨_, hx, hd, _, _⟩ := h.new_inv
   -- Seen as `ro T`, it would still be more than `imm`.
   obtain ⟨μ', hμ', hle⟩ := hx.var_update.atMost_imm hd
   rcases hμ' with rfl | hmem
@@ -180,7 +180,7 @@ example (t : Ty) :
 
 /-- `mut Box { item: x }` is fine without one: a `mut` box can hold
 anything. -/
-example : HasType [] [] .none false (Ctx.empty.update 0 (.tparam 0)) (.new true (.var 0))
+example : HasType [] [] .none false (Ctx.empty.update 0 (.tparam 0)) (.new .mutable (.var 0))
     (.cell .mutable (.tparam 0)) :=
   .new (.var rfl) ⟨.mutable, .inl rfl, .refl _⟩
 
@@ -190,7 +190,7 @@ def wrapAssume : Assume := { tys := [(0, .immutable)] }
 
 def wrap : Fn :=
   { assume := wrapAssume, param := 0, argTy := .tparam 0, retTy := .cell .immutable (.tparam 0),
-    body := .new false (.var 0) }
+    body := .new .immutable (.var 0) }
 
 theorem wrap_ok : FnsOk [wrap] := by
   intro fn hfn
@@ -200,7 +200,7 @@ theorem wrap_ok : FnsOk [wrap] := by
 
 /-- `wrap[imm [i32]](x)` meets the assumption. -/
 example : HasType [wrap] [] .none false Ctx.empty
-    (.call 0 [] [.cell .immutable .int] (.new false (.int 1))) (.cell .immutable (.cell .immutable .int)) := by
+    (.call 0 [] [.cell .immutable .int] (.new .immutable (.int 1))) (.cell .immutable (.cell .immutable .int)) := by
   show HasType _ _ _ _ _ _ (wrap.retTy.inst [] [.cell .immutable .int])
   refine .call rfl ⟨?_, ?_, ?_⟩ (.new .int trivial)
   · intro p h; simp [wrap, wrapAssume] at h
@@ -227,22 +227,22 @@ example (e : Expr) (t : Ty) :
 next: i32 }` is `cell m (prod (cell 'v int) int)`. A `mut` iterator can hold
 the array it's given, whatever `'v` is. -/
 example : HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int))
-    (.new true (.pair (.var 0) (.int 0))) (.cell .mutable (.prod (.cell (.param 0) .int) .int)) :=
+    (.new .mutable (.pair (.var 0) (.int 0))) (.cell .mutable (.prod (.cell (.param 0) .int) .int)) :=
   .new (.pair (.var rfl) .int) ⟨⟨.top _, trivial⟩, trivial⟩
 
 /-- An `imm` one can't, since `'v` may be `mut`... -/
 example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int))
-    (.new false (.pair (.var 0) (.int 0))) t := by
+    (.new .immutable (.pair (.var 0) (.int 0))) t := by
   intro h
-  obtain ⟨_, hp, hd, _⟩ := h.new_inv
+  obtain ⟨_, hp, hd, _, _⟩ := h.new_inv
   obtain ⟨_, _, hx, _, hs⟩ := hp.pair_inv
   -- Seen as `ro`, it would still be more than `imm`.
   exact nomatch Le.none_immutable (hx.var_update.atMost_imm (hs.atMost_imm hd).1).1
 
 /-- ...unless the function assumes `'v ⊑ imm`. -/
 example : HasType [] [] { mus := [(.param 0, .immutable)] } false (Ctx.empty.update 0 (.cell (.param 0) .int))
-    (.new false (.pair (.var 0) (.int 0))) (.cell .immutable (.prod (.cell (.param 0) .int) .int)) :=
-  .new (.pair (.var rfl) .int) ⟨⟨.assume (by simp [muOf]), trivial⟩, trivial⟩
+    (.new .immutable (.pair (.var 0) (.int 0))) (.cell .immutable (.prod (.cell (.param 0) .int) .int)) :=
+  .new (.pair (.var rfl) .int) ⟨⟨.assume (by simp ), trivial⟩, trivial⟩
 
 /-! ## Read-only views (#320)
 
@@ -262,8 +262,8 @@ theorem peek_ok : FnsOk [peek] := by
 /-- `let xs = mut [1]; peek(xs)` and `let xs = [1]; peek(xs)`: it takes
 either, with no mutability parameter. -/
 example (b : Bool) : HasType [peek] [] .none false Ctx.empty
-    (.letE 0 (.new b (.int 1)) (.call 0 [] [] (.var 0))) .int := by
-  refine .letE (.new .int trivial) ?_
+    (.letE 0 (.new (muOf b) (.int 1)) (.call 0 [] [] (.var 0))) .int := by
+  refine .letE (.new .int trivial (by cases b <;> lit_mu)) ?_
   show HasType _ _ _ _ _ _ (peek.retTy.inst [] [])
   exact .call rfl (sat_none _ _) (.sub (.var rfl) (.ro (.refl _) trivial))
 
@@ -294,9 +294,9 @@ example (t : Ty) :
 /-- `[xs]` with `xs : ro [i32]` is rejected: an `imm` object can't hold a
 `ro` one, since what's seen as `ro` may change. -/
 example (t : Ty) :
-    ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.new false (.var 0)) t := by
+    ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.new .immutable (.var 0)) t := by
   intro h
-  obtain ⟨_, hx, hd, _⟩ := h.new_inv
+  obtain ⟨_, hx, hd, _, _⟩ := h.new_inv
   -- However it's seen, `xs` is still `ro`.
   exact nomatch Le.none_immutable (hx.var_update.atMost_imm hd).1
 
@@ -316,14 +316,14 @@ theorem firstRo_ok : FnsOk [firstRo] := by
 `xs` is seen as `ro [ro [i32]]`, and the result is `ro [i32]`, which can't
 change `ys`. -/
 example : HasType [firstRo] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 1)) (.letE 1 (.new true (.var 0))
+    (.letE 0 (.new .mutable (.int 1)) (.letE 1 (.new .mutable (.var 0))
       (.call 0 [] [.cell .mutable .int] (.var 1))))
     (.cell .readonly .int) := by
   refine .letE (.new .int trivial)
-    (.letE (.new (.var (t := .cell .mutable .int) (by simp [Ctx.update, muOf])) ⟨.refl _, trivial⟩) ?_)
+    (.letE (.new (.var (t := .cell .mutable .int) (by simp [Ctx.update])) ⟨.refl _, trivial⟩) ?_)
   show HasType _ _ _ _ _ _ (firstRo.retTy.inst [] [.cell .mutable .int])
   refine .call rfl ⟨?_, ?_, ?_⟩
-    (.sub (.var (t := .cell .mutable (.cell .mutable .int)) (by simp [Ctx.update, muOf]))
+    (.sub (.var (t := .cell .mutable (.cell .mutable .int)) (by simp [Ctx.update]))
       (.ro (.ro (.refl _) trivial) ⟨.refl _, trivial⟩))
   · intro p h; simp [firstRo] at h
   · intro p h; simp [firstRo] at h
@@ -339,13 +339,13 @@ def both : Fn :=
   { assume := {}, param := 0, argTy := .prod (.tparam 0) (.tparam 0), retTy := .unit, body := .unit }
 
 example : HasType [both] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 1)) (.letE 1 (.new false (.int 2))
+    (.letE 0 (.new .mutable (.int 1)) (.letE 1 (.new .immutable (.int 2))
       (.call 0 [] [.cell .readonly .int] (.pair (.var 0) (.var 1))))) .unit := by
   refine .letE (.new .int trivial) (.letE (.new .int trivial) ?_)
   show HasType _ _ _ _ _ _ (both.retTy.inst [] [.cell .readonly .int])
   refine .call rfl ⟨?_, ?_, ?_⟩
-    (.pair (.sub (.var (t := .cell .mutable .int) (by simp [Ctx.update, muOf])) (.ro (.refl _) trivial))
-      (.sub (.var (t := .cell .immutable .int) (by simp [Ctx.update, muOf])) (.ro (.refl _) trivial)))
+    (.pair (.sub (.var (t := .cell .mutable .int) (by simp [Ctx.update])) (.ro (.refl _) trivial))
+      (.sub (.var (t := .cell .immutable .int) (by simp [Ctx.update])) (.ro (.refl _) trivial)))
   · intro p h; simp [both] at h
   · intro p h; simp [both] at h
   · intro i
@@ -360,13 +360,13 @@ into a new `imm` one. -/
 
 /-- `let xs = mut [1]; xs[0] = 2; imm xs`. -/
 example : HasType [] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.toImm false (.var 0))))
+    (.letE 0 (.new .mutable (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.toImm false (.var 0))))
     (.cell .immutable .int) :=
   .letE (.new .int trivial)
     (.letE (.set (.var rfl) .int) (.toImm (.var (t := .cell (muOf true) .int) rfl) (.cell (.asIs trivial))))
 
 /-- `imm mut [mut [1]]` is deep: it gives `imm [imm [i32]]`. -/
-example : HasType [] [] .none false Ctx.empty (.toImm false (.new true (.new true (.int 1))))
+example : HasType [] [] .none false Ctx.empty (.toImm false (.new .mutable (.new .mutable (.int 1))))
     (.cell .immutable (.cell .immutable .int)) :=
   .toImm (.new (.new .int trivial) ⟨.refl _, trivial⟩) (.cell (.cell (.asIs trivial)))
 

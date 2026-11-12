@@ -106,9 +106,9 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   induction hs with
   | newCong _ ih =>
     intro σ t n A hh ht hn hc hhc
-    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    obtain ⟨_, he, _, _, _⟩ := ht.new_inv
     exact ih hh he hn hc hhc
-  | @newVal e b _ =>
+  | @newVal e m _ =>
     intro σ t n A hh _ hn hc hhc
     refine ⟨fun l hl _ => List.getElem?_append_left (by omega), by simp; omega,
       fun l hl => .inl (hl ▸ hn), ?_⟩

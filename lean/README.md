@@ -31,9 +31,9 @@ A small language with what matters for mutability:
 | a tuple `(a, b)`, a value | `pair a b`, of type `prod a b` |
 | a struct, whose mutability covers its fields | a cell holding the tuple of its fields: `struct Line { a: Point, n: i32 }` is `cell m (prod (cell m int) int)` |
 | `l.n = 5` | `set l (pair (fst (get l)) 5)`: the tuple is replaced |
-| `Line { n: 5, ..l }` | `new false (pair (fst (get l)) 5)`: the field it doesn't give is shared with `l` |
+| `Line { n: 5, ..l }` | `new .immutable (pair (fst (get l)) 5)`: the field it doesn't give is shared with `l` |
 | `let ys = xs`: another name for the same array | copying a location |
-| `mut [x]`, `[x]` | `new true x`, `new false x` |
+| `mut [x]`, `[x]` | `new .mutable x`, `new .immutable x` |
 | `xs[i]`, `xs[i] = y` | `get e`, `set e y` |
 | `'m [T]`, or `[T]` in a signature: either mutability | a mutability parameter, `Mu.param i` |
 | `ro [T]`, a read-only view (#320) | `cell readonly t`; a cell of any mutability can be seen as one (`Sub`) |
@@ -51,7 +51,7 @@ A small language with what matters for mutability:
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 
 - **Deep `imm`, as "at most"**: an object holds only what's at most its
-  mutability (`AtMost`), with `imm ⊑ mut`. For `new false e`, an `imm`
+  mutability (`AtMost`), with `imm ⊑ mut`. For `new .immutable e`, an `imm`
   object, that's a type that's `imm` all the way down; a `mut` one can hold
   `imm` and `mut` things.
 - **Assumptions** (#243): a parameter is below something only by what the
@@ -117,7 +117,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254). Both copy the same way when they reach `imm e` (`Freeze.sim`) |
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
-| `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` | a `ro` literal, `new true e` used at a `ro` type, has the type `ro t'` for what `e`'s type can be seen as (#320). One holding a value of a type parameter is `ro (ro T)`, with nothing assumed, as #415's `match (a, b)` needs |
+| `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` | a `ro` literal, `new .readonly e`, has the type `ro t'` for what `e`'s type can be seen as (#320). One holding a value of a type parameter is `ro (ro T)`, with nothing assumed, as #415's `match (a, b)` needs |
 | `Sub.trans`, `Sub.imm` | `Subtyping.lean`, `Soundness.lean` | subtyping composes, also through a function's parameters, which are related the other way round; and the copy `imm e` makes of a value seen at a supertype fits the copy of that type |
 | `Ty.sub_var`, `StructDecl.sub_view`, `StructDecl.sub_imm` | `Variance.lean` | a struct type with its arguments changed is a subtype of it when each changed parameter is only where it can change that way: covariant in tuples and in `imm` and `ro` objects, contravariant in a function's parameters, invariant in `mut` objects (#440). So `mut Box[mut [i32]]` can be seen as `ro Box[ro [i32]]`, and an `imm Handler[ro [i32]]` used as an `imm Handler[mut [i32]]` |
 | `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, the region of what it makes `imm`, the `mut` objects it reaches (`Region`), is its own: the program has them only there, and no object outside the region holds one (`Expr.UniqToImm`). Freezing in place makes the region `imm` where it is. The simulation gives up the originals and relates each copy to its original (`region_freeze_step`), using what the copy is (`Freeze.shape`): exactly the region, each object copied to its own location (`Freeze.keys`, `Freeze.fresh`). No closure may have a `toImm` |

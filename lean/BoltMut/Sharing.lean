@@ -34,7 +34,7 @@ inductive Rel (ρ : Nat → Nat → Prop) : Expr → Expr → Prop where
   | unit : Rel ρ .unit .unit
   | int {n : Int} : Rel ρ (.int n) (.int n)
   | loc {a c : Nat} : ρ a c → Rel ρ (.loc a) (.loc c)
-  | new {b : Bool} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.new b e₁) (.new b e₂)
+  | new {m : Mu} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.new m e₁) (.new m e₂)
   | get {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.get e₁) (.get e₂)
   | set {a₁ a₂ b₁ b₂ : Expr} : Rel ρ a₁ a₂ → Rel ρ b₁ b₂ → Rel ρ (.set a₁ b₁) (.set a₂ b₂)
   | letE {x : Nat} {a₁ a₂ b₁ b₂ : Expr} : Rel ρ a₁ a₂ → Rel ρ b₁ b₂ → Rel ρ (.letE x a₁ b₁) (.letE x a₂ b₂)
@@ -164,7 +164,7 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih =>
+  | new _ _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih | sub _ _ ih =>
     exact ih hl
   | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
 
@@ -449,16 +449,16 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   induction hs with
   | newCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
-    obtain ⟨_, he, _, _⟩ := ht.new_inv
+    obtain ⟨_, he, _, _, _⟩ := ht.new_inv
     cases hr with
     | new hr =>
       obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
       exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr'⟩
-  | @newVal e b hv =>
+  | @newVal e m hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | @new _ _ e' hr =>
-      exact ⟨_, h₂ ++ [(b, e')], .loc h₂.length, .newVal (hr.isValue hv), fun _ _ h => .inl h, hc.alloc hr,
+      exact ⟨_, h₂ ++ [(m.allocMut, e')], .loc h₂.length, .newVal (hr.isValue hv), fun _ _ h => .inl h, hc.alloc hr,
         .loc (.inr ⟨rfl, rfl⟩)⟩
   | getCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr

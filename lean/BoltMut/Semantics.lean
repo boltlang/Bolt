@@ -47,10 +47,11 @@ theorem Heap.freezeAt_get (h : Heap) (m : List (Nat × Nat)) (i : Nat) :
   simp [Heap.freezeAt, List.getElem?_mapIdx]
 
 inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
-  | newCong {h h' : Heap} {e e' : Expr} {b : Bool} :
-      Step fns h e h' e' → Step fns h (.new b e) h' (.new b e')
-  | newVal {h : Heap} {e : Expr} {b : Bool} :
-      e.IsValue → Step fns h (.new b e) (h ++ [(b, e)]) (.loc h.length)
+  | newCong {h h' : Heap} {e e' : Expr} {m : Mu} :
+      Step fns h e h' e' → Step fns h (.new m e) h' (.new m e')
+  /-- A `ro` literal is a new `mut` object (`Mu.allocMut`). -/
+  | newVal {h : Heap} {e : Expr} {m : Mu} :
+      e.IsValue → Step fns h (.new m e) (h ++ [(m.allocMut, e)]) (.loc h.length)
   | getCong {h h' : Heap} {e e' : Expr} :
       Step fns h e h' e' → Step fns h (.get e) h' (.get e')
   | getLoc {h : Heap} {l : Nat} {b : Bool} {v : Expr} :
