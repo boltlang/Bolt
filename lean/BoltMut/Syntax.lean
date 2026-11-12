@@ -478,7 +478,13 @@ inductive Sub (Δ : Assume) : Ty → Ty → Prop where
   | refl (t : Ty) : Sub Δ t t
   | ro {m : Mu} {t t' : Ty} : Sub Δ t t' → AtMost Δ .readonly t' →
       Sub Δ (.cell m t) (.cell .readonly t')
+  /-- What an `imm` object holds never changes, so it can be seen as any
+  supertype of its type, like a closure it holds at another function type. -/
+  | immCell {t t' : Ty} : Sub Δ t t' → Sub Δ (.cell .immutable t) (.cell .immutable t')
   | prod {a a' b b' : Ty} : Sub Δ a a' → Sub Δ b b' → Sub Δ (.prod a b) (.prod a' b')
+  /-- A function can be used where one that takes less and gives more is
+  expected, like one that takes `ro` where one that takes `mut` is (#444). -/
+  | fn {m : Mu} {a a' r r' : Ty} : Sub Δ a' a → Sub Δ r r' → Sub Δ (.fn m a r) (.fn m a' r')
   /-- A value of a type parameter can be seen as `ro T`. -/
   | tparam (i : Nat) : Sub Δ (.tparam i) (.roParam i)
 
@@ -492,18 +498,41 @@ theorem Sub.to_ro (Δ : Assume) (t : Ty) : Sub Δ t t.ro := by
   | tparam i => exact .tparam i
   | roParam i => exact .refl _
 
+/-- By induction on the type in the middle, since a function's parameters
+are related the other way round. -/
 theorem Sub.trans {Δ : Assume} {t₁ t₂ t₃ : Ty} (h₁ : Sub Δ t₁ t₂) (h₂ : Sub Δ t₂ t₃) : Sub Δ t₁ t₃ := by
-  induction h₁ generalizing t₃ with
-  | refl => exact h₂
-  | ro _ _ ih =>
-    cases h₂ with
-    | refl => exact .ro (by assumption) (by assumption)
-    | ro h₂ ha => exact .ro (ih h₂) ha
-  | prod _ _ iha ihb =>
-    cases h₂ with
-    | refl => exact .prod (by assumption) (by assumption)
-    | prod ha hb => exact .prod (iha ha) (ihb hb)
-  | tparam i => cases h₂; exact .tparam i
+  induction t₂ generalizing t₁ t₃ with
+  | unit | int => cases h₁; exact h₂
+  | cell m t ih =>
+    cases h₁ with
+    | refl => exact h₂
+    | ro h ha =>
+      cases h₂ with
+      | refl => exact .ro h ha
+      | ro h' ha' => exact .ro (ih h h') ha'
+    | immCell h =>
+      cases h₂ with
+      | refl => exact .immCell h
+      | ro h' ha' => exact .ro (ih h h') ha'
+      | immCell h' => exact .immCell (ih h h')
+  | fn m a r iha ihr =>
+    cases h₁ with
+    | refl => exact h₂
+    | fn ha hr =>
+      cases h₂ with
+      | refl => exact .fn ha hr
+      | fn ha' hr' => exact .fn (iha ha' ha) (ihr hr hr')
+  | prod a b iha ihb =>
+    cases h₁ with
+    | refl => exact h₂
+    | prod ha hb =>
+      cases h₂ with
+      | refl => exact .prod ha hb
+      | prod ha' hb' => exact .prod (iha ha ha') (ihb hb hb')
+  | tparam i => cases h₁; exact h₂
+  | roParam i =>
+    cases h₂
+    exact h₁
 
 /-- Seeing an object as `ro` survives instantiating. -/
 theorem Sub.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t t' : Ty}
@@ -515,21 +544,28 @@ theorem Sub.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' 
     have := AtMost.inst hs ha
     simp only [Mu.subst] at this
     exact .ro ih this
+  | immCell _ ih =>
+    simp only [Ty.inst, Mu.subst]
+    exact .immCell ih
   | prod _ _ iha ihb => exact .prod iha ihb
+  | fn _ _ iha ihr => exact .fn iha ihr
   | tparam i => exact Sub.to_ro Δ' _
 
-/-- What `t` can be used as, when `t` isn't a `ro` view or a tuple: only `t`. -/
+/-- What a cell can be seen as: a cell of the same mutability or a `ro`
+one, holding a supertype of what it holds. -/
 theorem Sub.cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ (.cell m t) t') :
-    t' = .cell m t ∨ ∃ s, t' = .cell .readonly s ∧ Sub Δ t s ∧ AtMost Δ .readonly s := by
+    ∃ m' s, t' = .cell m' s ∧ Sub Δ t s ∧ (m' = m ∨ m' = .readonly) := by
   cases h with
-  | refl => exact .inl rfl
-  | ro h ha => exact .inr ⟨_, rfl, h, ha⟩
+  | refl => exact ⟨_, _, rfl, .refl _, .inl rfl⟩
+  | ro h _ => exact ⟨_, _, rfl, h, .inr rfl⟩
+  | immCell h => exact ⟨_, _, rfl, h, .inl rfl⟩
 
-theorem Sub.to_cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ t (.cell m t')) (hm : m ≠ .readonly) :
+/-- What a `mut` cell can be seen from: only itself. -/
+theorem Sub.to_cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ t (.cell m t')) (hm : m = .mutable) :
     t = .cell m t' := by
+  subst hm
   cases h with
   | refl => rfl
-  | ro => exact (hm rfl).elim
 
 theorem Sub.prod_inv {Δ : Assume} {a b t' : Ty} (h : Sub Δ (.prod a b) t') :
     ∃ a' b', t' = .prod a' b' ∧ Sub Δ a a' ∧ Sub Δ b b' := by
@@ -539,12 +575,14 @@ theorem Sub.prod_inv {Δ : Assume} {a b t' : Ty} (h : Sub Δ (.prod a b) t') :
 
 /-- Other types are only subtypes of themselves. -/
 theorem Sub.eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
-    (hc : ∀ m s, t ≠ .cell m s) (hp : ∀ a b, t ≠ .prod a b) (hq : ∀ i, t ≠ .tparam i) : t' = t := by
+    (hc : ∀ m s, t ≠ .cell m s) (hp : ∀ a b, t ≠ .prod a b) (hq : ∀ i, t ≠ .tparam i)
+    (hf : ∀ m a r, t ≠ .fn m a r) : t' = t := by
   cases h with
   | refl => rfl
-  | ro => exact (hc _ _ rfl).elim
+  | ro | immCell => exact (hc _ _ rfl).elim
   | prod => exact (hp _ _ rfl).elim
   | tparam => exact (hq _ rfl).elim
+  | fn => exact (hf _ _ _ rfl).elim
 
 /-- What's a subtype of a tuple: a tuple. -/
 theorem Sub.to_prod_inv {Δ : Assume} {t a b : Ty} (h : Sub Δ t (.prod a b)) :
@@ -559,42 +597,40 @@ theorem Sub.to_cell {Δ : Assume} {t t' : Ty} {m : Mu} (h : Sub Δ t (.cell m t'
   cases h with
   | refl => exact ⟨_, _, rfl⟩
   | ro => exact ⟨_, _, rfl⟩
+  | immCell => exact ⟨_, _, rfl⟩
 
 /-- What's a subtype of a function type: a function type. -/
 theorem Sub.to_fn {Δ : Assume} {t a r : Ty} {m : Mu} (h : Sub Δ t (.fn m a r)) :
     ∃ a₀ r₀, t = .fn m a₀ r₀ := by
   cases h with
   | refl => exact ⟨_, _, rfl⟩
+  | fn => exact ⟨_, _, rfl⟩
 
 /-- What a function type is a subtype of: a function type. -/
 theorem Sub.of_fn {Δ : Assume} {m : Mu} {a r t : Ty} (h : Sub Δ (.fn m a r) t) :
     ∃ a' r', t = .fn m a' r' := by
   cases h with
   | refl => exact ⟨_, _, rfl⟩
+  | fn => exact ⟨_, _, rfl⟩
 
-/-- A function type is a subtype of another when they're the same. -/
+/-- A function type is a subtype of another with the same mutability that
+takes less and gives more. -/
 theorem Sub.fn_inv {Δ : Assume} {m m' : Mu} {a a' r r' : Ty} (h : Sub Δ (.fn m a r) (.fn m' a' r')) :
-    m = m' ∧ a = a' ∧ r = r' := by
+    m = m' ∧ Sub Δ a' a ∧ Sub Δ r r' := by
   cases h with
-  | refl => exact ⟨rfl, rfl, rfl⟩
+  | refl => exact ⟨rfl, .refl _, .refl _⟩
+  | fn ha hr => exact ⟨rfl, ha, hr⟩
 
-/-- What's a subtype of a type with nothing to see as `ro` in it: that type. -/
-theorem Sub.to_eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
-    (hc : ∀ s, t' ≠ .cell .readonly s) (hp : ∀ a b, t' ≠ .prod a b) (hq : ∀ i, t' ≠ .roParam i) :
-    t = t' := by
-  cases h with
-  | refl => rfl
-  | ro => exact (hc _ rfl).elim
-  | prod => exact (hp _ _ rfl).elim
-  | tparam => exact (hq _ rfl).elim
-
-/-- Nothing is seen as `ro` in a type that's `imm` all the way down, so only
-that type is a subtype of it. -/
-theorem Sub.eq_of_imm {t t' : Ty} (h : Sub .none t t') (hd : AtMost .none .immutable t') : t = t' := by
+/-- Nothing is seen as `ro` in a type that's `imm` all the way down, so what
+it's a supertype of is `imm` all the way down too. -/
+theorem Sub.atMost_imm {t t' : Ty} (h : Sub .none t t') (hd : AtMost .none .immutable t') :
+    AtMost .none .immutable t := by
   induction h with
-  | refl => rfl
+  | refl => exact hd
   | ro _ _ => exact nomatch Le.none_immutable hd.1
-  | prod _ _ iha ihb => rw [iha hd.1, ihb hd.2]
+  | immCell _ ih => exact ⟨hd.1, ih hd.2⟩
+  | prod _ _ iha ihb => exact ⟨iha hd.1, ihb hd.2⟩
+  | fn => exact hd
   | tparam => exact nomatch Le.none_immutable hd
 
 end BoltMut

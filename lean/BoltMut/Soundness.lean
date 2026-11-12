@@ -134,13 +134,17 @@ theorem Ty.Freezable.atMost {t : Ty} (h : t.Freezable) : AtMost .none .immutable
   | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
   | tparam | roParam => exact h.elim
 
-/-- Seeing objects as `ro` changes neither what's copied nor the copy. -/
-theorem Sub.imm {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : s.imm = t.imm ∧ (t.Freezable → s.Freezable) := by
+/-- Seeing a value as a supertype of its type doesn't change what's copied,
+and its copy has a subtype of the copy's type: seeing an object as `ro`
+changes nothing in it, and a closure in it is kept as it is. -/
+theorem Sub.imm {Δ : Assume} {s t : Ty} (h : Sub Δ s t) : Sub Δ s.imm t.imm ∧ (t.Freezable → s.Freezable) := by
   induction h with
-  | refl => exact ⟨rfl, id⟩
-  | ro _ _ ih => exact ⟨by simp [Ty.imm, ih.1], ih.2⟩
-  | prod _ _ iha ihb => exact ⟨by simp [Ty.imm, iha.1, ihb.1], fun h => ⟨iha.2 h.1, ihb.2 h.2⟩⟩
-  | tparam => exact ⟨rfl, fun h => h.elim⟩
+  | refl => exact ⟨.refl _, id⟩
+  | ro _ _ ih => exact ⟨.immCell ih.1, ih.2⟩
+  | immCell _ ih => exact ⟨.immCell ih.1, ih.2⟩
+  | prod _ _ iha ihb => exact ⟨.prod iha.1 ihb.1, fun h => ⟨iha.2 h.1, ihb.2 h.2⟩⟩
+  | fn ha hr => exact ⟨.fn ha hr, id⟩
+  | tparam => exact ⟨.refl _, fun h => h.elim⟩
 
 /-- A copy only adds to the heap. -/
 theorem Freeze.prefix {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
@@ -177,9 +181,9 @@ theorem MemoOk.extend {σ σ' : HeapTy} {m : List (Nat × Nat)} (hm : MemoOk σ 
 /-- The type of a location, through a `ro` view or not, gives the copy's. -/
 theorem loc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {l : Nat} {t : Ty}
     (ht : HasType fns σ .none io Γ (.loc l) t) :
-    ∃ m s, σ[l]? = some (m, s) ∧ t.imm = Ty.imm (.cell m s) ∧ (t.Freezable → s.Freezable) := by
+    ∃ m s, σ[l]? = some (m, s) ∧ Sub .none (.cell .immutable s.imm) t.imm ∧ (t.Freezable → s.Freezable) := by
   obtain ⟨_, _, h, _, hs⟩ := ht.loc_inv
-  exact ⟨_, _, h, hs.imm.1.symm, hs.imm.2⟩
+  exact ⟨_, _, h, hs.imm.1, hs.imm.2⟩
 
 /-- **A copy is well-typed.** It has the value's type with each cell
 `imm`, in a heap typing that only grows. -/
@@ -216,20 +220,15 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
       · cases hw₀
       · rfl
     subst hμ'
-    have heq : t.imm = .cell .immutable s := by
-      rw [himm]; simp [Ty.imm, (hd.imm_eq).1]
-    refine ⟨σ, Extends.refl σ, hh, .loc, ?_, hmo⟩
-    rw [heq]
-    exact .loc hσ (fun _ => rfl)
+    rw [(hd.imm_eq).1] at himm
+    exact ⟨σ, Extends.refl σ, hh, .loc, .sub (.loc hσ (fun _ => rfl)) himm, hmo⟩
   | @seen h m l c w hw hlk =>
     intro σ io Γ t hh _ ht _ hmo
     obtain ⟨μ, s, hσ, himm, _⟩ := loc_imm ht
     obtain ⟨s', hl, hc⟩ := hmo l c hlk
     rw [hσ] at hl
     cases hl
-    refine ⟨σ, Extends.refl σ, hh, .loc, ?_, hmo⟩
-    rw [himm]
-    exact .loc hc (fun _ => rfl)
+    exact ⟨σ, Extends.refl σ, hh, .loc, .sub (.loc hc (fun _ => rfl)) himm, hmo⟩
   | @cell h h' m m' l w w' hw hlk _ ih =>
     intro σ io Γ t hh _ ht hf hmo
     obtain ⟨μ, s, hσ, himm, hfs⟩ := loc_imm ht
@@ -245,8 +244,7 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
     obtain ⟨σ₁, hx, hh₁, hv', ht', hmo₁⟩ := ih hh hwv hwt hfs' hmo
     refine ⟨σ₁ ++ [(muOf false, s.imm)], hx.trans (Extends.append _ _),
       hh₁.alloc hfs'.atMost hv' ht', .loc, ?_, ?_⟩
-    · rw [himm]
-      exact .loc (by rw [hh₁.1, List.getElem?_concat_length]; rfl) (fun _ => rfl)
+    · exact .sub (.loc (by rw [hh₁.1, List.getElem?_concat_length]; rfl) (fun _ => rfl)) himm
     · intro k c hk
       rw [List.lookup_cons] at hk
       split at hk
@@ -269,9 +267,7 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
       have hf' := hfs hf
       obtain ⟨σ₁, hx₁, hh₁, hv₁', ht₁', hmo₁⟩ := ih₁ hh hv₁ ht₁ hf'.1 hmo
       obtain ⟨σ₂, hx₂, hh₂, hv₂', ht₂', hmo₂⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf'.2 hmo₁
-      refine ⟨σ₂, hx₁.trans hx₂, hh₂, .pair hv₁' hv₂', ?_, hmo₂⟩
-      rw [← heq]
-      exact .pair (ht₁'.weaken_heap hx₂) ht₂'
+      exact ⟨σ₂, hx₁.trans hx₂, hh₂, .pair hv₁' hv₂', .sub (.pair (ht₁'.weaken_heap hx₂) ht₂') heq, hmo₂⟩
 
 /-- A well-typed value can always be copied, also when it's seen through
 `ro`. -/
@@ -290,9 +286,8 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
       | none =>
         -- What it holds has a type that `s` is, seen through `ro` or not.
         have hs : Sub .none s₀ s := by
-          rcases hsub.cell_inv with h | ⟨s', h, hs, _⟩
-          · cases h; exact .refl _
-          · cases h; exact hs
+          obtain ⟨_, _, h, hs, _⟩ := hsub.cell_inv
+          cases h; exact hs
         obtain ⟨h', m', w', hc⟩ := ih hh hwv hwt hs hf hmo
         exact ⟨_, _, _, .cell hw hlk hc⟩
     · exact ⟨_, _, _, .imm hw⟩
@@ -317,7 +312,8 @@ theorem Freeze.exists {fns : List Fn} (t : Ty) :
     | int => exact ⟨_, _, _, .int⟩
     | loc =>
       obtain ⟨_, _, _, _, hs⟩ := ht'.loc_inv
-      rcases hs.cell_inv with h | ⟨_, h, _⟩ <;> cases h
+      obtain ⟨_, _, h, _⟩ := hs.cell_inv
+      cases h
     | lam =>
       obtain ⟨_, _, _, _, _, _, hs⟩ := ht'.lam_inv
       obtain ⟨_, _, h⟩ := hs.of_fn
@@ -433,10 +429,8 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     rw [hl] at hv
     cases hv
     -- Read through a `ro` view, the value is seen as `ro` too.
-    have hs₀ : Sub .none s₀ s := by
-      rcases hsub.cell_inv with h | ⟨s', h, hs', _⟩
-      · cases h; exact .refl _
-      · cases h; exact hs'
+    obtain ⟨_, _, h, hs₀, _⟩ := hsub.cell_inv
+    cases h
     exact ⟨σ, Extends.refl σ, hh, .sub (.sub hvt hs₀) hs⟩
   | setCong₁ _ ih =>
     intro σ t hh ht
@@ -493,11 +487,14 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     intro σ t hh ht
     obtain ⟨m, a, r, he₁, he₂, hr⟩ := ht.app_inv
     obtain ⟨Γc, a₀, r₀, hc, _, hbody, hs⟩ := he₁.lam_inv
-    obtain ⟨_, rfl, rfl⟩ := hs.fn_inv
+    -- The closure may be used at a function type that takes less and gives
+    -- more than its own: the argument is seen as what it takes, and what
+    -- it gives as what's expected.
+    obtain ⟨_, ha, hr₀⟩ := hs.fn_inv
     -- The body of an `imm` closure is typed inside one; outside, it has
     -- the same type. A closed closure saw nothing but its parameter.
     have hb := (hbody.weaken_ctx (hc.update _ _)).weaken_imm (io' := false) (fun h => nomatch h)
-    exact ⟨σ, Extends.refl σ, hh, .sub (hb.subst_update hv he₂) hr⟩
+    exact ⟨σ, Extends.refl σ, hh, .sub (.sub (hb.subst_update hv (.sub he₂ ha)) hr₀) hr⟩
   | pairCong₁ _ ih =>
     intro σ t hh ht
     obtain ⟨a, b, he₁, he₂, hs⟩ := ht.pair_inv

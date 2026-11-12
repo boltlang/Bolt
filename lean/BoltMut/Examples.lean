@@ -28,8 +28,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.new false (.new true
   intro h
   obtain ⟨_, hin, hd, _⟩ := h.new_inv
   obtain ⟨_, _, _, hs⟩ := hin.new_inv
-  cases hs.eq_of_imm hd
-  exact nomatch Le.none_immutable hd.1
+  exact nomatch Le.none_immutable (hs.atMost_imm hd).1
 
 /-- A generic function that reads what it's given:
 `fn first(xs: 'm [i32]) -> i32 = xs[0]`, with the mutability `'m` as its
@@ -92,8 +91,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   obtain ⟨_, _, _, h₂, _⟩ := h.letE_inv
   obtain ⟨_, hl, hd, _⟩ := h₂.new_inv
   obtain ⟨_, _, _, _, _, _, hs⟩ := hl.lam_inv
-  cases hs.eq_of_imm hd
-  exact nomatch Le.none_immutable hd.none_fn
+  exact nomatch Le.none_immutable (hs.atMost_imm hd).none_fn
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
@@ -135,20 +133,18 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   obtain ⟨_, _, _, hsa⟩ := hp₁.new_inv
   obtain ⟨_, hp, hd, _⟩ := h₂.new_inv
   obtain ⟨a', _, ha, _, hsp'⟩ := hp.pair_inv
-  cases hsp'.eq_of_imm hd
+  have hd₁ := (hsp'.atMost_imm hd).1
   obtain ⟨a'', _, hg, hsa'⟩ := ha.fst_inv
   obtain ⟨_, _, hv, hs''⟩ := hg.get_inv
   obtain ⟨a₀, b₀, rfl, ha₀, _⟩ := hs''.to_prod_inv
   -- Seeing `l.a` as `ro` doesn't help: an `imm` object can't hold a `ro`
   -- one either.
   have hss : Sub .none s (.prod a₀ b₀) := by
-    rcases (hs₁.trans hv.var_update).cell_inv with h | ⟨_, h, hs', _⟩
-    · cases h; exact .refl _
-    · cases h; exact hs'
+    obtain ⟨_, _, h, hs', _⟩ := (hs₁.trans hv.var_update).cell_inv
+    cases h; exact hs'
   obtain ⟨_, _, h, ha', _⟩ := (hsp.trans hss).prod_inv
   cases h
-  cases (hsa.trans (ha'.trans (ha₀.trans hsa'))).eq_of_imm hd.1
-  exact nomatch Le.none_immutable hd.1.1
+  exact nomatch Le.none_immutable ((hsa.trans (ha'.trans (ha₀.trans hsa'))).atMost_imm hd₁).1
 
 /-- But `Line { a: Point { x: 0 }, ..l }` gives the shared field anew, and
 copies only the number. -/
@@ -172,8 +168,7 @@ example (t : Ty) :
   intro h
   obtain ⟨_, hx, hd, _⟩ := h.new_inv
   -- Seen as `ro T`, it would still be more than `imm`.
-  cases hx.var_update.eq_of_imm hd
-  obtain ⟨μ', hμ', hle⟩ := hd
+  obtain ⟨μ', hμ', hle⟩ := hx.var_update.atMost_imm hd
   rcases hμ' with rfl | hmem
   · exact nomatch Le.none_immutable hle
   · simp [Assume.none] at hmem
@@ -237,9 +232,7 @@ example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.par
   obtain ⟨_, hp, hd, _⟩ := h.new_inv
   obtain ⟨_, _, hx, _, hs⟩ := hp.pair_inv
   -- Seen as `ro`, it would still be more than `imm`.
-  cases hs.eq_of_imm hd
-  cases hx.var_update.eq_of_imm hd.1
-  exact nomatch Le.none_immutable hd.1.1
+  exact nomatch Le.none_immutable (hx.var_update.atMost_imm (hs.atMost_imm hd).1).1
 
 /-- ...unless the function assumes `'v ⊑ imm`. -/
 example : HasType [] [] { mus := [(.param 0, .immutable)] } false (Ctx.empty.update 0 (.cell (.param 0) .int))
@@ -300,8 +293,7 @@ example (t : Ty) :
   intro h
   obtain ⟨_, hx, hd, _⟩ := h.new_inv
   -- However it's seen, `xs` is still `ro`.
-  cases hx.var_update.eq_of_imm hd
-  exact nomatch Le.none_immutable hd.1
+  exact nomatch Le.none_immutable (hx.var_update.atMost_imm hd).1
 
 /-- `fn first[T](xs: ro [T]) -> ro T = xs[0]`: a `ro` view of an array of
 any `T`, with nothing assumed. What's read through it is `ro T`. -/

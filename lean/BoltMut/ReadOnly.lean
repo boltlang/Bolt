@@ -77,12 +77,8 @@ example (t : Ty) : ¬ HasType [] [] .none false
   obtain ⟨s, hp, hd, _⟩ := h.new_inv
   obtain ⟨a, b, hx, _, hs⟩ := hp.pair_inv
   -- Nothing is seen as `ro` in what's `imm` all the way down.
-  cases hs.eq_of_imm hd
-  obtain ⟨s₀, hx, hs₀⟩ := hx.var_inv
-  cases hs₀.eq_of_imm hd.1
-  simp only [Ctx.update, ite_true, Option.some.injEq] at hx
-  subst hx
-  exact nomatch Le.none_immutable hd.1.1
+  have hd' := hx.var_update.atMost_imm (hs.atMost_imm hd).1
+  exact nomatch Le.none_immutable hd'.1
 
 /-- A `ro` literal holding a `T` with nothing assumed: `ro (ro T)`, as in
 #415's `match (a, b)`. -/

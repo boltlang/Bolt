@@ -155,13 +155,13 @@ theorem HasType.unit_inv (h : HasType fns σ Δ io Γ .unit t) : t = .unit := by
   generalize hE : Expr.unit = E at h
   induction h <;> cases hE
   case unit => rfl
-  case sub => rename_i hs _ ih; cases ih rfl; exact (hs.eq_of_not (by simp) (by simp) (by simp))
+  case sub => rename_i hs _ ih; cases ih rfl; exact (hs.eq_of_not (by simp) (by simp) (by simp) (by simp))
 
 theorem HasType.int_inv {n : Int} (h : HasType fns σ Δ io Γ (.int n) t) : t = .int := by
   generalize hE : Expr.int n = E at h
   induction h <;> cases hE
   case int => rfl
-  case sub => rename_i hs _ ih; cases ih rfl; exact (hs.eq_of_not (by simp) (by simp) (by simp))
+  case sub => rename_i hs _ ih; cases ih rfl; exact (hs.eq_of_not (by simp) (by simp) (by simp) (by simp))
 
 theorem HasType.loc_inv {l : Nat} (h : HasType fns σ Δ io Γ (.loc l) t) :
     ∃ m s, σ[l]? = some (m, s) ∧ (io = true → m = .immutable) ∧ Sub Δ (.cell m s) t := by
@@ -201,7 +201,7 @@ theorem HasType.set_inv {e₁ e₂ : Expr} (h : HasType fns σ Δ io Γ (.set e�
   case sub =>
     rename_i hs _ ih
     obtain ⟨s, h₁, h₂, rfl⟩ := ih rfl
-    exact ⟨s, h₁, h₂, hs.eq_of_not (by simp) (by simp) (by simp)⟩
+    exact ⟨s, h₁, h₂, hs.eq_of_not (by simp) (by simp) (by simp) (by simp)⟩
   all_goals exact ⟨_, by assumption, by assumption, rfl⟩
 
 theorem HasType.letE_inv {x : Nat} {e₁ e₂ : Expr} (h : HasType fns σ Δ io Γ (.letE x e₁ e₂) t) :
@@ -313,16 +313,11 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
   | loc h _ => exact .loc h (fun _ => Le.none_immutable hd.1)
   | locSub h _ hs =>
     -- Nothing seen as `ro` is `imm` all the way down.
-    refine .locSub h (fun _ => ?_) hs
-    rcases hs.cell_inv with rfl | ⟨s, rfl, _⟩
-    · exact Le.none_immutable hd.1
-    · exact nomatch Le.none_immutable hd.1
+    exact .locSub h (fun _ => Le.none_immutable (hs.atMost_imm hd).1) hs
   | lam hc himm hb =>
     cases muOf_immutable (Le.none_immutable hd.none_fn)
     exact .lam hc himm (hb.weaken_imm (fun _ => by simp))
-  | sub _ hs ih =>
-    cases hs.eq_of_imm hd
-    exact ih hv hd
+  | sub _ hs ih => exact .sub (ih hv (hs.atMost_imm hd)) hs
   | var | varSub | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- A value of a cell type is a location, whose type is a subtype of it. -/
@@ -341,9 +336,9 @@ theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | unit | int | lam | pair => cases hT
   | var | varSub | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
-/-- A value of a cell type that isn't `ro` is a location of that type. -/
+/-- A value of a `mut` cell type is a location of that type. -/
 theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
-    {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) (hm : m ≠ .readonly) :
+    {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) (hm : m = .mutable) :
     ∃ l, v = .loc l ∧ σ[l]? = some (m, t) := by
   obtain ⟨l, m', t', rfl, h, hs⟩ := canonical_cell_sub hv ht
   cases hs.to_cell_inv hm
