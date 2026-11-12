@@ -11,7 +11,7 @@ not the rest of the program, and no object outside it.
 
 This file proves what the copy does to the region: it copies exactly
 objects of it (`Freeze.keys`), each to a new location of its own
-(`Freeze.memo_inj`), and each copy holds what the original does, with the
+(`Freeze.fresh`), and each copy holds what the original does, with the
 region's objects replaced by their copies (`Freeze.shape`).
 -/
 
