@@ -3,9 +3,9 @@ import BoltMut.Semantics
 /-!
 # Lemmas about typing
 
-Weakening, canonical forms, and the two substitutions a call makes: the
-mutability and type arguments for the function's parameters, and the
-argument for its variable.
+Weakening, inversion, canonical forms, and the two substitutions a call
+makes: the mutability and type arguments for the function's parameters,
+and the argument for its variable.
 -/
 
 namespace BoltMut
@@ -271,16 +271,6 @@ theorem HasType.toImm_inv {b : Bool} {e : Expr} (h : HasType fns σ Δ io Γ (.t
 
 end Inversion
 
-theorem muOf_cases (b : Bool) : muOf b = .mutable ∨ muOf b = .immutable := by
-  cases b
-  · exact .inr rfl
-  · exact .inl rfl
-
-theorem muOf_immutable {b : Bool} (h : muOf b = .immutable) : b = false := by
-  cases b
-  · rfl
-  · cases h
-
 /-- A value whose type is `imm` all the way down can be captured by an `imm`
 closure. Values only run in the program, which assumes nothing. -/
 theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {t : Ty}
@@ -300,7 +290,7 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
   | var | new | get | set | letE | call | app | fst | snd | toImm => cases hv
 
 /-- A value of a cell type is a location, whose type is a subtype of it. -/
-theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
+theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
     {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) :
     ∃ l m' t', v = .loc l ∧ σ[l]? = some (m', t') ∧ Sub Δ (.cell m' t') (.cell m t) := by
   generalize hT : Ty.cell m t = T at ht
@@ -318,7 +308,7 @@ theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
 theorem canonical_mut_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
     {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell .mutable t)) :
     ∃ l, v = .loc l ∧ σ[l]? = some (.mutable, t) := by
-  obtain ⟨l, m', t', rfl, h, hs⟩ := canonical_cell_sub hv ht
+  obtain ⟨l, m', t', rfl, h, hs⟩ := canonical_cell hv ht
   cases hs.to_mut_cell
   exact ⟨l, rfl, h⟩
 
@@ -575,11 +565,11 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := ih hn
     simp only [Ty.inst] at h
     exact .fst h
-  | toImm _ hd ih => exact .toImm (ih hn) (hd.inst hs)
   | snd _ ih =>
     have h := ih hn
     simp only [Ty.inst] at h
     exact .snd h
+  | toImm _ hd ih => exact .toImm (ih hn) (hd.inst hs)
   | sub _ hsub ih => exact .sub (ih hn) (Sub.inst hs hsub)
 
 /-- Inside an `imm` closure, every location is `imm`. -/

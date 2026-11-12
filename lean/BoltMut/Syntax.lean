@@ -324,6 +324,16 @@ theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat �
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
   | roParam i => exact (AtMost.of_ro Δ' _).mono (Le.inst hs h)
 
+theorem muOf_cases (b : Bool) : muOf b = .mutable ∨ muOf b = .immutable := by
+  cases b
+  · exact .inr rfl
+  · exact .inl rfl
+
+theorem muOf_immutable {b : Bool} (h : muOf b = .immutable) : b = false := by
+  cases b
+  · rfl
+  · cases h
+
 theorem Mu.subst_muOf (ms : List Mu) (b : Bool) : (muOf b).subst ms = muOf b := by
   cases b <;> rfl
 

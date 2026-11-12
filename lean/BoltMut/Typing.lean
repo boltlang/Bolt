@@ -23,6 +23,9 @@ The rules that matter for mutability:
   (`Fn.assume`, #243), like `T ⊑ imm`, and a call must meet that with its
   arguments (`Sat`). Without an assumption, a value of type `T` can't be put
   in an `imm` object, since `T` may be `mut` (#247).
+* Any expression can be used at a supertype of its type (`sub`), like a
+  `mut` or `imm` object seen as `ro`. Proofs take a typing apart up to it
+  (`HasType.app_inv` and the others in `Lemmas.lean`).
 
 The flag `io` of `HasType` says the expression is in the body of an `imm`
 closure, where a location must be `imm`. `Δ` is what the function being
@@ -98,8 +101,9 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   /-- `imm e` copies what's `mut` in `e`'s value (#335). -/
   | toImm {io : Bool} {Γ : Ctx} {e : Expr} {t t' : Ty} :
       HasType fns σ Δ io Γ e t → ImmTy Δ t t' → HasType fns σ Δ io Γ (.toImm false e) t'
-  /-- Any expression can be used as a subtype of its type: what it gives can
-  be seen as `ro` (#320, #444). -/
+  /-- Any expression can be used at a supertype of its type (`Sub`): what it
+  gives can be seen as `ro` (#320), and a closure at a function type that
+  takes less and gives more (#444). -/
   | sub {io : Bool} {Γ : Ctx} {e : Expr} {s t : Ty} :
       HasType fns σ Δ io Γ e s → Sub Δ s t → HasType fns σ Δ io Γ e t
 

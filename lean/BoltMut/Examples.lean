@@ -127,24 +127,29 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.pair (.new true (.int 1)) (.int 0)))
       (.new false (.pair (.fst (.get (.var 0))) (.int 5)))) t := by
   intro h
-  obtain ⟨t₁, _, h₁, h₂, _⟩ := h.letE_inv
-  obtain ⟨s, hl, _, hs₁⟩ := h₁.new_inv
-  obtain ⟨a, _, hp₁, _, hsp⟩ := hl.pair_inv
-  obtain ⟨_, _, _, hsa⟩ := hp₁.new_inv
-  obtain ⟨_, hp, hd, _⟩ := h₂.new_inv
-  obtain ⟨a', _, ha, _, hsp'⟩ := hp.pair_inv
-  have hd₁ := (hsp'.atMost_imm hd).1
-  obtain ⟨a'', _, hg, hsa'⟩ := ha.fst_inv
-  obtain ⟨_, _, hv, hs''⟩ := hg.get_inv
-  obtain ⟨a₀, b₀, rfl, ha₀, _⟩ := hs''.to_prod
-  -- Seeing `l.a` as `ro` doesn't help: an `imm` object can't hold a `ro`
-  -- one either.
-  have hss : Sub .none s (.prod a₀ b₀) := by
-    obtain ⟨_, _, h, hs', _⟩ := (hs₁.trans hv.var_update).of_cell
-    cases h; exact hs'
-  obtain ⟨_, _, h, ha', _⟩ := (hsp.trans hss).of_prod
+  obtain ⟨tl, _, hl, hbody, _⟩ := h.letE_inv
+  -- `l` is a `mut` line holding `(p, 0)`, with `p` a `mut` point.
+  obtain ⟨line, hpair, _, hline⟩ := hl.new_inv
+  obtain ⟨pt, _, hpt, _, hfields⟩ := hpair.pair_inv
+  obtain ⟨_, _, _, hmut⟩ := hpt.new_inv
+  -- The new line is `imm` all the way down, and so is its first field.
+  obtain ⟨_, hnew, hd, _⟩ := hbody.new_inv
+  obtain ⟨a, _, ha, _, hnew'⟩ := hnew.pair_inv
+  have hda := (hnew'.atMost_imm hd).1
+  -- That field is `l.a`, read through `l`.
+  obtain ⟨a₁, _, hfst, ha₁⟩ := ha.fst_inv
+  obtain ⟨_, _, hget, hread⟩ := hfst.get_inv
+  obtain ⟨a₂, b₂, rfl, ha₂, _⟩ := hread.to_prod
+  -- What `l` holds is a subtype of what's read through it, also when `l`
+  -- is seen as `ro`.
+  have hheld : Sub .none line (.prod a₂ b₂) := by
+    obtain ⟨_, _, h, hs, _⟩ := (hline.trans hget.var_update).of_cell
+    cases h; exact hs
+  obtain ⟨_, _, h, hpt', _⟩ := (hfields.trans hheld).of_prod
   cases h
-  exact nomatch Le.none_immutable ((hsa.trans (ha'.trans (ha₀.trans hsa'))).atMost_imm hd₁).1
+  -- So the `mut` point has a subtype of what's `imm` all the way down: an
+  -- `imm` object can't hold a `ro` one either.
+  exact nomatch Le.none_immutable ((hmut.trans (hpt'.trans (ha₂.trans ha₁))).atMost_imm hda).1
 
 /-- But `Line { a: Point { x: 0 }, ..l }` gives the shared field anew, and
 copies only the number. -/

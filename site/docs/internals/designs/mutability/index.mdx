@@ -352,8 +352,9 @@ like a `mut Box[imm [i32]]`, it's fine. A `mut` closure can still be held,
 as above.
 
 The rules are proven in `lean/BoltMut`: in `Syntax.lean`, `Ty.ro` is the
-view, `Sub.to_ro` says a type fits its view, and `Ty.roParam` is `ro T`;
-`ReadOnly.lean` has the examples.
+view and `Ty.roParam` is `ro T`; in `Subtyping.lean`, `Sub` says where a
+type fits, and `Sub.to_ro` that a type fits its view. `ReadOnly.lean` has
+the examples.
 `Variance.lean` proves when a struct's arguments can change, for
 [#440](https://github.com/boltlang/Bolt/issues/440). A parameter in a
 tuple, or in an object that's `imm`, `ro`, or whose mutability is a

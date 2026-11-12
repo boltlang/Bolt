@@ -178,7 +178,8 @@ theorem MemoOk.extend {σ σ' : HeapTy} {m : List (Nat × Nat)} (hm : MemoOk σ 
   obtain ⟨s, h₁, h₂⟩ := hm l c hl
   exact ⟨s, hx _ _ h₁, hx _ _ h₂⟩
 
-/-- The type of a location, through a `ro` view or not, gives the copy's. -/
+/-- A location seen at any type `t`: its copy, an `imm` object holding a
+copy of what it holds, fits the copy of `t`. -/
 theorem loc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {l : Nat} {t : Ty}
     (ht : HasType fns σ .none io Γ (.loc l) t) :
     ∃ m s, σ[l]? = some (m, s) ∧ Sub .none (.cell .immutable s.imm) t.imm ∧ (t.Freezable → s.Freezable) := by
@@ -260,8 +261,8 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
     intro σ io Γ t hh hv ht hf hmo
     cases hv with
     | pair hv₁ hv₂ =>
-      -- Copied at the types its parts have: seeing them as `ro` changes
-      -- neither what's copied nor the copy.
+      -- Copied at the types its parts have, whose copies fit the copy of
+      -- the pair's type (`Sub.imm`).
       obtain ⟨a, b, ht₁, ht₂, hs⟩ := ht.pair_inv
       obtain ⟨heq, hfs⟩ := hs.imm
       have hf' := hfs hf
@@ -269,64 +270,58 @@ theorem Freeze.typed {fns : List Fn} {h h' : Heap} {m m' : List (Nat × Nat)} {v
       obtain ⟨σ₂, hx₂, hh₂, hv₂', ht₂', hmo₂⟩ := ih₂ hh₁ hv₂ (ht₂.weaken_heap hx₁) hf'.2 hmo₁
       exact ⟨σ₂, hx₁.trans hx₂, hh₂, .pair hv₁' hv₂', .sub (.pair (ht₁'.weaken_heap hx₂) ht₂') heq, hmo₂⟩
 
-/-- A well-typed value can always be copied, also when it's seen through
-`ro`. -/
+/-- A well-typed value can always be copied, at any type it has. -/
 theorem Freeze.exists {fns : List Fn} (t : Ty) :
-    ∀ {σ : HeapTy} {h : Heap} {m : List (Nat × Nat)} {io : Bool} {Γ : Ctx} {v : Expr} {t₀ : Ty}, HeapOk fns σ h →
-      v.IsValue → HasType fns σ .none io Γ v t₀ → Sub .none t₀ t → t.Freezable → MemoOk σ m →
+    ∀ {σ : HeapTy} {h : Heap} {m : List (Nat × Nat)} {io : Bool} {Γ : Ctx} {v : Expr}, HeapOk fns σ h →
+      v.IsValue → HasType fns σ .none io Γ v t → t.Freezable → MemoOk σ m →
       ∃ h' m' v', Freeze h m v h' m' v' := by
   induction t with
   | cell μ s ih =>
-    intro σ h m io Γ v t₀ hh hv ht hs₀ hf hmo
-    obtain ⟨l, m₀, s₀, rfl, hσ, hsub⟩ := canonical_cell_sub hv (.sub ht hs₀)
+    intro σ h m io Γ v hh hv ht hf hmo
+    obtain ⟨l, m₀, s₀, rfl, hσ, hsub⟩ := canonical_cell hv ht
     obtain ⟨hμ, _, w, hw, hwv, hwt⟩ := hh.2 _ _ _ hσ
     rcases hμ with rfl | rfl
     · cases hlk : m.lookup l with
       | some c => exact ⟨_, _, _, .seen hw hlk⟩
       | none =>
-        -- What it holds has a type that `s` is, seen through `ro` or not.
-        have hs : Sub .none s₀ s := by
-          obtain ⟨_, _, h, hs, _⟩ := hsub.of_cell
-          cases h; exact hs
-        obtain ⟨h', m', w', hc⟩ := ih hh hwv hwt hs hf hmo
+        -- What it holds has a subtype of `s`.
+        obtain ⟨_, _, h, hs, _⟩ := hsub.of_cell
+        cases h
+        obtain ⟨h', m', w', hc⟩ := ih hh hwv (.sub hwt hs) hf hmo
         exact ⟨_, _, _, .cell hw hlk hc⟩
     · exact ⟨_, _, _, .imm hw⟩
   | prod a b iha ihb =>
-    intro σ h m io Γ v t₀ hh hv ht hs₀ hf hmo
-    obtain ⟨a₀, b₀, rfl, ha, hb⟩ := hs₀.to_prod
+    intro σ h m io Γ v hh hv ht hf hmo
     obtain ⟨v₁, v₂, rfl, hv₁, hv₂⟩ := canonical_prod hv ht
-    obtain ⟨a₁, b₁, ht₁, ht₂, hs₁⟩ := ht.pair_inv
-    obtain ⟨_, _, heq, ha₁, hb₁⟩ := hs₁.to_prod
-    cases heq
-    have ha' := ha₁.trans ha
-    have hb' := hb₁.trans hb
-    obtain ⟨h₁, m₁, v₁', hc₁⟩ := iha hh hv₁ ht₁ ha' hf.1 hmo
-    obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ ht₁ (ha'.imm.2 hf.1) hmo
-    obtain ⟨h₂, m₂, v₂', hc₂⟩ := ihb hh₁ hv₂ (ht₂.weaken_heap hx₁) hb' hf.2 hmo₁
+    obtain ⟨a₁, b₁, ht₁, ht₂, hs⟩ := ht.pair_inv
+    obtain ⟨_, _, h, ha, hb⟩ := hs.of_prod
+    cases h
+    obtain ⟨h₁, m₁, v₁', hc₁⟩ := iha hh hv₁ (.sub ht₁ ha) hf.1 hmo
+    obtain ⟨σ₁, hx₁, hh₁, _, _, hmo₁⟩ := hc₁.typed hh hv₁ (.sub ht₁ ha) hf.1 hmo
+    obtain ⟨h₂, m₂, v₂', hc₂⟩ := ihb hh₁ hv₂ (.sub (ht₂.weaken_heap hx₁) hb) hf.2 hmo₁
     exact ⟨_, _, _, .pair hc₁ hc₂⟩
   | unit | int =>
-    intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
-    have ht' := HasType.sub ht hs₀
+    intro σ h m io Γ v _ hv ht _ _
     cases hv with
     | unit => exact ⟨_, _, _, .unit⟩
     | int => exact ⟨_, _, _, .int⟩
     | loc =>
-      obtain ⟨_, _, _, _, hs⟩ := ht'.loc_inv
+      obtain ⟨_, _, _, _, hs⟩ := ht.loc_inv
       obtain ⟨_, _, h, _⟩ := hs.of_cell
       cases h
     | lam =>
-      obtain ⟨_, _, _, _, _, _, hs⟩ := ht'.lam_inv
+      obtain ⟨_, _, _, _, _, _, hs⟩ := ht.lam_inv
       obtain ⟨_, _, h, _⟩ := hs.of_fn
       cases h
     | pair =>
-      obtain ⟨_, _, _, _, hs⟩ := ht'.pair_inv
+      obtain ⟨_, _, _, _, hs⟩ := ht.pair_inv
       obtain ⟨_, _, h, _, _⟩ := hs.of_prod
       cases h
   | fn μ a r =>
-    intro σ h m io Γ v t₀ _ hv ht hs₀ _ _
-    obtain ⟨b, x, body, rfl⟩ := canonical_fn hv (.sub ht hs₀)
+    intro σ h m io Γ v _ hv ht _ _
+    obtain ⟨b, x, body, rfl⟩ := canonical_fn hv ht
     exact ⟨_, _, _, .lam⟩
-  | tparam | roParam => intro _ _ _ _ _ _ _ _ _ _ _ hf _; exact hf.elim
+  | tparam | roParam => intro _ _ _ _ _ _ _ _ _ hf _; exact hf.elim
 
 /-- A well-typed program that isn't a value can take a step. -/
 theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr} {t : Ty}
@@ -371,7 +366,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     · exact .inr ⟨_, _, .newCong hs⟩
   | get he ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
-    · obtain ⟨l, _, _, rfl, hl, _⟩ := canonical_cell_sub hv he
+    · obtain ⟨l, _, _, rfl, hl, _⟩ := canonical_cell hv he
       obtain ⟨_, _, v, hv, _⟩ := hh.2 _ _ _ hl
       exact .inr ⟨_, _, .getLoc hv⟩
     · exact .inr ⟨_, _, .getCong hs⟩
@@ -389,7 +384,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     · exact .inr ⟨_, _, .letCong hs⟩
   | toImm he hi ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
-    · obtain ⟨h', m', v', hc⟩ := Freeze.exists _ hh hv he (.refl _) (hi.none_eq).2 (MemoOk.nil σ)
+    · obtain ⟨h', m', v', hc⟩ := Freeze.exists _ hh hv he (hi.none_eq).2 (MemoOk.nil σ)
       exact .inr ⟨_, _, .toImmVal hv hc⟩
     · exact .inr ⟨_, _, .toImmCong hs⟩
   | call hf _ _ ih =>
@@ -428,7 +423,8 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     obtain ⟨_, _, v, hv, hvv, hvt⟩ := hh.2 _ _ _ hσ
     rw [hl] at hv
     cases hv
-    -- Read through a `ro` view, the value is seen as `ro` too.
+    -- Read through a location seen at a supertype of its type, the value
+    -- is seen at a supertype of its own.
     obtain ⟨_, _, h, hs₀, _⟩ := hsub.of_cell
     cases h
     exact ⟨σ, Extends.refl σ, hh, .sub (.sub hvt hs₀) hs⟩
