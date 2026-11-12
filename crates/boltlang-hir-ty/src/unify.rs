@@ -168,7 +168,7 @@ impl<'db> Unifier<'db> {
             },
             _ => None,
         })
-        .normalize_ro()
+        .normalize_ro(self.variances)
     }
 
     /// A `ro T` whose `T` is known as the view of it, so that unifying

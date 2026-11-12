@@ -2318,7 +2318,7 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
                 | Ty::Assoc(..)
                 | Ty::Imm(_)
                 | Ty::Var(_) => Ty::Ro(Box::new(inner)),
-                inner => normalize_assoc(db, file, &inner.ro_view(false)),
+                inner => normalize_assoc(db, file, &inner.ro_view(Variances::of(db), false)),
             });
         }
         if let Ty::Imm(inner) = t {

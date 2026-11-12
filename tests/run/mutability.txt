@@ -296,6 +296,24 @@ print(show(apply(reads)));
 6
 
 ================================================================================
+A struct's arguments seen as ro, or the other way round (#440)
+:test-prelude
+================================================================================
+struct Box[T] { item: T }
+struct Handler[T] { f: fn(T) -> i32 }
+fn peek(b: ro Box[[i32]]) -> i32 = b.item[0];
+fn call(h: imm Handler[mut [i32]]) -> i32 = (h.f)(mut [7]);
+fn reads(xs: ro [i32]) -> i32 = xs[0];
+let b = mut Box { item: mut [3] };
+print(show(peek(b)));
+print(show(peek(Box { item: [4] })));
+print(show(call(Handler { f: reads })));
+--------------------------------------------------------------------------------
+3
+4
+7
+
+================================================================================
 ro T: a type parameter seen as ro (#320)
 :test-prelude
 ================================================================================

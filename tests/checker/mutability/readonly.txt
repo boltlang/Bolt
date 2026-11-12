@@ -245,13 +245,31 @@ fn fine() = get(mut Box { item: [1] });
 --------------------------------------------------------------------------------
 change: fn(b: ro Box[mut [i32]]) -> ()
 inside: fn(t: ro (Opt[mut [i32]], i32)) -> ()
-get: forall T. fn(b: ro Box[T]) -> T
+get: forall T. fn(b: ro Box[ro T]) -> T
 leak: fn() -> ()
 fine: fn() -> imm [i32]
 --------------------------------------------------------------------------------
 error at `b`: ro Box[mut [i32]] holds mut [i32]
 error at `t`: ro (Opt[mut [i32]], i32) holds mut [i32]
-error at `get`: ro Box[mut [i32]] holds mut [i32]
+error at `b.item`: expected T, found ro T
+
+================================================================================
+A struct's arguments are seen as ro where they're only held (#440)
+:test-prelude
+================================================================================
+struct Box[T] { item: T }
+struct VecIter[T, 'v] { data: 'v [T], index: i32 }
+fn peek(b: ro Box[[i32]]) -> i32 = b.item[0];
+fn first(it: ro VecIter[[i32], ro]) -> i32 = it.data[0][0];
+fn go() = {
+  let b = mut Box { item: mut [1] };
+  let it = mut VecIter { data: mut [mut [1]], index: 0 };
+  peek(b) + peek(Box { item: [2] }) + first(it)
+};
+--------------------------------------------------------------------------------
+peek: fn(b: ro Box[ro [i32]]) -> i32
+first: fn(it: ro VecIter[ro [i32], ro]) -> i32
+go: fn() -> i32
 
 ================================================================================
 A closure's parameters are seen the other way round (#440)
@@ -265,3 +283,35 @@ fn go() = call(Handler { f: reads });
 call: fn(h: imm Handler[mut [i32]]) -> i32
 reads: fn(xs: ro [i32]) -> i32
 go: fn() -> i32
+
+================================================================================
+What a struct's variance doesn't let change stays an error (#440)
+:error
+:test-prelude
+================================================================================
+struct Box[T] { item: T }
+struct Handler[T] { f: fn(T) -> i32 }
+struct Both[T] { item: T, f: fn(T) -> i32 }
+fn change(b: mut Box[ro [i32]]) {}
+fn takes_ro(h: imm Handler[ro [i32]]) {}
+fn both(b: ro Both[ro [i32]]) {}
+fn writes(xs: mut [i32]) -> i32 = { xs[0] = 2; 0 };
+fn go() = {
+  let b = mut Box { item: mut [1] };
+  change(b);
+  takes_ro(Handler { f: writes });
+  both(mut Both { item: mut [1], f: |xs| xs[0] });
+};
+fn read(b: ro Box[[i32]]) { b.item[0] = 1; }
+--------------------------------------------------------------------------------
+change: fn(b: mut Box[ro [i32]]) -> ()
+takes_ro: fn(h: imm Handler[ro [i32]]) -> ()
+both: fn(b: ro Both[ro [i32]]) -> ()
+writes: fn(xs: mut [i32]) -> i32
+go: fn() -> ()
+read: fn(b: ro Box[ro [i32]]) -> ()
+--------------------------------------------------------------------------------
+error at `b`: expected mut Box[ro [i32]], found mut Box[mut [i32]]
+error at `Handler { f: writes }`: expected imm Handler[ro [i32]], found imm Handler[mut [i32]]
+error at `mut Both { item: mut [1], f: |xs| xs[0] }`: expected ro Both[ro [i32]], found mut Both[mut [i32]]
+error at `b.item`: can't change ro [i32]

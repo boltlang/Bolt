@@ -14,6 +14,8 @@ use boltlang_hir_def::{
 
 pub use boltlang_hir_def::hir::Mutability;
 
+use crate::variance::Variances;
+
 /// An inference variable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::SalsaValue)]
 pub struct TyVar(pub u32);
@@ -471,24 +473,22 @@ impl<'db> Ty<'db> {
         )
     }
 
-    /// `imm T` of a type that `imm` can't take apart: `imm (imm T)` is
-    /// `imm T`.
     /// The type with each mutability inside it that isn't written seen as
     /// `ro`, as in a type written `ro` (#320), whose view is deep.
-    pub fn ro_inside(&self) -> Ty<'db> {
-        self.ro_view(true)
+    pub fn ro_inside(&self, variances: Variances<'db>) -> Ty<'db> {
+        self.ro_view(variances, true)
     }
 
     /// Each `ro T` in the type whose `T` is known replaced by the view of
     /// it (#320). A `ro T` of what can't be taken apart, like a type
     /// parameter or a variable, stays.
-    pub fn normalize_ro(&self) -> Ty<'db> {
+    pub fn normalize_ro(&self, variances: Variances<'db>) -> Ty<'db> {
         if !self.any(&mut |t| matches!(t, Ty::Ro(_))) {
             return self.clone();
         }
         self.fold(&mut |t| {
             let Ty::Ro(inner) = t else { return None };
-            let inner = inner.normalize_ro();
+            let inner = inner.normalize_ro(variances);
             Some(match inner {
                 Ty::Param(_)
                 | Ty::Bound(_)
@@ -497,7 +497,7 @@ impl<'db> Ty<'db> {
                 | Ty::Imm(_)
                 | Ty::Var(_)
                 | Ty::Error => Ty::Ro(Box::new(inner)),
-                inner => inner.ro_view(false).normalize_ro(),
+                inner => inner.ro_view(variances, false).normalize_ro(variances),
             })
         })
     }
@@ -507,15 +507,17 @@ impl<'db> Ty<'db> {
     /// apart yet, like a type parameter, as `ro T`. With `unwritten`, only
     /// the mutabilities that aren't written are, as in a type written `ro`,
     /// where one written otherwise is kept, and reported if it can't be
-    /// held. A closure stays as it is, as do the type arguments of a
-    /// struct or enum, which can be anywhere in its fields.
-    pub fn ro_view(&self, unwritten: bool) -> Ty<'db> {
+    /// held. A closure stays as it is. The arguments of a struct or enum
+    /// are seen as `ro` where its variance lets them become a supertype
+    /// (#440), and kept elsewhere, like the `T` of
+    /// `struct Handler[T] { f: fn(T) }`.
+    pub fn ro_view(&self, variances: Variances<'db>, unwritten: bool) -> Ty<'db> {
         let ro = Ty::Mutability(Mutability::ReadOnly);
         let m = |m: &Ty<'db>| match unwritten && !matches!(m, Ty::Unwritten) {
             true => m.clone(),
             false => ro.clone(),
         };
-        let view = |t: &Ty<'db>| t.ro_view(unwritten);
+        let view = |t: &Ty<'db>| t.ro_view(variances, unwritten);
         match self {
             Ty::Array(mu, elem) => Ty::array(m(mu), view(elem)),
             Ty::Tuple(tys, mu) => Ty::tuple(tys.iter().map(view).collect(), m(mu)),
@@ -524,8 +526,24 @@ impl<'db> Ty<'db> {
                 named.iter().map(|(n, t)| (n.clone(), view(t))).collect(),
                 m(mu),
             ),
-            Ty::Adt(id @ AdtId::Struct(_), args, ms, own) => {
-                Ty::Adt(*id, args.clone(), ms.clone(), Box::new(m(own)))
+            Ty::Adt(id, args, ms, own) => {
+                let varies = |i: usize| variances.get(*id, i).keeps_direction();
+                let ms = ms
+                    .iter()
+                    .enumerate()
+                    .map(|(j, mu)| if varies(args.len() + j) { m(mu) } else { mu.clone() })
+                    .collect();
+                let args = args
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| if varies(i) { view(a) } else { a.clone() })
+                    .collect();
+                // An enum is a value, always `imm`.
+                let own = match id {
+                    AdtId::Struct(_) => m(own),
+                    AdtId::Enum(_) => (**own).clone(),
+                };
+                Ty::Adt(*id, args, ms, Box::new(own))
             }
             Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Var(_) | Ty::Imm(_) => {
                 Ty::Ro(Box::new(self.clone()))

@@ -31,6 +31,7 @@ use boltlang_hir_ty::{
     lower::VariantDef,
     solve::{imm_of, normalize_assoc},
     ty::{EffectTy, PackHalf, Params},
+    variance::Variances,
 };
 
 /// A mutability in an instance.
@@ -832,7 +833,7 @@ impl<'db> Subst<'_, 'db> {
             Ty::Assoc(alias, args) => self.assoc(*alias, args)?,
             // `ro T`, once `T` is known: `T` seen as `ro` (#320).
             Ty::Ro(inner) => {
-                let viewed = self.back(&self.ty(inner)?)?.ro_view(false);
+                let viewed = self.back(&self.ty(inner)?)?.ro_view(Variances::of(self.db), false);
                 if viewed.any(&mut |t| matches!(t, Ty::Ro(_))) {
                     return Err(TyError::Unknown);
                 }

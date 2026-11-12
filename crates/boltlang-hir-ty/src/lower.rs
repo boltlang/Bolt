@@ -24,6 +24,7 @@ use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
     solve::{AssocConstraint, AtMostConstraint, Held},
     ty::{AdtId, EffectTy, GenericParamId, Mutability, PackHalf, Params, Ty},
+    variance::Variances,
 };
 
 pub(crate) fn imm<'db>() -> Ty<'db> {
@@ -183,6 +184,10 @@ pub struct TyLoweringContext<'a, 'db> {
     allow_equalities: bool,
     /// The associated type whose bounds are being lowered, if any.
     bounds_of: Option<TypeAliasId<'db>>,
+    /// Whether a written `ro` sees the arguments of a struct in it as `ro`
+    /// by its variance. Not for the fields that variance is found from
+    /// ([`raw_field_types`]).
+    variance: bool,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -199,8 +204,21 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             equalities: Vec::new(),
             allow_equalities: false,
             bounds_of: None,
+            variance: true,
             diagnostics: Vec::new(),
         }
+    }
+
+    /// Lower without seeing the arguments of structs as `ro` by their
+    /// variance, as for the fields that variance is found from.
+    fn without_variance(mut self) -> Self {
+        self.variance = false;
+        self
+    }
+
+    /// Where a written `ro` finds the variance of the structs in it.
+    fn variances(&self) -> Variances<'db> {
+        if self.variance { Variances::of(self.db) } else { Variances::none() }
     }
 
     /// Let the types use the named mutabilities of `def`, a function or an
@@ -329,9 +347,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let elem = self.lower_ty(*element);
                 match mutability {
                     // A `ro` view is deep (#320): what's in it is seen as `ro`.
-                    Some(Mutability::ReadOnly) => {
-                        Ty::array(Ty::Mutability(Mutability::ReadOnly), elem.ro_inside())
-                    }
+                    Some(Mutability::ReadOnly) => Ty::array(
+                        Ty::Mutability(Mutability::ReadOnly),
+                        elem.ro_inside(self.variances()),
+                    ),
                     _ => Ty::array(mutability.map_or(Ty::Unwritten, Ty::Mutability), elem),
                 }
             }
@@ -363,7 +382,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let ty = self.with_mutability(id, ty, written.clone());
                 // A `ro` view is deep (#320): what's in it is seen as `ro`.
                 if written == Ty::Mutability(Mutability::ReadOnly) {
-                    return (ty.ro_inside(), kind);
+                    return (ty.ro_inside(self.variances()), kind);
                 }
                 return (ty, kind);
             }
@@ -1631,6 +1650,10 @@ pub fn field_types<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> &'db FieldType
 /// an `imm` struct holds can't be changed either.
 #[salsa::tracked(returns(ref))]
 pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes<'db> {
+    lower_struct_fields(db, id, true)
+}
+
+fn lower_struct_fields<'db>(db: &'db dyn Db, id: StructId<'db>, variance: bool) -> FieldTypes<'db> {
     let sig = struct_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Struct(id));
     // The fields of an `imm struct` are `imm`, like those of an enum.
@@ -1639,17 +1662,22 @@ pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes
     // `data: 'v Vec[T]` in `struct VecIter[T, 'v]`.
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store)
         .with_mutabilities(GenericDefId::Struct(id));
+    if !variance {
+        ctx = ctx.without_variance();
+    }
     lower_fields(&mut ctx, &sig.fields, &own)
 }
 
-/// The types of the fields of every variant of `adt`, which
-/// [`crate::variance`] finds where each parameter is used from.
+/// The types of the fields of every variant of `adt`, lowered without
+/// seeing the arguments of structs in a written `ro` by their variance,
+/// since that's what [`crate::variance`] finds from them. Where a
+/// parameter is used doesn't change with it: `ro T` varies as `T`.
 pub(crate) fn raw_field_types<'db>(db: &'db dyn Db, adt: AdtId<'db>) -> Vec<Ty<'db>> {
     let fields = match adt {
-        AdtId::Struct(s) => std::slice::from_ref(struct_field_types(db, s)),
-        AdtId::Enum(e) => &enum_field_types(db, e)[..],
+        AdtId::Struct(s) => vec![lower_struct_fields(db, s, false)],
+        AdtId::Enum(e) => lower_enum_fields(db, e, false),
     };
-    fields.iter().flat_map(|f| f.fields.iter().map(|(_, t)| t.clone())).collect()
+    fields.into_iter().flat_map(|f| f.fields.into_iter().map(|(_, t)| t)).collect()
 }
 
 /// The mutability of a struct as seen from its fields: its hidden
@@ -1676,9 +1704,20 @@ pub fn struct_args<'db>(
 /// them without `mut` or `imm` is `imm`.
 #[salsa::tracked(returns(ref))]
 pub fn enum_field_types<'db>(db: &'db dyn Db, id: EnumId<'db>) -> Vec<FieldTypes<'db>> {
+    lower_enum_fields(db, id, true)
+}
+
+fn lower_enum_fields<'db>(
+    db: &'db dyn Db,
+    id: EnumId<'db>,
+    variance: bool,
+) -> Vec<FieldTypes<'db>> {
     let sig = enum_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Enum(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
+    if !variance {
+        ctx = ctx.without_variance();
+    }
     sig.variants.iter().map(|v| lower_fields(&mut ctx, &v.fields, &imm())).collect()
 }
 
