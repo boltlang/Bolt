@@ -15,7 +15,8 @@
 //! - An enum can't be changed in place, but can hold values that can, which
 //!   Conduit's deep `imm` doesn't allow. So its mutability is the most a
 //!   value it holds can be: `imm` if they're all `imm`, the parameter if
-//!   one parameter can be `mut`, and `mut` otherwise.
+//!   one parameter can be `mut`, and `mut` otherwise, as when it holds
+//!   something `ro`, since no object is made `ro`.
 //! - Each row of effects in the type arguments, like that of the closure in
 //!   `Option[fn() does Log]`, becomes an effect parameter of the
 //!   declaration, as mutabilities do.
@@ -489,6 +490,7 @@ fn held_mutability(held: &[MonoMut]) -> Result<Mutability, ErrorKind> {
     if held.contains(&MonoMut::Mut) {
         return Ok(Mutability::Mut);
     }
+    let ro = held.contains(&MonoMut::ReadOnly);
     let mut params: Vec<u32> = held
         .iter()
         .filter_map(|m| match m {
@@ -499,6 +501,9 @@ fn held_mutability(held: &[MonoMut]) -> Result<Mutability, ErrorKind> {
     params.sort();
     params.dedup();
     match params[..] {
+        // No object is made `ro`, and `mut` holds what's `ro`; nor is the
+        // larger of a parameter and `ro` one.
+        _ if ro => Ok(Mutability::Mut),
         [] => Ok(Mutability::Imm),
         [p] => Ok(mutability(MonoMut::Param(p))),
         _ => Err(ErrorKind::missing(
