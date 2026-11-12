@@ -95,7 +95,7 @@ fit, which is why `Sub.immCell` came with `Sub.fn`.
 | a `ro` value can't hold `mut` (`infer::mut_inside`) | the `AtMost` premise of `Sub.ro` |
 | function types in unification (`flipped`) | `Sub.fn` |
 | `struct_atoms_of` in `holds.rs` | `StructDecl.implied` in `Structs.lean` |
-| a struct's type arguments, which must be the same | `Variance.lean`, for when they won't have to be (#440) |
+| a struct's variance (`adt_variance` in `variance.rs`) | `Ty.varIn` in `Variance.lean` |
 | `imm e`, `solve_imm` and `ToImmDeep` | `toImm`, `ImmTy`, `Freeze` |
 
 ## What's left out

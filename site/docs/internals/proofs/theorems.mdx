@@ -271,8 +271,8 @@ functions are.
 A parameter can change as it is where it's only held, like `T` in
 `struct Box[T] { item: T }`, the other way round in a function's
 parameters, like `T` in `struct Handler[T] { f: fn(T) -> () }`, and not at
-all in a `mut` object. The checker doesn't use this yet: a struct's type
-arguments must be the same, so these are rejected today:
+all in a `mut` object. The checker follows it (`adt_variance` in
+`crates/boltlang-hir-ty/src/variance.rs`):
 
 ```bolt
 struct Box[T] { item: T }
@@ -280,8 +280,8 @@ struct Handler[T] { f: fn(T) -> () }
 fn peek(b: ro Box[ro [i32]]) {}
 fn call(h: imm Handler[mut [i32]]) {}
 fn go(b: mut Box[mut [i32]], h: imm Handler[ro [i32]]) {
-  peek(b);   // could be fine: `T` is only held
-  call(h);   // could be fine: `T` is only in a closure's parameters
+  peek(b);   // fine: `T` is only held
+  call(h);   // fine: `T` is only in a closure's parameters
 }
 ```
 

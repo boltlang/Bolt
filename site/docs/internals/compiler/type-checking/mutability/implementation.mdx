@@ -45,8 +45,14 @@ description: Where the rules of mutability are in the checker, the tests and the
 - **Unification** (`unify.rs`): mutabilities are equal or they aren't,
   except that a place that receives `ReadOnly` takes any mutability, with
   `flipped` saying which side receives inside a function's parameters. A
-  `mut` value shares its contents both ways (`Unifier::share_if_mut`), and
-  so do a struct's type arguments, so `ro` doesn't reach into them. `Ty::Fn` holds its mutability last, and `fn(...)`
+  `mut` value shares its contents both ways (`Unifier::share_if_mut`). A
+  struct's arguments change as its variance says (`variance.rs`,
+  `adt_variance`): as they are where they're only held, the other way round
+  in a closure's parameters, and not at all where they're both, or in a
+  struct that's `mut` or whose mutability isn't known yet
+  (`variance::arg_variance`, #440). The variance is a fixed point over the
+  fields, like `struct_atoms`, and is found from the fields lowered without
+  it (`lower::raw_field_types`). `Ty::Fn` holds its mutability last, and `fn(...)`
   lowers with `Ty::Unwritten` like an array, so it's a hidden parameter in
   a signature and the struct's own in a field.
 - **Inference** (`infer.rs`): an array or struct literal is `Imm`, or `Mut`
@@ -97,7 +103,9 @@ description: Where the rules of mutability are in the checker, the tests and the
   `ReadOnly` too, since a `ro` view is deep. A type parameter under it is
   `Ty::Ro`, `ro T`, which a `T` fits where it's received. Once `T` is
   known, `Unifier::shallow_resolve` and `Unifier::resolve` give its view
-  instead (`Ty::ro_view`, `Ty::normalize_ro`). `holds.rs` sees `ro T` as
+  instead (`Ty::ro_view`, `Ty::normalize_ro`). The view goes into a
+  struct's or enum's arguments where its variance lets them become a
+  supertype, so `ro Box[[i32]]` is `ro Box[ro [i32]]`. `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
   an error (E0223). A `mut` array or struct held by `ro` is the same error
   (`infer::mut_inside`, with the bound it breaks), also in the parameters

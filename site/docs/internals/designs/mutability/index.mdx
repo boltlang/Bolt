@@ -332,23 +332,27 @@ expected, but a `ro T` isn't a `T`, so a generic function can't give back
 what it read through `ro [T]` as a `T`. Once `T` is known, `ro T` is its
 view: `ro (mut [i32])` is `ro [i32]`, and `ro i32` is `i32`.
 
-**The type arguments of a struct aren't seen as `ro`.** A parameter can be
-anywhere in the fields, like the `T` of `struct Handler[T] { f: fn(T) }`,
-where seeing `Handler[mut [i32]]` as `Handler[ro [i32]]` would let a
-function that changes its argument be given an `imm` array. So they're the
-same both ways, which is too strict for `struct Box[T] { item: T }`
-([#440](https://github.com/boltlang/Bolt/issues/440)).
+**A struct's arguments change as its fields use them** (its *variance*,
+[#440](https://github.com/boltlang/Bolt/issues/440)). The `T` of
+`struct Box[T] { item: T }` is only held, so a `mut Box[mut [i32]]` can be
+seen as a `ro Box[ro [i32]]`, and a written `ro Box[[i32]]` is that type.
+The `T` of `struct Handler[T] { f: fn(T) }` is in a closure's parameters,
+so it changes the other way round: an `imm Handler[ro [i32]]`, whose closure
+only reads, can be used as an `imm Handler[mut [i32]]`, but not the other
+way, which would give an `imm` array to a function that changes it. A
+parameter that's both held and taken can't change at all. A `mut` struct
+keeps its arguments as they are, like the elements of a `mut` array, since
+what it holds is read and written.
 
 **A `ro` value can't hold a `mut` one** (E0223,
 [#442](https://github.com/boltlang/Bolt/issues/442),
 [#443](https://github.com/boltlang/Bolt/issues/443)). Otherwise what's
 read through it could be changed: through a `ro (mut [i32], i32)`, `t.0`
 would be a `mut [i32]`, and through a `ro Box[mut [i32]]`, so would
-`b.item`. Since the type arguments of a struct or enum aren't seen as
-`ro`, a `fn get[T](b: ro Box[T]) -> T` can't be called with a
-`mut Box[mut [i32]]`: `get` itself would be a
-`fn(ro Box[mut [i32]])`, so the error is at `get`. With an `imm` argument,
-like a `mut Box[imm [i32]]`, it's fine. A `mut` closure can still be held,
+`b.item`. Seen as `ro`, both are `ro [i32]` instead. A written
+`ro Box[mut [i32]]` stays an error, and so does a `T` that can't be seen
+as `ro`, like that of a `ro Both[mut [i32]]` for
+`struct Both[T] { item: T, f: fn(T) }`. A `mut` closure can still be held,
 as above.
 
 The rules are proven in `lean/BoltMut`: in `Syntax.lean`, `Ty.ro` is the
