@@ -438,11 +438,67 @@ pub fn class_impl_method_sig<'db>(
     // Others, like those of a superclass, come from the impls visible from
     // the impl.
     let file = imp.file(db);
-    let normalize = |t: Ty<'db>| normalize_assoc(db, file, &own_assoc(t));
+    // A `ro T` given a type that's known is that type's view, like `Char`
+    // for the `ro T` of `Show` in `impl Show[Char]`.
+    let variances = crate::variance::Variances::of(db);
+    let normalize = |t: Ty<'db>| normalize_assoc(db, file, &own_assoc(t)).normalize_ro(variances);
     let params =
         sig.params.iter().map(|t| normalize(t.as_ref().map_or(Ty::Error, subst))).collect();
     let ret = normalize(sig.ret.as_ref().map_or(Ty::Error, |t| subst(&t.fill_unwritten(&mut imm))));
     Some((params, ret))
+}
+
+/// For each parameter of `class`, whether its methods only see it as `ro`,
+/// like the `T` of `class Eq[T] { fn eq(a: ro T, b: ro T) -> Bool; }`.
+/// Then `Eq[X]` and `Eq[ro X]` have the same methods, and the solver takes
+/// them for the same instance: comparing what a `ro` value holds needs no
+/// more than comparing the value.
+#[salsa::tracked(returns(ref))]
+pub fn class_params_seen_as_ro<'db>(
+    db: &'db dyn Db,
+    class: boltlang_hir_def::ids::ClassId<'db>,
+) -> Box<[bool]> {
+    let def = GenericDefId::Class(class);
+    let count = def.generic_params(db).type_params.len();
+    let mut seen_as_ro = vec![true; count];
+    let mut any_method = false;
+    for item in class.item(db).items.iter() {
+        let AssocItem::Function(idx) = *item else {
+            // A constant of the class has the type as it is.
+            if let AssocItem::Const(_) = item {
+                seen_as_ro.iter_mut().for_each(|s| *s = false);
+            }
+            continue;
+        };
+        any_method = true;
+        let sig = fn_sig(db, FunctionId::new(db, ItemContainerId::Class(class), idx));
+        let tys = sig.params.iter().flatten().chain(sig.ret.iter());
+        for ty in tys {
+            for (i, seen) in seen_as_ro.iter_mut().enumerate() {
+                let param = Ty::Param(GenericParamId { def, index: i as u32 });
+                if !only_seen_as_ro(ty, &param) {
+                    *seen = false;
+                }
+            }
+        }
+    }
+    if !any_method {
+        seen_as_ro.iter_mut().for_each(|s| *s = false);
+    }
+    seen_as_ro.into()
+}
+
+/// Whether `param` only appears in `ty` inside a `ro T`.
+fn only_seen_as_ro<'db>(ty: &Ty<'db>, param: &Ty<'db>) -> bool {
+    match ty {
+        Ty::Ro(_) => true,
+        t if t == param => false,
+        t => {
+            let mut ok = true;
+            t.walk_children(|c| ok = ok && only_seen_as_ro(c, param));
+            ok
+        }
+    }
 }
 
 /// The declaration in the class of a method of a class impl, like the

@@ -1819,12 +1819,12 @@ fn log_bool(%b: i32) -> () {
   }
 }
 
-fn eq_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn eq_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = call Eq_A_B_C_D_E_F_G_H_I_J_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32[imm](%a, %b)
   jump ret(%2)
 }
 
-fn lt_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn lt_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = call PartialOrd_lt_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a, %b)
   jump ret(%2)
 }
@@ -1847,7 +1847,7 @@ fn order(%o: i32) -> () {
   }
 }
 
-fn Ord_A_B_C_D_E_F_G_H_I_J_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_E_F_G_H_I_J_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: i32 = call Ord_i32_cmp(%2, %3)
@@ -1881,7 +1881,7 @@ fn Ord_A_B_C_D_E_F_G_H_I_J_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 
   }
 }
 
-fn Ord_A_B_C_D_E_cmp_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_E_cmp_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32.0.0(%b)
   let %other: i32 = call Ord_i32_cmp(%2, %3)
@@ -1905,12 +1905,12 @@ fn Ord_A_B_C_D_E_cmp_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32,
   }
 }
 
-fn lt_eq_i32_i32_i32_i32_i32(%a: imm Tuple_i32_i32_i32_i32_i32, %b: imm Tuple_i32_i32_i32_i32_i32) -> (i32) {
+fn lt_eq_i32_i32_i32_i32_i32(%a: ro Tuple_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = call PartialOrd_lte_i32_i32_i32_i32_i32(%a, %b)
   jump ret(%2)
 }
 
-fn Eq_A_B_C_D_E_F_G_H_I_J_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn Eq_A_B_C_D_E_F_G_H_I_J_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %4: i32 = call eq_eq_i32(%2, %3)
@@ -2006,7 +2006,7 @@ fn Eq_A_B_C_D_E_F_G_H_I_J_eq_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm
   }
 }
 
-fn PartialOrd_lt_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: imm Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn PartialOrd_lt_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32(%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: imm Option_Ordering = call PartialOrd_A_B_C_D_E_F_G_H_I_J_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32[imm](%a, %b)
   let %3: imm Option_Ordering = new Option_Ordering.1(0i32)
   let %4: i32 = call eq_eq_Option_Ordering(%2, %3)
@@ -2025,7 +2025,7 @@ fn Ord_i32_cmp(%a: i32, %b: i32) -> (i32) {
   jump ret(%4)
 }
 
-fn Ord_A_B_C_D_E_F_G_H_I_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_E_F_G_H_I_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: i32 = call Ord_i32_cmp(%2, %3)
@@ -2057,7 +2057,7 @@ fn Ord_A_B_C_D_E_F_G_H_I_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tu
   }
 }
 
-fn Ord_A_B_C_D_cmp_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_cmp_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32.0.0(%b)
   let %other#4: i32 = call Ord_i32_cmp(%2, %3)
@@ -2091,7 +2091,7 @@ fn Ord_A_B_C_D_cmp_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32, %b: 'm1 T
   }
 }
 
-fn PartialOrd_lte_i32_i32_i32_i32_i32(%a: imm Tuple_i32_i32_i32_i32_i32, %b: imm Tuple_i32_i32_i32_i32_i32) -> (i32) {
+fn PartialOrd_lte_i32_i32_i32_i32_i32(%a: ro Tuple_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32) -> (i32) {
   let %2: imm Option_Ordering = call PartialOrd_A_B_C_D_E_partial_cmp_i32_i32_i32_i32_i32[imm](%a, %b)
   join j1(%3: i32) = jump ret(%3)
   in
@@ -2116,7 +2116,7 @@ fn eq_eq_i32(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn PartialOrd_A_B_C_D_E_F_G_H_I_J_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_E_F_G_H_I_J_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)
@@ -2182,7 +2182,7 @@ fn ordering(%lt: i32, %gt: i32) -> (i32) {
   }
 }
 
-fn Ord_A_B_C_D_E_F_G_H_cmp_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_E_F_G_H_cmp_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: i32 = call Ord_i32_cmp(%2, %3)
@@ -2212,7 +2212,7 @@ fn Ord_A_B_C_D_E_F_G_H_cmp_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i3
   }
 }
 
-fn PartialOrd_A_B_C_D_E_partial_cmp_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_E_partial_cmp_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32.0.0(%b)
   let %other: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)
@@ -2254,7 +2254,7 @@ fn PartialOrd_i32_partial_cmp(%a: i32, %b: i32) -> (imm Option_Ordering) {
   jump ret(%3)
 }
 
-fn PartialOrd_A_B_C_D_E_F_G_H_I_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_E_F_G_H_I_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)
@@ -2320,7 +2320,7 @@ fn Eq_Option_T_eq_Ordering(%a: imm Option_Ordering, %b: imm Option_Ordering) -> 
   }
 }
 
-fn Ord_A_B_C_D_E_F_G_cmp_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_E_F_G_cmp_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: i32 = call Ord_i32_cmp(%2, %3)
@@ -2348,7 +2348,7 @@ fn Ord_A_B_C_D_E_F_G_cmp_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_
   }
 }
 
-fn PartialOrd_A_B_C_D_partial_cmp_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_partial_cmp_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32.0.0(%b)
   let %other#4: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)
@@ -2403,7 +2403,7 @@ fn PartialOrd_A_B_C_D_partial_cmp_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32
   }
 }
 
-fn PartialOrd_A_B_C_D_E_F_G_H_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_E_F_G_H_partial_cmp_i32_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)
@@ -2445,7 +2445,7 @@ fn eq_eq_Ordering(%a: i32, %b: i32) -> (i32) {
   jump ret(%2)
 }
 
-fn Ord_A_B_C_D_E_F_cmp_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32) -> (i32) {
+fn Ord_A_B_C_D_E_F_cmp_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32) -> (i32) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: i32 = call Ord_i32_cmp(%2, %3)
@@ -2471,7 +2471,7 @@ fn Ord_A_B_C_D_E_F_cmp_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i3
   }
 }
 
-fn PartialOrd_A_B_C_D_E_F_G_partial_cmp_i32_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_E_F_G_partial_cmp_i32_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)
@@ -2538,7 +2538,7 @@ fn Eq_Ordering_eq(%a: i32, %b: i32) -> (i32) {
   }
 }
 
-fn PartialOrd_A_B_C_D_E_F_partial_cmp_i32_i32_i32_i32_i32_i32['m1](%a: 'm1 Tuple_i32_i32_i32_i32_i32_i32, %b: 'm1 Tuple_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
+fn PartialOrd_A_B_C_D_E_F_partial_cmp_i32_i32_i32_i32_i32_i32['m1](%a: ro Tuple_i32_i32_i32_i32_i32_i32, %b: ro Tuple_i32_i32_i32_i32_i32_i32) -> (imm Option_Ordering) {
   let %2: i32 = get Tuple_i32_i32_i32_i32_i32_i32.0.0(%a)
   let %3: i32 = get Tuple_i32_i32_i32_i32_i32_i32.0.0(%b)
   let %other: imm Option_Ordering = call PartialOrd_i32_partial_cmp(%2, %3)

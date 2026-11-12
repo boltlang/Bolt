@@ -22,8 +22,8 @@ pub class IndexMut[C] where Index[C] {
 
 /// Types whose values can be compared, with `a == b` and `a != b`.
 pub class Eq[T] {
-  fn eq(a: T, b: T) -> Bool;
-  fn ne(a: T, b: T) -> Bool = !eq(a, b);
+  fn eq(a: ro T, b: ro T) -> Bool;
+  fn ne(a: ro T, b: ro T) -> Bool = !eq(a, b);
 }
 
 impl Eq[Bool] { fn eq(a, b) = bool_eq(a, b); fn ne(a, b) = bool_ne(a, b); }
@@ -66,7 +66,7 @@ impl Eq[Ordering] {
 }
 
 pub class Ord[T] {
-  fn cmp(a: T, b: T) -> Ordering;
+  fn cmp(a: ro T, b: ro T) -> Ordering;
 }
 
 /// Types whose values can be ordered, with `a < b`, `a > b`, `a <= b` and
@@ -75,14 +75,14 @@ pub class Ord[T] {
 /// needs `partial_cmp`; the primitive types define the others too, with
 /// their builtins.
 pub class PartialOrd[T] {
-  fn partial_cmp(a: T, b: T) -> Option[Ordering];
-  fn lt(a: T, b: T) -> Bool = partial_cmp(a, b) == Some(Ordering.Less);
-  fn gt(a: T, b: T) -> Bool = partial_cmp(a, b) == Some(Ordering.Greater);
-  fn lte(a: T, b: T) -> Bool = match partial_cmp(a, b) {
+  fn partial_cmp(a: ro T, b: ro T) -> Option[Ordering];
+  fn lt(a: ro T, b: ro T) -> Bool = partial_cmp(a, b) == Some(Ordering.Less);
+  fn gt(a: ro T, b: ro T) -> Bool = partial_cmp(a, b) == Some(Ordering.Greater);
+  fn lte(a: ro T, b: ro T) -> Bool = match partial_cmp(a, b) {
     Some(Ordering.Less) | Some(Ordering.Equal) => True,
     _ => False,
   };
-  fn gte(a: T, b: T) -> Bool = match partial_cmp(a, b) {
+  fn gte(a: ro T, b: ro T) -> Bool = match partial_cmp(a, b) {
     Some(Ordering.Greater) | Some(Ordering.Equal) => True,
     _ => False,
   };

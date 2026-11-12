@@ -40,7 +40,7 @@ fn both() = {
   pick(True, m, i)
 };
 --------------------------------------------------------------------------------
-Eq[Money].eq: fn(a: 'm Money, b: 'm Money) -> Bool
+Eq[Money].eq: fn(a: ro Money, b: ro Money) -> Bool
 same: fn(a: ro Money, b: ro Money) -> Bool
 pick: fn(c: Bool, a: ro Money, b: ro Money) -> ro Money
 both: fn() -> ro Money
@@ -414,3 +414,38 @@ f: forall T. fn(a: 'm [T], b: [T]) -> 'm [T]
 go: fn() -> ()
 --------------------------------------------------------------------------------
 error at `z[0]`: can't change ro [i32]
+
+================================================================================
+A class that only sees its type as ro holds for it seen as ro
+:test-prelude
+================================================================================
+struct P { x: i32 }
+impl Eq[P] { fn eq(a, b) = a.x == b.x; }
+fn same[T: Eq](a: ro T, b: ro T) -> Bool = a == b;
+fn both_same[A: Eq, B: Eq](x: ro A, y: ro B) -> Bool = mut (x, y) == mut (x, y);
+fn go(p: mut P) -> Bool = same(p, p) && both_same(p, 1);
+--------------------------------------------------------------------------------
+Eq[P].eq: fn(a: ro P, b: ro P) -> Bool
+same: forall T. Eq[T] => fn(a: ro T, b: ro T) -> Bool
+both_same: forall A B. Eq[A] => Eq[B] => fn(x: ro A, y: ro B) -> Bool
+go: fn(p: mut P) -> Bool
+
+================================================================================
+An imm struct is itself where a class sees it as ro
+================================================================================
+imm struct Money(i32)
+fn amount(m: Money) -> i32 = m.0;
+class Price[T] { fn price(x: ro T) -> i32; }
+impl Price[Money] { fn price(m) = amount(m); }
+--------------------------------------------------------------------------------
+amount: fn(m: Money) -> i32
+Price[Money].price: fn(m: Money) -> i32
+
+================================================================================
+A value fits where its own view is expected
+================================================================================
+fn s[T](x: ro T) -> i32 = 1;
+fn go() = s(imm [1, 2]);
+--------------------------------------------------------------------------------
+s: forall T. fn(x: ro T) -> i32
+go: fn() -> i32

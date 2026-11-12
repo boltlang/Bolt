@@ -135,7 +135,15 @@ What a call is expected to be decides its mutabilities before that
 keeps the least solution: `longer(mut [1], [2])` for
 `fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32]` is a `ro [i32]`, but
 where a `mut [i32]` is expected, `'m` is `mut`, and the `[2]` is reported.
-Only mutabilities: a type that doesn't fit is reported at the call. `holds.rs` sees `ro T` as
+Only mutabilities: a type that doesn't fit is reported at the call.
+
+A class whose methods only see a parameter as `ro`, like the `T` of
+`class Eq[T] { fn eq(a: ro T, b: ro T) -> Bool; }`, has the same methods
+for `T` and `ro T` (`class_params_seen_as_ro`), so the solver compares such
+constraints, the assumptions and what impls give by their `ro` views:
+given `Eq[A]` and `Eq[B]`, `Eq[(ro A, ro B)]` holds, as for a tuple of
+what `ro` values hold. A class that may change its argument, like
+`Iterator`, whose `next` takes `I`, doesn't. `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
   an error (E0223). A `mut` array or struct held by `ro` is the same error
   (`infer::mut_inside`, with the bound it breaks), also in the parameters

@@ -375,8 +375,13 @@ The prelude also has a class for each operator, like Rust's `std::ops`:
 | `a & b`, `a \| b`, `a ^ b` | `BitAnd`, `BitOr`, `BitXor` | `fn bitand(a: T, b: T) -> Output`, … |
 | `a << n`, `a >> n` | `Shl`, `Shr` | `fn shl(a: T, n: u32) -> Output`, … |
 | `-a`, `!a` | `Neg`, `Not` | `fn neg(a: T) -> Output`, `fn not(a: T) -> Output` |
-| `a == b`, `a != b` | `Eq` | `fn eq(a: T, b: T) -> Bool`, `fn ne(a: T, b: T) -> Bool` |
-| `a < b`, `a > b`, `a <= b`, `a >= b` | `PartialOrd` | `fn partial_cmp(a: T, b: T) -> Option[Ordering]`, and `fn lt(a: T, b: T) -> Bool`, … |
+| `a == b`, `a != b` | `Eq` | `fn eq(a: ro T, b: ro T) -> Bool`, `fn ne(a: ro T, b: ro T) -> Bool` |
+| `a < b`, `a > b`, `a <= b`, `a >= b` | `PartialOrd` | `fn partial_cmp(a: ro T, b: ro T) -> Option[Ordering]`, and `fn lt(a: ro T, b: ro T) -> Bool`, … |
+
+Comparing two values doesn't change them, so `Eq` and `PartialOrd` take
+`ro T`, as do `Show` and `Debug`. So an impl for a type works for that
+type seen as `ro` too: a function that's given `T: Eq` can compare what a
+`ro` value holds.
 
 Each has an associated type `Output`, the type of the result, which is `T`
 unless an impl says otherwise, and each operator is defined as a function

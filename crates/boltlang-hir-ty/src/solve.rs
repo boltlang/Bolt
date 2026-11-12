@@ -2072,7 +2072,11 @@ impl<'db> Solver<'db> {
         if goal.args.iter().any(Ty::has_error) {
             return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
-        if self.assumptions.contains(goal) {
+        // What a class only sees as `ro` is compared as `ro`: `Eq[ro T]`
+        // holds where `Eq[T]` does.
+        let viewed = seen_as_class_sees(self.db, goal);
+        let goal = &viewed;
+        if self.assumptions.iter().any(|a| seen_as_class_sees(self.db, a) == *goal) {
             return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
         let has_vars = goal.args.iter().any(has_vars);
@@ -2109,6 +2113,21 @@ impl<'db> Solver<'db> {
             ImplSearch::Missing => Step::NoInstance,
         }
     }
+}
+
+/// `c` with each argument that its class's methods only see as `ro` seen
+/// as `ro`, like `Eq[ro T]` for `Eq[T]`: see [`class_params_seen_as_ro`].
+fn seen_as_class_sees<'db>(db: &'db dyn Db, c: &ClassConstraint<'db>) -> ClassConstraint<'db> {
+    let seen_as_ro = crate::scheme::class_params_seen_as_ro(db, c.class);
+    if !seen_as_ro.iter().any(|&s| s) {
+        return c.clone();
+    }
+    let variances = Variances::of(db);
+    let args = c.args.iter().enumerate().map(|(i, t)| match seen_as_ro.get(i) {
+        Some(true) => Ty::Ro(Box::new(t.clone())).normalize_ro(variances),
+        _ => t.clone(),
+    });
+    ClassConstraint { class: c.class, args: args.collect() }
 }
 
 /// What [`find_impl`] finds.

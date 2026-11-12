@@ -310,7 +310,7 @@ struct P { x: i32 }
 impl PartialOrd[P] { fn partial_cmp(a, b) = partial_cmp(a.x, b.x); }
 P { x: 1 } < P { x: 2 };
 --------------------------------------------------------------------------------
-PartialOrd[P].partial_cmp: fn(a: 'm P, b: 'm P) -> Option[Ordering]
+PartialOrd[P].partial_cmp: fn(a: ro P, b: ro P) -> Option[Ordering]
 P { x: 1 } < P { x: 2 }: Bool
 
 ================================================================================

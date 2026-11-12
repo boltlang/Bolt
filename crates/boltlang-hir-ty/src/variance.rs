@@ -100,6 +100,13 @@ impl<'db> Variances<'db> {
         Variances(Some(db))
     }
 
+    /// Whether the values of the struct `s` are always `imm`, as for an
+    /// `imm struct` like `Char`: its view is itself. Without a database,
+    /// none is.
+    pub fn always_imm(self, s: boltlang_hir_def::ids::StructId<'db>) -> bool {
+        self.0.is_some_and(|db| s.item(db).is_imm)
+    }
+
     pub fn none() -> Self {
         Variances(None)
     }

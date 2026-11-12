@@ -9,7 +9,7 @@ import "./ops" *;
 /// Types whose values can be shown to the people who use a program.
 pub class Show[T] {
   /// Add how `x` looks to the end of `out`.
-  fn show_to(x: T, out: mut StringBuilder);
+  fn show_to(x: ro T, out: mut StringBuilder);
 }
 
 /// How `x` looks, as a `String`.

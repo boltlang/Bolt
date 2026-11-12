@@ -556,10 +556,10 @@ impl<'db> Ty<'db> {
                     .enumerate()
                     .map(|(i, a)| if varies(i) { view(a) } else { a.clone() })
                     .collect();
-                // An enum is a value, always `imm`.
+                // An enum is a value, always `imm`, and so is an `imm struct`.
                 let own = match id {
-                    AdtId::Struct(_) => m(own),
-                    AdtId::Enum(_) => (**own).clone(),
+                    AdtId::Struct(s) if !variances.always_imm(*s) => m(own),
+                    AdtId::Struct(_) | AdtId::Enum(_) => (**own).clone(),
                 };
                 Ty::Adt(*id, args, ms, Box::new(own))
             }

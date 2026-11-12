@@ -10,7 +10,7 @@ import "./ops" *;
 /// Types whose values can be shown as they look in code.
 pub class Debug[T] {
   /// Add how `x` looks to the end of `out`.
-  fn debug(x: T, out: mut StringBuilder);
+  fn debug(x: ro T, out: mut StringBuilder);
 }
 
 /// How `x` looks in code, as a `String`.
