@@ -348,9 +348,19 @@ fn reset(xs: 'm [i32]) { xs[0] = 0; }
 [E0221] Error: cannot change an element of `xs`, which is `'m [i32]`; only a `mut` array can be changed
 ```
 
-For the same reason, a function can't give back something of its own
-making with a name: `fn make() -> 'm [i32] = [1]` is an error, since `[1]`
-is `imm`, not whatever the caller asks for.
+For the same reason, `fn make() -> 'm [i32] = [1]` is an error: `[1]` is
+`imm`, not whatever the caller asks for. To make an array of the caller's
+mutability, write the name before it, as you'd write `mut`:
+
+```bolt
+fn make() -> 'm [i32] = 'm [1];
+let xs = make();
+xs[0] = 2;            // fine: the caller asked for a `mut` array
+let ys: [i32] = make();
+```
+
+What a literal like that holds must be at most its name, as for `mut`:
+`fn wrap[T](x: T) -> 'm [T] = 'm [x]` needs `T: 'm`.
 
 Bolt uses names too when it shows a type. Writing `[i32]` twice in
 `fn same(xs: [i32]) -> [i32] = xs` doesn't link the two, but the body

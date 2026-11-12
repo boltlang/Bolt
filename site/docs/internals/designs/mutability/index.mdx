@@ -385,6 +385,12 @@ shows how to use them; this section is about how the checker treats them.
   using one is enough. Like a hidden parameter, the caller chooses it, so
   the function can't change what has it, and
   `fn make() -> 'm [i32] = [1]` is an error.
+- **A name can be written before a literal**, as `mut` can: `'m [1]`,
+  `'m (a, b)` and `'m Point { x: 1 }` are of mutability `'m`, which the
+  caller may make `mut`. Nothing is `mut` unless it's asked for, and
+  writing the name asks for whatever the caller gives. What the literal
+  holds must be at most `'m`. Before anything but a literal, a name is an
+  error, as `mut` is (E0222).
 - **Only functions, impls and structs have names.** An impl's associated
   types can use its names too: `impl[T] Iterable['m FnIter[T]] { type Iter =
   'm FnIter[T]; ... }` is for an `FnIter` of either mutability, and its
