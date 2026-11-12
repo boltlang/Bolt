@@ -228,6 +228,9 @@ impl<'db> Walk<'_, 'db> {
     /// A mutability used as that of an object or closure, in a place that
     /// varies as `v`. It can only become `ro` where it's seen as it is.
     fn mutability(&mut self, m: &Ty<'db>, v: Variance) {
+        if v == Variance::Unused {
+            return;
+        }
         if let Some(i) = self.param(m) {
             self.add(i, if v == Variance::Co { Variance::Co } else { Variance::Inv });
         }
@@ -247,7 +250,12 @@ impl<'db> Walk<'_, 'db> {
         }
     }
 
+    /// Where `ty`, in a place that varies as `v`, uses each parameter. In
+    /// an argument of a parameter that isn't used, nothing is.
     fn ty(&mut self, ty: &Ty<'db>, v: Variance) {
+        if v == Variance::Unused {
+            return;
+        }
         match ty {
             Ty::Param(_) => match self.param(ty) {
                 Some(i) if i < self.types => self.add(i, v),
@@ -363,6 +371,15 @@ mod tests {
     #[test]
     fn unused_parameters() {
         assert_eq!(variances("struct Tag[T] { id: i32 }"), [vec![Unused]]);
+        // What's in an argument of a parameter that isn't used isn't used
+        // either, mutabilities and closures too.
+        assert_eq!(
+            variances(
+                "struct Tag[T] { id: i32 }
+                 struct Outer['v, T] { a: Tag['v [i32]], b: Tag['v fn(T) -> ()], c: Tag[imm T] }"
+            ),
+            [vec![Unused], vec![Unused, Unused]]
+        );
     }
 
     #[test]
