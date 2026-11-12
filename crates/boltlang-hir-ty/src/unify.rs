@@ -875,6 +875,15 @@ impl<'db> Unifier<'db> {
                 }
                 Ok(())
             }
+            // A value fits where its own view is expected: `?0` where a
+            // `ro ?0` is, as when what's checked again holds what isn't
+            // known yet.
+            (Ty::Ro(x), Ty::Var(v)) if !self.flipped && self.shallow_resolve(x) == Ty::Var(*v) => {
+                Ok(())
+            }
+            (Ty::Var(v), Ty::Ro(y)) if self.flipped && self.shallow_resolve(y) == Ty::Var(*v) => {
+                Ok(())
+            }
             // A variable on the side that's expected receives the names of
             // the other; on the other side, it gets open names.
             (Ty::Var(var), ty) => self.bind_freshened(*var, ty, true),
