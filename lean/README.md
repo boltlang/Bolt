@@ -16,6 +16,9 @@ The rules are described in
 [`site/docs/internals/designs/mutability/`](../site/docs/internals/designs/mutability/),
 and how the checker implements them in
 [`site/docs/internals/compiler/type-checking/mutability/`](../site/docs/internals/compiler/type-checking/mutability/).
+[`site/docs/internals/proofs/`](../site/docs/internals/proofs/) documents
+this proof: the model, each theorem with Bolt code that shows what it
+means, and how to work on it.
 
 ## The language
 

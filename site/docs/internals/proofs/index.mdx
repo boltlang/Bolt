@@ -1,0 +1,72 @@
+---
+sidebar_position: 0
+title: Proofs
+description: The Lean proof of Bolt's mutability rules, what it covers, and how it's organized.
+---
+
+# Proofs
+
+[`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a proof, in
+Lean 4, that the core of Bolt's [mutability rules](../designs/mutability/index.mdx)
+keeps its promises. The most important one: **nothing reachable from an
+`imm` value ever changes**, and a well-typed program never gets stuck.
+
+```bolt
+let xs = [1, 2];  // `imm [i32]`
+let ys = xs;      // another name for the same array, also `imm`
+ys[0] = 3;        // E0221: rejected, so `xs` can't change through `ys`
+```
+
+The checker rejects the last line. The proof shows that rules like the one
+behind E0221 are enough: no program that passes them can change an `imm`
+array, through any name, however long it runs.
+
+The proof isn't of the checker itself, which is Rust. It's of a small
+language with the same rules, the *model*. Each rule of the model is a
+rule the checker follows, and the pages here say which.
+
+## The pages
+
+- **[The model](./model.mdx)**: the small language, and how Bolt's arrays,
+  structs, closures and generics map to it.
+- **[What's proven](./theorems.mdx)**: each theorem, with Bolt code that
+  shows what it means for a program.
+- **[Working on the proofs](./working-on-proofs.mdx)**: building them, how
+  they're organized, and what to do when a rule changes.
+
+## Building
+
+```sh
+cd lean
+lake build --wfail
+```
+
+It uses only Lean's standard library. CI builds it with `--wfail`, so a
+warning fails the build, and nothing is left as `sorry`. The theorems
+depend only on Lean's standard axioms (`propext`, `Quot.sound` and
+`Classical.choice`).
+
+## The files
+
+All are in `lean/BoltMut/`. Each depends only on the ones above it.
+
+| File | What's in it |
+|---|---|
+| `Syntax.lean` | mutabilities, types, expressions, "at most" (`AtMost`) and what a function assumes (`Assume`) |
+| `Subtyping.lean` | where a type fits in place of another (`Sub`) |
+| `Typing.lean` | the typing rules (`HasType`) |
+| `Semantics.lean` | how a program runs, and the copy `imm e` makes (`Step`, `Freeze`) |
+| `Lemmas.lean` | weakening, inversion, canonical forms and substitution |
+| `Soundness.lean` | progress and preservation |
+| `Immutability.lean` | `imm` values never change |
+| `Purity.lean`, `Frame.lean` | what a call can change |
+| `Examples.lean` | programs the rules accept and reject |
+| `ReadOnly.lean` | `ro` literals |
+| `Solver.lean` | the shortcuts the checker's solver takes |
+| `Structs.lean` | struct declarations, and which struct types are well-formed |
+| `Variance.lean` | how a struct's arguments can change |
+| `Sharing.lean` | `imm` values can be copied or shared |
+| `Region.lean`, `Unique.lean`, `UniqueCheck.lean` | `imm e` without the copy |
+
+`lean/README.md` has a short version of these pages, for reading next to
+the code.

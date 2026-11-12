@@ -1,0 +1,186 @@
+---
+sidebar_position: 1
+title: The model
+description: The small language the Lean proof is about, and how Bolt maps to it.
+---
+
+# The model
+
+The proof is about a small language with what matters for mutability:
+objects that are shared, mutabilities, closures, and generic functions.
+This page says how Bolt maps to it, and what its rules are.
+
+## From Bolt to the model
+
+Arrays and structs are shared in Bolt: every name for one is the same
+object. In the model, such an object is a *cell*: `Ty.cell m t` is an
+object with mutability `m` that holds a `t`, at a location in the heap.
+
+| Bolt | The model |
+|---|---|
+| `mut [x]`, `[x]` | `new true x`, `new false x`: a `mut` or an `imm` cell |
+| `xs[i]`, `xs[i] = y` | `get e`, `set e y`. A cell is one element, so there's no index |
+| `[[i32]]` | a cell holding a cell |
+| `(a, b)`, a value | `pair a b`, of type `prod a b` |
+| `struct Line { a: Point, n: i32 }` | a cell holding the tuple of its fields: `cell m (prod (cell m int) int)`. One mutability covers all of them |
+| `l.n = 5` | `set l (pair (fst (get l)) 5)`: the tuple is replaced |
+| `let ys = xs` | another name for the same location |
+| `'m [T]`, or `[T]` in a signature | a mutability parameter, `Mu.param i` |
+| `T` | a type parameter, `Ty.tparam i` |
+| `ro [T]` | `cell readonly t`. No cell is made `ro`: one of any mutability is seen as one |
+| `ro T` | `Ty.roParam i`, a type parameter seen as `ro` |
+| `fn wrap[T](x: T)` with `T: imm` | a top-level `Fn`, with what it assumes in `Fn.assume` |
+| `wrap(x)` | `call f ms τs e`, with the mutability and type arguments given |
+| `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm` |
+| a `let mut` variable a closure captures | a `mut` cell |
+| `imm e` | `toImm false e`: a deep copy of what's `mut` in `e`'s value |
+
+So a Bolt program like
+
+```bolt
+struct Point { x: i32 }
+let p = mut Point { x: 1 };
+p.x = 2;
+```
+
+is, in the model, `let p = new true 1 in set p 2`: a `mut` cell holding the
+one field.
+
+## Types and mutabilities
+
+```lean
+inductive Mu where
+  | mutable | immutable | readonly | param (i : Nat)
+
+inductive Ty where
+  | unit | int
+  | cell (m : Mu) (t : Ty)      -- an object
+  | fn (m : Mu) (a r : Ty)      -- a closure
+  | prod (a b : Ty)             -- a tuple, a value
+  | tparam (i : Nat)            -- `T`
+  | roParam (i : Nat)           -- `ro T`
+```
+
+Two orders relate mutabilities, and they differ:
+
+- **What an object can hold** (`AtMost`, in `Syntax.lean`): `imm ⊑ ro ⊑ mut`.
+  An object holds only what's at most its mutability, so an `imm` array
+  can't hold a `mut` one, or a `ro` one, which may change.
+- **Where a value fits** (`Sub`, in `Subtyping.lean`): `ro` is above both
+  `mut` and `imm`. A `mut` or `imm` object can be used where a `ro` one is
+  expected.
+
+```bolt
+fn peek(xs: ro [i32]) -> i32 = xs[0];
+let a = peek(mut [1]);   // fine: a `mut` array fits `ro`
+let b = peek([2]);       // fine: so does an `imm` one
+let c = [mut [1]];       // E0223: an `imm` array can't hold a `mut` one
+```
+
+## The typing rules
+
+`HasType fns σ Δ io Γ e t` in `Typing.lean` says `e` has type `t`, where
+`σ` gives each location its type, `Δ` is what the function being checked
+assumes, and `Γ` the variables in scope. `io` says `e` is in the body of an
+`imm` closure. The rules that matter for mutability:
+
+- **An object holds what's at most its mutability.** `new false e` is an
+  `imm` cell, so `e`'s type must be `imm` all the way down. That's E0223.
+- **Only `mut` can be changed.** `set e₁ e₂` needs `e₁ : cell mutable t`.
+  A mutability parameter isn't enough, since the function may be called
+  with `imm`:
+
+  ```bolt
+  fn poke(xs: 'm [i32]) { xs[0] = 1; }   // E0221: 'm may be imm
+  ```
+
+- **An `imm` closure only captures what's `imm` all the way down.** Its
+  type is `fn imm a r`, so an `imm` object can hold it. A `mut` closure
+  captures anything, and can't be in an `imm` object:
+
+  ```bolt
+  let c = mut [0];
+  let fs = [|| { c[0] = 1; }];   // E0223: the closure is `mut`
+  ```
+
+- **A generic function is checked under what it assumes**, like `T: imm`,
+  and a call must meet that with its arguments (`Sat`):
+
+  ```bolt
+  struct Box[T] { item: T }
+  fn wrap[T: imm](x: T) = Box { item: x };
+  let b = wrap([1]);       // fine
+  let c = wrap(mut [1]);   // E0230: `mut [i32]` isn't at most `imm`
+  ```
+
+  The checker infers that bound when it isn't written: `fn wrap[T](x: T)`
+  gets it too. In the model, it's always written, in `Fn.assume`.
+- **`imm e` copies what's `mut`** (`ImmTy`): each cell becomes `imm`, and
+  what's `imm` all the way down stays as it is.
+
+  ```bolt
+  let xs = mut [mut [1]];
+  let ys = imm xs;   // `imm [imm [i32]]`
+  ```
+
+- **Any expression can be used at a supertype of its type** (`sub`):
+
+  ```lean
+  | sub : HasType fns σ Δ io Γ e s → Sub Δ s t → HasType fns σ Δ io Γ e t
+  ```
+
+## Subtyping
+
+`Sub Δ s t` says an `s` can be used where a `t` is expected. Its rules,
+in `Subtyping.lean`:
+
+| Rule | Says | In Bolt |
+|---|---|---|
+| `ro` | any object can be seen as `ro`, with what it holds seen as a supertype that's at most `ro` | `peek(mut [1])` for `fn peek(xs: ro [i32])` |
+| `immCell` | what an `imm` object holds can be seen as a supertype of its type, since it never changes | an `imm [fn(ro [i32]) -> i32]` passed as an `imm [fn(mut [i32]) -> i32]` |
+| `prod` | a tuple's parts each can | |
+| `fn` | a function that takes less and gives more fits where one that takes more and gives less is expected | a `fn(ro [i32])` passed where a `fn(mut [i32])` is expected |
+| `tparam` | a `T` can be seen as `ro T` | `fn first[T](xs: ro [T]) -> ro T` |
+
+A `mut` object's contents can't be seen as anything else, because they're
+read and written:
+
+```bolt
+fn put(xs: mut [ro [i32]]) {}
+let xs = mut [mut [1]];
+put(xs);   // E0201: in a `mut` array, `ro` takes only `ro`
+```
+
+The view is deep: through a `ro` object, what it holds is at most `ro`.
+That's why a `ro` value can't hold a `mut` one, like a written
+`ro (mut [i32], i32)` (E0223).
+
+## How a program runs
+
+`Semantics.lean` has a small-step semantics, `Step`, over a heap of
+objects. Each object knows whether it's `mut`, as in the evaluator. Nothing
+at run time stops a write to an `imm` object: `set` writes to any
+location. Ruling that out is the type system's job, and the theorems show
+it does.
+
+`toImm false e` steps to a copy of `e`'s value (`Freeze`): each `mut` object
+it reaches is copied once into a new `imm` one, and what's `imm` is shared.
+`toImm true e` makes the same copy but goes on with the original, made
+`imm` where it is. That one isn't typed: it's what the program becomes once
+the copy is left out (see [what's proven](./theorems.mdx#imm-e-without-the-copy)).
+
+## Where the model differs from Bolt
+
+- **Inference.** The model has the arguments of each call and the
+  assumptions of each function written. The checker infers them. A
+  closure's mutability is written too, where Bolt infers it.
+- **Struct declarations.** A struct is the tuple of its fields here, with
+  the types they have. `Structs.lean` and `Variance.lean` add declarations
+  with parameters, but only to say which struct types are well-formed and
+  how their arguments can change. Programs aren't typed with them.
+- **No enums, classes or bounds checks.** Enums are values, like tuples.
+  A cell is one element, so an index can't be out of bounds.
+- **A closure's own mutability isn't seen as `ro`.** So a struct whose
+  closure field has the struct's mutability can't be seen as `ro` in the
+  model, though the checker allows it.
+- **Generic closures**: a closure can't take a type argument.

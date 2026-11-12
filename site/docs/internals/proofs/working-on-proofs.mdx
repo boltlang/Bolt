@@ -1,0 +1,131 @@
+---
+sidebar_position: 3
+title: Working on the proofs
+description: How the Lean proofs are organized, their conventions, what to do when a rule changes, and what they leave out.
+---
+
+# Working on the proofs
+
+## Building
+
+```sh
+cd lean
+lake build --wfail
+```
+
+The toolchain is the one `lean/lean-toolchain` names, which
+[elan](https://github.com/leanprover/elan) installs. CI
+(`.github/workflows/lean.yaml`) builds with `--wfail` whenever something
+in `lean/` changes, so a warning, like an unused `simp` argument or a
+`sorry`, fails it. Build with it before committing.
+
+## How a proof goes
+
+Most theorems about running programs are by induction on the steps a
+program takes (`Step`), and in each case, take apart the typing of the
+expression that stepped. A step of `app e₁ e₂` to `app e₁' e₂`, for
+example, needs the type of `e₁`:
+
+```lean
+| appCong₁ _ ih =>
+  intro σ t hh ht
+  obtain ⟨m, a, r, he₁, he₂, hr⟩ := ht.app_inv
+  obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+  exact ⟨σ', hx, hh', .sub (.app he₁' (he₂.weaken_heap hx)) hr⟩
+```
+
+A typing can end in `sub` any number of times, so it isn't taken apart
+with `cases`. Each expression form has an *inversion lemma* in
+`Lemmas.lean` instead, like `HasType.app_inv`: what the form's rule needs,
+with the type it gives a subtype of the one asked about (`hr` above). A
+case then ends with `.sub` to get back to the type asked about.
+
+Values are taken apart with the *canonical forms*: a value of a cell type
+is a location (`canonical_cell`), of a function type a closure
+(`canonical_fn`), and of a tuple type a pair (`canonical_prod`).
+
+## Conventions
+
+- **Names say what's known.** The lemmas that take a subtyping apart are
+  named after the side that's known: `Sub.of_cell` says what a cell can be
+  seen as, `Sub.to_cell` what can be seen as one. Inversion lemmas for
+  typings end in `_inv`.
+- **Facts about a rule are next to it.** A lemma about `Sub` is in
+  `Subtyping.lean`, one about typing in general in `Lemmas.lean`, and one
+  needed by one theorem in that theorem's file.
+- **Computable checks are `Bool`.** Like `Ty.varIn` in `Variance.lean`, so
+  examples are proven by `rfl`.
+- **Comments are in the words of these docs.** A doc comment says what a
+  lemma means for Bolt, with the issue it's for. Each file starts with a
+  `/-! ... -/` that says what it proves and how.
+- **Examples are proofs.** A program the rules accept is an `example` with
+  its typing; one they reject is an `example` that no typing exists, by
+  taking apart what one would be.
+
+## When a rule changes
+
+A rule of the checker that's in the model should change in the model too,
+in the same piece of work, or have an issue that says it doesn't yet.
+
+**A new typing rule** is a constructor of `HasType`. Every induction on a
+typing gets a case for it: `weaken_heap`, `weaken_ctx`, `weaken_imm`,
+`subst`, `inst` and `hasLoc_*` in `Lemmas.lean`, and a few in other files.
+A new expression form also needs an inversion lemma, a case in
+`progress`, and the steps it takes in `preservation`. Then the theorems
+about running programs need its steps: `step_keeps_imm`, `step_clean`,
+the simulations in `Sharing.lean` and `Unique.lean`.
+
+**A new subtyping rule** is a constructor of `Sub`. `Sub.trans`,
+`Sub.inst` and `Sub.atMost_imm` in `Subtyping.lean` need a case, as do
+`Sub.imm` in `Soundness.lean` and `Sub.size` in `Region.lean`. The
+inversions (`Sub.of_*`, `Sub.to_*`) may need one too. If the rule relates
+what objects hold, check `Freeze.typed`: the copy `imm e` makes must still
+fit, which is why `Sub.immCell` came with `Sub.fn`.
+
+## The proofs and the checker
+
+| In the checker | In the proofs |
+|---|---|
+| "at most", E0223, E0230 (`holds.rs`, `Solver::solve_at_most`) | `AtMost` in `Syntax.lean`, `split` in `Solver.lean` |
+| assumptions like `T: imm` and `'v: 'm` | `Assume`, `Le`, `Sat` in `Syntax.lean` |
+| `Solver::mutability_le` | `leSearch` in `Solver.lean` |
+| deciding an unknown mutability early | `Le.eq_immutable`, `Le.eq_mutable` in `Solver.lean` |
+| a written `ro`, and unifying with it (`unify.rs`) | `Sub` in `Subtyping.lean` |
+| `ro T`, `Ty::Ro` | `Ty.roParam` |
+| a `ro` value can't hold `mut` (`infer::mut_inside`) | the `AtMost` premise of `Sub.ro` |
+| function types in unification (`flipped`) | `Sub.fn` |
+| `struct_atoms_of` in `holds.rs` | `StructDecl.implied` in `Structs.lean` |
+| a struct's type arguments, which must be the same | `Variance.lean`, for when they won't have to be (#440) |
+| `imm e`, `solve_imm` and `ToImmDeep` | `toImm`, `ImmTy`, `Freeze` |
+
+## What's left out
+
+- **Inference.** The proofs are about the typing rules, with the arguments
+  of each call and the assumptions of each function given. That the
+  checker finds them, and the most general ones, isn't proven, beyond the
+  solver's shortcuts in `Solver.lean`. A closure's mutability is written
+  in the model; in Bolt, it's inferred.
+- **Generic closures.** A closure can't take a type argument.
+- **Struct declarations**, mostly. A struct is the tuple of its fields, so
+  a struct update shares a field at the type it has in the base; the
+  checker gets the same rule from the declared field types (#246).
+  `Structs.lean` and `Variance.lean` add declarations, but programs aren't
+  typed with them.
+- **Bounds checks, enums, classes and `let mut`.** A cell is one element,
+  so an index can't be out of bounds, and enums are values, like tuples.
+- **Borrowed parameters** (#283).
+- **The rest of `ro`** (#320). A closure's own mutability isn't seen as
+  `ro`, so a struct whose closure field has the struct's mutability can't
+  be seen as `ro`, though the checker allows it. There's no rule for `if`
+  branches, which the model doesn't have. `imm e` of a `ro T` can't be
+  typed: there's no type like the checker's `imm T`.
+- **The rest of uniqueness** (#284). A function can give back a new unique
+  object only if its body is `mut [e]`; one that changes it first, like
+  `let b = mut []; b.push(1); b`, isn't covered. A closure can't make an
+  `imm` copy in place, an `imm e` must be of a variable, and freezing in
+  place is only covered for an object whose contents are `imm` already.
+- **Leaving out the copy** (#293): freezing in place still makes the copy
+  and only goes on with the original. That a run that skips the copy
+  computes the same isn't proven.
+- **Effects that suspend**, like `Async`. Only operations that resume right
+  away are covered, as a handler passed in.

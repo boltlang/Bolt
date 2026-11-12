@@ -1,0 +1,356 @@
+---
+sidebar_position: 2
+title: What's proven
+description: Each theorem of the Lean proof, with Bolt code that shows what it means for a program.
+---
+
+# What's proven
+
+Each section below is one promise of the [mutability rules](../designs/mutability/index.mdx),
+with the theorems that prove it, and Bolt code that shows what it means.
+The theorems are about [the model](./model.mdx), so a Bolt program is
+covered by a theorem through the way it maps to the model.
+
+Most theorems start from a well-typed program, a heap that matches its
+typing (`HeapOk`), and well-typed functions (`FnsOk`), and say something
+about every run.
+
+## Programs don't get stuck
+
+| Theorem | File |
+|---|---|
+| `progress`, `preservation` | `Soundness.lean` |
+| `safety` | `Immutability.lean` |
+
+A well-typed program that isn't done can take a step (`progress`), and a
+step keeps it well-typed, in a heap typing that only grows
+(`preservation`). Together, however many steps a program takes, it never
+gets stuck (`safety`). So reading an element always reads an array, and
+calling a value always calls a closure:
+
+```bolt
+fn peek(xs: ro [i32]) -> i32 = xs[0];
+fn apply(f: fn(mut [i32]) -> i32) -> i32 = f(mut [1]);
+let n = apply(peek);
+```
+
+That holds with every kind of subtyping in the model: `apply` is given a
+`fn(ro [i32]) -> i32` where it expects a `fn(mut [i32]) -> i32`, and the
+call in its body passes a `mut [i32]` to `peek`. Preservation's case for a
+call shows the argument fits what the closure takes, and what it gives
+fits what's expected (`Sub.fn`).
+
+## `imm` values never change
+
+| Theorem | File |
+|---|---|
+| `imm_never_changes` | `Immutability.lean` |
+| `reaches_only_imm` | `Immutability.lean` |
+| `reachable_from_imm_never_changes` | `Immutability.lean` |
+| `program_imm_never_changes` | `Immutability.lean` |
+
+This is the promise that sharing makes hard: every name for an array is
+the same array, so an array that can't be changed through one name must
+not be changeable through any.
+
+```bolt
+let xs = [1, 2];
+let ys = xs;
+ys[0] = 3;   // E0221
+```
+
+- `imm_never_changes`: however many steps a program takes, an `imm`
+  location holds the same value. The only step that writes is `set`, and
+  it needs a `mut` cell.
+- `reaches_only_imm`: everything reachable from an `imm` location is
+  `imm`, also through what its closures captured. That's what E0223 is
+  for:
+
+  ```bolt
+  let xs = mut [1];
+  let nested = [xs];    // E0223: else `nested[0]` could change
+  let c = mut [0];
+  let fs = [|| { c[0] = 1; }];   // E0223: the closure changes `c`
+  ```
+
+- `reachable_from_imm_never_changes`: the two together, nothing reachable
+  from an `imm` location ever changes.
+- `program_imm_never_changes`: the same for a whole program, run from an
+  empty heap.
+
+## What a call can change
+
+| Theorem | File |
+|---|---|
+| `steps_clean` | `Purity.lean` |
+| `changes_only_frame`, `changed_is_in_frame_and_mut` | `Frame.lean` |
+| `call_changes_only_what_args_reach` | `Frame.lean` |
+| `imm_fn_changes_only_what_it_is_given` | `Frame.lean` |
+| `imm_fn_changes_nothing` | `Frame.lean` |
+| `imm_fn_changes_only_through_handler` | `Frame.lean` |
+
+A program changes only what's reachable from the locations in it that
+aren't `imm`, its *frame* (`changes_only_frame`, #255). For a call, that's
+what the function and its argument reach, and what's `imm` all the way
+down adds nothing. So the types of a call say what it can change:
+
+```bolt
+fn fill(xs: mut [i32], ys: imm [i32]) { xs[0] = ys[0]; }
+let a = mut [0];
+let b = [1];
+fill(a, b);   // only what `a` reaches can change
+```
+
+- `imm_fn_changes_only_what_it_is_given`: an `imm` function, given a pair
+  whose second part is `imm` all the way down, changes only what the
+  first part reaches.
+- `imm_fn_changes_nothing`: an `imm` function given an argument that's
+  `imm` all the way down changes nothing that existed before the call.
+
+  ```bolt
+  fn total(xs: imm [i32]) -> i32 = xs[0];
+  let n = total([1, 2]);   // changes nothing
+  ```
+
+- `imm_fn_changes_only_through_handler`: the same, with a handler as an
+  extra argument, which is how an effect whose operations resume right
+  away compiles. Only what the handler can reach changes.
+
+  ```bolt
+  effect Log { fn log(n: i32); }
+  fn total(xs: imm [i32]) -> i32 does Log = { log(xs[0]); xs[0] };
+  ```
+
+  Calling `total` changes only what the handler of `Log` can reach. The
+  [reactive design](../designs/reactive.mdx) needs this: while drawing, a
+  component can only affect the world through its effects.
+
+`steps_clean` is the invariant behind all of them: every location a
+program can reach is `imm`, new, or allowed, and a step only writes to
+locations that are new or allowed.
+
+## `imm` values can be copied or shared
+
+| Theorem | File |
+|---|---|
+| `Freeze.typed`, `Freeze.exists` | `Soundness.lean` |
+| `steps_sim` | `Sharing.lean` |
+| `imm_copy_changes_nothing` | `Sharing.lean` |
+| `imm_merge_changes_nothing` | `Sharing.lean` |
+
+`imm e` copies each `mut` object that `e`'s value reaches, once, and
+shares what's `imm`. `Freeze.typed`: the copy has `e`'s type with each
+object `imm`. `Freeze.exists`: the copy can always be made. Together they
+give progress and preservation for `imm e`.
+
+```bolt
+let xs = mut [mut [1]];
+let ys = imm xs;   // `imm [imm [i32]]`: both arrays copied
+```
+
+Since an `imm` value never changes, a copy of it can't be told apart from
+it (#254). So the code generator may store small `imm` structs by value,
+and make `imm` literals constants that are shared:
+
+```bolt
+let a = [1, 2];
+let b = [1, 2];   // may be the same object as `a`
+```
+
+- `steps_sim`: two runs whose heaps differ only in how `imm` values are
+  stored, with each `mut` location one in both, take the same steps, with
+  results that correspond.
+- `imm_copy_changes_nothing`: using a copy of an `imm` location in place
+  of it computes the same.
+- `imm_merge_changes_nothing`: using one of two `imm` locations that hold
+  the same value for both computes the same.
+
+## `imm e` without the copy
+
+| Theorem | File |
+|---|---|
+| `Freeze.keys`, `Freeze.fresh`, `Freeze.shape` | `Region.lean` |
+| `region_freeze_step`, `toImms_in_place_change_nothing` | `Unique.lean` |
+| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` |
+
+Building an array and then making it `imm` is common:
+
+```bolt
+fn fill(xs: mut [i32]) { xs[0] = 1; }
+let xs = mut [0];
+fill(xs);
+let frozen = imm xs;
+```
+
+The copy `imm xs` makes is wasted here: nothing else has `xs`, so it could
+be made `imm` where it is. That's what #335 is about.
+
+- `Region.lean` says what the copy does: it copies exactly the `mut`
+  objects the value reaches, its *region* (`Freeze.keys`), each to a
+  location of its own (`Freeze.fresh`), and each copy holds what its
+  original does, with the region's objects replaced by their copies
+  (`Freeze.shape`).
+- `toImms_in_place_change_nothing`: if whenever a program gets to an
+  `imm e`, nothing outside the region has its objects, then the program
+  with every `imm e` done in place computes what it does.
+  `region_freeze_step` is the step itself.
+- `checked_toImms_in_place_change_nothing` (#284): a check of the program
+  as written gives that premise. An `imm x` is in place when `x` is a new
+  `mut` object that's only read, written, or given to functions that
+  borrow it, like `fill` above, before it's made `imm`. That it holds only
+  what's `imm` already is still a premise (`Shallow`).
+
+It doesn't hold when something else has the object:
+
+```bolt
+let xs = mut [0];
+let ys = xs;
+let frozen = imm xs;   // must copy: `ys` can still change `xs`
+ys[0] = 1;
+```
+
+## Read-only views
+
+| Theorem | File |
+|---|---|
+| `Sub.to_ro`, `Sub.trans` | `Subtyping.lean` |
+| `HasType.newRo`, `HasType.newRo_tparam` | `ReadOnly.lean` |
+
+A `mut` or `imm` value can be seen as `ro` (#320), and the view is deep:
+
+```bolt
+fn first(xs: ro [[i32]]) -> ro [i32] = xs[0];
+let xs = mut [mut [1]];
+let ys = first(xs);
+ys[0] = 2;   // E0221: what's read through `ro` is `ro` too
+```
+
+The theorems about `imm` values hold with `ro` in the model, so seeing a
+value as `ro` can't be used to change an `imm` one. `Sub.to_ro`: every type
+fits its `ro` view. `Sub.trans`: subtyping composes.
+
+`ReadOnly.lean` is groundwork for literals that are `ro`
+([#415](https://github.com/boltlang/Bolt/issues/415)). A tuple of generic
+values can't be `imm`, since its parts may be `mut`, which is why the
+checker rejects this today:
+
+```bolt
+enum Opt[T] { No, Yes(T) }
+fn same[T](a: Opt[T], b: Opt[T]) -> Bool = match (a, b) {   // E0230
+  (Opt.No, Opt.No) => True,
+  _ => False,
+};
+```
+
+`HasType.newRo_tparam`: a new object holding a `T` can be used as
+`ro (ro T)` with nothing assumed. `HasType.newRo`: a `ro` literal is a new
+`mut` object used at a `ro` type, so it needs no rule of its own.
+
+## Function subtyping and variance
+
+| Theorem | File |
+|---|---|
+| `Sub.fn`, `Sub.immCell`, `Sub.imm` | `Subtyping.lean`, `Soundness.lean` |
+| `Ty.sub_var`, `StructDecl.sub_view`, `StructDecl.sub_imm` | `Variance.lean` |
+
+A function that takes `ro` fits where one that takes `mut` is expected
+(#444), and what an `imm` array holds can be seen as a supertype of its
+type. The checker allows both:
+
+```bolt
+fn reads(xs: ro [i32]) -> i32 = xs[0];
+fn call_all(fs: imm [fn(mut [i32]) -> i32]) -> i32 = fs[0](mut [1]);
+let n = call_all([reads]);
+```
+
+`Sub.imm`: the copy `imm e` makes of a value seen at a supertype fits the
+copy of that type, which is why `imm` arrays need to be covariant once
+functions are.
+
+`Variance.lean` proves when a struct's type arguments can change (#440).
+A parameter can change as it is where it's only held, like `T` in
+`struct Box[T] { item: T }`, the other way round in a function's
+parameters, like `T` in `struct Handler[T] { f: fn(T) -> () }`, and not at
+all in a `mut` object. The checker doesn't use this yet: a struct's type
+arguments must be the same, so these are rejected today:
+
+```bolt
+struct Box[T] { item: T }
+struct Handler[T] { f: fn(T) -> () }
+fn peek(b: ro Box[ro [i32]]) {}
+fn call(h: imm Handler[mut [i32]]) {}
+fn go(b: mut Box[mut [i32]], h: imm Handler[ro [i32]]) {
+  peek(b);   // could be fine: `T` is only held
+  call(h);   // could be fine: `T` is only in a closure's parameters
+}
+```
+
+`Ty.sub_var`: a type with its arguments changed as their variance allows
+is a subtype of it. `StructDecl.sub_view`: so `mut Box[mut [i32]]` can be
+seen as `ro Box[ro [i32]]`. `StructDecl.sub_imm`: and an
+`imm Handler[ro [i32]]` used as an `imm Handler[mut [i32]]`.
+
+## The checker's solver
+
+| Theorem | File |
+|---|---|
+| `atMost_iff_split` | `Solver.lean` |
+| `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` |
+| `le_iff_leSearch` | `Solver.lean` |
+
+The checker's solver (`crates/boltlang-hir-ty/src/solve.rs`) doesn't
+search for derivations of "at most". It takes shortcuts, and these prove
+them right:
+
+- `atMost_iff_split`: splitting "a type is at most `μ`" into the
+  mutabilities it holds, each at most the one around it, and its type
+  parameters, says exactly what "at most" does (`Solver::solve_at_most`).
+- `Le.eq_immutable`, `Le.eq_mutable`: an unknown mutability that must be
+  at most `imm` can be made `imm` right away, and one above `mut` made
+  `mut`, unless an assumption ends at `imm` or starts at `mut`. That's how
+  the checker decides the hidden mutability parameters of a signature
+  early:
+
+  ```bolt
+  fn keep(x) = [x];   // `fn(x: a) -> imm [a]`, with `a ⊑ imm`
+  ```
+
+- `le_iff_leSearch`: following assumptions like `'v ⊑ 'm` from a
+  mutability finds every chain that holds, once it can take as many
+  steps as there are assumptions (`Solver::mutability_le`).
+
+## Struct types
+
+| Theorem | File |
+|---|---|
+| `StructDecl.atMost_ty_iff` | `Structs.lean` |
+
+A struct type with arguments is well-formed exactly when its arguments
+meet what its fields imply. For `VecIter`, that's `'v ⊑ m` and `T ⊑ 'v`:
+
+```bolt
+struct VecIter[T, 'v] { data: 'v [T], index: i32 }
+fn f(it: mut VecIter[mut [i32], imm]) = ();   // E0223: `data` would be an
+                                              // `imm` array of `mut` ones
+```
+
+The checker does the same, where a value is made and wherever it splits a
+struct type (`struct_atoms_of` in `holds.rs`).
+
+## Examples
+
+`Examples.lean` shows what the rules accept and reject, each as a proof
+about a small program:
+
+- changing a `mut` object, but not an `imm` one;
+- an `imm` object can't hold a `mut` one;
+- a generic function that reads what it's given, but can't change it;
+- #244: an `imm` object can't hold a closure that changes what it
+  captured;
+- #246: `Line { a: l.a, n: 5 }` with a `mut` `l` can't be an `imm Line`,
+  since it would share `l.a`, a `mut Point`;
+- #247: an `imm Box` holding a `T` needs `T ⊑ imm`;
+- an iterator whose array has a mutability `'v` of its own;
+- #320: `fn peek(xs: ro [i32])` taking a `mut` and an `imm` array,
+  `fn total(xs: 'm [i32]) = peek(xs)` passing what it's given on as `ro`,
+  and one type parameter for a `mut` and an `imm` value, as `ro [i32]`.

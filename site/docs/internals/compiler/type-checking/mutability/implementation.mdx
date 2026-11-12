@@ -139,7 +139,7 @@ description: Where the rules of mutability are in the checker, the tests and the
   `tests/checker/mutability/closures.txt` have a case for each rule in this
   chapter.
 - **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a
-  Lean proof, for a core of these rules with closures, structs and type
+  Lean proof ([Proofs](../../../proofs/index.mdx) lists what it covers), for a core of these rules with closures, structs and type
   parameters, that nothing reachable from an `imm` value ever changes, that
   a well-typed program never gets stuck, and that calling an `imm` function
   with `imm` arguments changes nothing that existed before. More
