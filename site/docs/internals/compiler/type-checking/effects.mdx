@@ -139,14 +139,33 @@ Containment is checked like this:
 Combination waits until its rows aren't variables, and then makes the goal
 their union.
 
+The same check lets a function that does less fit where one that does more
+is expected. When two function types meet and both of their rows are known,
+the given function's row must fit in the expected one's, with containment
+checked as above, so `quiet` can be passed for a `fn() does Log`:
+
+```bolt
+effect Log { fn log(n: i32); }
+fn run(f: fn() -> () does Log) does Log = f();
+fn quiet() = ();
+fn go() does Log = run(quiet);
+```
+
+The other way round, a function that does more where one that does less is
+expected, is an error. In a function's parameters it's turned the other way
+round, as for their types, and a row that's an argument of a struct or enum
+fits as the argument's variance says, like the `E` of
+`struct Lazy[E] { run: fn() does E }`. When either row is still a variable,
+the two are made the same row, so that inferring one gives the other.
+
 ### Least solutions
 
 What a function does is the least row that holds what it calls. When a
 function is generalized, each row variable that's only in *positive*
-places, like the `does` of the function, or of a closure it returns, gets
-the union of the rows that must fit in it, or `Nothing`. That's as general
-as leaving it open, since a smaller row fits wherever a bigger one does
-through `≲`. A row that must hold exactly one unknown row becomes that row:
+places, like the `does` of the function, of a closure it returns, or of a
+struct it returns where the row's argument keeps its direction, gets the
+union of the rows that must fit in it, or `Nothing`. That's as general as
+leaving it open, since a smaller row fits wherever a bigger one does. A row that must hold exactly one unknown row becomes that row:
 
 ```text
 twice: forall a e. fn(fn() -> a does e) -> a does e
@@ -173,7 +192,9 @@ made of, both sorted so that equal rows are equal; a row that's one
 parameter and nothing else is that parameter. Row variables are inference
 variables of kind `Effect`, and row parameters are type parameters of kind
 `Effect`. Containment and combination are `RowConstraint` in `rows.rs`,
-solved by the solver like other deferred constraints. Instantiating a
+solved by the solver like other deferred constraints. How one known row
+fits in another is `Ty::row_fit`, which the solver uses for containment,
+and the unifier where it meets two function types (`Unifier::unify_contained`). Instantiating a
 scheme turns each row made of variables into a variable and a
 combination (`open_rows`). A scheme keeps the row constraints left about
 its rows. Instances don't keep rows: monomorphization skips row
