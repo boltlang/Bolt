@@ -314,10 +314,14 @@ impl<'db> Unifier<'db> {
     /// unified as they are.
     fn unify_contained(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         let (sub, sup) = if self.flipped { (a, b) } else { (b, a) };
+        // Only rows, which a struct's other arguments aren't, and which a
+        // type parameter could otherwise be taken for.
+        let is_row = |u: &Self, t: &Ty<'db>| matches!(u.shallow_resolve(t), Ty::Row(..));
+        if !is_row(self, sub) && !is_row(self, sup) {
+            return self.unify(a, b);
+        }
         let (sub, sup) = (self.resolve(sub), self.resolve(sup));
-        // Only rows: a type parameter could otherwise be taken for one.
-        let rows = matches!(sub, Ty::Row(..)) || matches!(sup, Ty::Row(..));
-        let Some(fit) = sub.row_fit(&sup).filter(|_| rows) else { return self.unify(a, b) };
+        let Some(fit) = sub.row_fit(&sup) else { return self.unify(a, b) };
         if !fit.fits() {
             return Err(UnifyError::Mismatch(a.clone(), b.clone()));
         }

@@ -415,9 +415,10 @@ struct Expectation<'a, 'db> {
 ///   it, as a `ro` view leaves a closure as it is.
 ///
 /// What a function takes is looked into, since a value is passed as it,
-/// like the `ro Box[mut [i32]]` of a `fn get[T](b: ro Box[T])` called
-/// with a `mut Box[mut [i32]]` (#443). What it gives is reported where
-/// it's given, and what it holds is covered by its mutability.
+/// like the `ro Both[mut [i32]]` of a `fn see[T](b: ro Both[T])` called
+/// with a `mut Both[mut [i32]]`, for `struct Both[T] { item: T, f: fn(T) }`,
+/// whose `T` can't be seen as `ro`. What it gives is reported where it's
+/// given, and what it holds is covered by its mutability.
 ///
 /// What a struct holds is what its fields do (`crate::holds`), not its
 /// type arguments: an `imm Handler[mut [i32]]` for
