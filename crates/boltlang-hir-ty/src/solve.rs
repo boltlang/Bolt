@@ -531,6 +531,7 @@ pub struct Solver<'db> {
 pub(crate) struct CallMark {
     vars: Vec<TyVar>,
     replays: usize,
+    links: usize,
 }
 
 impl<'db> Solver<'db> {
@@ -579,13 +580,15 @@ impl<'db> Solver<'db> {
         for &v in &vars {
             self.unifier.make_flexible(v);
         }
-        CallMark { vars, replays: self.unifier.replays.len() }
+        CallMark { vars, replays: self.unifier.replays.len(), links: self.unifier.links.len() }
     }
 
     /// Settle the variables of a call once its arguments are checked, and
     /// unify again what gave them lower bounds, reporting what doesn't fit
     /// where it was, or at the call, `origin`.
     pub(crate) fn end_call(&mut self, mark: CallMark, origin: Origin<'db>) {
+        let links = self.unifier.links.split_off(mark.links.min(self.unifier.links.len()));
+        self.unifier.force_linked(&links);
         for v in mark.vars {
             self.unifier.settle(v);
         }

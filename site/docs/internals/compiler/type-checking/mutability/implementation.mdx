@@ -119,7 +119,16 @@ bound instead of being bound to it, and once the arguments are checked
 unifications that gave it lower bounds are done again to check them. So
 `both([1], mut [2])` for `fn both[T](a: T, b: T)` makes `T` a `ro [i32]`,
 whichever comes first. A flexible variable that has to give a value
-first, like a closure's parameter, is settled with what it has so far. `holds.rs` sees `ro T` as
+first, like a closure's parameter, is settled with what it has so far.
+
+A parameter like `a: [T]` links two variables: the array's mutability and
+`T`. If `T` is widened, the array can't stay `mut`, since a `mut` array's
+contents must be what they are, so before the call's variables are settled,
+the mutability of an object whose contents are widened is made `ro`, and
+what a `ro` object holds at most `ro`, until that changes nothing
+(`Unifier::force_linked`, as `LinkedProblem.principal` in
+`lean/BoltMut/Linked.lean`). So `f(mut [mut [1]], mut [[1]])` for
+`fn f[T](a: [T], b: [T]) -> [T]` is a `ro [ro [i32]]`. `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
   an error (E0223). A `mut` array or struct held by `ro` is the same error
   (`infer::mut_inside`, with the bound it breaks), also in the parameters

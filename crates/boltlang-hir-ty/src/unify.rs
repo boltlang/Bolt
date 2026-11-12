@@ -137,6 +137,11 @@ pub struct Unifier<'db> {
     /// [`Replay`]s.
     pub(crate) site: u32,
     pub(crate) replays: Vec<Replay<'db>>,
+    /// The flexible variables that are the mutabilities of the objects
+    /// whose contents are being unified, innermost last, and what each
+    /// lower bound recorded inside one was: see [`Unifier::force_linked`].
+    under: Vec<TyVar>,
+    pub(crate) links: Vec<(TyVar, TyVar, Ty<'db>)>,
 }
 
 impl<'db> Unifier<'db> {
@@ -541,12 +546,22 @@ impl<'db> Unifier<'db> {
             {
                 return Ok(make(imm, held));
             }
-        } else if m == n && pairs.iter().all(|(x, y)| self.resolve(x) == self.resolve(y)) {
-            let held: Vec<_> = pairs.iter().map(|(x, _)| x.clone()).collect();
-            let at_most_ro = matches!(m, Ty::Mutability(Mutability::Imm | Mutability::ReadOnly))
-                && !held.iter().any(|t| may_change(self, &self.resolve(t)));
-            if !ro || at_most_ro {
-                return Ok(make(m, held));
+        } else if m == n {
+            // The same object when what it holds is the same on both sides,
+            // once what isn't known in it is.
+            let held: Result<Vec<_>, ()> =
+                pairs.iter().map(|(x, y)| self.lub(x, y, false)).collect();
+            if let Ok(held) = held {
+                let same = pairs.iter().zip(&held).all(|((x, y), h)| {
+                    let h = self.resolve(h);
+                    self.resolve(x) == h && self.resolve(y) == h
+                });
+                let at_most_ro =
+                    matches!(m, Ty::Mutability(Mutability::Imm | Mutability::ReadOnly))
+                        && !held.iter().any(|t| may_change(self, &self.resolve(t)));
+                if same && (!ro || at_most_ro) {
+                    return Ok(make(m, held));
+                }
             }
         }
         let held: Result<Vec<_>, ()> = pairs.iter().map(|(x, y)| self.lub(x, y, true)).collect();
@@ -648,6 +663,101 @@ impl<'db> Unifier<'db> {
         unified
     }
 
+    /// Do `f`, which unifies the contents of two objects of mutabilities `m`
+    /// and `n`, with the lower bounds it records linked to the mutability of
+    /// the one that receives a value, if that's a flexible variable.
+    fn under<T>(&mut self, m: &Ty<'db>, n: &Ty<'db>, f: impl FnOnce(&mut Self) -> T) -> T {
+        let receives = self.shallow_resolve(if self.flipped { n } else { m });
+        let pushed = match receives {
+            Ty::Var(v) if self.is_flexible(v) => {
+                self.under.push(v);
+                true
+            }
+            _ => false,
+        };
+        let out = f(self);
+        if pushed {
+            self.under.pop();
+        }
+        out
+    }
+
+    /// Before the variables `vars` of a call are settled, make the
+    /// mutability of an object `ro` where what it holds is widened, as
+    /// [`Unifier::lub`] does for a single type, and what a `ro` one holds
+    /// at most `ro`, until that changes nothing. `links` are what was
+    /// recorded in the contents of objects whose mutability is a flexible
+    /// variable. So for `fn f[T](a: [T], b: [T])`, given a `mut [mut [i32]]`
+    /// and a `mut [[i32]]`, `T` is `ro [i32]` and the array `ro` too, as
+    /// `LinkedProblem.principal` in `lean/BoltMut/Linked.lean` shows is the
+    /// least solution.
+    pub(crate) fn force_linked(&mut self, links: &[(TyVar, TyVar, Ty<'db>)]) {
+        let ro = Ty::Mutability(Mutability::ReadOnly);
+        let mut forced: Vec<TyVar> = Vec::new();
+        loop {
+            let mut changed = false;
+            for (outer, inner, lower) in links {
+                if !forced.contains(outer) && self.widened(*inner, lower, &forced) {
+                    forced.push(*outer);
+                    changed = true;
+                }
+                if forced.contains(outer) && self.is_flexible(*inner) {
+                    // What a `ro` object holds is at most `ro`.
+                    let data = &self.vars[inner.0 as usize];
+                    let is_mutability = data
+                        .lowers
+                        .iter()
+                        .any(|l| matches!(self.shallow_resolve(l), Ty::Mutability(_)));
+                    if is_mutability {
+                        let holds_mut = data
+                            .lowers
+                            .iter()
+                            .any(|l| self.shallow_resolve(l) == Ty::Mutability(Mutability::Mut));
+                        if holds_mut && !forced.contains(inner) {
+                            forced.push(*inner);
+                            changed = true;
+                        }
+                    } else if !data.seen_as_ro {
+                        self.vars[inner.0 as usize].seen_as_ro = true;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        for v in forced {
+            if self.is_flexible(v) {
+                self.vars[v.0 as usize].lowers.push(ro.clone());
+            }
+        }
+    }
+
+    /// Whether the flexible variable `var` will be settled to something
+    /// other than `lower`, one of its lower bounds: when they aren't all
+    /// the same, or it's at most `ro` and `lower` may change, or it's
+    /// `forced` to be `ro`.
+    fn widened(&self, var: TyVar, lower: &Ty<'db>, forced: &[TyVar]) -> bool {
+        if !self.is_flexible(var) {
+            return self.resolve(&Ty::Var(var)) != self.resolve(lower);
+        }
+        if forced.contains(&var) {
+            return true;
+        }
+        let data = &self.vars[var.0 as usize];
+        let resolved = self.resolve(lower);
+        let same = data.lowers.iter().all(|l| self.resolve(l) == resolved);
+        if same && !(data.seen_as_ro && may_change(self, &resolved)) {
+            return false;
+        }
+        // What isn't known yet, like the elements of `[1]` and `[2]`, is made
+        // the same when it's settled: see what it'd be.
+        let mut u = self.clone();
+        u.settle(var);
+        u.resolve(&Ty::Var(var)) != u.resolve(lower)
+    }
+
     /// Unify `a` and `b` as [`Unifier::unify`] does, with what receives a
     /// value on the side `flipped` says.
     pub(crate) fn unify_flipped(
@@ -673,6 +783,9 @@ impl<'db> Unifier<'db> {
                 && self.is_flexible(*v)
             {
                 self.vars[v.0 as usize].lowers.push(gives.clone());
+                if let Some(&outer) = self.under.last() {
+                    self.links.push((outer, *v, gives.clone()));
+                }
                 self.recorded = true;
                 return Ok(());
             }
@@ -750,11 +863,13 @@ impl<'db> Unifier<'db> {
             {
                 self.unify(m, n)?;
                 let own = self.shallow_resolve(if self.flipped { n } else { m });
-                let args = xs.iter().zip(ys.iter()).chain(ms.iter().zip(ns.iter()));
-                for (i, (a, b)) in args.enumerate() {
-                    self.unify_by(arg_variance(self.variances, *x, &own, i), a, b)?;
-                }
-                Ok(())
+                self.under(m, n, |u| {
+                    let args = xs.iter().zip(ys.iter()).chain(ms.iter().zip(ns.iter()));
+                    for (i, (a, b)) in args.enumerate() {
+                        u.unify_by(arg_variance(u.variances, *x, &own, i), a, b)?;
+                    }
+                    Ok(())
+                })
             }
             // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
             // the last arguments are equal, and so are the rest of each
@@ -783,7 +898,7 @@ impl<'db> Unifier<'db> {
             // doesn't fit.
             (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) if xs.len() == ys.len() => {
                 self.unify(m, n)?;
-                self.unify_all(xs, ys)?;
+                self.under(m, n, |u| u.unify_all(xs, ys))?;
                 self.share_if_mut(m, xs, ys)
             }
             // The same names, which are in the same order in both.
@@ -793,17 +908,20 @@ impl<'db> Unifier<'db> {
                     && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b) =>
             {
                 self.unify(m, n)?;
-                self.unify_all(xs, ys)?;
-                for ((_, x), (_, y)) in xn.iter().zip(yn.iter()) {
-                    self.unify(x, y)?;
-                }
+                self.under(m, n, |u| {
+                    u.unify_all(xs, ys)?;
+                    for ((_, x), (_, y)) in xn.iter().zip(yn.iter()) {
+                        u.unify(x, y)?;
+                    }
+                    Ok(())
+                })?;
                 let (xt, yt): (Vec<_>, Vec<_>) =
                     xn.iter().zip(yn.iter()).map(|((_, x), (_, y))| (x.clone(), y.clone())).unzip();
                 self.share_if_mut(m, xs, ys)?;
                 self.share_if_mut(m, &xt, &yt)
             }
             (Ty::Array(m, x), Ty::Array(n, y)) => {
-                self.unify(x, y)?;
+                self.under(m, n, |u| u.unify(x, y))?;
                 self.unify(m, n)?;
                 self.share_if_mut(m, std::slice::from_ref(x), std::slice::from_ref(y))
             }
