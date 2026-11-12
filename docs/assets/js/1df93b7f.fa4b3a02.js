@@ -10,17 +10,6 @@ pub enum Shape {
   Rect { w: f64, h: f64 },
 }
 
-class Show[T] {
-  fn show(x: T) -> String;
-}
-
-impl Show[Shape] {
-  fn show(s) = match s {
-    Shape.Circle(_) => "circle",
-    Shape.Rect { .. } => "rectangle",
-  };
-}
-
 const PI: f64 = 3.14159;
 
 fn area(s: Shape) -> f64 = match s {
@@ -30,16 +19,13 @@ fn area(s: Shape) -> f64 = match s {
 
 struct Vec2 { x: f64, y: f64 }
 
-fn (a: Vec2) + (b: Vec2) -> Vec2 = Vec2 { x: a.x + b.x, y: a.y + b.y };
-
-let shapes = [Shape.Circle(1.0), Shape.Rect { w: 2.0, h: 3.0 }];
-for s in shapes {
-  if area(s) > 1.0 {
-    print(s.show());
-  }
+impl Add[imm Vec2] {
+  fn add(a, b) = Vec2 { x: a.x + b.x, y: a.y + b.y };
 }
 
-macro_rules! twice {
-  ($e:expr) => { ($e, $e) };
+let shapes = [Shape.Circle(1.0), Shape.Rect { w: 2.0, h: 3.0 }];
+let mut total_area = 0.0;
+for s in shapes {
+   total_area += s.area();
 }
 `;function I(){let{siteConfig:n}=(0,u.A)();return(0,a.jsx)("header",{className:(0,i.A)("hero hero--primary","heroBanner_qdFl"),children:(0,a.jsxs)("div",{className:"container",children:[(0,a.jsx)(D.A,{as:"h1",className:"hero__title",children:n.title}),(0,a.jsx)("p",{className:"hero__subtitle",children:n.tagline}),(0,a.jsxs)("div",{className:O,children:[(0,a.jsx)(s.A,{className:"button button--secondary button--lg",style:{margin:"1rem"},to:"#playground",children:"To the playground"}),(0,a.jsx)(s.A,{className:"button button--secondary button--lg",style:{margin:"1rem"},to:"/docs/tutorial",children:"Learn how to write Bolt"})]})]})})}let B=[{title:"Secure by design",lead:(0,a.jsx)(a.Fragment,{children:"Whole classes of bugs can't happen in Bolt, because the type checker rules them out before the program runs."}),points:[(0,a.jsxs)(a.Fragment,{children:["There's no ",(0,a.jsx)("code",{children:"null"}),". A value that may be missing is an ",(0,a.jsx)("code",{children:"Option"}),", and the type checker makes you handle ",(0,a.jsx)("code",{children:"None"}),"."]}),(0,a.jsxs)(a.Fragment,{children:["Whether a value can change is part of its type. An ",(0,a.jsx)("code",{children:"imm"})," array or struct can never change, not even through another name for it, so data you hand out stays as it was."]}),(0,a.jsx)(a.Fragment,{children:"Programs compile to WebAssembly, which runs in a sandbox: compiled code can only reach the outside world through the few functions the host gives it, and every array access is checked."})]},{title:"Performant",lead:(0,a.jsx)(a.Fragment,{children:"Bolt knows every type before the program runs, so the program doesn't have to find them out while it's running."}),points:[(0,a.jsx)(a.Fragment,{children:"Programs compile ahead of time to WebAssembly, which browsers and runtimes like Wasmtime run at close to native speed."}),(0,a.jsxs)(a.Fragment,{children:["Static types mean no type checks or boxing at run time: an ",(0,a.jsx)("code",{children:"i32"})," is a machine integer, and a call is a direct call."]}),(0,a.jsx)(a.Fragment,{children:"Arrays and structs are passed by reference, never copied behind your back, and their mutability in the type tells the compiler what can't change."})]},{title:"Productive",lead:(0,a.jsx)(a.Fragment,{children:"Bolt infers the types you leave out, and tells you what's wrong while you type."}),points:[(0,a.jsxs)(a.Fragment,{children:["Write ",(0,a.jsx)("code",{children:"fn first(c) = c[0];"})," and Bolt works out that it's generic: it takes an array, a ",(0,a.jsx)("code",{children:"Vec"}),", or anything else that can be indexed."]}),(0,a.jsx)(a.Fragment,{children:"A language server reports mistakes in your editor, and in the playground above, with errors that point at the cause as well as the symptom."}),(0,a.jsxs)(a.Fragment,{children:["Run a program right away with ",(0,a.jsx)("code",{children:"bolt run"}),", then compile the same code with ",(0,a.jsx)("code",{children:"bolt build"}),". Enums with data, pattern matching, classes and macros keep the code short."]})]}];function F(){return(0,a.jsx)("section",{className:"features_cAfv",children:(0,a.jsxs)("div",{className:"container",children:[(0,a.jsx)("div",{className:"row",children:B.map(({title:n,lead:e,points:t})=>(0,a.jsxs)("div",{className:(0,i.A)("col col--4","feature_xuHn"),children:[(0,a.jsx)(D.A,{as:"h2",children:n}),(0,a.jsx)("p",{className:"lead_qqEL",children:e}),(0,a.jsx)("ul",{children:t.map((n,e)=>(0,a.jsx)("li",{children:n},e))})]},n))}),(0,a.jsx)("div",{className:O,children:(0,a.jsx)(s.A,{className:"button button--primary button--lg",to:"/docs/tutorial",children:"Start the tutorial"})})]})})}function z(){let{colorMode:n}=(0,p.G)();return(0,a.jsx)(E,{theme:n,style:{minHeight:"400px"},defaultValue:A})}function C(){let{siteConfig:n}=(0,u.A)();return(0,o.A)().collectAnchor("playground"),(0,a.jsxs)(S.A,{title:n.title,description:"Bolt is a language for quickly writing highly performant and safe (web) applications.",children:[(0,a.jsx)(I,{}),(0,a.jsxs)("main",{children:[(0,a.jsx)("div",{id:"playground",children:(0,a.jsx)(r.A,{children:()=>(0,a.jsx)(z,{})})}),(0,a.jsx)(F,{})]})]})}}}]);
