@@ -25,7 +25,7 @@ use crate::{
     rows::RowConstraint,
     ty::{AdtId, GenericParamId, Mutability, PackHalf, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
-    variance::Variances,
+    variance::{Variance, Variances, adt_variance},
 };
 
 /// Where a constraint comes from.
@@ -1064,11 +1064,9 @@ impl<'db> Solver<'db> {
                     .collect(),
             ),
         };
-        // A parameter that no field mentions keeps its argument.
-        let used = |index: usize| {
-            let param = Ty::Param(GenericParamId { def, index: index as u32 });
-            fields.iter().any(|t| t.any(&mut |t| *t == param))
-        };
+        // A parameter that no field uses keeps its argument.
+        let variance = adt_variance(self.db, id);
+        let used = |index: usize| variance.get(index) != Some(&Variance::Unused);
         let args_to: Vec<Ty<'db>> = args
             .iter()
             .enumerate()
