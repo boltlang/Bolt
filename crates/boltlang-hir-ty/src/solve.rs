@@ -521,6 +521,16 @@ pub struct Solver<'db> {
     /// [`crate::InferenceResult::type_args`].
     pub instantiations: Vec<(Origin<'db>, Box<[Ty<'db>]>)>,
     pub errors: Vec<TypeError<'db>>,
+    /// Where unifications were, by the number [`Unifier::site`] gives them,
+    /// to report what a [`crate::unify::Replay`] finds there.
+    sites: Vec<Origin<'db>>,
+}
+
+/// The variables of a call whose arguments are being checked, which take
+/// the least type of what flows into them: see [`Solver::begin_call`].
+pub(crate) struct CallMark {
+    vars: Vec<TyVar>,
+    replays: usize,
 }
 
 impl<'db> Solver<'db> {
@@ -550,6 +560,60 @@ impl<'db> Solver<'db> {
             chosen: Vec::new(),
             instantiations: Vec::new(),
             errors: Vec::new(),
+            sites: Vec::new(),
+        }
+    }
+
+    /// Start checking the arguments of a call, whose callee's scheme gave
+    /// its parameters and bound variables `args`: those that are variables
+    /// take the least type of what flows into them, rather than the first,
+    /// once [`Solver::end_call`] settles them (#448).
+    pub(crate) fn begin_call(&mut self, args: &[Ty<'db>]) -> CallMark {
+        let vars: Vec<TyVar> = args
+            .iter()
+            .filter_map(|t| match self.unifier.shallow_resolve(t) {
+                Ty::Var(v) => Some(v),
+                _ => None,
+            })
+            .collect();
+        for &v in &vars {
+            self.unifier.make_flexible(v);
+        }
+        CallMark { vars, replays: self.unifier.replays.len() }
+    }
+
+    /// Settle the variables of a call once its arguments are checked, and
+    /// unify again what gave them lower bounds, reporting what doesn't fit
+    /// where it was, or at the call, `origin`.
+    pub(crate) fn end_call(&mut self, mark: CallMark, origin: Origin<'db>) {
+        for v in mark.vars {
+            self.unifier.settle(v);
+        }
+        let replays = self.unifier.replays.split_off(mark.replays.min(self.unifier.replays.len()));
+        for replay in replays {
+            let at = self.sites.get(replay.site as usize).copied().unwrap_or(origin);
+            let unified =
+                self.unify_at(at, |u| u.unify_flipped(&replay.a, &replay.b, replay.flipped));
+            let (expected, actual) = match replay.flipped {
+                false => (&replay.a, &replay.b),
+                true => (&replay.b, &replay.a),
+            };
+            self.report_unified(unified, expected, actual, at);
+        }
+        // What waited for the call's variables is solved now, as it would
+        // have been when it was added, so that the call's type is known
+        // for what follows.
+        loop {
+            let mut progress = false;
+            progress |= self.retry(|s| &mut s.pending_fields, |s, (c, o)| s.solve_field(c, *o));
+            progress |= self.retry(|s| &mut s.pending_spreads, |s, (c, o)| s.solve_spread(c, *o));
+            progress |=
+                self.retry(|s| &mut s.pending_tuple_pats, |s, (c, o)| s.solve_tuple_pat(c, *o));
+            progress |= self.retry(|s| &mut s.pending_assoc, |s, (c, o)| s.solve_assoc(c, *o));
+            progress |= self.retry(|s| &mut s.pending_imm, |s, (c, o)| s.solve_imm(c, *o));
+            if !progress {
+                break;
+            }
         }
     }
 
@@ -1644,7 +1708,10 @@ impl<'db> Solver<'db> {
         unify: impl FnOnce(&mut Unifier<'db>) -> Result<(), UnifyError<'db>>,
     ) -> Result<(), UnifyError<'db>> {
         let start = self.unifier.given_fns.len();
+        self.unifier.site = self.sites.len() as u32;
+        self.sites.push(origin);
         let unified = unify(&mut self.unifier);
+        self.unifier.site = u32::MAX;
         let given = self.unifier.given_fns.split_off(start);
         self.given_fns.extend(given.into_iter().map(|(to, from)| (origin, to, from)));
         unified

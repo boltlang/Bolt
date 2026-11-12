@@ -109,7 +109,17 @@ description: Where the rules of mutability are in the checker, the tests and the
 that must be at most `ro`, like the `T` of `fn pass[T: ro](x: T) -> T`, is
 given what may change seen as `ro`, and what can't as it is
 (`Unifier::see_as_ro`): `pass(mut [1])` is a `ro [i32]`, and `pass([1])` an
-`imm [i32]`. `holds.rs` sees `ro T` as
+`imm [i32]`.
+
+The variables a call gives its callee's parameters are *flexible*
+(`Solver::begin_call`): one that receives a value records it as a lower
+bound instead of being bound to it, and once the arguments are checked
+(`Solver::end_call`), it's settled to the least type of all of them
+(`Unifier::lub`, as `Ty.lub` in `lean/BoltMut/Least.lean`), then the
+unifications that gave it lower bounds are done again to check them. So
+`both([1], mut [2])` for `fn both[T](a: T, b: T)` makes `T` a `ro [i32]`,
+whichever comes first. A flexible variable that has to give a value
+first, like a closure's parameter, is settled with what it has so far. `holds.rs` sees `ro T` as
   at most `ro`, so an `imm` value can't hold it, and `ro` held by `imm` is
   an error (E0223). A `mut` array or struct held by `ro` is the same error
   (`infer::mut_inside`, with the bound it breaks), also in the parameters

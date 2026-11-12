@@ -42,6 +42,24 @@ struct Var<'db> {
     /// Whether it must be at most `ro`, so that a value it receives that
     /// holds what may change is seen as `ro`: see [`Unifier::see_as_ro`].
     seen_as_ro: bool,
+    /// Whether it's a variable of a call that's being checked, which takes
+    /// the least type of what flows into it, `lowers`, once the arguments
+    /// are checked, rather than the first: see [`Unifier::make_flexible`].
+    flexible: bool,
+    lowers: Vec<Ty<'db>>,
+}
+
+/// A unification that gave a flexible variable a lower bound, to be done
+/// again once the variable is settled, with what it's settled to. That
+/// checks what the least type can't by itself, like the contents of a
+/// `mut` array whose mutability was a variable too.
+#[derive(Debug, Clone)]
+pub(crate) struct Replay<'db> {
+    pub a: Ty<'db>,
+    pub b: Ty<'db>,
+    pub flipped: bool,
+    /// Where it was unified, as the solver numbers it: see [`Unifier::site`].
+    pub site: u32,
 }
 
 /// That a function whose name slot is `hi` flows into the variable `lo`,
@@ -111,6 +129,14 @@ pub struct Unifier<'db> {
     /// received it and the one given, for the warning about swapped names
     /// (#433). The solver takes them with where they were unified.
     pub(crate) given_fns: Vec<(Ty<'db>, Ty<'db>)>,
+    /// How deep unifications are nested, and whether the outermost one
+    /// gave a flexible variable a lower bound.
+    depth: u32,
+    recorded: bool,
+    /// Where what's unified now is, as the solver numbers it, for
+    /// [`Replay`]s.
+    pub(crate) site: u32,
+    pub(crate) replays: Vec<Replay<'db>>,
 }
 
 impl<'db> Unifier<'db> {
@@ -133,6 +159,8 @@ impl<'db> Unifier<'db> {
             met_error: false,
             defaulted: None,
             seen_as_ro: false,
+            flexible: false,
+            lowers: Vec::new(),
         });
         Ty::Var(var)
     }
@@ -323,27 +351,206 @@ impl<'db> Unifier<'db> {
 
     /// `ty` seen as `ro`, if it holds what may change, and `ty` otherwise.
     fn view_if_it_may_change(&self, ty: &Ty<'db>) -> Ty<'db> {
-        fn may_change(ty: &Ty<'_>) -> bool {
-            match ty {
-                // A closure never changes once it's made, and `ro T` and
-                // `imm T` aren't changed through.
-                Ty::Fn(..) | Ty::Ro(_) | Ty::Imm(_) => false,
-                Ty::Mutability(Mutability::Mut) => true,
-                // A type parameter may be `mut`.
-                Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => true,
-                ty => {
-                    let mut found = false;
-                    ty.walk_children(|t| found = found || may_change(t));
-                    found
-                }
-            }
-        }
         let resolved = self.resolve(ty);
-        if may_change(&resolved) {
+        if may_change(self, &resolved) {
             resolved.ro_view(self.variances, false).normalize_ro(self.variances)
         } else {
             ty.clone()
         }
+    }
+
+    /// Let the variable `var`, of the scheme of a function being called,
+    /// take the least type of what flows into it, once the call's arguments
+    /// are checked ([`Unifier::settle`]), rather than the first. So
+    /// `both([1], mut [2])` for `fn both[T](a: T, b: T) -> T` makes `T` a
+    /// `ro [i32]`, as `Ty.lub` does in `lean/BoltMut/Least.lean`.
+    pub(crate) fn make_flexible(&mut self, var: TyVar) {
+        if self.var_kind(var) == Some(VarKind::General) {
+            self.vars[var.0 as usize].flexible = true;
+        }
+    }
+
+    fn is_flexible(&self, var: TyVar) -> bool {
+        let var = &self.vars[var.0 as usize];
+        var.flexible && matches!(var.state, VarState::Unbound(_))
+    }
+
+    /// Give a flexible variable the least type of what flowed into it, and
+    /// at most `ro` if it must be ([`Unifier::see_as_ro`]). What the least
+    /// type can't be found for, like functions that take different things,
+    /// is the first that flowed in, as without flexible variables. Either
+    /// way, the unifications that gave it its lower bounds are done again
+    /// ([`Replay`]), which reports what doesn't fit.
+    pub(crate) fn settle(&mut self, var: TyVar) {
+        if !self.is_flexible(var) {
+            return;
+        }
+        let data = &mut self.vars[var.0 as usize];
+        data.flexible = false;
+        let lowers = std::mem::take(&mut data.lowers);
+        let ro = data.seen_as_ro;
+        let Some(first) = lowers.first() else { return };
+        let mut least = self.lub(first, first, ro);
+        for lower in &lowers[1..] {
+            least = least.and_then(|t| self.lub(&t, lower, ro));
+        }
+        // The least type is at most `ro` already, and isn't seen as `ro`
+        // again when it's bound.
+        if least.is_ok() {
+            self.vars[var.0 as usize].seen_as_ro = false;
+        }
+        let ty = least.unwrap_or_else(|()| first.clone());
+        let _ = self.unify_flipped(&Ty::Var(var), &ty, false);
+    }
+
+    /// Settle the flexible variables in `ty`.
+    pub(crate) fn settle_in(&mut self, ty: &Ty<'db>) {
+        let mut found = Vec::new();
+        self.resolve(ty).any(&mut |t| {
+            if let Ty::Var(v) = t
+                && self.is_flexible(*v)
+            {
+                found.push(*v);
+            }
+            false
+        });
+        for v in found {
+            self.settle(v);
+        }
+    }
+
+    /// The least type that both `a` and `b` fit, and with `ro` the least
+    /// such type that's at most `ro`, as `Ty.lub` in
+    /// `lean/BoltMut/Least.lean`: the same type, or one with objects seen as
+    /// `ro` where they differ or may change. What isn't known yet is made
+    /// the same on both sides.
+    fn lub(&mut self, a: &Ty<'db>, b: &Ty<'db>, ro: bool) -> Result<Ty<'db>, ()> {
+        let (a, b) = (self.shallow_resolve(a), self.shallow_resolve(b));
+        for t in [&a, &b] {
+            if let Ty::Var(v) = t
+                && self.is_flexible(*v)
+            {
+                self.settle(*v);
+                return self.lub(&a, &b, ro);
+            }
+        }
+        let viewed = |u: &Self, t: Ty<'db>| match ro && may_change(u, &u.resolve(&t)) {
+            true => Ty::Ro(Box::new(t)).normalize_ro(u.variances),
+            false => t,
+        };
+        match (&a, &b) {
+            (Ty::Error, _) | (_, Ty::Error) => Ok(Ty::Error),
+            (Ty::Never, t) | (t, Ty::Never) => {
+                let t = t.clone();
+                self.lub(&t, &t, ro)
+            }
+            (Ty::Var(_), _) | (_, Ty::Var(_)) => {
+                self.unify_flipped(&a, &b, false).map_err(|_| ())?;
+                Ok(viewed(self, self.shallow_resolve(&a)))
+            }
+            (Ty::Array(m, x), Ty::Array(n, y)) => {
+                let pairs = [((**x).clone(), (**y).clone())];
+                self.lub_object(m, n, &pairs, ro, |m, cs| {
+                    Ty::Array(Box::new(m), Box::new(cs[0].clone()))
+                })
+            }
+            (Ty::Tuple(xs, m), Ty::Tuple(ys, n))
+                if xs.len() == ys.len() && !a.has_spread() && !b.has_spread() =>
+            {
+                let pairs: Vec<_> = xs.iter().cloned().zip(ys.iter().cloned()).collect();
+                self.lub_object(m, n, &pairs, ro, |m, cs| Ty::Tuple(cs.into(), Box::new(m)))
+            }
+            (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
+                if xs.len() == ys.len()
+                    && xn.len() == yn.len()
+                    && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b)
+                    && !a.has_spread()
+                    && !b.has_spread() =>
+            {
+                let names: Vec<_> = xn.iter().map(|(name, _)| name.clone()).collect();
+                let named =
+                    xn.iter().map(|(_, t)| t.clone()).zip(yn.iter().map(|(_, t)| t.clone()));
+                let pairs: Vec<_> =
+                    xs.iter().cloned().zip(ys.iter().cloned()).chain(named).collect();
+                let positional = xs.len();
+                self.lub_object(m, n, &pairs, ro, |m, cs| {
+                    let named = names.iter().cloned().zip(cs[positional..].iter().cloned());
+                    Ty::Record(cs[..positional].into(), named.collect(), Box::new(m))
+                })
+            }
+            // A struct or enum with the same arguments, whose own mutability
+            // may differ; seen as `ro`, its arguments are too.
+            (Ty::Adt(x, xs, ms, m), Ty::Adt(y, ys, ns, n))
+                if x == y && self.same_all(xs, ys) && self.same_all(ms, ns) =>
+            {
+                let (id, xs, ms) = (*x, xs.clone(), ms.clone());
+                let adt = self.lub_object(m, n, &[], ro, |m, _| {
+                    Ty::Adt(id, xs.clone(), ms.clone(), Box::new(m))
+                })?;
+                Ok(match &adt {
+                    Ty::Adt(.., m) if **m == Ty::Mutability(Mutability::ReadOnly) => {
+                        adt.ro_view(self.variances, false).normalize_ro(self.variances)
+                    }
+                    _ => adt,
+                })
+            }
+            // Two mutabilities, as of a variable for a hidden mutability
+            // parameter: the same one, or `ro`, which every one fits.
+            (Ty::Mutability(_), Ty::Mutability(_) | Ty::Param(_))
+            | (Ty::Param(_), Ty::Mutability(_)) => {
+                let same = a == b && !(ro && a == Ty::Mutability(Mutability::Mut));
+                Ok(if same { a.clone() } else { Ty::Mutability(Mutability::ReadOnly) })
+            }
+            (Ty::Param(x), Ty::Ro(y)) | (Ty::Ro(y), Ty::Param(x)) if **y == Ty::Param(*x) => {
+                Ok(Ty::Ro(y.clone()))
+            }
+            _ if self.resolve(&a) == self.resolve(&b) => Ok(viewed(self, a.clone())),
+            _ => Err(()),
+        }
+    }
+
+    /// Whether `xs` and `ys` are the same types, as far as they're known.
+    fn same_all(&self, xs: &[Ty<'db>], ys: &[Ty<'db>]) -> bool {
+        xs.len() == ys.len() && xs.iter().zip(ys).all(|(x, y)| self.resolve(x) == self.resolve(y))
+    }
+
+    /// The least type of two objects, of mutabilities `m` and `n`, with what
+    /// they hold, `pairs`: an `imm` one when both are and what they hold
+    /// has a least type, the same object when they're the same, and a `ro`
+    /// one otherwise. `make` makes the object of a mutability and contents.
+    fn lub_object(
+        &mut self,
+        m: &Ty<'db>,
+        n: &Ty<'db>,
+        pairs: &[(Ty<'db>, Ty<'db>)],
+        ro: bool,
+        make: impl Fn(Ty<'db>, Vec<Ty<'db>>) -> Ty<'db>,
+    ) -> Result<Ty<'db>, ()> {
+        let (mut m, mut n) = (self.shallow_resolve(m), self.shallow_resolve(n));
+        // A mutability that isn't known yet is the other.
+        if matches!(m, Ty::Var(_)) || matches!(n, Ty::Var(_)) {
+            self.unify_flipped(&m, &n, false).map_err(|_| ())?;
+            (m, n) = (self.shallow_resolve(&m), self.shallow_resolve(&n));
+        }
+        let imm = Ty::Mutability(Mutability::Imm);
+        if m == imm && n == imm {
+            let held: Result<Vec<_>, ()> =
+                pairs.iter().map(|(x, y)| self.lub(x, y, false)).collect();
+            if let Ok(held) = held
+                && (!ro || !held.iter().any(|t| may_change(self, &self.resolve(t))))
+            {
+                return Ok(make(imm, held));
+            }
+        } else if m == n && pairs.iter().all(|(x, y)| self.resolve(x) == self.resolve(y)) {
+            let held: Vec<_> = pairs.iter().map(|(x, _)| x.clone()).collect();
+            let at_most_ro = matches!(m, Ty::Mutability(Mutability::Imm | Mutability::ReadOnly))
+                && !held.iter().any(|t| may_change(self, &self.resolve(t)));
+            if !ro || at_most_ro {
+                return Ok(make(m, held));
+            }
+        }
+        let held: Result<Vec<_>, ()> = pairs.iter().map(|(x, y)| self.lub(x, y, true)).collect();
+        Ok(make(Ty::Mutability(Mutability::ReadOnly), held?))
     }
 
     /// `f` the other way round: with what receives a value and what gives
@@ -426,8 +633,56 @@ impl<'db> Unifier<'db> {
     }
 
     pub fn unify(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
+        self.depth += 1;
+        let top = self.depth == 1;
+        if top {
+            self.recorded = false;
+        }
+        let unified = self.unify_inner(a, b);
+        self.depth -= 1;
+        if top && self.recorded && unified.is_ok() {
+            let replay =
+                Replay { a: a.clone(), b: b.clone(), flipped: self.flipped, site: self.site };
+            self.replays.push(replay);
+        }
+        unified
+    }
+
+    /// Unify `a` and `b` as [`Unifier::unify`] does, with what receives a
+    /// value on the side `flipped` says.
+    pub(crate) fn unify_flipped(
+        &mut self,
+        a: &Ty<'db>,
+        b: &Ty<'db>,
+        flipped: bool,
+    ) -> Result<(), UnifyError<'db>> {
+        let saved = std::mem::replace(&mut self.flipped, flipped);
+        let unified = self.unify(a, b);
+        self.flipped = saved;
+        unified
+    }
+
+    fn unify_inner(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         let a = self.shallow_resolve(a);
         let b = self.shallow_resolve(b);
+        // A flexible variable that receives a value takes it as a lower
+        // bound; one that gives a value is settled first.
+        if a != b && !matches!(a, Ty::Error | Ty::Never) && !matches!(b, Ty::Error | Ty::Never) {
+            let (receives, gives) = if self.flipped { (&b, &a) } else { (&a, &b) };
+            if let Ty::Var(v) = receives
+                && self.is_flexible(*v)
+            {
+                self.vars[v.0 as usize].lowers.push(gives.clone());
+                self.recorded = true;
+                return Ok(());
+            }
+            if let Ty::Var(v) = gives
+                && self.is_flexible(*v)
+            {
+                self.settle(*v);
+                return self.unify_inner(&a, &b);
+            }
+        }
         match (&a, &b) {
             (Ty::Var(var), Ty::Error) | (Ty::Error, Ty::Var(var)) => {
                 self.vars[var.0 as usize].met_error = true;
@@ -947,6 +1202,25 @@ impl<'db> Unifier<'db> {
         }
         self.vars[var.0 as usize].state = VarState::Bound(ty);
         Ok(())
+    }
+}
+
+/// Whether something in a value of type `ty` may change: something `mut`,
+/// or a type parameter or what isn't known yet, which may be `mut`, unless
+/// it's a number.
+fn may_change(u: &Unifier<'_>, ty: &Ty<'_>) -> bool {
+    match ty {
+        // A closure never changes once it's made, and `ro T` and `imm T`
+        // aren't changed through.
+        Ty::Fn(..) | Ty::Ro(_) | Ty::Imm(_) => false,
+        Ty::Mutability(Mutability::Mut) => true,
+        Ty::Var(v) => !matches!(u.var_kind(*v), Some(VarKind::Int | VarKind::Float)),
+        Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => true,
+        ty => {
+            let mut found = false;
+            ty.walk_children(|t| found = found || may_change(u, t));
+            found
+        }
     }
 }
 

@@ -307,20 +307,22 @@ xs;
 [9, 2, 3]
 ```
 
-`'m` is the same everywhere in the signature, so `longer` takes two arrays
-of the same kind and gives back one of that kind. Given two `mut` arrays,
-it gives a `mut` one, which you can change. Arrays of different kinds are
-an error:
+`'m` is the same everywhere in the signature, so `longer` gives back an
+array of the kind it was given. Given two `mut` arrays, it gives a `mut`
+one, which you can change. Given arrays of different kinds, `'m` is `ro`,
+which both can be seen as, so what it gives back can be read but not
+changed:
 
 ```bolt
 fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32] =
   if array_len(a) >= array_len(b) { a } else { b };
 
-longer(mut [1, 2], [3]);
+let l = longer(mut [1, 2], [3]);
+l[0] = 9;
 ```
 
 ```text
-[E0201] Error: expected `mut [i32]`, found `imm [i32]`
+[E0221] Error: cannot change an element of `l`, which is `ro [i32]`; only a `mut` array can be changed
 ```
 
 Different names are independent of each other:

@@ -1143,6 +1143,15 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         else {
             unreachable!("only called for a lambda")
         };
+        // What its parameters are given is known from what came before it,
+        // like the `T` of `px(xs, |p| p.x)`: its body needs it.
+        if let Some(e) = expected
+            && let Ty::Fn(ps, ..) = self.solver.unifier.shallow_resolve(e.ty)
+        {
+            for p in ps.positional.iter() {
+                self.solver.unifier.settle_in(p);
+            }
+        }
         let (hint_params, hint_ret) =
             match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
                 // A lambda only has positional parameters for now.
@@ -1930,8 +1939,29 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// Call a value of type `callee_ty` with `args`, after `receiver` if
-    /// there's one. `function` is the function it is, if it's known.
+    /// there's one. `function` is the function it is, if it's known. The
+    /// variables its scheme gave `callee` take the least type of what flows
+    /// into them from the arguments (#448).
+    #[allow(clippy::too_many_arguments)]
     fn apply(
+        &mut self,
+        expr: ExprId,
+        callee: ExprId,
+        callee_ty: &Ty<'db>,
+        function: Option<FunctionId<'db>>,
+        args: CallArgs<'_>,
+        receiver: Option<(ExprId, &Ty<'db>, bool)>,
+    ) -> Ty<'db> {
+        let origin = self.origin(callee);
+        let vars = self.solver.instantiations.iter().rev().find(|(o, _)| *o == origin);
+        let vars = vars.map(|(_, args)| args.clone()).unwrap_or_default();
+        let mark = self.solver.begin_call(&vars);
+        let ty = self.apply_args(expr, callee, callee_ty, function, args, receiver);
+        self.solver.end_call(mark, self.origin(expr));
+        ty
+    }
+
+    fn apply_args(
         &mut self,
         expr: ExprId,
         callee: ExprId,
