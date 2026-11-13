@@ -244,8 +244,14 @@ splits markup into small updates.
 ## Using the rest of Bolt
 
 - **Props are keyword arguments.** `<Button label="Save" primary />` is
-  `Button(label="Save", primary=true)`, and parameter defaults are default
+  `button(label: "Save", primary: true)`, and parameter defaults are default
   props.
+- **Children are a trailing block.** A block after a call is its last
+  argument, and the `()` can be left out, so children are a list literal:
+  `div(cls: "card") {[ h1 {["Hi"]}, p {["Welcome."]} ]}`. With `if` and
+  `for` in list literals, the list reads like markup. See
+  [#458](https://github.com/boltlang/Bolt/issues/458) and
+  [#457](https://github.com/boltlang/Bolt/issues/457).
 - **Extensible records pass props on.** `props: { class: str, .. }` is
   React's `...rest`, but type-checked.
 - **A class for interpolation.** Like `Show` for `print`, a `ToHtml` class
@@ -254,15 +260,13 @@ splits markup into small updates.
 ## An example
 
 ```bolt
-import "html" (Html)
-
-enum Remote[T, E] { Loading, Failed(E), Done(T) }
+import "html" (Html, h1, button)
 
 fn app() -> Html does Reactive {
     let mut user = None;
     match user {
-        None => <LoginForm on_login={|u| { user = Some(u); }} />,
-        Some({ username, .. }) => <h1>Welcome back, {username}!</h1>,
+        None => login_form(on_login: |u| { user = Some(u); }),
+        Some((username: username, ..)) => h1 {["Welcome back, ", username, "!"]},
     }
 }
 
@@ -271,23 +275,26 @@ fn login_form(on_login: fn(User) -> ()) -> Html does Reactive {
     // fetch waits, so the closure is inferred to be fn() -> () does Async.
     // That's what on_click accepts: the page runs it as a task of its own.
     let submit = || match fetch("/api/login") {
-        Ok(data) => on_login({ username = data.username }),
+        Ok(data) => on_login((username: data.username)),
         Err(_) => { failed = true; },
     };
     if failed {
-        <h1>Something went wrong.</h1>
+        h1 {["Something went wrong."]}
     } else {
-        <button on_click={submit}>Log in</button>
+        button(on_click: submit) {["Log in"]}
     }
 }
 ```
+
+`h1 {[..]}` is a call and not a struct literal because functions start with
+a lowercase letter and types with an uppercase one
+([#460](https://github.com/boltlang/Bolt/issues/460)).
 
 ## Fetching while drawing
 
 `fetch` in `submit` runs in an event handler. It performs `Async`, waits,
 and resumes once with a `Result`. A component that fetches while drawing
-wants to show each state instead: loading, failed and done. That's what
-`Remote` is for.
+wants to show each state instead: loading, failed and done.
 
 Resuming the continuation of the call once with `Loading` and again with
 `Done` would do it, but that's resuming more than once, which is problem 4.
@@ -295,26 +302,15 @@ The code after the call usually holds a `let mut`, so its continuation is
 `mut` and may be resumed at most once (see [Mutability and
 effects](#mutability-and-effects)).
 
-Redrawing gives the same result with one resume each time. Loading is a
-`Reactive` operation with a state slot, keyed by its place in the source
-like `state` (problem 1):
+Redrawing gives the same result with one resume each time. A loader keeps
+the result in state, keyed like any other state (problem 1):
 
-1. On the first draw the slot is empty. The call starts the request as a
-   task, stores `Loading` and resumes right away with it.
-2. When the task is done, it writes `Done(data)` or `Failed(e)` to the slot,
-   like a write from an event handler. That schedules a redraw.
-3. On the redraw the same call finds the slot filled and resumes with what's
-   in it.
-
-```bolt
-fn profile() -> Html does Reactive {
-    match load[User, HttpError]("/foobar") {
-        Loading => p() {["Loading…"]},
-        Failed(e) => p() {["Error: ", e.message]},
-        Done(user) => h1() {["Hi ", user.username]},
-    }
-}
-```
+1. On the first draw the state is `Loading`. The loader starts the request
+   as a task and returns `Loading` right away.
+2. When the task is done, it writes `Done(data)` or `Failed(e)` to the
+   state, like a write from an event handler. That schedules a redraw.
+3. On the redraw the state already holds the result, and the loader returns
+   it.
 
 Unlike a second resume, a redraw runs the whole component again, not only
 the code after the call. Drawing must be safe to run again anyway.
@@ -326,6 +322,72 @@ names; `load` is a placeholder. An `Async` call while drawing still
 suspends the component, as in
 [Components as effectful functions](#components-as-effectful-functions),
 for when a fallback from the handler is enough.
+
+### Example: a loader
+
+`load` needs one more `Reactive` operation, `task`, which starts a task from
+a component. Everything else is inferred state:
+
+```bolt
+import "http" (fetch, HttpError, Decode)
+import "html" (Html, h1, p)
+
+enum Remote[T, E] { Loading, Failed(E), Done(T) }
+
+/// Starts `f` as a task the first time this call is drawn. When `key`
+/// changes, it cancels the old task and starts a new one. The task is
+/// also cancelled when the component leaves the page.
+#[builtin]
+fn task[K: Eq](key: K, f: fn() -> () does Async) -> () does Reactive;
+
+pub fn load[T: Decode](url: String) -> Remote[T, HttpError] does Reactive {
+    // Written by the task after drawing is done, so it's inferred to be
+    // state. The write schedules a redraw.
+    let mut remote = Loading;
+    task(key: url) {
+        remote = Loading;
+        remote = match fetch(url).and_then(|res| res.json[T]()) {
+            Ok(value) => Done(value),
+            Err(e) => Failed(e),
+        };
+    };
+    // Reading state: the handler records that the caller depends on it.
+    remote
+}
+
+fn profile() -> Html does Reactive {
+    match load[User]("/foobar") {
+        Loading => p {["Loading…"]},
+        Failed(e) => p {["Error: ", e.message]},
+        Done(user) => h1 {["Hi ", user.username]},
+    }
+}
+```
+
+1. **First draw.** `remote` is state holding `Loading`. `task` starts the
+   request and returns at once, so `load` returns `Loading`.
+2. **The request is done.** The task writes `Done(..)` or `Failed(..)`; it
+   runs outside drawing, so that's `remote.set(..)`, which schedules a
+   redraw of `profile`.
+3. **Redraw.** `remote` keeps what was stored, `task` sees the same `url`
+   and does nothing, and `load` returns `Done(user)`.
+4. **The URL changes.** `task` cancels the old request and starts a new
+   one, so a late answer for the old URL can't overwrite the new one.
+
+Open points:
+
+- **Keys across functions.** `remote` and `task` live in `load`, so their
+  keys must include where `load` was called, like a path of call sites.
+  Otherwise two calls to `load` in one component share their state.
+- **`task(key: url) { .. }`** needs trailing closures
+  ([#462](https://github.com/boltlang/Bolt/issues/462)): `f` has a function
+  type, so the block becomes a closure and isn't run while drawing. Without
+  them it's `task(key: url, || { .. })`.
+- **`let mut remote = Loading`** sets the state once, not on every draw.
+  That's what inferred state means, but it's easy to misread here.
+- **Errors.** Decoding probably has its own error, so a real `load` has a
+  sum of errors or an error parameter with `From`.
+- `task` is a first version of effects with cleanup, below.
 
 ## Still to design
 
