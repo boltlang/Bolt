@@ -411,28 +411,33 @@ shows how to use them; this section is about how the checker treats them.
   writing the name asks for whatever the caller gives. What the literal
   holds must be at most `'m`. Before anything but a literal, a name is an
   error, as `mut` is (E0222).
-- **A class method's names are its impls' too (#459).** A class method can
-  name mutabilities, which each call chooses, like the `'m` of
-  `fn default() -> 'm T` in `class Default[T]`. An impl's method has them
-  first, so its body can use them: `impl[T] Default[[T]] { fn default() =
-  'm []; }`. Its body can also use the impl's own names, like the `'m` of
-  `impl[T] D['m [T]]` (#450). The types the class gives are well-formed
-  there, so that `'m []` may hold a `T`: a call checks that what a `'m T`
-  holds is at most `'m` where it chooses `'m`.
-- **A class can declare names too (#453)**, after its type parameters, as
-  a struct does, for associated types that depend on a mutability:
+- **A class declares its names (#453)**, after its type parameters, as a
+  struct does. A name written in a class method's signature must be one of
+  them: it never appears from nowhere.
 
   ```bolt
-  class Each[C, 'v] { type Iter; fn each(c: 'v C) -> Iter; }
-  impl[T] Each[[T], 'v] { type Iter = mut Walk[T, 'v]; fn each(xs) = mut Walk { items: xs, at: 0 }; }
+  class Default[T, 'm] { fn default() -> 'm T; }
+  impl[T] Default[[T], 'm] { fn default() = 'm []; }   // the impl's 'm
+  impl[T] Default[Vec[T], mut] { fn default() = Vec.new(); }
   ```
 
   An impl gives them, as it gives types, and an instance matches them
-  exactly, so `impl Each[[i32], imm]` and `impl Each[[i32], mut]` don't
-  overlap. A bound may leave one out, like `C: Each`, which makes it a
-  hidden parameter of the function. A function whose class constraint has
-  one of its mutabilities, like `where Each[C, 'v]`, gets an instance for
-  each mutability it's called with, since that can choose the impl.
+  exactly, so an impl for `mut` alone, like that of `Vec`, is only for
+  `mut`, and `impl Default[[i32], imm]` and `impl Default[[i32], mut]`
+  don't overlap. An impl that leaves one out, like `impl Default[Bool]`,
+  is for any. The types the class gives an impl's method are well-formed
+  there, so that `'m []` may hold a `T`: a call checks that what a `'m T`
+  holds is at most `'m` where it chooses `'m`.
+
+  **A bound that leaves one out is for any mutability.** `fn fresh[T:
+  Default]() -> mut T = default()` may use `Default[T, m]` for every `m`,
+  and a call needs an impl for each, so `fresh` works for `[i32]` but not
+  for `Vec[i32]`. An associated type can depend on the name, so `C.Item`
+  needs it written, as in `where Get[C, 'm]`.
+
+  A function whose class constraint has one of its mutabilities, like
+  `where Freeze[C, 'v]`, gets an instance for each mutability it's called
+  with, since that can choose the impl.
 - **Only functions, impls, classes and structs have names.** An impl's associated
   types can use its names too: `impl[T] Iterable['m FnIter[T]] { type Iter =
   'm FnIter[T]; ... }` is for an `FnIter` of either mutability, and its
