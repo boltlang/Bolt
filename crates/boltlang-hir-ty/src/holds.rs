@@ -123,6 +123,14 @@ pub fn split<'db>(
         // can hold any closure (#320, as `AtMost` in `lean/BoltMut`).
         Ty::Fn(..) if matches!(bound, Ty::Mutability(Mutability::ReadOnly | Mutability::Mut)) => {}
         Ty::Fn(_, _, m, _) => push(out, Held::Mutability((**m).clone()), bound),
+        // `'m T` is at most `m`, and holds what `T` does, at most `m` (#459).
+        // For a `T` that isn't known, that's `T ⊑ m`, which also bounds
+        // its own mutability, which `'m T` replaces: more than needed, but
+        // never less.
+        Ty::WithMut(m, inner) => {
+            push(out, Held::Mutability((**m).clone()), bound);
+            split(db, inner, m, out);
+        }
         // A `T` seen as `ro` is at most `ro`.
         Ty::Ro(_) => push(out, Held::Mutability(Ty::Mutability(Mutability::ReadOnly)), bound),
         // A row of effects holds no values, and `imm T` nothing that can be

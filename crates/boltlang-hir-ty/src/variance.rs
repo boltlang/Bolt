@@ -316,8 +316,8 @@ impl<'db> Walk<'_, 'db> {
                 effects.iter().flat_map(|e| e.args.iter()).for_each(|t| self.ty(t, Variance::Inv));
                 rest.iter().for_each(|t| self.ty(t, v));
             }
-            // What's taken apart later, like `imm T` or `F[T]`, can't vary.
-            Ty::Imm(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Spread(..) => {
+            // What's taken apart later, like `imm T`, `'m T` or `F[T]`, can't vary.
+            Ty::Imm(_) | Ty::WithMut(..) | Ty::App(..) | Ty::Assoc(..) | Ty::Spread(..) => {
                 ty.walk_children(|t| self.ty(t, Variance::Inv))
             }
             Ty::Var(_)

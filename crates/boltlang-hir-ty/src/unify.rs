@@ -198,6 +198,8 @@ impl<'db> Unifier<'db> {
                 }
                 // A `ro T` whose `T` is known is the view of it (#320).
                 Ty::Ro(_) => return self.view_known_ro(ty),
+                // A `'m T` whose `T` is known is `T` with `m` (#459).
+                Ty::WithMut(..) => return self.known_with_mut(ty),
                 _ => return ty,
             }
         }
@@ -231,6 +233,22 @@ impl<'db> Unifier<'db> {
             Ty::Var(v) if matches!(self.var_kind(v), Some(VarKind::Int | VarKind::Float)) => {
                 Ty::Var(v)
             }
+            Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) => {
+                ty
+            }
+            _ => self.resolve(&ty),
+        }
+    }
+
+    /// A `'m T` whose `T` is known as `T` with `m` (#459), so that unifying
+    /// compares what it is.
+    fn known_with_mut(&self, ty: Ty<'db>) -> Ty<'db> {
+        let Ty::WithMut(m, inner) = &ty else { return ty };
+        // A `ro T` is the view of `T`, which is known as `ro T` too.
+        if self.shallow_resolve(m) == Ty::Mutability(Mutability::ReadOnly) {
+            return self.resolve(&ty);
+        }
+        match self.shallow_resolve(inner) {
             Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) => {
                 ty
             }
@@ -1031,6 +1049,13 @@ impl<'db> Unifier<'db> {
             (Ty::Imm(x), Ty::Imm(y)) => self.unify(x, y),
             // `ro T` too, and a `T` fits where a `ro T` is received (#320).
             (Ty::Ro(x), Ty::Ro(y)) => self.unify(x, y),
+            // `'m T` only equals itself (#459), and is seen as `ro` as `T` is.
+            (Ty::WithMut(m, x), Ty::WithMut(n, y)) => {
+                self.unify(m, n)?;
+                self.unify(x, y)
+            }
+            (Ty::Ro(x), Ty::WithMut(_, y)) if !self.flipped => self.unify(x, y),
+            (Ty::WithMut(_, x), Ty::Ro(y)) if self.flipped => self.unify(x, y),
             (Ty::Ro(x), _) if !self.flipped => self.unify(x, &b),
             (_, Ty::Ro(y)) if self.flipped => self.unify(&a, y),
             _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),

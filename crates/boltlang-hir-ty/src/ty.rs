@@ -420,6 +420,14 @@ pub enum Ty<'db> {
     /// ([`Ty::ro_view`]). In a body, the checker replaces it with a
     /// variable and a constraint, like `imm T`.
     Ro(Box<Ty<'db>>),
+    /// `mut T` or `'m T` (#459): a `T` with the outer mutability `m`,
+    /// whatever its own, for a type whose own can't be replaced yet, like a
+    /// type parameter. The mutability is first. Once `T` is known, it's
+    /// that type with `m` instead of its own ([`Ty::with_outer`]), `T`
+    /// itself for one without a mutability, like `i32`, and its `ro` view
+    /// when `m` is `ro`. Like `imm T`, it only equals itself, and in a body
+    /// the checker replaces it with a variable and a constraint.
+    WithMut(Box<Ty<'db>>, Box<Ty<'db>>),
     /// A type parameter as seen inside the item that declares it, where it
     /// stands for any type and only equals itself.
     Param(GenericParamId<'db>),
@@ -498,13 +506,18 @@ impl<'db> Ty<'db> {
     }
 
     /// Each `ro T` in the type whose `T` is known replaced by the view of
-    /// it (#320). A `ro T` of what can't be taken apart, like a type
-    /// parameter or a variable, stays.
+    /// it (#320), and each `'m T` by `T` with the mutability `m` (#459). A
+    /// `ro T` or `'m T` of what can't be taken apart, like a type parameter
+    /// or a variable, stays.
     pub fn normalize_ro(&self, variances: Variances<'db>) -> Ty<'db> {
-        if !self.any(&mut |t| matches!(t, Ty::Ro(_))) {
+        if !self.any(&mut |t| matches!(t, Ty::Ro(_) | Ty::WithMut(..))) {
             return self.clone();
         }
         self.fold(&mut |t| {
+            if let Ty::WithMut(m, inner) = t {
+                let inner = inner.normalize_ro(variances);
+                return Some(Ty::with_outer((**m).clone(), inner, variances));
+            }
             let Ty::Ro(inner) = t else { return None };
             let inner = inner.normalize_ro(variances);
             Some(match inner {
@@ -567,6 +580,43 @@ impl<'db> Ty<'db> {
                 Ty::Ro(Box::new(self.clone()))
             }
             _ => self.clone(),
+        }
+    }
+
+    /// `ty` with the outer mutability `m`, as `'m T` is once `T` is known
+    /// (#459): an array, struct, tuple or function with `m` instead of its
+    /// own, seen as `ro` all the way down when `m` is `ro`, and a type
+    /// without a mutability, like `i32` or an enum, as it is. A type that
+    /// can't be taken apart yet, like a type parameter, is `'m T`, or
+    /// `ro T` when `m` is `ro`.
+    pub fn with_outer(m: Ty<'db>, ty: Ty<'db>, variances: Variances<'db>) -> Ty<'db> {
+        let ro = matches!(m, Ty::Mutability(Mutability::ReadOnly));
+        let replaced = match ty {
+            Ty::WithMut(_, inner) => return Ty::with_outer(m, *inner, variances),
+            Ty::Param(_)
+            | Ty::Bound(_)
+            | Ty::App(..)
+            | Ty::Assoc(..)
+            | Ty::Imm(_)
+            | Ty::Ro(_)
+            | Ty::Var(_) => {
+                return match ro {
+                    true => Ty::Ro(Box::new(ty)),
+                    false => Ty::WithMut(Box::new(m), Box::new(ty)),
+                };
+            }
+            Ty::Adt(AdtId::Struct(s), args, ms, _) if !variances.always_imm(s) => {
+                Ty::Adt(AdtId::Struct(s), args, ms, Box::new(m))
+            }
+            Ty::Array(_, elem) => Ty::Array(Box::new(m), elem),
+            Ty::Tuple(tys, _) if !tys.is_empty() => Ty::Tuple(tys, Box::new(m)),
+            Ty::Record(tys, named, _) => Ty::Record(tys, named, Box::new(m)),
+            Ty::Fn(params, ret, _, effects) => Ty::Fn(params, ret, Box::new(m), effects),
+            ty => return ty,
+        };
+        match ro {
+            true => replaced.ro_view(variances, false),
+            false => replaced,
         }
     }
 
@@ -891,6 +941,10 @@ impl<'db> Ty<'db> {
             }
             Ty::Assoc(_, args) => args.iter().for_each(f),
             Ty::Imm(ty) | Ty::Ro(ty) | Ty::Spread(_, ty) => f(ty),
+            Ty::WithMut(m, ty) => {
+                f(m);
+                f(ty);
+            }
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Host(_)
@@ -952,6 +1006,7 @@ impl<'db> Ty<'db> {
             Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
             Ty::Imm(ty) => Ty::Imm(Box::new(ty.fold(f))),
             Ty::Ro(ty) => Ty::Ro(Box::new(ty.fold(f))),
+            Ty::WithMut(m, ty) => Ty::WithMut(Box::new(m.fold(f)), Box::new(ty.fold(f))),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Host(_)
@@ -1390,6 +1445,15 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 Ty::Fn(..) | Ty::Imm(_) | Ty::Ro(_) => write!(f, "ro ({})", show(ty)),
                 _ => write!(f, "ro {}", show(ty)),
             },
+            Ty::WithMut(m, ty) => {
+                self.write_mutability(f, m)?;
+                match ty.as_ref() {
+                    Ty::Fn(..) | Ty::Imm(_) | Ty::Ro(_) | Ty::WithMut(..) => {
+                        write!(f, "({})", show(ty))
+                    }
+                    _ => write!(f, "{}", show(ty)),
+                }
+            }
             Ty::Bound(index) => match named(Unknown::Bound(*index)) {
                 Some(name) => f.write_str(name),
                 None => write!(f, "{}", bound_name(*index)),

@@ -452,13 +452,12 @@ Types that can't be mut or imm
 :error
 ================================================================================
 enum Maybe[T] { Just(T), Nothing }
-fn f[T](a: mut i32, c: mut Maybe[i32], d: mut T) {}
+fn f(a: mut i32, c: mut Maybe[i32]) {}
 --------------------------------------------------------------------------------
-f: forall T. fn(a: i32, c: Maybe[i32], d: T) -> ()
+f: fn(a: i32, c: Maybe[i32]) -> ()
 --------------------------------------------------------------------------------
 error at `mut i32`: can't be mut or imm
 error at `mut Maybe[i32]`: can't be mut or imm
-error at `mut T`: can't be mut or imm
 
 ================================================================================
 An inferred function that changes a field

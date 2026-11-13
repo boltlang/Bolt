@@ -762,7 +762,7 @@ fn describe(
             };
             (C::CANNOT_CHANGE, message)
         }
-        K::NoMutability => (C::NO_MUTABILITY, "only an array, a struct or a function can be `mut` or `imm`".into()),
+        K::NoMutability => (C::NO_MUTABILITY, "only an array, a struct, a function or a type parameter can be `mut` or `imm`".into()),
         // A `mut` mutability argument, like that of `imm VecIter[i32, mut]`.
         K::MutInside { ty, inner: Ty::Mutability(_), bound } => {
             let ty = ty.display_with(db, names).to_string();

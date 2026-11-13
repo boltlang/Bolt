@@ -106,7 +106,7 @@ impl<'db> Scheme<'db> {
         self.ty.fold(&mut |t| match t {
             Ty::Param(p) => params.get(p).cloned(),
             Ty::Bound(i) => Some(bound[*i as usize].clone()),
-            Ty::Assoc(..) | Ty::Imm(_) => Some(new_var()),
+            Ty::Assoc(..) | Ty::Imm(_) | Ty::WithMut(..) => Some(new_var()),
             _ => None,
         })
     }

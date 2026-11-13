@@ -30,7 +30,7 @@ struct Bag { items: mut [i32] }
 let a = [mut [1]];
       //^^^^^^^^^ error: an `imm [mut [i32]]` can't hold a `mut [i32]`: what an `imm` value holds can't be changed either
 fn f(x: mut i32) {}
-      //^^^^^^^ error: only an array, a struct or a function can be `mut` or `imm`
+      //^^^^^^^ error: only an array, a struct, a function or a type parameter can be `mut` or `imm`
 
 ================================================================================
 Closure mutability

@@ -385,6 +385,14 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 {
                     return (Ty::Ro(Box::new(ty)), kind);
                 }
+                // `mut T` or `'m T` of a type parameter: the `T` with that
+                // mutability, whatever its own (#459).
+                if deep
+                    && kind == Some(Kind::Type)
+                    && matches!(written, Ty::Mutability(Mutability::Mut) | Ty::Param(_))
+                {
+                    return (Ty::WithMut(Box::new(written), Box::new(ty)), kind);
+                }
                 let ty = self.with_mutability(id, ty, written.clone());
                 // A `ro` view is deep (#320): what's in it is seen as `ro`.
                 if written == Ty::Mutability(Mutability::ReadOnly) {

@@ -239,6 +239,20 @@ pub struct ImmConstraint<'db> {
     pub to: Ty<'db>,
 }
 
+/// That `to` is `'m T` for `m` and a `T` of type `from` (#459): `from`
+/// with the outer mutability `m`, whatever its own. Once `from` is known,
+/// `to` is `'m from`, which the unifier gives as what it is. While it
+/// isn't, what `to` turns out to be decides it: `to` with an outer
+/// mutability of its own, and `m` the outer mutability of `to`, so that a
+/// call of `fn count[I](it: mut I)` with a `mut VecIter[i32]` has an
+/// `I` of `VecIter[i32]`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct WithMutConstraint<'db> {
+    pub mutability: Ty<'db>,
+    pub from: Ty<'db>,
+    pub to: Ty<'db>,
+}
+
 /// Where an "at most" constraint comes from, which decides how breaking it
 /// is reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,6 +310,8 @@ pub enum Constraint<'db> {
     AtMost { constraint: AtMostConstraint<'db>, source: AtMostSource<'db>, origin: Origin<'db> },
     /// The type of `imm e` for the type of `e`.
     Imm { constraint: ImmConstraint<'db>, origin: Origin<'db> },
+    /// The type of `'m T` for the type of `T`.
+    WithMut { constraint: WithMutConstraint<'db>, origin: Origin<'db> },
     /// The effects of a row are in another: `sub ≲ sup`.
     Row { constraint: RowConstraint<'db>, origin: Origin<'db> },
 }
@@ -503,6 +519,7 @@ pub struct Solver<'db> {
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
     pending_imm: Vec<(ImmConstraint<'db>, Origin<'db>)>,
+    pending_with_mut: Vec<(WithMutConstraint<'db>, Origin<'db>)>,
     pub(crate) pending_rows: Vec<(RowConstraint<'db>, Origin<'db>)>,
     /// The structs and enums that `imm` constraints were split into, with
     /// their types after `imm`, so that a type that holds itself, like a
@@ -555,6 +572,7 @@ impl<'db> Solver<'db> {
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
             pending_imm: Vec::new(),
+            pending_with_mut: Vec::new(),
             pending_rows: Vec::new(),
             imm_split: Vec::new(),
             overload_choices: Vec::new(),
@@ -626,6 +644,8 @@ impl<'db> Solver<'db> {
                 self.retry(|s| &mut s.pending_tuple_pats, |s, (c, o)| s.solve_tuple_pat(c, *o));
             progress |= self.retry(|s| &mut s.pending_assoc, |s, (c, o)| s.solve_assoc(c, *o));
             progress |= self.retry(|s| &mut s.pending_imm, |s, (c, o)| s.solve_imm(c, *o));
+            progress |=
+                self.retry(|s| &mut s.pending_with_mut, |s, (c, o)| s.solve_with_mut(c, *o));
             if !progress {
                 break;
             }
@@ -796,6 +816,12 @@ impl<'db> Solver<'db> {
             Constraint::Imm { constraint, origin } => {
                 if !self.solve_imm(&constraint, origin) {
                     self.pending_imm.push((constraint, origin));
+                }
+            }
+            // Solved right away when possible, as for `imm e`.
+            Constraint::WithMut { constraint, origin } => {
+                if !self.solve_with_mut(&constraint, origin) {
+                    self.pending_with_mut.push((constraint, origin));
                 }
             }
             Constraint::Row { constraint, origin } => {
@@ -1109,6 +1135,51 @@ impl<'db> Solver<'db> {
         }
     }
 
+    /// Solve `'m T` (see [`WithMutConstraint`]). Returns `false` if neither
+    /// side is known yet.
+    fn solve_with_mut(&mut self, c: &WithMutConstraint<'db>, origin: Origin<'db>) -> bool {
+        let with = |m: &Ty<'db>, t: Ty<'db>| Ty::WithMut(Box::new(m.clone()), Box::new(t));
+        match self.unifier.shallow_resolve(&c.from) {
+            Ty::Var(_) => {}
+            Ty::App(head, _) if matches!(*head, Ty::Var(_)) => {}
+            from => {
+                self.equal(&c.to, &with(&c.mutability, from), origin);
+                return true;
+            }
+        }
+        let fresh = |s: &mut Self| s.new_var(VarKind::Mutability);
+        let (from, outer) = match self.unifier.shallow_resolve(&c.to) {
+            Ty::Var(_) => return false,
+            Ty::WithMut(m, inner) => (*inner, Some(*m)),
+            Ty::Ro(inner) => (*inner, Some(Ty::Mutability(Mutability::ReadOnly))),
+            Ty::Array(m, elem) => (Ty::Array(Box::new(fresh(self)), elem), Some(*m)),
+            Ty::Adt(AdtId::Struct(s), args, ms, m) if !Variances::of(self.db).always_imm(s) => {
+                (Ty::Adt(AdtId::Struct(s), args, ms, Box::new(fresh(self))), Some(*m))
+            }
+            Ty::Tuple(tys, m) if !tys.is_empty() => {
+                (Ty::Tuple(tys, Box::new(fresh(self))), Some(*m))
+            }
+            Ty::Record(tys, named, m) => (Ty::Record(tys, named, Box::new(fresh(self))), Some(*m)),
+            Ty::Fn(params, ret, m, effects) => {
+                (Ty::Fn(params, ret, Box::new(fresh(self)), effects), Some(*m))
+            }
+            // A type without a mutability of its own is what `'m` of it is,
+            // and one that can't be taken apart, like a type parameter, is
+            // never a `'m T`, which equating says.
+            to @ (Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_)) => {
+                self.equal(&c.from, &to, origin);
+                self.equal(&c.to, &with(&c.mutability, to), origin);
+                return true;
+            }
+            to => (to, None),
+        };
+        if let Some(outer) = outer {
+            self.equal(&c.mutability, &outer, origin);
+        }
+        self.equal(&c.from, &from, origin);
+        true
+    }
+
     /// `imm` of a struct or enum: an `imm` one, whose type arguments are
     /// what `imm` makes of its fields.
     fn solve_imm_adt(
@@ -1224,7 +1295,12 @@ impl<'db> Solver<'db> {
     pub fn settle_copies(&mut self) {
         loop {
             self.solve();
-            if !self.pending_imm.is_empty() {
+            // A `'m T` whose `T` nothing decided is `'m` of the unknown.
+            if !self.pending_with_mut.is_empty() {
+                let (c, origin) = self.pending_with_mut.remove(0);
+                let with = Ty::WithMut(Box::new(c.mutability), Box::new(c.from));
+                self.equal(&c.to, &with, origin);
+            } else if !self.pending_imm.is_empty() {
                 let (c, origin) = self.pending_imm.remove(0);
                 let from = self.unifier.resolve(&c.from);
                 self.equal(&c.to, &Ty::imm_of_unknown(from), origin);
@@ -1488,7 +1564,7 @@ impl<'db> Solver<'db> {
     /// `imm T` by one that a [`Constraint::Imm`] decides, so that `imm T` is
     /// `T` itself where `T` is `imm`.
     pub fn flatten_assoc(&mut self, ty: &Ty<'db>, origin: Origin<'db>) -> Ty<'db> {
-        if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_))) {
+        if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_) | Ty::WithMut(..))) {
             return ty.clone();
         }
         ty.fold(&mut |t| match t {
@@ -1504,6 +1580,16 @@ impl<'db> Solver<'db> {
                 let var = self.new_var(VarKind::General);
                 let constraint = ImmConstraint { from, to: var.clone() };
                 self.add(Constraint::Imm { constraint, origin });
+                Some(var)
+            }
+            // And each `'m T` by one that a [`Constraint::WithMut`] decides,
+            // from `T` or from what it's unified with (#459).
+            Ty::WithMut(m, inner) => {
+                let from = self.flatten_assoc(inner, origin);
+                let var = self.new_var(VarKind::General);
+                let constraint =
+                    WithMutConstraint { mutability: (**m).clone(), from, to: var.clone() };
+                self.add(Constraint::WithMut { constraint, origin });
                 Some(var)
             }
             _ => None,
@@ -1893,6 +1979,8 @@ impl<'db> Solver<'db> {
                 |s, (c, source, o)| s.solve_at_most(c, source, *o),
             );
             progress |= self.retry(|s| &mut s.pending_imm, |s, (c, o)| s.solve_imm(c, *o));
+            progress |=
+                self.retry(|s| &mut s.pending_with_mut, |s, (c, o)| s.solve_with_mut(c, *o));
             progress |= self.retry(|s| &mut s.pending_rows, |s, (c, o)| s.solve_row(c, *o));
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
@@ -2419,10 +2507,15 @@ pub fn missing_instances<'db>(
 /// a type parameter is replaced. Those whose arguments aren't known well
 /// enough stay.
 pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
-    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_) | Ty::Ro(_))) {
+    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..) | Ty::Imm(_) | Ty::Ro(_) | Ty::WithMut(..))) {
         return ty.clone();
     }
     ty.fold(&mut |t| {
+        // `'m T` once `T` is known (#459).
+        if let Ty::WithMut(m, inner) = t {
+            let inner = normalize_assoc(db, file, inner);
+            return Some(Ty::with_outer((**m).clone(), inner, Variances::of(db)));
+        }
         if let Ty::Ro(inner) = t {
             let inner = normalize_assoc(db, file, inner);
             return Some(match inner {

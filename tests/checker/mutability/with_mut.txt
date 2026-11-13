@@ -1,0 +1,55 @@
+================================================================================
+mut T and 'm T: a type parameter with another mutability (#459)
+:test-prelude
+================================================================================
+fn count[I](it: mut I) -> i32 = 0;
+fn pick[T](a: 'm T, b: 'm T) -> 'm T = a;
+fn twice[I](it: mut I) -> i32 = count(it) + count(it);
+let a = count(mut [1]);
+let b = pick(mut [1], mut [2]);
+let c = pick([1], [2]);
+let d = pick(1, 2);
+let e = twice(mut [True]);
+--------------------------------------------------------------------------------
+count: forall I. fn(it: mut I) -> i32
+pick: forall T. fn(a: 'm T, b: 'm T) -> 'm T
+twice: forall I. fn(it: mut I) -> i32
+let a: i32
+let b: mut [i32]
+let c: imm [i32]
+let d: i32
+let e: i32
+
+================================================================================
+A 'm T is seen as ro as its T is, and a ro T can't become a mut T
+:error
+:test-prelude
+================================================================================
+fn view[T](x: 'm T) -> ro T = x;
+fn leak[T](x: ro T) -> mut T = x;
+fn pick[T](a: 'm T, b: 'm T) -> 'm T = a;
+let a = view(mut [1]);
+let b = pick(mut [1], [2]);
+--------------------------------------------------------------------------------
+view: forall T. fn(x: 'm T) -> ro T
+leak: forall T. fn(x: ro T) -> mut T
+pick: forall T. fn(a: 'm T, b: 'm T) -> 'm T
+let a: ro [i32]
+let b: mut [i32]
+--------------------------------------------------------------------------------
+error at `x`: expected mut T, found ro T
+error at `pick`: expected imm [{integer}], found mut [{integer}]
+
+================================================================================
+'m before an associated type
+:test-prelude
+================================================================================
+class Get[C] { type Item; fn get(c: 'm C) -> 'm Item; }
+struct Box2 { x: [i32] }
+impl Get[Box2] { type Item = [i32]; fn get(c) = c.x; }
+fn twice[C](c: 'm C) -> ('m C.Item, 'm C.Item) where Get[C] = (get(c), get(c));
+let a = get(Box2 { x: [1] });
+--------------------------------------------------------------------------------
+Get[Box2].get: fn(c: Box2) -> [i32]
+twice: forall C. Get[C] => fn(c: 'm C) -> imm ('m C.Item, 'm C.Item)
+let a: imm [i32]

@@ -141,18 +141,18 @@ first: forall C. Index[C] => fn(c: C) -> imm C.Item
 let x: imm [i32]
 
 ================================================================================
-Only imm, not mut, can be written before a type parameter
+A T isn't a mut T, and a type constructor can't be imm
 :error
 ================================================================================
 fn f[T](x: T) -> mut T = x;
 fn g[F](x: F[i32]) -> imm F = x;
 --------------------------------------------------------------------------------
-f: forall T. fn(x: T) -> T
+f: forall T. fn(x: T) -> mut T
 g: forall F. fn(x: F[i32]) -> {error}
 --------------------------------------------------------------------------------
-error at `mut T`: can't be mut or imm
 error at `imm F`: can't be mut or imm
 error at `imm F`: expected 1 type arguments, found 0
+error at `x`: expected mut T, found T
 
 ================================================================================
 A type argument held and in a function type must already be imm
