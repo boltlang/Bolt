@@ -1,6 +1,6 @@
 ================================================================================
 ? needs an Option or a Result
-:prelude
+:test-prelude
 ================================================================================
 fn f(x: i32) -> Option[i32] {
   let y = x?;
@@ -10,7 +10,7 @@ fn f(x: i32) -> Option[i32] {
 
 ================================================================================
 ? needs a function that gives the same kind
-:prelude
+:test-prelude
 ================================================================================
 fn on_option(x: Option[i32]) -> Result[String, i32] {
   let y = x?;
@@ -25,7 +25,7 @@ fn on_result(x: Result[String, i32]) -> i32 {
 
 ================================================================================
 ? passes on an error of the same type
-:prelude
+:test-prelude
 ================================================================================
 fn f(x: Result[i32, i32]) -> Result[String, i32] {
                            //^^^^^^^^^^^^^^^^^^^ label: expected because of the return type
@@ -36,7 +36,7 @@ fn f(x: Result[i32, i32]) -> Result[String, i32] {
 
 ================================================================================
 ? on something whose type isn't known yet
-:prelude
+:test-prelude
 ================================================================================
 fn f(g) {
   let y = g()?;
