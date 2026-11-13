@@ -2,7 +2,7 @@
 //! `tests/diagnostics`, run by `tests/diagnostics.rs`. Here are the tests
 //! that need more than the diagnostics of a case's files.
 
-use boltlang_base_db::{File, Settings, SystemPathBuf, TestDb, source_text};
+use boltlang_base_db::{Db, File, Settings, SystemPath, SystemPathBuf, TestDb, source_text};
 use boltlang_syntax::rowan::TextRange;
 
 /// A database whose `std`, the one that comes with the compiler, is in
@@ -62,4 +62,41 @@ fn errors_in_files_a_file_uses() {
     );
     // A file's own errors aren't among them.
     assert!(broken(&db, more).is_empty());
+}
+
+/// The errors of the `.bolt` files in `dir` on disk and the directories in
+/// it, which are at `at` in `db`, as `path:line:column message`.
+fn errors_in_dir(db: &TestDb, dir: &std::path::Path, at: &str, out: &mut Vec<String>) {
+    let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+    entries.sort();
+    for path in entries {
+        let name = format!("{at}/{}", path.file_name().unwrap().to_str().unwrap());
+        if path.is_dir() {
+            errors_in_dir(db, &path, &name, out);
+        } else if path.extension().is_some_and(|ext| ext == "bolt") {
+            let file = db.files().resolve(db, SystemPath::new(&name));
+            let text = source_text(db, file);
+            for d in crate::diagnostics(db, file) {
+                if d.severity == crate::Severity::Error {
+                    let before = &text[..usize::from(d.range.start())];
+                    let line = before.matches('\n').count() + 1;
+                    let column = before.len() - before.rfind('\n').map_or(0, |i| i + 1) + 1;
+                    out.push(format!("{name}:{line}:{column} {}", d.message));
+                }
+            }
+        }
+    }
+}
+
+/// The prelude of `:test-prelude`, `tests/std`, has no errors. The cases
+/// that use it only see the errors of their own files, so without this,
+/// an error in it would only show up in the cases of `tests/run`.
+#[test]
+fn the_test_prelude_has_no_errors() {
+    let mut db = TestDb::new();
+    db.add_test_std();
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/std");
+    let mut errors = Vec::new();
+    errors_in_dir(&db, &dir, TestDb::STD_DIR, &mut errors);
+    assert!(errors.is_empty(), "tests/std has errors:\n{}", errors.join("\n"));
 }
