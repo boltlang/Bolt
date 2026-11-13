@@ -860,7 +860,12 @@ impl<'db> Subst<'_, 'db> {
                 }
             }
             // A type that nothing decides, like the elements of `[]`, can't
-            // change what the code does.
+            // change what the code does. The checker leaves one in a body when
+            // it isn't in the function's type, like the `x` of
+            // `fn g() = ignore(|x| x)`: a scheme is generic only over the
+            // variables of its type, so no caller can choose it, and every
+            // choice runs the same. If a class needed it, the checker
+            // reported it as ambiguous.
             Ty::Var(_) => MonoTy::unit(),
             // A row as a type argument, as for a parameter above.
             Ty::Row(..) => MonoTy::Row(self.row(ty)?),
@@ -958,8 +963,9 @@ impl<'db> Subst<'_, 'db> {
                 Some(Slot::Ty(MonoTy::Row(r))) => r.clone(),
                 _ => return Err(TyError::Unknown),
             },
-            // A row that nothing decided has no effects, its least solution;
-            // and the checker reported the error.
+            // A row that nothing decided has no effects, its least solution,
+            // as for a type that nothing decides (see `ty`); and the checker
+            // reported the error.
             Ty::Var(_) | Ty::Error | Ty::Never => MonoRow::nothing(),
             _ => return Err(TyError::Unknown),
         })
@@ -977,7 +983,8 @@ impl<'db> Subst<'_, 'db> {
                 None if op_param(self.db, ty).is_some() => MonoMut::Imm,
                 _ => return Err(TyError::Unknown),
             },
-            // A mutability left undecided is `imm`, as the checker defaults it.
+            // A mutability left undecided is `imm`, as the checker defaults it,
+            // and as for a type that nothing decides (see `ty`).
             Ty::Var(_) | Ty::Error => MonoMut::Imm,
             _ => return Err(TyError::Unknown),
         })
