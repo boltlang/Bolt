@@ -1167,7 +1167,7 @@ impl<'db> Solver<'db> {
             // A type without a mutability of its own is what `'m` of it is,
             // and one that can't be taken apart, like a type parameter, is
             // never a `'m T`, which equating says.
-            to @ (Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_)) => {
+            to if to.is_opaque() => {
                 self.equal(&c.from, &to, origin);
                 self.equal(&c.to, &with(&c.mutability, to), origin);
                 return true;
@@ -2554,12 +2554,7 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
         if let Ty::Ro(inner) = t {
             let inner = normalize_assoc(db, file, inner);
             return Some(match inner {
-                Ty::Param(_)
-                | Ty::Bound(_)
-                | Ty::App(..)
-                | Ty::Assoc(..)
-                | Ty::Imm(_)
-                | Ty::Var(_) => Ty::Ro(Box::new(inner)),
+                inner if inner.is_opaque() => Ty::Ro(Box::new(inner)),
                 inner => normalize_assoc(db, file, &inner.ro_view(Variances::of(db), false)),
             });
         }

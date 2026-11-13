@@ -233,9 +233,7 @@ impl<'db> Unifier<'db> {
             Ty::Var(v) if matches!(self.var_kind(v), Some(VarKind::Int | VarKind::Float)) => {
                 Ty::Var(v)
             }
-            Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) => {
-                ty
-            }
+            inner if inner.is_opaque() => ty,
             _ => self.resolve(&ty),
         }
     }
@@ -249,9 +247,7 @@ impl<'db> Unifier<'db> {
             return self.resolve(&ty);
         }
         match self.shallow_resolve(inner) {
-            Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) => {
-                ty
-            }
+            inner if inner.is_opaque() => ty,
             _ => self.resolve(&ty),
         }
     }

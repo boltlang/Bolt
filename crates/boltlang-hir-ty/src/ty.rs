@@ -505,6 +505,16 @@ impl<'db> Ty<'db> {
         self.ro_view(variances, true)
     }
 
+    /// Whether this is a type that can't be taken apart yet: a type
+    /// parameter, an associated type, `imm T` of one, or a variable. `ro T`
+    /// and `'m T` of one stay as they are until it's known.
+    pub fn is_opaque(&self) -> bool {
+        matches!(
+            self,
+            Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Imm(_) | Ty::Var(_)
+        )
+    }
+
     /// Each `ro T` in the type whose `T` is known replaced by the view of
     /// it (#320), and each `'m T` by `T` with the mutability `m` (#459). A
     /// `ro T` or `'m T` of what can't be taken apart, like a type parameter
@@ -521,13 +531,7 @@ impl<'db> Ty<'db> {
             let Ty::Ro(inner) = t else { return None };
             let inner = inner.normalize_ro(variances);
             Some(match inner {
-                Ty::Param(_)
-                | Ty::Bound(_)
-                | Ty::App(..)
-                | Ty::Assoc(..)
-                | Ty::Imm(_)
-                | Ty::Var(_)
-                | Ty::Error => Ty::Ro(Box::new(inner)),
+                inner if inner.is_opaque() || inner == Ty::Error => Ty::Ro(Box::new(inner)),
                 inner => inner.ro_view(variances, false).normalize_ro(variances),
             })
         })
@@ -576,9 +580,7 @@ impl<'db> Ty<'db> {
                 };
                 Ty::Adt(*id, args, ms, Box::new(own))
             }
-            Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Var(_) | Ty::Imm(_) => {
-                Ty::Ro(Box::new(self.clone()))
-            }
+            ty if ty.is_opaque() => Ty::Ro(Box::new(ty.clone())),
             // `'m T` seen as `ro` is `ro T`, unless `m` is written in a type
             // written `ro`, where it's kept, and reported if it can't be held.
             Ty::WithMut(_, inner) if !unwritten => {
@@ -598,13 +600,7 @@ impl<'db> Ty<'db> {
         let ro = matches!(m, Ty::Mutability(Mutability::ReadOnly));
         let replaced = match ty {
             Ty::WithMut(_, inner) => return Ty::with_outer(m, *inner, variances),
-            Ty::Param(_)
-            | Ty::Bound(_)
-            | Ty::App(..)
-            | Ty::Assoc(..)
-            | Ty::Imm(_)
-            | Ty::Ro(_)
-            | Ty::Var(_) => {
+            ty if ty.is_opaque() || matches!(ty, Ty::Ro(_)) => {
                 return match ro {
                     true => Ty::Ro(Box::new(ty)),
                     false => Ty::WithMut(Box::new(m), Box::new(ty)),
