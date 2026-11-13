@@ -252,7 +252,27 @@ have the same `imm`: `imm (mut [i32])` and `imm [i32]` are both `imm
 and the same constraint as `imm e`, which is how `imm T` becomes `T` under
 `T: imm`. Written `imm` keeps its meaning before an array, a struct or a
 function, and is `imm T` only before a type parameter or an associated
-type; `mut T` is still an error (E0222).
+type.
+
+**`mut T` and `'m T` give a type parameter a mutability (#459).** Before a
+type parameter or an associated type, `mut` or a name is the `T` with that
+outer mutability, whatever its own: `mut T` with `T = imm [i32]` is
+`mut [i32]`, and for a type without a mutability, like `i32`, it's the type
+itself. With `'m = ro`, `'m T` is `ro T`. A caller that only gives a
+`mut T` decides `T` without its outer mutability:
+
+```bolt
+fn count[I](it: mut I) -> i32 = 0;              // count(mut [1]): I is [i32]
+fn pick[T](a: 'm T, b: 'm T) -> 'm T = a;       // pick(mut [1], mut [2]): mut [i32]
+fn leak[T](x: ro T) -> mut T = x;               // error: expected mut T, found ro T
+```
+
+Like `imm T`, it only equals itself, and in a body the checker replaces
+it by a variable and a constraint, which `T` decides once it's known, or
+what the variable is unified with while it isn't. What a `'m T` holds is
+at most `'m`, as for a literal of a named mutability; for a `T` that isn't
+known, the checker asks for `T ⊑ 'm`, which is more than needed, but never
+less.
 
 **A closure that can change what it captured is `mut`.** A function type
 has a mutability like an array's. A closure is `mut` if it captures a

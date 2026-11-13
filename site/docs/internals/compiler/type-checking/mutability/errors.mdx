@@ -9,7 +9,7 @@ description: The errors about mutability, and where they should point.
 | Code | Error |
 |---|---|
 | E0221 | changing an element of an array, or a field of a struct, that isn't `mut` |
-| E0222 | `mut` or `imm` before something that isn't an array or a struct |
+| E0222 | `mut` or `imm` before something that isn't an array, a struct, a tuple, a function or a type parameter |
 | E0223 | an `imm` value that holds a `mut` one |
 | E0224 | a `mut` field |
 | E0225 | a named mutability that isn't the function's or impl's, or one its struct declares |
