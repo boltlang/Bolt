@@ -35,7 +35,10 @@
 //!
 //! Lines starting with `:` after the title are attributes:
 //!
-//! - `:prelude` and `:test-prelude`: the prelude of the files, as above.
+//! - `:prelude`, `:test-prelude` and `:fixture-prelude`: the prelude of the
+//!   files, as above. `:fixture-prelude` is that of the case's own `std`,
+//!   in `/toolchain/std`, like `/toolchain/std/__prelude__/lib.bolt`; a
+//!   case with one can't use `:prelude`, which is the repository's.
 //! - `:skip`: never run the case, and report it as ignored. For a case that
 //!   crashes or hangs.
 //! - `:todo`: the comments are what the compiler should report, but doesn't
@@ -64,11 +67,12 @@ struct Attributes {
 enum Prelude {
     #[default]
     None,
-    /// That of the repository's `std`, or of the case's own, with
-    /// `:prelude`.
+    /// That of the repository's `std`, with `:prelude`.
     Std,
     /// The small one of `tests/std`, with `:test-prelude`.
     Test,
+    /// The case's own, in `/toolchain/std`, with `:fixture-prelude`.
+    Fixture,
 }
 
 impl Attributes {
@@ -80,10 +84,11 @@ impl Attributes {
                 "todo" => attributes.todo = true,
                 "prelude" => attributes.prelude = Prelude::Std,
                 "test-prelude" => attributes.prelude = Prelude::Test,
+                "fixture-prelude" => attributes.prelude = Prelude::Fixture,
                 other => {
                     return Err(format!(
                         "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo`, \
-                         `:prelude` and `:test-prelude`",
+                         `:prelude`, `:test-prelude` and `:fixture-prelude`",
                         case.title
                     ));
                 }
@@ -99,12 +104,27 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
     let files = split_files(input)?;
     let mut db = TestDb::new();
     let own_std = files.iter().any(|(path, _)| path.starts_with(&format!("{}/", TestDb::STD_DIR)));
+    // `:prelude` is the repository's std, and `:fixture-prelude` the case's
+    // own, in `/toolchain/std`, so a case can't have one and ask for the other.
+    match (prelude, own_std) {
+        (Prelude::Std, true) => {
+            return Err("this case has a std of its own, in `/toolchain/std`: use \
+                        `:fixture-prelude`, not `:prelude`, which is the repository's"
+                .into());
+        }
+        (Prelude::Fixture, false) => {
+            return Err(
+                "`:fixture-prelude` needs a std of the case's own, in `/toolchain/std`".into()
+            );
+        }
+        _ => {}
+    }
     if own_std {
         Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
     }
     match prelude {
         Prelude::None => {}
-        Prelude::Std if own_std => db.set_prelude(Some("std"), true),
+        Prelude::Fixture => db.set_prelude(Some("std"), true),
         Prelude::Std => {
             db.add_std();
             db.set_prelude(Some("std"), true);

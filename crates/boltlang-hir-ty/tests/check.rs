@@ -28,9 +28,9 @@
 //! the code is `/main.bolt`. With several files, each line of the output
 //! starts with the path of its file, like `/lib.bolt: id: fn(a) -> a`.
 //! Files get no prelude, unless the case has the attribute `:prelude`: then
-//! they get the prelude of `std`, as in the compiler. That's the
-//! repository's, or the case's own in `/toolchain/std/__prelude__/lib.bolt`.
-//! With `:test-prelude`, it's the small one of `tests/std`, with only the
+//! they get the prelude of the repository's `std`, as in the compiler. With
+//! `:fixture-prelude`, it's that of the case's own, in
+//! `/toolchain/std/__prelude__/lib.bolt`. With `:test-prelude`, it's the small one of `tests/std`, with only the
 //! classes that `xs[i]`, `xs[i] = x` and `for` use and a few built-ins, so
 //! that a case doesn't change when `std` does. Without either, a case can
 //! define its own copies of the prelude's names.
@@ -56,6 +56,9 @@
 //!   `cargo test --test check -- --ignored` to see how far along they are.
 //! - `:error`: the case must find at least one error, so that an update
 //!   can't make it a case without errors by accident.
+//! - `:prelude`, `:test-prelude` and `:fixture-prelude`: the prelude of the
+//!   files, as above. A case with a `std` of its own can't use `:prelude`,
+//!   which is the repository's.
 //!
 //! `UPDATE_EXPECT=1` leaves the output of `:skip` and `:todo` cases alone,
 //! since it's written by hand, and that of an `:error` case without errors.
@@ -109,6 +112,8 @@ enum Prelude {
     Std,
     /// The small one of `tests/std`, with `:test-prelude`.
     Test,
+    /// The case's own, in `/toolchain/std`, with `:fixture-prelude`.
+    Fixture,
 }
 
 impl Attributes {
@@ -121,10 +126,11 @@ impl Attributes {
                 "error" => attributes.error = true,
                 "prelude" => attributes.prelude = Prelude::Std,
                 "test-prelude" => attributes.prelude = Prelude::Test,
+                "fixture-prelude" => attributes.prelude = Prelude::Fixture,
                 other => {
                     return Err(format!(
                         "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo`, `:error`, \
-                         `:prelude` and `:test-prelude`",
+                         `:prelude`, `:test-prelude` and `:fixture-prelude`",
                         case.title
                     ));
                 }
@@ -149,12 +155,29 @@ fn expected(case: &Case) -> (String, String) {
 /// about. With several files, each line starts with the path of its file.
 fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
     let mut db = TestDb::new();
-    // With `:prelude`, as in the compiler, the prelude is the one of `std`.
+    // With `:prelude` or `:fixture-prelude`, as in the compiler, the prelude
+    // is the one of `std`: the repository's or the case's own.
     db.set_prelude((prelude != Prelude::None).then_some("std"), false);
     let files = split_files(input)?;
+    let own_std = files.iter().any(|(path, _)| path.starts_with(&format!("{}/", TestDb::STD_DIR)));
+    // `:prelude` is the repository's std, and `:fixture-prelude` the case's
+    // own, in `/toolchain/std`, so a case can't have one and ask for the other.
+    match (prelude, own_std) {
+        (Prelude::Std, true) => {
+            return Err("this case has a std of its own, in `/toolchain/std`: use \
+                        `:fixture-prelude`, not `:prelude`, which is the repository's"
+                .into());
+        }
+        (Prelude::Fixture, false) => {
+            return Err(
+                "`:fixture-prelude` needs a std of the case's own, in `/toolchain/std`".into()
+            );
+        }
+        _ => {}
+    }
     // A case without a `std` of its own, in `/toolchain/std`, gets the
     // repository's there, whose types aren't shown.
-    if files.iter().any(|(path, _)| path.starts_with(&format!("{}/", TestDb::STD_DIR))) {
+    if own_std {
         Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
     } else if prelude == Prelude::Test {
         db.add_test_std();

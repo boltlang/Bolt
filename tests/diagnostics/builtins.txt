@@ -45,7 +45,7 @@ fn array_alloc[T](len: i32) -> [T];
 
 ================================================================================
 A builtin resume takes the prelude's Cont
-:prelude
+:fixture-prelude
 ================================================================================
 //- /toolchain/std/__prelude__.bolt
 pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
@@ -54,7 +54,7 @@ pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
 
 ================================================================================
 A builtin resume without the effects of the computation
-:prelude
+:fixture-prelude
 ================================================================================
 //- /toolchain/std/__prelude__.bolt
 pub imm struct Cont[B, U, R] { resume: fn(B) -> U does R }
