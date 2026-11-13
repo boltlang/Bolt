@@ -23,7 +23,7 @@
 //! have several files, each starting with a line like
 //! `//- /lib.bolt`: see [`split_files`].
 
-use libtest_mimic::{Failed, Trial};
+use libtest_mimic::{Arguments, Failed, Trial};
 use std::{
     ops::Range,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -31,6 +31,7 @@ use std::{
 };
 
 /// One case of a data file.
+#[derive(Clone)]
 pub struct Case {
     pub title: String,
     /// The attribute lines, without their `:`, like `todo` or `todo wasm`.
@@ -264,7 +265,9 @@ pub fn data_name(root: &Path, path: &Path) -> String {
 
 /// A test for each case of the data files of `root`, which have at most
 /// `max_sections` sections of output. When [`updating`], the files get new
-/// output first, which `updated` gives as [`update`] takes it. `trial`
+/// output first, which `updated` gives as [`update`] takes it, for the
+/// cases whose tests the command line picks, like `cargo test -- arrays`
+/// (#469): the others keep theirs. `trial`
 /// makes the test of a case from its name, or says why it can't, like for
 /// an unknown attribute. A file that can't be parsed, and a second case
 /// with the name of another, are tests that fail.
@@ -286,25 +289,65 @@ pub fn file_trials(
     root: &Path,
     path: &Path,
     max_sections: usize,
+    updated: impl FnMut(&Case) -> Option<Vec<String>>,
+    trial: impl FnMut(String, Case) -> Result<Trial, String>,
+) -> Vec<Trial> {
+    let picking = updating().then(Arguments::from_args);
+    picked_trials(root, path, max_sections, picking.as_ref(), updated, trial)
+}
+
+/// [`file_trials`], updating the file for the cases whose tests `picking`
+/// picks, if it's given.
+fn picked_trials(
+    root: &Path,
+    path: &Path,
+    max_sections: usize,
+    picking: Option<&Arguments>,
     mut updated: impl FnMut(&Case) -> Option<Vec<String>>,
     mut trial: impl FnMut(String, Case) -> Result<Trial, String>,
 ) -> Vec<Trial> {
-    let fail = |name: String, message: String| Trial::test(name, move || Err(message.into()));
     let stem = data_name(root, path);
     let mut text = std::fs::read_to_string(path).unwrap();
-    if updating()
+    if let Some(args) = picking
         && let Ok(cases) = parse_cases(&text, max_sections)
     {
-        let new = update(&text, &cases, &mut updated);
+        // Each case has one test, in order, so `update`, which goes through
+        // them in order too, can tell by their position which are picked.
+        let picked: Vec<bool> = case_trials(&stem, path, cases.clone(), &mut trial)
+            .iter()
+            .map(|t| !args.is_filtered_out(t))
+            .collect();
+        let mut next = 0;
+        let new = update(&text, &cases, |case| {
+            next += 1;
+            if picked[next - 1] { updated(case) } else { None }
+        });
         if new != text {
             std::fs::write(path, &new).unwrap();
             text = new;
         }
     }
-    let cases = match parse_cases(&text, max_sections) {
-        Ok(cases) => cases,
-        Err(error) => return vec![fail(stem, format!("{}: {error}", path.display()))],
-    };
+    match parse_cases(&text, max_sections) {
+        Ok(cases) => case_trials(&stem, path, cases, &mut trial),
+        Err(error) => vec![fail(stem, format!("{}: {error}", path.display()))],
+    }
+}
+
+/// A test that fails with `message`.
+fn fail(name: String, message: String) -> Trial {
+    Trial::test(name, move || Err(message.into()))
+}
+
+/// The test of each of `cases` of the data file `path`, whose name in tests
+/// is `stem`, in order: what `trial` makes of it, or one that fails, for a
+/// case `trial` can't make one of, or a second case with the name of
+/// another.
+fn case_trials(
+    stem: &str,
+    path: &Path,
+    cases: Vec<Case>,
+    trial: &mut impl FnMut(String, Case) -> Result<Trial, String>,
+) -> Vec<Trial> {
     let mut trials = Vec::new();
     let mut seen = Vec::new();
     for case in cases {
@@ -369,5 +412,30 @@ mod tests {
             "{sep}\nA case\n{sep}\nlet x = 1;\n{SECTION}\nnew A case\n\n{sep}\nNo output yet\n{sep}\nx;\n{SECTION}\nnew No output yet\n"
         );
         assert_eq!(updated, expected);
+    }
+
+    #[test]
+    fn an_update_only_changes_the_cases_the_filter_picks() {
+        let dir = std::env::temp_dir().join(format!("boltlang-corpus-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("file.txt");
+        let sep = "=".repeat(80);
+        let text = format!("{sep}\nPicked\n{sep}\na\n\n{sep}\nLeft\n{sep}\nb\n");
+        std::fs::write(&path, &text).unwrap();
+        let args = Arguments { filter: Some("picked".into()), ..Arguments::default() };
+        let trials = picked_trials(
+            &dir,
+            &path,
+            1,
+            Some(&args),
+            |case| Some(vec![format!("new {}", case.title)]),
+            |name, _| Ok(Trial::test(name, || Ok(()))),
+        );
+        let written = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+        assert_eq!(trials.len(), 2);
+        let expected =
+            format!("{sep}\nPicked\n{sep}\na\n{SECTION}\nnew Picked\n\n{sep}\nLeft\n{sep}\nb\n");
+        assert_eq!(written, expected);
     }
 }
