@@ -43,6 +43,8 @@ a [page of its own](./async.mdx).
 effect Reactive {
     fn state[T](key: Key, init: T) -> Signal[T];  // the key comes from the compiler
     fn read[T](s: Signal[T]) -> T;
+    fn after_draw(f: mut fn() does Async);   // after each draw on the page
+    fn on_unmount(f: mut fn() does Async);   // when the component leaves it
 }
 
 fn app() -> Html does Reactive + Async {
@@ -325,20 +327,73 @@ for when a fallback from the handler is enough.
 
 ### Example: a loader
 
-`load` needs one more `Reactive` operation, `task`, which starts a task from
-a component. Everything else is inferred state:
+`load` starts its request with `task`, which isn't builtin. It's built from
+two more `Reactive` operations:
+
+- **`after_draw(f)`** runs `f` after each draw that reaches the page. Some
+  draws never do: a server handler draws once and sends HTML, and a draw
+  can be thrown away when state changes in the middle of it. So requests
+  start here, not while drawing, and rendering on the server sends none.
+  Like `on_click`, `f` runs as a task of its own, so it may perform
+  `Async`.
+- **`on_unmount(f)`** runs `f` when the component leaves the page.
+
+These are React's `useEffect` and its cleanup. Only the handler knows when
+the page is updated and when a component leaves it, so they're operations,
+like `state` and `read`. Timers, subscriptions and the rest are built on
+them in a library. `on_mount` runs once, with one more piece of state:
+
+```bolt
+pub fn on_mount(f: mut fn() does Async) does Reactive {
+    let mut mounted = false;   // written by the closure, never read while drawing
+    after_draw(|| {
+        if !mounted {
+            mounted = true;
+            f();
+        }
+    });
+}
+```
+
+`task` uses `spawn` from `std/async`, and `cancel`, which doesn't exist yet
+([#463](https://github.com/boltlang/Bolt/issues/463)):
+
+```bolt
+/// Starts `f` as a task after the first draw. When `key` changes, it cancels
+/// the old task and starts a new one. The task is also cancelled when the
+/// component leaves the page.
+pub fn task[K: Eq](key: K, f: mut fn() -> () does Async) -> () does Reactive {
+    // Written by the closures below, so it's state. It's never read while
+    // drawing, so writing it doesn't cause a redraw.
+    let mut running: Option[(key: K, handle: mut Task[()])] = None;
+    after_draw(|| {
+        let same = match running {
+            Some(r) => r.key == key,
+            None => false,
+        };
+        if !same {
+            stop(running);
+            running = Some((key: key, handle: spawn(f)));
+        }
+    });
+    on_unmount(|| stop(running));
+}
+
+fn stop[K](running: Option[(key: K, handle: mut Task[()])]) does Async {
+    match running {
+        Some(r) => cancel(r.handle),
+        None => {},
+    }
+}
+```
+
+`load` is then state and a task:
 
 ```bolt
 import "http" (fetch, HttpError, Decode)
 import "html" (Html, h1, p)
 
 enum Remote[T, E] { Loading, Failed(E), Done(T) }
-
-/// Starts `f` as a task the first time this call is drawn. When `key`
-/// changes, it cancels the old task and starts a new one. The task is
-/// also cancelled when the component leaves the page.
-#[builtin]
-fn task[K: Eq](key: K, f: fn() -> () does Async) -> () does Reactive;
 
 pub fn load[T: Decode](url: String) -> Remote[T, HttpError] does Reactive {
     // Written by the task after drawing is done, so it's inferred to be
@@ -364,8 +419,9 @@ fn profile() -> Html does Reactive {
 }
 ```
 
-1. **First draw.** `remote` is state holding `Loading`. `task` starts the
-   request and returns at once, so `load` returns `Loading`.
+1. **First draw.** `remote` is state holding `Loading`. `task` only
+   registers its closures, so `load` returns `Loading`. After the draw, the
+   request starts.
 2. **The request is done.** The task writes `Done(..)` or `Failed(..)`; it
    runs outside drawing, so that's `remote.set(..)`, which schedules a
    redraw of `profile`.
@@ -376,9 +432,10 @@ fn profile() -> Html does Reactive {
 
 Open points:
 
-- **Keys across functions.** `remote` and `task` live in `load`, so their
-  keys must include where `load` was called, like a path of call sites.
-  Otherwise two calls to `load` in one component share their state.
+- **Keys across functions.** `remote` and `running` live in functions that
+  components call, so their keys must include where those functions were
+  called, like a path of call sites. Otherwise two calls to `load` in one
+  component share their state.
 - **`task(key: url) { .. }`** needs trailing closures
   ([#462](https://github.com/boltlang/Bolt/issues/462)): `f` has a function
   type, so the block becomes a closure and isn't run while drawing. Without
@@ -387,7 +444,9 @@ Open points:
   That's what inferred state means, but it's easy to misread here.
 - **Errors.** Decoding probably has its own error, so a real `load` has a
   sum of errors or an error parameter with `From`.
-- `task` is a first version of effects with cleanup, below.
+- **Cleanup in a task.** Cancelling drops the rest of the task, so
+  whatever it would have run later, like closing a connection, doesn't run
+  ([#463](https://github.com/boltlang/Bolt/issues/463)).
 
 ## Still to design
 
@@ -395,8 +454,8 @@ Open points:
   than one slot, like a header and a body
   ([#458](https://github.com/boltlang/Bolt/issues/458)).
 - Lists and their keys.
-- Effects with cleanup, like timers and subscriptions, and what happens when
-  a component leaves the page.
+- Cleanup inside a cancelled task, and whether `after_draw` and
+  `on_unmount` are enough for timers and subscriptions.
 - Context, for values like the user that is logged in.
 - Mounting, and what this compiles to: JavaScript, or wasm.
 - Typed elements and attributes. With elements as functions, `img(scr: ..)`
