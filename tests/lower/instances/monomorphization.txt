@@ -56,16 +56,24 @@ xs[0];
 
 ================================================================================
 Methods of types and constants of impls
-:prelude
+:test-prelude
 ================================================================================
-let v = Vec.new();
-v.push(1);
-let e: List[i32] = empty;
+struct Box[T] { x: T }
+fn Box.new[T](x: T) -> Box[T] = Box { x };
+fn get[T](b: Box[T]) -> T = b.x;
+class Zero[T] { const zero: T; }
+impl[T] Zero[Option[T]] { const zero: Option[T] = None; }
+let b = Box.new(1);
+b.get();
+let e: Option[i32] = zero;
 --------------------------------------------------------------------------------
 <file>
-  -> Vec.new[i32]
-  -> push[i32]
-  -> Monoid[List[T]].empty[i32]
+  -> Box.new[i32]
+  -> get[i32] with imm
+  -> Zero[Option[T]].zero[i32]
+Box.new[i32]
+get[i32]
+Zero[Option[T]].zero[i32]
 
 ================================================================================
 A use whose type isn't known after an error

@@ -234,26 +234,24 @@ fn size(y: i32) -> Bool = True;
 
 ================================================================================
 Functions with the same name as one of the prelude add to it
-:prelude
+:test-prelude
 ================================================================================
 struct Stack { items: [i32] }
-fn len(s: Stack) -> i32 = array_len(s.items);
-let v = Vec.from_array([1, 2, 3]);
-len(v);
-Stack { items: [1] }.len();
+fn array_len(s: Stack) -> i32 = 1;
+array_len([1, 2, 3]);
+Stack { items: [1] }.array_len();
 --------------------------------------------------------------------------------
-len: fn(s: Stack) -> i32
-let v: mut Vec[i32]
-len(v): i32
-Stack { items: [1] }.len(): i32
+array_len: fn(s: Stack) -> i32
+array_len([1, 2, 3]): i32
+Stack { items: [1] }.array_len(): i32
 
 ================================================================================
 A function that overlaps one of the prelude
-:prelude
+:test-prelude
 :error
 ================================================================================
-fn is_empty[T](v: Vec[T]) -> Bool = True;
+fn array_len[T](xs: [T]) -> i32 = 0;
 --------------------------------------------------------------------------------
-is_empty: forall T. fn(v: Vec[T]) -> Bool
+array_len: forall T. fn(xs: [T]) -> i32
 --------------------------------------------------------------------------------
-error at `is_empty`: overlaps the is_empty of type forall T. fn(v: Vec[T]) -> Bool
+error at `array_len`: overlaps the array_len of type forall T. fn(xs: [T]) -> i32
