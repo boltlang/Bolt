@@ -851,6 +851,22 @@ impl<'db> Subst<'_, 'db> {
                 }
                 self.ty(&viewed)?
             }
+            // `'m T`, once `T` is known: `T` with the mutability `m` (#459).
+            // A `ro` one is seen as `ro` all the way down, so `m` is known
+            // first, as far as the instance knows it.
+            Ty::WithMut(m, inner) => {
+                let inner = self.back(&self.ty(inner)?)?;
+                let m = match self.mutability(m)? {
+                    MonoMut::Imm => Ty::Mutability(Mutability::Imm),
+                    MonoMut::Mut => Ty::Mutability(Mutability::Mut),
+                    MonoMut::ReadOnly => Ty::Mutability(Mutability::ReadOnly),
+                    MonoMut::Param(_) => (**m).clone(),
+                };
+                match Ty::with_outer(m, inner, Variances::of(self.db)) {
+                    Ty::WithMut(..) | Ty::Ro(_) => return Err(TyError::Unknown),
+                    ty => self.ty(&ty)?,
+                }
+            }
             // `imm T`, once `T` is known: what `imm` makes of it.
             Ty::Imm(inner) => {
                 let inner = self.back(&self.ty(inner)?)?;

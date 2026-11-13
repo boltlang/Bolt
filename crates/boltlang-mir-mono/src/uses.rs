@@ -855,6 +855,14 @@ pub(crate) fn bind<'db>(
         // What's at a `ro T` is the view of the `T`, which stands for it
         // where `T` isn't written as it is.
         (Ty::Ro(x), y) => bind(params, x, y, found),
+        // What's at a `'m T` is a `T` with the mutability `m`, which only
+        // `'m T` uses where `T` isn't written as it is (#459).
+        (Ty::WithMut(m, x), y) => {
+            if let Some(outer) = y.outer_mutability() {
+                bind_mut(m, outer, found);
+            }
+            bind(params, x, y, found);
+        }
         (Ty::Adt(a, xs, ms, own), MonoTy::Adt(b, ys, ns, n)) if a == b => {
             all(xs, ys, found);
             for (m, n) in ms.iter().zip(ns.iter()) {
