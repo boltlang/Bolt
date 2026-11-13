@@ -1,0 +1,6 @@
+/// The `k` of an effect arm: see `packages/std/effect.bolt`.
+pub imm struct Cont[B, U, R] {
+  resume: fn(B) -> U does R,
+}
+
+#[builtin] pub fn resume[B, U, R](k: Cont[B, U, R], value: B) -> U does R;

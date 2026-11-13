@@ -1,0 +1,32 @@
+/// Types that have a copy that can't be changed all the way down, which
+/// `imm e` makes with `to_imm_deep`.
+pub class ToImmDeep[T] {
+  fn to_imm_deep(x: T) -> imm T;
+}
+
+impl ToImmDeep[Bool] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i8] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i16] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i32] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i64] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[i128] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[isize] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u8] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u16] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u32] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u64] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[u128] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[usize] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[f32] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[f64] { fn to_imm_deep(x) = x; }
+impl ToImmDeep[()] { fn to_imm_deep(x) = x; }
+
+impl[A: ToImmDeep, B: ToImmDeep] ToImmDeep[(A, B)] {
+  fn to_imm_deep(p) = match p { (a, b) => (to_imm_deep(a), to_imm_deep(b)) };
+}
+
+impl[A: ToImmDeep, B: ToImmDeep, C: ToImmDeep] ToImmDeep[(A, B, C)] {
+  fn to_imm_deep(t) = match t {
+    (a, b, c) => (to_imm_deep(a), to_imm_deep(b), to_imm_deep(c)),
+  };
+}

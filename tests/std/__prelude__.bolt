@@ -1,0 +1,38 @@
+// A small prelude for the tests in `tests/`, which a case gets with the
+// attribute `:test-prelude`. It's a copy of the parts of `packages/std`
+// that syntax needs, in files of the same names, so that a case that only
+// needs these doesn't change when `std` does:
+//
+// - the classes of `xs[i]`, `xs[i] = x`, `for x in xs` and the operators
+//   like `a + b` and `a == b`, with their impls for the primitive types,
+//   arrays and tuples;
+// - `String` and `Char`, the types of string and character literals;
+// - `Debug`, which the evaluator shows characters with, and `ToImmDeep`,
+//   which `imm e` copies with;
+// - `Cont` and `resume` for handlers, and `Result` for `?`;
+// - `print`, `eprint` and `panic` on the evaluator's `write`, and a few
+//   functions the compiler provides;
+// - `<>` for strings, a simpler `Show`, which the cases of `tests/run` print
+//   their results with, and the ranges of `a..b` and `a..=b`.
+
+// Type classes
+pub import "./semigroup" *;
+pub import "./ops" *;
+pub import "./iter" *;
+pub import "./mutability" *;
+pub import "./debug" *;
+pub import "./show" *;
+
+// Types
+pub import "./array" *;
+pub import "./option" *;
+pub import "./result" *;
+pub import "./string" *;
+pub import "./char" *;
+pub import "./range" *;
+
+// Effects
+pub import "./effect" *;
+
+// Interfacing with the system
+pub import "./io" *;

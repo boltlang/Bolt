@@ -1,0 +1,111 @@
+import "./option" (Option, Some, None);
+import "./ops" *;
+import "./iter" (Iterator, Iterable);
+
+/// Types whose values come one after another, so that a [Range] of them can
+/// be stepped through, like the integers.
+pub class Step[T] {
+  /// The value after `x`. A [Range] only asks for it while `x` is before
+  /// the range's end, so it needn't have one for the largest value.
+  fn successor(x: T) -> T;
+}
+
+impl Step[i8] { fn successor(x) = x + 1; }
+impl Step[i16] { fn successor(x) = x + 1; }
+impl Step[i32] { fn successor(x) = x + 1; }
+impl Step[i64] { fn successor(x) = x + 1; }
+impl Step[i128] { fn successor(x) = x + 1; }
+impl Step[isize] { fn successor(x) = x + 1; }
+impl Step[u8] { fn successor(x) = x + 1; }
+impl Step[u16] { fn successor(x) = x + 1; }
+impl Step[u32] { fn successor(x) = x + 1; }
+impl Step[u64] { fn successor(x) = x + 1; }
+impl Step[u128] { fn successor(x) = x + 1; }
+impl Step[usize] { fn successor(x) = x + 1; }
+
+/// The values from `start` up to `end`, without `end` itself: `Range {
+/// start: 0, end: 3 }` is 0, 1 and 2. It's empty when `start` isn't
+/// before `end`.
+///
+/// A range is a plain value, which can be kept and looped over as often as
+/// needed: a `for` loop goes through a [RangeIter] of its own.
+pub struct Range[T] {
+  pub start: T,
+  pub end: T,
+}
+
+/// `for x in range`: the values of the range, in order.
+impl[T] Iterable[Range[T]] where Step[T], PartialOrd[T] {
+  type Iter = mut RangeIter[T];
+  fn iter(r) = mut RangeIter { current: r.start, end: r.end };
+}
+
+/// Where a loop over a [Range] is: the values from `current` up to `end`
+/// that it hasn't given yet.
+pub struct RangeIter[T] {
+  current: T,
+  end: T,
+}
+
+impl[T] Iterator[mut RangeIter[T]] where Step[T], PartialOrd[T] {
+
+  type Item = T;
+
+  fn next(it) -> Option[T] {
+    if it.current < it.end {
+      let x = it.current;
+      it.current = successor(x);
+      Some(x)
+    } else {
+      None
+    }
+  }
+
+}
+
+/// The values from `start` up to `end`, `end` too: `RangeInclusive {
+/// start: 0, end: 3 }`, or `0..=3`, is 0, 1, 2 and 3. It's empty when
+/// `start` is after `end`. Like a [Range], it's a plain value, which each
+/// `for` loop goes through with a [RangeInclusiveIter] of its own.
+pub struct RangeInclusive[T] {
+  pub start: T,
+  pub end: T,
+}
+
+/// `for x in range`: the values of the range, in order.
+impl[T] Iterable[RangeInclusive[T]] where Step[T], PartialOrd[T] {
+  type Iter = mut RangeInclusiveIter[T];
+  fn iter(r) = mut RangeInclusiveIter { current: r.start, end: r.end, done: False };
+}
+
+/// Where a loop over a [RangeInclusive] is: the values from `current` up
+/// to `end` that it hasn't given yet. Once it has given `end`, it's `done`,
+/// so that it never asks for the value after `end`, which the largest
+/// value of a type doesn't have.
+pub struct RangeInclusiveIter[T] {
+  current: T,
+  end: T,
+  done: Bool,
+}
+
+impl[T] Iterator[mut RangeInclusiveIter[T]] where Step[T], PartialOrd[T] {
+
+  type Item = T;
+
+  fn next(it) -> Option[T] {
+    if it.done {
+      None
+    } else if it.current < it.end {
+      let x = it.current;
+      it.current = successor(x);
+      Some(x)
+    } else if it.current <= it.end {
+      it.done = True;
+      Some(it.current)
+    } else {
+      it.done = True;
+      None
+    }
+  }
+
+}

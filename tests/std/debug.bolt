@@ -1,0 +1,9 @@
+import "./string" (String);
+
+/// How values look in code, like `std`'s `Debug`, but giving a `String`.
+/// The evaluator shows values of types with an impl with `repr`.
+pub class Debug[T] {
+  fn debug(x: ro T) -> String;
+}
+
+pub fn repr[T](x: T) -> String where Debug[T] = debug(x);

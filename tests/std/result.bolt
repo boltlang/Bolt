@@ -1,0 +1,7 @@
+/// What `?` takes besides an `Option`: see `packages/std/result.bolt`.
+pub enum Result[E, T] {
+  Err(E),
+  Ok(T),
+}
+
+pub import Result.*;

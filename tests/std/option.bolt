@@ -1,0 +1,24 @@
+import "./ops" *;
+import "./mutability" (ToImmDeep, to_imm_deep);
+
+pub enum Option[T] {
+  None,
+  Some(T),
+}
+
+pub import Option.*;
+
+impl[T] Eq[Option[T]] where Eq[T] {
+  fn eq(a, b) = match mut (a, b) {
+    (Some(x), Some(y)) => x == y,
+    (None, None) => True,
+    _ => False,
+  };
+}
+
+impl[T: ToImmDeep] ToImmDeep[Option[T]] {
+  fn to_imm_deep(o) = match o {
+    None => None,
+    Some(x) => Some(to_imm_deep(x)),
+  };
+}

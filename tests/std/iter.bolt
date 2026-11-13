@@ -1,0 +1,13 @@
+import "./option" (Option);
+
+/// Types that give their items one at a time, until there are none left.
+pub class Iterator[I] {
+  type Item;
+  fn next(it: I) -> Option[Item];
+}
+
+/// Types that can be looped over with `for x in c`.
+pub class Iterable[C] {
+  type Iter: Iterator;
+  fn iter(c: C) -> Iter;
+}

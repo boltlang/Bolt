@@ -1,0 +1,43 @@
+import "./array" (array_len, array_get, array_alloc, array_set, array_freeze);
+import "./ops" *;
+import "./semigroup" (Semigroup);
+import "./mutability" (ToImmDeep);
+
+/// Text, as its bytes in UTF-8, like `std`'s `String`: the type of string
+/// literals, and what `print` and `panic` take.
+pub imm struct String(pub(package) [u8]);
+
+impl ToImmDeep[String] { fn to_imm_deep(s) = s; }
+
+impl Eq[String] {
+  fn eq(a, b) {
+    if array_len(a.0) != array_len(b.0) {
+      return False;
+    }
+    let mut i = 0;
+    while i < array_len(a.0) {
+      if array_get(a.0, i) != array_get(b.0, i) {
+        return False;
+      }
+      i += 1;
+    }
+    True
+  }
+}
+
+impl Semigroup[String] {
+  fn concat(a, b) {
+    let n = array_len(a.0);
+    let bytes = array_alloc(n + array_len(b.0));
+    let mut i = 0;
+    for byte in a.0 {
+      array_set(bytes, i, byte);
+      i += 1;
+    }
+    for byte in b.0 {
+      array_set(bytes, i, byte);
+      i += 1;
+    }
+    String(array_freeze(bytes))
+  }
+}

@@ -1,0 +1,20 @@
+import "./ops" *;
+import "./string" (String);
+import "./debug" (Debug);
+import "./mutability" (ToImmDeep);
+
+/// A character, like `std`'s `Char`: the type of character literals, which
+/// holds its code point.
+pub imm struct Char(pub(package) u32);
+
+impl ToImmDeep[Char] { fn to_imm_deep(c) = c; }
+
+impl Eq[Char] {
+  fn eq(a, b) = a.0 == b.0;
+}
+
+/// Characters look like `'a'`. Only ASCII ones without escapes, which is
+/// what the tests show.
+impl Debug[Char] {
+  fn debug(c) = String([39, c.0 as u8, 39]);
+}

@@ -1,0 +1,69 @@
+import "./ops" *;
+import "./option" (Option, Some, None);
+import "./iter" (Iterable, Iterator);
+import "./mutability" (ToImmDeep, to_imm_deep);
+
+/// The number of elements of `xs`.
+#[builtin]
+pub fn array_len[T](xs: [T]) -> i32;
+
+#[builtin] pub(package) fn array_get[T](xs: [T], i: i32) -> T;
+
+#[builtin] pub(package) fn array_set[T](xs: mut [T], i: i32, x: T);
+
+/// A new array of `len` elements that aren't set yet.
+#[builtin]
+pub(package) fn array_alloc[T](len: i32) -> mut [T];
+
+/// A copy of `xs` that can't be changed.
+#[builtin]
+pub(package) fn array_freeze[T](xs: [T]) -> imm [T];
+
+impl[T] Index[[T]] {
+  type Item = T;
+  fn index(xs, i) = array_get(xs, i);
+}
+
+impl[T] IndexMut[mut [T]] {
+  fn set_index(xs, i, x) = array_set(xs, i, x);
+}
+
+pub struct ArrayIter[T, 'v] {
+  array: 'v [T],
+  index: i32,
+}
+
+impl[T] Iterator[mut ArrayIter[T]] {
+
+  type Item = T;
+
+  fn next(self) -> Option[T] {
+    if self.index < array_len(self.array) {
+      self.index += 1;
+      Some(array_get(self.array, self.index - 1))
+    } else {
+      None
+    }
+  }
+
+}
+
+/// `for x in xs`: the elements, in order. A change the loop makes to an
+/// element it hasn't reached yet is seen when it gets there.
+impl[T, 'v] Iterable['v [T]] {
+  type Iter = mut ArrayIter[T, 'v];
+  fn iter(array) = mut ArrayIter { array, index: 0 };
+}
+
+impl[T: ToImmDeep] ToImmDeep[[T]] {
+  fn to_imm_deep(xs) {
+    let n = array_len(xs);
+    let ys = array_alloc(n);
+    let mut i = 0;
+    while i < n {
+      array_set(ys, i, to_imm_deep(array_get(xs, i)));
+      i = i + 1;
+    }
+    array_freeze(ys)
+  }
+}
