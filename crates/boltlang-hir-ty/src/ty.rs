@@ -732,15 +732,10 @@ impl<'db> Ty<'db> {
         out
     }
 
-    /// An array of `element` with the mutability `mutability`.
     /// A tuple of `tys`. The unit type is always `Imm`, so that it has
     /// one form.
     pub fn tuple(tys: Box<[Ty<'db>]>, mutability: Ty<'db>) -> Self {
-        if tys.iter().any(|t| matches!(t, Ty::Spread(..))) {
-            return Ty::record(tys, Vec::new(), mutability);
-        }
-        let mutability = if tys.is_empty() { Ty::Mutability(Mutability::Imm) } else { mutability };
-        Ty::Tuple(tys, Box::new(mutability))
+        Ty::record(tys, Vec::new(), mutability)
     }
 
     /// A tuple with the positional fields `tys` and the named fields
@@ -832,6 +827,7 @@ impl<'db> Ty<'db> {
         }
     }
 
+    /// An array of `element` with the mutability `mutability`.
     pub fn array(mutability: Ty<'db>, element: Ty<'db>) -> Self {
         Ty::Array(Box::new(mutability), Box::new(element))
     }
