@@ -2551,12 +2551,11 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
             let inner = normalize_assoc(db, file, inner);
             return Some(Ty::with_outer((**m).clone(), inner, Variances::of(db)));
         }
+        // `ro T` once `T` is known, as normalize_ro does: the view adds no
+        // associated types.
         if let Ty::Ro(inner) = t {
             let inner = normalize_assoc(db, file, inner);
-            return Some(match inner {
-                inner if inner.is_opaque() => Ty::Ro(Box::new(inner)),
-                inner => normalize_assoc(db, file, &inner.ro_view(Variances::of(db), false)),
-            });
+            return Some(Ty::Ro(Box::new(inner)).normalize_ro(Variances::of(db)));
         }
         if let Ty::Imm(inner) = t {
             let inner = normalize_assoc(db, file, inner);
