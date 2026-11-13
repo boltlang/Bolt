@@ -30,7 +30,7 @@ use crate::{
     },
     solve::{
         AssocConstraint, AtMostConstraint, Constraint, ConstraintSource, ExprOrPat,
-        FieldConstraint, Origin, Solver, TypeError, has_vars, normalize_assoc,
+        FieldConstraint, Held, Origin, Solver, TypeError, has_vars, normalize_assoc,
         prune_implied_errors, resolve_error, unsolved_error, vars_in, visible_impls,
     },
     ty::{Mutability, Ty, TyVar, VarKind},
@@ -86,6 +86,9 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     // `*args` is a tuple of its pack.
                     let params = &crate::lower::declared_param_tys(db, f, params);
                     for assumption in implied_assumptions(db, f, params) {
+                        ctx.solver.assume_at_most(assumption);
+                    }
+                    for assumption in with_mut_assumptions(db, ret) {
                         ctx.solver.assume_at_most(assumption);
                     }
                     // A method of a class impl must have the class's types.
@@ -347,6 +350,21 @@ fn implied_assumptions<'db>(
     out
 }
 
+/// What the body of a function can assume of each `'m T` in its return
+/// type `ret` whose `T` isn't known: that what `T` holds is at most `m`
+/// (#466), as for its parameters. Each use of the function checks it, once
+/// `T` is, as for every `'m T` (`Solver::with_mut_holds`).
+fn with_mut_assumptions<'db>(db: &'db dyn Db, ret: &Ty<'db>) -> Vec<AtMostConstraint<'db>> {
+    let mut out = Vec::new();
+    split(db, ret, &Ty::Mutability(Mutability::Mut), &mut out);
+    out.retain(|a| {
+        matches!(a.held, Held::Type(Ty::WithMut(..)))
+            && !has_vars(a.held.ty())
+            && !has_vars(&a.bound)
+    });
+    out
+}
+
 /// Infer a group of functions that call each other, and generalize them.
 fn infer_group<'db>(
     db: &'db dyn Db,
@@ -378,6 +396,9 @@ fn infer_group<'db>(
             Some(ret) => ret.fill_unwritten(&mut || solver.new_var(VarKind::Mutability)),
             None => solver.new_var(VarKind::General),
         };
+        for assumption in with_mut_assumptions(db, &ret) {
+            solver.assume_at_most(assumption);
+        }
         // The body decides the effects that aren't written.
         let effects = match &sig.effects {
             Some(effects) => effects.clone(),

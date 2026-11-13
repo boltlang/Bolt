@@ -22,6 +22,7 @@ use crate::{
     lower::{struct_args, struct_field_types, struct_mutability, subst_params},
     solve::{AtMostConstraint, Held},
     ty::{AdtId, Mutability, Ty},
+    variance::Variances,
 };
 
 /// What the fields of the struct `s` imply of its parameters: the atoms of
@@ -123,13 +124,16 @@ pub fn split<'db>(
         // can hold any closure (#320, as `AtMost` in `lean/BoltMut`).
         Ty::Fn(..) if matches!(bound, Ty::Mutability(Mutability::ReadOnly | Mutability::Mut)) => {}
         Ty::Fn(_, _, m, _) => push(out, Held::Mutability((**m).clone()), bound),
-        // `'m T` is at most `m`, and holds what `T` does, at most `m` (#459).
-        // For a `T` that isn't known, that's `T ⊑ m`, which also bounds
-        // its own mutability, which `'m T` replaces: more than needed, but
-        // never less.
+        // `'m T` is at most `m`, and holds what `T` does, at most `m` (#459):
+        // what `T` with the mutability `m` holds, which isn't `T`'s own. For
+        // a `T` that isn't known, that's the atom `'m T ⊑ m` itself, which
+        // says nothing about `T`'s own mutability, since `'m T` replaces it.
         Ty::WithMut(m, inner) => {
             push(out, Held::Mutability((**m).clone()), bound);
-            split(db, inner, m, out);
+            match Ty::with_outer((**m).clone(), (**inner).clone(), Variances::of(db)) {
+                with @ Ty::WithMut(..) => push(out, Held::Type(with), m),
+                known => split(db, &known, m, out),
+            }
         }
         // A `T` seen as `ro` is at most `ro`.
         Ty::Ro(_) => push(out, Held::Mutability(Ty::Mutability(Mutability::ReadOnly)), bound),
