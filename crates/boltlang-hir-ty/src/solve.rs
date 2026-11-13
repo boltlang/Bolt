@@ -1646,7 +1646,9 @@ impl<'db> Solver<'db> {
             ImplSearch::Missing if goal.args.iter().any(has_type_vars) => return false,
             ImplSearch::Missing if assumed_class(self, &goal) => return false,
             // `C.Item` for a parameter `C` with `where Index[C]`.
-            ImplSearch::Missing if self.assumptions.contains(&goal) => {
+            ImplSearch::Missing
+                if self.assumptions.iter().any(|a| assumption_fits(self.db, a, &goal)) =>
+            {
                 Ty::Assoc(constraint.alias, goal.args.clone())
             }
             ImplSearch::Missing => {
@@ -2176,7 +2178,11 @@ impl<'db> Solver<'db> {
         // holds where `Eq[T]` does.
         let viewed = seen_as_class_sees(self.db, goal);
         let goal = &viewed;
-        if self.assumptions.iter().any(|a| seen_as_class_sees(self.db, a) == *goal) {
+        if self
+            .assumptions
+            .iter()
+            .any(|a| assumption_fits(self.db, &seen_as_class_sees(self.db, a), goal))
+        {
             return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
         let has_vars = goal.args.iter().any(has_vars);
@@ -2432,6 +2438,20 @@ fn match_app<'db>(
     let t_rest = Ty::app(t_head, t_args[..t_args.len() - n].to_vec());
     match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst)
         .and(|| match_ty(&p_rest, &t_rest, subst))
+}
+
+/// Whether the assumption `a` gives `goal`: they're the same, except that
+/// a mutability that `a`'s bound left out of its class gives any (#453).
+fn assumption_fits<'db>(
+    db: &'db dyn Db,
+    a: &ClassConstraint<'db>,
+    goal: &ClassConstraint<'db>,
+) -> bool {
+    a.class == goal.class
+        && a.args.len() == goal.args.len()
+        && a.args.iter().zip(goal.args.iter()).all(|(x, y)| {
+            x == y || matches!(x, Ty::Param(p) if crate::lower::is_any_mutability(db, *p))
+        })
 }
 
 /// The error for a class constraint left unsolved: there's no instance if

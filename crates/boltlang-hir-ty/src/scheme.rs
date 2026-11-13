@@ -144,11 +144,45 @@ impl<'db> Scheme<'db> {
         };
         for (i, pred) in self.predicates.iter().enumerate() {
             let origin = required_by(origin, self.sources.predicates.get(i));
-            let constraint = pred.map(|t| {
-                let t = subst(t);
-                solver.flatten_assoc(&t, origin)
-            });
-            solver.add(Constraint::Class { constraint, origin });
+            // A mutability that a bound leaves out of its class stands for
+            // any, so the constraint must hold for each (#453).
+            let any: Vec<GenericParamId<'db>> = pred
+                .args
+                .iter()
+                .filter_map(|t| match t {
+                    Ty::Param(p) if crate::lower::is_any_mutability(db, *p) => Some(*p),
+                    _ => None,
+                })
+                .collect();
+            let mut choices: Vec<HashMap<GenericParamId<'db>, Ty<'db>>> = vec![HashMap::new()];
+            for p in any {
+                choices = choices
+                    .into_iter()
+                    .flat_map(|chosen| {
+                        [
+                            crate::ty::Mutability::Imm,
+                            crate::ty::Mutability::Mut,
+                            crate::ty::Mutability::ReadOnly,
+                        ]
+                        .map(|m| {
+                            let mut chosen = chosen.clone();
+                            chosen.insert(p, Ty::Mutability(m));
+                            chosen
+                        })
+                    })
+                    .collect();
+            }
+            for chosen in choices {
+                let constraint = pred.map(|t| {
+                    let t = t.fold(&mut |t| match t {
+                        Ty::Param(p) => chosen.get(p).cloned(),
+                        _ => None,
+                    });
+                    let t = subst(&t);
+                    solver.flatten_assoc(&t, origin)
+                });
+                solver.add(Constraint::Class { constraint, origin });
+            }
         }
         for (i, field) in self.fields.iter().enumerate() {
             let origin = required_by(origin, self.sources.fields.get(i));
@@ -417,27 +451,8 @@ pub fn class_impl_method_sig<'db>(
     let method_def = GenericDefId::Function(method);
     let own_def = GenericDefId::Function(f);
     let own_params = same_generic_count(db, method, f).then(|| identity_args(db, own_def));
-    // The method's named mutabilities, like the `'m` of `fn default() ->
-    // 'm T`, are the first of the impl's method (#459), which come after
-    // its type parameters.
-    let types = |def: GenericDefId<'db>| def.generic_params(db).type_params.len() as u32;
-    let (method_types, own_types) = (types(method_def), types(own_def));
-    let names = crate::lower::named_mutabilities(db, method_def).len() as u32;
-    let own_names = |t: Ty<'db>| {
-        t.fold(&mut |t| match t {
-            Ty::Param(p)
-                if p.def == method_def
-                    && p.index >= method_types
-                    && p.index < method_types + names =>
-            {
-                let index = own_types + (p.index - method_types);
-                Some(Ty::Param(GenericParamId { def: own_def, index }))
-            }
-            _ => None,
-        })
-    };
     let subst = |t: &Ty<'db>| {
-        let t = own_names(subst_params(t, class_def, &target.args));
+        let t = subst_params(t, class_def, &target.args);
         match &own_params {
             Some(params) => subst_params(&t, method_def, params),
             None => t,

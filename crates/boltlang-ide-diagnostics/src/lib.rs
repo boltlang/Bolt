@@ -896,9 +896,10 @@ fn describe(
         K::UnknownMutability => (
             C::UNKNOWN_MUTABILITY,
             format!(
-                "the mutability of `{source}` isn't one of this function's or impl's, or one that this struct declares: \
+                "the mutability of `{source}` isn't one of this function's or impl's, or one that this struct or class declares: \
                  a name like `'m` can only be used in the function or impl whose signature names it, an impl's \
-                 associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`"
+                 associated types and methods, and a struct or class that declares it, like `struct VecIter[T, 'v]` \
+                 or `class Default[T, 'm]`"
             ),
         ),
         K::UnusedImplParam { name, instance, suggestion } => {

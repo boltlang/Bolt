@@ -45,8 +45,6 @@ written: forall C. Each[C, 'v] => fn(c: 'v C) -> Each[C, 'v].Iter
 left_out: forall C. Each[C, '_] => fn(c: 'v C) -> i32
 let a: mut Walk[i32, mut]
 let b: i32
---------------------------------------------------------------------------------
-error at `each`: no instance Each[C, 'v]
 
 ================================================================================
 Impls for one mutability, and a superclass with one (#453)
@@ -84,3 +82,25 @@ Freeze[[Bool], imm].freeze: fn(c: imm [Bool]) -> i32
 error at `Freeze[[T], 'v]`: overlaps the impl for Freeze[[i32], imm]
 error at `Freeze[[Bool], imm, mut]`: expected at most 1 mutability arguments, found 2
 error at `Freeze[[Bool], imm, mut]`: overlaps the impl for Freeze[[T], 'v]
+
+================================================================================
+A bound that leaves a mutability out holds for each (#453)
+:error
+:test-prelude
+================================================================================
+class Make[T, 'm] { fn make() -> 'm T; }
+impl[T] Make[[T], 'm] { fn make() = 'm []; }
+struct Counter { n: i32 }
+impl Make[Counter, mut] { fn make() = mut Counter { n: 0 }; }
+fn fresh[T: Make]() -> mut T = make();
+let a: mut [i32] = fresh();
+let b: mut Counter = fresh();
+--------------------------------------------------------------------------------
+Make[[T], 'm].make: forall T. fn() -> 'm [T]
+Make[Counter, mut].make: fn() -> mut Counter
+fresh: forall T. Make[T, '_] => fn() -> mut T
+let a: mut [i32]
+let b: mut Counter
+--------------------------------------------------------------------------------
+error at `fresh`: no instance Make[Counter, imm]
+error at `fresh`: no instance Make[Counter, ro]

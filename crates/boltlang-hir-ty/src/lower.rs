@@ -55,6 +55,16 @@ impl<'db> HiddenParams<'db> {
     }
 }
 
+/// Whether `p` is a mutability that a bound of its function leaves out of
+/// the bound's class, like the `'v` of `Each[C, 'v]` in `C: Each` (#453).
+/// It stands for any mutability: the body may assume the constraint for
+/// each, and a caller must show it for each.
+pub fn is_any_mutability<'db>(db: &'db dyn Db, p: GenericParamId<'db>) -> bool {
+    let GenericDefId::Function(_) = p.def else { return false };
+    let first = first_hidden(db, p.def);
+    (first..first + generic_predicates(db, p.def).hidden).contains(&p.index)
+}
+
 /// The index of the first hidden mutability parameter of `def`: after its
 /// declared type parameters and its named mutabilities.
 pub fn first_hidden<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> u32 {
@@ -1073,28 +1083,20 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
         _ => return Box::new([]),
     };
     let mut names: Vec<Name> = Vec::new();
-    // A method of an impl has its class method's names first, in order,
-    // which its type comes with (#459), and doesn't have its impl's,
-    // which are the impl's (#450). A method of a class doesn't have its
-    // class's either (#453).
+    // A method of an impl doesn't have its impl's names, which are the
+    // impl's (#450). A method of a class has only those it declares: a
+    // name written in its signature is the class's, which declares it
+    // like `class Default[T, 'm]` (#453).
     let mut impl_names: &[Name] = &[];
-    let container = match def {
-        GenericDefId::Function(f) => Some(f.container(db)),
-        _ => None,
-    };
-    match container {
-        Some(ItemContainerId::Impl(imp)) => {
-            impl_names = named_mutabilities(db, GenericDefId::Impl(imp));
-            if let GenericDefId::Function(f) = def
-                && let Some(method) = crate::scheme::class_method_of(db, f)
-            {
-                names
-                    .extend(named_mutabilities(db, GenericDefId::Function(method)).iter().cloned());
+    let mut implicit = true;
+    match def {
+        GenericDefId::Function(f) => match f.container(db) {
+            ItemContainerId::Impl(imp) => {
+                impl_names = named_mutabilities(db, GenericDefId::Impl(imp));
             }
-        }
-        Some(ItemContainerId::Class(class)) => {
-            impl_names = named_mutabilities(db, GenericDefId::Class(class));
-        }
+            ItemContainerId::Class(_) => implicit = false,
+            _ => {}
+        },
         _ => {}
     }
     for param in def.generic_params(db).mutability_params.iter() {
@@ -1102,7 +1104,7 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
             names.push(param.name.clone());
         }
     }
-    let Some(store) = store else { return names.into() };
+    let Some(store) = store.filter(|_| implicit) else { return names.into() };
     for (_, type_ref) in store.types.iter() {
         if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. }
         | TypeRef::Mutability(MutabilityRef::Named(name)) = type_ref

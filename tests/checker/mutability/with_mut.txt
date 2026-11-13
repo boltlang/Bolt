@@ -44,31 +44,31 @@ error at `pick`: expected imm [{integer}], found mut [{integer}]
 'm before an associated type
 :test-prelude
 ================================================================================
-class Get[C] { type Item; fn get(c: 'm C) -> 'm Item; }
+class Get[C, 'm] { type Item; fn get(c: 'm C) -> 'm Item; }
 struct Box2 { x: [i32] }
 impl Get[Box2] { type Item = [i32]; fn get(c) = c.x; }
-fn twice[C](c: 'm C) -> ('m C.Item, 'm C.Item) where Get[C] = (get(c), get(c));
+fn twice[C](c: 'm C) -> ('m C.Item, 'm C.Item) where Get[C, 'm] = (get(c), get(c));
 let a = get(Box2 { x: [1] });
 --------------------------------------------------------------------------------
-Get[Box2].get: fn(c: 'm Box2) -> 'm [i32]
-twice: forall C. Get[C] => fn(c: 'm C) -> imm ('m C.Item, 'm C.Item)
+Get[Box2, '_].get: fn(c: 'm Box2) -> 'm [i32]
+twice: forall C. Get[C, 'm] => fn(c: 'm C) -> imm ('m Get[C, 'm].Item, 'm Get[C, 'm].Item)
 let a: imm [i32]
 
 ================================================================================
-A class method's own names, which its impls' methods have (#459)
+A class's names, which its impls give and their methods use (#459)
 :test-prelude
 ================================================================================
-class Make[T] { fn make() -> 'm T; }
-impl[T] Make[[T]] { fn make() = 'm []; }
-class Convert[T, S] { fn convert(x: ro S) -> 'm T; }
-impl Convert[[i32], i32] { fn convert(x) = 'm [x]; }
+class Make[T, 'm] { fn make() -> 'm T; }
+impl[T] Make[[T], 'm] { fn make() = 'm []; }
+class Convert[T, S, 'm] { fn convert(x: ro S) -> 'm T; }
+impl Convert[[i32], i32, 'm] { fn convert(x) = 'm [x]; }
 let a: mut [i32] = make();
 let b: [Bool] = make();
 let c: mut [i32] = convert(1);
 let d: [i32] = convert(2);
 --------------------------------------------------------------------------------
-Make[[T]].make: forall T. fn() -> 'm [T]
-Convert[[i32], i32].convert: fn(x: i32) -> 'm [i32]
+Make[[T], 'm].make: forall T. fn() -> 'm [T]
+Convert[[i32], i32, 'm].convert: fn(x: i32) -> 'm [i32]
 let a: mut [i32]
 let b: imm [Bool]
 let c: mut [i32]
@@ -92,11 +92,11 @@ A use checks that what a 'm T holds is at most 'm (#459)
 :error
 :test-prelude
 ================================================================================
-class Make[T] { fn make() -> 'm T; }
-impl[T] Make[[T]] { fn make() = 'm []; }
+class Make[T, 'm] { fn make() -> 'm T; }
+impl[T] Make[[T], 'm] { fn make() = 'm []; }
 fn keep(x: mut [i32]) -> imm [mut [i32]] = make();
 --------------------------------------------------------------------------------
-Make[[T]].make: forall T. fn() -> 'm [T]
+Make[[T], 'm].make: forall T. fn() -> 'm [T]
 keep: fn(x: mut [i32]) -> imm [mut [i32]]
 --------------------------------------------------------------------------------
 error at `make`: imm [mut [i32]] isn't at most imm
