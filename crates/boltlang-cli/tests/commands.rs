@@ -286,6 +286,24 @@ fn test_runs_the_tests_of_files() {
 }
 
 #[test]
+fn a_test_that_should_panic_passes_when_it_stops_with_its_error() {
+    let source = "#[test]\n#[should_panic(expected = \"boom\")]\nfn panics() { panic(\"boom\"); }\n\
+        #[test]\n#[should_panic]\nfn any_error() { panic(\"x\"); }\n\
+        #[test]\n#[should_panic]\nfn returns() {}\n\
+        #[test]\n#[should_panic(expected = \"other\")]\nfn other_error() { panic(\"boom\"); }\n";
+    let dir = dir_with("test-should-panic", &[("a.bolt", source)]);
+    let o = bolt_std(&dir, "test", &[]);
+    assert!(!o.ok);
+    assert!(o.out.contains("a.bolt::panics ... ok"), "{}", o.out);
+    assert!(o.out.contains("a.bolt::any_error ... ok"), "{}", o.out);
+    assert!(o.out.contains("a.bolt::returns ... FAILED"), "{}", o.out);
+    assert!(o.err.contains("didn't stop with an error"), "{}", o.err);
+    assert!(o.out.contains("a.bolt::other_error ... FAILED"), "{}", o.out);
+    assert!(o.err.contains("but not with `other`; it wrote:\nboom"), "{}", o.err);
+    assert!(o.out.contains("test result: FAILED. 2 passed; 2 failed"), "{}", o.out);
+}
+
+#[test]
 fn test_runs_the_tests_compiled_to_wasm() {
     if Command::new("node").arg("--version").output().is_err() {
         eprintln!("skipped: no `node` to run the tests with");

@@ -50,6 +50,30 @@ pub fn run_captured(
     (String::from_utf8_lossy(&captured).into_owned(), result)
 }
 
+/// Whether a test with `#[should_panic]` passed: it stopped with an error,
+/// and `expected`, if given, is in what it wrote or in the error. If not,
+/// why, with what it wrote.
+pub fn should_panic_outcome(
+    result: Result<(), String>,
+    output: &str,
+    expected: Option<&str>,
+) -> Result<(), String> {
+    let shown = |why: String| match output.trim_end() {
+        "" => why,
+        output => format!("{why}; it wrote:\n{output}"),
+    };
+    match (result, expected) {
+        (Ok(()), _) => {
+            Err(shown("it didn't stop with an error, which `#[should_panic]` expects".into()))
+        }
+        (Err(_), None) => Ok(()),
+        (Err(error), Some(text)) if output.contains(text) || error.contains(text) => Ok(()),
+        (Err(error), Some(text)) => {
+            Err(shown(format!("it stopped with an error ({error}), but not with `{text}`")))
+        }
+    }
+}
+
 /// Run `f` with `emu` as the host, which it gives back.
 fn execute(
     program: &Lowered,

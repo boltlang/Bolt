@@ -14,8 +14,8 @@ use boltlang_base_db::{
 };
 use boltlang_codegen_conduit::{
     Lowered, lower,
-    node::NodeHost,
-    run::{run, run_with_args},
+    node::{NodeHost, Runtime},
+    run::{run, run_captured, run_with_args, should_panic_outcome},
 };
 use boltlang_hir_def::nameres::test_functions;
 use boltlang_ide_diagnostics::{
@@ -259,7 +259,8 @@ impl Exec for RunCommand {
 
 /// Check files, then run their tests, with Conduit's evaluator: the
 /// functions with `#[test]` before them. A test fails when it stops with an
-/// error, like a panic.
+/// error, like a panic, unless it has `#[should_panic]`, which makes it
+/// fail when it doesn't.
 #[derive(clap::Parser)]
 struct TestCommand {
     /// Files, or directories whose `.bolt` files to test, recursively
@@ -337,14 +338,39 @@ impl Exec for TestCommand {
                 }
                 None => None,
             };
+            // What `#[should_panic]` says of each test, by its name.
+            let should_panic: std::collections::HashMap<String, Option<String>> =
+                test_functions(&db, file)
+                    .iter()
+                    .filter_map(|f| {
+                        let item = f.item(&db);
+                        let name = item.display_name()?.to_string();
+                        Some((name, item.should_panic.as_ref()?.expected.clone()))
+                    })
+                    .collect();
             for (name, f) in tests {
                 print!("test {}::{name} ... ", display_path(&db, file));
                 io::stdout().flush()?;
                 // Each test gets a machine, or an instance, of its own, so
                 // that tests don't see each other's objects.
-                let result = match (&wasm, &module) {
-                    (Some(wasm), Some(module)) => wasm.run(module, name)?,
-                    _ => run(&program, *f, self.fuel).map_err(|e| e.to_string()),
+                let result = match (should_panic.get(name), &wasm, &module) {
+                    // It must stop with an error, which says `expected`, in
+                    // what it wrote or the error itself. What it wrote is
+                    // only shown if it doesn't.
+                    (Some(expected), wasm, module) => {
+                        let (result, output) = match (wasm, module) {
+                            (Some(wasm), Some(module)) => {
+                                wasm.run_captured(Runtime::Node, module, name)?
+                            }
+                            _ => {
+                                let (output, result) = run_captured(&program, *f, self.fuel);
+                                (result.map_err(|e| e.to_string()), output)
+                            }
+                        };
+                        should_panic_outcome(result, &output, expected.as_deref())
+                    }
+                    (None, Some(wasm), Some(module)) => wasm.run(module, name)?,
+                    (None, ..) => run(&program, *f, self.fuel).map_err(|e| e.to_string()),
                 };
                 match result {
                     Ok(()) => {

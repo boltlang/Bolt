@@ -52,6 +52,16 @@ fn P.t() {}
 fn fine() { let x = 1; }
 #[test]
 fn never_returns() { loop {} }
+#[test]
+#[should_panic(oops)]
+fn malformed() {}
+ //^^^^^^^^^ error: `#[should_panic]` takes nothing, or the text the error must have, like `#[should_panic(expected = "index out of bounds")]`
+#[should_panic]
+fn not_a_test() {}
+ //^^^^^^^^^^ error: only a test can have `#[should_panic]`: add `#[test]`
+#[test]
+#[should_panic(expected = "boom")]
+fn fine_too() {}
 
 ================================================================================
 Matches that miss values and arms never taken

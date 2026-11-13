@@ -1253,6 +1253,11 @@ fn bad_test_message(reason: BadTest) -> String {
         BadTest::Params => "a test can't have parameters: nothing gives it any",
         BadTest::Generic => "a test can't have type parameters: nothing decides them",
         BadTest::Result => "a test must give `()`: nothing looks at what it gives",
+        BadTest::ShouldPanicNotTest => "only a test can have `#[should_panic]`: add `#[test]`",
+        BadTest::ShouldPanicMalformed => {
+            "`#[should_panic]` takes nothing, or the text the error must have, like \
+             `#[should_panic(expected = \"index out of bounds\")]`"
+        }
     }
     .to_string()
 }

@@ -228,6 +228,9 @@ pub struct Function {
     /// Whether it's a test, with `#[test]` before it. A test isn't in the
     /// file's scope: it's only found by [`crate::nameres::test_functions`].
     pub is_test: bool,
+    /// What `#[should_panic]` before a test says: that it passes when it
+    /// stops with an error, as Rust's does.
+    pub should_panic: Option<ShouldPanic>,
     /// Whether it's a builtin, with `#[builtin]` before it: a function
     /// without a body that the compiler provides.
     pub is_builtin: bool,
@@ -235,6 +238,16 @@ pub struct Function {
     /// the host provides.
     pub link: Option<Link>,
     pub ast_id: AstId,
+}
+
+/// What `#[should_panic]` or `#[should_panic(expected = "text")]` says: a
+/// test that passes when it stops with an error, with `text` in what it
+/// wrote or in the error, if it's given.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct ShouldPanic {
+    pub expected: Option<String>,
+    /// Whether what's between the parentheses isn't `expected = "text"`.
+    pub malformed: bool,
 }
 
 /// What `#[link(wasm, module = "m", name = "n", abi = flat)]` says: that
@@ -572,6 +585,7 @@ impl ItemTree {
             is_const: f.const_token().is_some(),
             has_body: f.body().is_some(),
             is_test: has_attr(f, "test"),
+            should_panic: should_panic_attr(f),
             is_builtin: has_attr(f, "builtin"),
             link: link_attr(f),
             ast_id,
@@ -657,6 +671,31 @@ pub(crate) fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
     node.attrs()
         .filter_map(|attr| attr.meta())
         .any(|meta| meta.token_tree().is_none() && meta.expr().is_none() && is_attr(&meta, name))
+}
+
+/// What the `#[should_panic(..)]` of `node` says, if it has one.
+fn should_panic_attr(node: &impl ast::HasAttrs) -> Option<ShouldPanic> {
+    let meta =
+        node.attrs().filter_map(|attr| attr.meta()).find(|meta| is_attr(meta, "should_panic"))?;
+    let Some(tree) = meta.token_tree() else {
+        return Some(ShouldPanic { expected: None, malformed: meta.expr().is_some() });
+    };
+    let tokens: Vec<(SyntaxKind, String)> = tree
+        .syntax()
+        .children_with_tokens()
+        .filter_map(|e| e.into_token())
+        .filter(|t| !t.kind().is_trivia())
+        .map(|t| (t.kind(), t.text().to_string()))
+        .collect();
+    Some(match tokens.as_slice() {
+        [(L_PAREN, _), (R_PAREN, _)] => ShouldPanic { expected: None, malformed: false },
+        [(L_PAREN, _), (IDENT, key), (EQUALS, _), (STRING, text), (R_PAREN, _)]
+            if key == "expected" =>
+        {
+            ShouldPanic { expected: Some(unquote(text)), malformed: false }
+        }
+        _ => ShouldPanic { expected: None, malformed: true },
+    })
 }
 
 /// What the `#[link(..)]` of `node` says, if it has one.

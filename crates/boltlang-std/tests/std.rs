@@ -21,7 +21,7 @@ use boltlang_base_db::{Db, File, Settings, SystemPath, Target, TestDb};
 use boltlang_codegen_conduit::{
     Lowered, lower,
     node::{NodeHost, Runtime},
-    run::run,
+    run::{run, run_captured, should_panic_outcome},
     wasm,
 };
 use boltlang_hir_def::nameres::test_functions;
@@ -42,11 +42,17 @@ fn main() -> ExitCode {
     // Each mode has the tests of its target, which `#[cfg]` can pick.
     let emu = std_db(Target::default());
     let wasm = std_db(Target::WASM);
-    let names = |db: &TestDb, relative: &str| -> Vec<String> {
+    // Each test's name, and what its `#[should_panic]` expects, if it has
+    // one.
+    let names = |db: &TestDb, relative: &str| -> Vec<(String, Option<Option<String>>)> {
         let file = std_file(db, relative);
         test_functions(db, file)
             .iter()
-            .map(|f| f.item(db).display_name().unwrap().to_string())
+            .map(|f| {
+                let item = f.item(db);
+                let expected = item.should_panic.as_ref().map(|s| s.expected.clone());
+                (item.display_name().unwrap().to_string(), expected)
+            })
             .collect()
     };
     let node = if boltlang_codegen_conduit::node::available() {
@@ -58,19 +64,19 @@ fn main() -> ExitCode {
     let mut trials = Vec::new();
     for path in paths {
         let relative = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
-        for name in names(&emu, &relative) {
+        for (name, expected) in names(&emu, &relative) {
             let test = format!("eval::{}::{name}", module(&relative));
             let r = relative.clone();
-            trials.push(Trial::test(test, move || run_eval(&r, &name)));
+            trials.push(Trial::test(test, move || run_eval(&r, &name, expected.as_ref())));
         }
-        for name in names(&wasm, &relative) {
+        for (name, expected) in names(&wasm, &relative) {
             for (prefix, runtime) in [("wasm", Runtime::Node), ("browser", Runtime::Browser)] {
                 let test = format!("{prefix}::{}::{name}", module(&relative));
-                let (r, n) = (relative.clone(), name.clone());
+                let (r, n, e) = (relative.clone(), name.clone(), expected.clone());
                 let (node, modules) = (node.clone(), modules.clone());
                 let ignored = node.is_none();
                 let trial = Trial::test(test, move || match &node {
-                    Some(node) => run_wasm(node, runtime, &modules, &r, &n),
+                    Some(node) => run_wasm(node, runtime, &modules, &r, &n, e.as_ref()),
                     None => Ok(()),
                 });
                 trials.push(trial.with_ignored_flag(ignored));
@@ -108,8 +114,14 @@ fn lowered(db: &TestDb, relative: &str) -> Result<Lowered, Failed> {
     })
 }
 
-/// Run the test `name` of the file `relative` with the evaluator.
-fn run_eval(relative: &str, name: &str) -> Result<(), Failed> {
+/// Run the test `name` of the file `relative` with the evaluator. With
+/// `should_panic`, it must stop with an error, which has the text it
+/// expects, if any.
+fn run_eval(
+    relative: &str,
+    name: &str,
+    should_panic: Option<&Option<String>>,
+) -> Result<(), Failed> {
     let db = std_db(Target::default());
     let program = lowered(&db, relative)?;
     let &(_, f) = program
@@ -117,7 +129,14 @@ fn run_eval(relative: &str, name: &str) -> Result<(), Failed> {
         .iter()
         .find(|(n, _)| n == name)
         .ok_or_else(|| format!("there's no test `{name}` any more"))?;
-    run(&program, f, Some(FUEL)).map_err(|e| e.to_string().into())
+    match should_panic {
+        Some(expected) => {
+            let (output, result) = run_captured(&program, f, Some(FUEL));
+            let result = result.map_err(|e| e.to_string());
+            should_panic_outcome(result, &output, expected.as_deref()).map_err(Failed::from)
+        }
+        None => run(&program, f, Some(FUEL)).map_err(|e| e.to_string().into()),
+    }
 }
 
 /// Run the test `name` of the file `relative` in Wasm, with `runtime`, in
@@ -128,12 +147,16 @@ fn run_wasm(
     modules: &Modules,
     relative: &str,
     name: &str,
+    should_panic: Option<&Option<String>>,
 ) -> Result<(), Failed> {
     let cell = modules.lock().unwrap().entry(relative.to_string()).or_default().clone();
     let module = cell.get_or_init(|| compile(node, relative)).clone()?;
-    match node.run_captured(runtime, &module, name).map_err(|e| e.to_string())? {
-        (Ok(()), _) => Ok(()),
-        (Err(why), output) => Err(format!("{why}\n{output}").into()),
+    match (node.run_captured(runtime, &module, name).map_err(|e| e.to_string())?, should_panic) {
+        ((result, output), Some(expected)) => {
+            should_panic_outcome(result, &output, expected.as_deref()).map_err(Failed::from)
+        }
+        ((Ok(()), _), None) => Ok(()),
+        ((Err(why), output), None) => Err(format!("{why}\n{output}").into()),
     }
 }
 

@@ -570,6 +570,11 @@ pub enum BadTest {
     Generic,
     /// It gives something other than `()`, which nothing looks at.
     Result,
+    /// It has `#[should_panic]` without `#[test]`.
+    ShouldPanicNotTest,
+    /// Its `#[should_panic(..)]` has something other than
+    /// `expected = "text"`.
+    ShouldPanicMalformed,
 }
 
 /// What an item of a class or impl is.
@@ -884,10 +889,17 @@ impl<'db> Collector<'db> {
     fn test(&mut self, f: FunctionId<'db>) {
         let db = self.db;
         let item = f.item(db);
+        let range = Some(self.item_range(item.ast_id));
+        if let Some(should_panic) = &item.should_panic {
+            if !item.is_test {
+                self.push(range, DiagnosticKind::BadTest { reason: BadTest::ShouldPanicNotTest });
+            } else if should_panic.malformed {
+                self.push(range, DiagnosticKind::BadTest { reason: BadTest::ShouldPanicMalformed });
+            }
+        }
         if !item.is_test {
             return;
         }
-        let range = Some(self.item_range(item.ast_id));
         if item.owner.is_some() || !matches!(f.container(db), ItemContainerId::File(_)) {
             self.push(range, DiagnosticKind::BadTest { reason: BadTest::NotTopLevel });
             return;
