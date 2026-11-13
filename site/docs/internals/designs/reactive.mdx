@@ -282,6 +282,51 @@ fn login_form(on_login: fn(User) -> ()) -> Html does Reactive {
 }
 ```
 
+## Fetching while drawing
+
+`fetch` in `submit` runs in an event handler. It performs `Async`, waits,
+and resumes once with a `Result`. A component that fetches while drawing
+wants to show each state instead: loading, failed and done. That's what
+`Remote` is for.
+
+Resuming the continuation of the call once with `Loading` and again with
+`Done` would do it, but that's resuming more than once, which is problem 4.
+The code after the call usually holds a `let mut`, so its continuation is
+`mut` and may be resumed at most once (see [Mutability and
+effects](#mutability-and-effects)).
+
+Redrawing gives the same result with one resume each time. Loading is a
+`Reactive` operation with a state slot, keyed by its place in the source
+like `state` (problem 1):
+
+1. On the first draw the slot is empty. The call starts the request as a
+   task, stores `Loading` and resumes right away with it.
+2. When the task is done, it writes `Done(data)` or `Failed(e)` to the slot,
+   like a write from an event handler. That schedules a redraw.
+3. On the redraw the same call finds the slot filled and resumes with what's
+   in it.
+
+```bolt
+fn profile() -> Html does Reactive {
+    match load[User, HttpError]("/foobar") {
+        Loading => p() {["Loading…"]},
+        Failed(e) => p() {["Error: ", e.message]},
+        Done(user) => h1() {["Hi ", user.username]},
+    }
+}
+```
+
+Unlike a second resume, a redraw runs the whole component again, not only
+the code after the call. Drawing must be safe to run again anyway.
+
+So there are two kinds of calls: `fetch` with `Async` in handlers, which
+returns a `Result` once, and a loader with `Reactive` while drawing, which
+returns a `Remote`. They return different types, so they get different
+names; `load` is a placeholder. An `Async` call while drawing still
+suspends the component, as in
+[Components as effectful functions](#components-as-effectful-functions),
+for when a fallback from the handler is enough.
+
 ## Still to design
 
 - Child components and children, like `<Layout>…</Layout>`.
