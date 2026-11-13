@@ -4,6 +4,7 @@ import "./default" *;
 import "./array" (array_len);
 import "./option" (Option, Some, None);
 import "./string" (String);
+import "./vec" (Vec, push, len);
 import "./ops" *;
 import "./io" (assert);
 
@@ -29,4 +30,11 @@ fn values_to_start_from() {
   assert(o == None);
   let s: String = default();
   assert(s == "");
+}
+
+#[test]
+fn an_empty_vec_to_change() {
+  let v: mut Vec[i32] = default();
+  v.push(1);
+  assert(v.len() == 1);
 }
