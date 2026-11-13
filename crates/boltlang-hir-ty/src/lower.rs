@@ -228,12 +228,22 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         self
     }
 
-    /// The parameter that a named mutability like `'m` stands for.
+    /// The parameter that a named mutability like `'m` stands for: one of
+    /// the function's, or of its impl's (#450).
     fn named_mutability(&self, name: &Name) -> Option<Ty<'db>> {
         let def = self.mutabilities?;
-        let index = named_mutabilities(self.db, def).iter().position(|n| n == name)?;
-        let index = def.generic_params(self.db).type_params.len() + index;
-        Some(Ty::Param(GenericParamId { def, index: index as u32 }))
+        let of = |def: GenericDefId<'db>| {
+            let index = named_mutabilities(self.db, def).iter().position(|n| n == name)?;
+            let index = def.generic_params(self.db).type_params.len() + index;
+            Some(Ty::Param(GenericParamId { def, index: index as u32 }))
+        };
+        of(def).or_else(|| match def {
+            GenericDefId::Function(f) => match f.container(self.db) {
+                ItemContainerId::Impl(imp) => of(GenericDefId::Impl(imp)),
+                _ => None,
+            },
+            _ => None,
+        })
     }
 
     /// A mutability on its own, like the `imm` of `T: imm`, or `None` if
@@ -1036,6 +1046,18 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
         _ => return Box::new([]),
     };
     let mut names: Vec<Name> = Vec::new();
+    // A method of an impl has its class method's names first, in order,
+    // which its type comes with (#459), and doesn't have its impl's,
+    // which are the impl's (#450).
+    let mut impl_names: &[Name] = &[];
+    if let GenericDefId::Function(f) = def
+        && let ItemContainerId::Impl(imp) = f.container(db)
+    {
+        impl_names = named_mutabilities(db, GenericDefId::Impl(imp));
+        if let Some(method) = crate::scheme::class_method_of(db, f) {
+            names.extend(named_mutabilities(db, GenericDefId::Function(method)).iter().cloned());
+        }
+    }
     for param in def.generic_params(db).mutability_params.iter() {
         if !names.contains(&param.name) {
             names.push(param.name.clone());
@@ -1046,6 +1068,7 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
         if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. }
         | TypeRef::Mutability(MutabilityRef::Named(name)) = type_ref
             && !names.contains(name)
+            && !impl_names.contains(name)
         {
             names.push(name.clone());
         }

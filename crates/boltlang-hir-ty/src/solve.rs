@@ -1144,6 +1144,7 @@ impl<'db> Solver<'db> {
             Ty::App(head, _) if matches!(*head, Ty::Var(_)) => {}
             from => {
                 self.equal(&c.to, &with(&c.mutability, from), origin);
+                self.with_mut_holds(c, origin);
                 return true;
             }
         }
@@ -1177,7 +1178,18 @@ impl<'db> Solver<'db> {
             self.equal(&c.mutability, &outer, origin);
         }
         self.equal(&c.from, &from, origin);
+        self.with_mut_holds(c, origin);
         true
+    }
+
+    /// What a `'m T` holds is at most `m`, which a function whose type has
+    /// one, like a class method's `fn default() -> 'm T`, assumes of it
+    /// (#459), so the use checks it.
+    fn with_mut_holds(&mut self, c: &WithMutConstraint<'db>, origin: Origin<'db>) {
+        let constraint =
+            AtMostConstraint { held: Held::Type(c.to.clone()), bound: c.mutability.clone() };
+        let source = AtMostSource::Needed(constraint.clone());
+        self.add(Constraint::AtMost { constraint, source, origin });
     }
 
     /// `imm` of a struct or enum: an `imm` one, whose type arguments are

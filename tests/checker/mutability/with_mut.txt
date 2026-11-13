@@ -50,6 +50,54 @@ impl Get[Box2] { type Item = [i32]; fn get(c) = c.x; }
 fn twice[C](c: 'm C) -> ('m C.Item, 'm C.Item) where Get[C] = (get(c), get(c));
 let a = get(Box2 { x: [1] });
 --------------------------------------------------------------------------------
-Get[Box2].get: fn(c: Box2) -> [i32]
+Get[Box2].get: fn(c: 'm Box2) -> 'm [i32]
 twice: forall C. Get[C] => fn(c: 'm C) -> imm ('m C.Item, 'm C.Item)
 let a: imm [i32]
+
+================================================================================
+A class method's own names, which its impls' methods have (#459)
+:test-prelude
+================================================================================
+class Make[T] { fn make() -> 'm T; }
+impl[T] Make[[T]] { fn make() = 'm []; }
+class Convert[T, S] { fn convert(x: ro S) -> 'm T; }
+impl Convert[[i32], i32] { fn convert(x) = 'm [x]; }
+let a: mut [i32] = make();
+let b: [Bool] = make();
+let c: mut [i32] = convert(1);
+let d: [i32] = convert(2);
+--------------------------------------------------------------------------------
+Make[[T]].make: forall T. fn() -> 'm [T]
+Convert[[i32], i32].convert: fn(x: i32) -> 'm [i32]
+let a: mut [i32]
+let b: imm [Bool]
+let c: mut [i32]
+let d: imm [i32]
+
+================================================================================
+An impl's method can use the impl's names (#450)
+:test-prelude
+================================================================================
+class D[T] { fn d() -> T; }
+impl[T] D['m [T]] { fn d() = 'm []; }
+let a: mut [i32] = d();
+let b: [i32] = d();
+--------------------------------------------------------------------------------
+D['m [T]].d: forall T. fn() -> 'm [T]
+let a: mut [i32]
+let b: imm [i32]
+
+================================================================================
+A use checks that what a 'm T holds is at most 'm (#459)
+:error
+:test-prelude
+================================================================================
+class Make[T] { fn make() -> 'm T; }
+impl[T] Make[[T]] { fn make() = 'm []; }
+fn keep(x: mut [i32]) -> imm [mut [i32]] = make();
+--------------------------------------------------------------------------------
+Make[[T]].make: forall T. fn() -> 'm [T]
+keep: fn(x: mut [i32]) -> imm [mut [i32]]
+--------------------------------------------------------------------------------
+error at `make`: imm [mut [i32]] isn't at most imm
+error at `make()`: imm [mut [i32]] holds mut [i32]

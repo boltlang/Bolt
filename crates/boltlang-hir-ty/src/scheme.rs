@@ -415,8 +415,27 @@ pub fn class_impl_method_sig<'db>(
     let method_def = GenericDefId::Function(method);
     let own_def = GenericDefId::Function(f);
     let own_params = same_generic_count(db, method, f).then(|| identity_args(db, own_def));
+    // The method's named mutabilities, like the `'m` of `fn default() ->
+    // 'm T`, are the first of the impl's method (#459), which come after
+    // its type parameters.
+    let types = |def: GenericDefId<'db>| def.generic_params(db).type_params.len() as u32;
+    let (method_types, own_types) = (types(method_def), types(own_def));
+    let names = crate::lower::named_mutabilities(db, method_def).len() as u32;
+    let own_names = |t: Ty<'db>| {
+        t.fold(&mut |t| match t {
+            Ty::Param(p)
+                if p.def == method_def
+                    && p.index >= method_types
+                    && p.index < method_types + names =>
+            {
+                let index = own_types + (p.index - method_types);
+                Some(Ty::Param(GenericParamId { def: own_def, index }))
+            }
+            _ => None,
+        })
+    };
     let subst = |t: &Ty<'db>| {
-        let t = subst_params(t, class_def, &target.args);
+        let t = own_names(subst_params(t, class_def, &target.args));
         match &own_params {
             Some(params) => subst_params(&t, method_def, params),
             None => t,
@@ -503,7 +522,7 @@ fn only_seen_as_ro<'db>(ty: &Ty<'db>, param: &Ty<'db>) -> bool {
 
 /// The declaration in the class of a method of a class impl, like the
 /// `show` of `class Show[T]` for the `show` of `impl Show[i32]`.
-fn class_method_of<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<FunctionId<'db>> {
+pub(crate) fn class_method_of<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<FunctionId<'db>> {
     let ItemContainerId::Impl(imp) = f.container(db) else { return None };
     let class = impl_header(db, imp).class.as_ref()?.class;
     let name = f.item(db).name.as_ref()?;

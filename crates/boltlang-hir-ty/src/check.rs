@@ -112,6 +112,19 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                             ctx.solver.equal(class, &own, origin);
                         }
                         ctx.solver.equal(&class_ret, ret, origin);
+                        // The types the class gives are well-formed, return
+                        // type too, since a call checks that where it
+                        // chooses the class method's names (#459): a
+                        // `'m [T]` for `'m T` holds a `T` at most `'m`.
+                        let mutable = Ty::Mutability(Mutability::Mut);
+                        let mut atoms = Vec::new();
+                        for t in class_params.iter().chain([&class_ret]) {
+                            split(db, t, &mutable, &mut atoms);
+                        }
+                        atoms.retain(|a| !has_vars(a.held.ty()) && !has_vars(&a.bound));
+                        for atom in atoms {
+                            ctx.solver.assume_at_most(atom);
+                        }
                     }
                     ctx.infer_fn_body(params, ret, effects);
                 }
