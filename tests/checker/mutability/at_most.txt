@@ -105,13 +105,18 @@ let x: {error}
 error at `imm`: a mutability isn't a type
 
 ================================================================================
-to_imm needs what an array holds to be imm, since the copy is shallow
+An impl whose type parameter must be imm, like std's to_imm of arrays
 :error
-:prelude
+:test-prelude
 ================================================================================
+class ToImm[T] { type Imm; fn to_imm(x: T) -> Imm; }
+#[builtin] fn array_freeze[T](xs: [T]) -> imm [T];
+impl[T: imm] ToImm[[T]] { type Imm = imm [T]; fn to_imm(xs) = array_freeze(xs); }
 to_imm(mut [1, 2]);
 to_imm(mut [mut [1]]);
 --------------------------------------------------------------------------------
+array_freeze: forall T. fn(xs: [T]) -> imm [T]
+ToImm[[T]].to_imm: forall T. T: imm => fn(xs: [T]) -> imm [T]
 to_imm(mut [1, 2]): imm [i32]
 to_imm(mut [mut [1]]): imm [mut [i32]]
 --------------------------------------------------------------------------------

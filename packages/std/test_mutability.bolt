@@ -1,0 +1,52 @@
+// The tests of `mutability.bolt`: copies that can and can't be changed.
+// The annotations say what type each copy has.
+
+import "./mutability" *;
+import "./array" *;
+import "./vec" *;
+import "./list" (List);
+import "./option" (Option, Some, None);
+import "./string" (String);
+import "./char" (Char);
+import "./ops" *;
+import "./io" (assert);
+
+#[test]
+fn shallow_copies_have_the_mutability_asked_for() {
+  let a: mut [i32] = to_mut([1]);
+  let b: imm [i32] = to_imm(mut [1]);
+  let c: mut Vec[Bool] = to_mut(Vec.from_array([True]));
+  let d: imm Vec[Bool] = to_imm(Vec.from_array([True]));
+  a[0] = 2;
+  c.push(False);
+  assert(a[0] == 2 && b[0] == 1);
+  assert(c.len() == 2 && d.len() == 1);
+}
+
+#[test]
+fn deep_copies_that_can_t_be_changed_are_imm_all_the_way_down() {
+  let a: imm [imm [i32]] = to_imm_deep(mut [mut [1, 2], mut [3]]);
+  let v = Vec.new();
+  v.push(mut [1]);
+  let b: imm Vec[imm [i32]] = to_imm_deep(v);
+  let c: Option[imm [Bool]] = to_imm_deep(Some(mut [True]));
+  let d: imm (imm [i32], Char, String) = to_imm_deep(mut (mut [1], 'x', "s"));
+  let e: List[imm [i32]] = to_imm_deep(List.Cons(mut [1], List.Nil));
+  let f: i32 = to_imm_deep(5);
+  assert(a[1][0] == 3 && b[0][0] == 1 && d.2 == "s" && f == 5);
+  assert(match c { Some(xs) => xs[0], None => False });
+  assert(match e { List.Cons(xs, _) => xs[0] == 1, List.Nil => False });
+}
+
+#[test]
+fn tuples_up_to_ten_elements_have_deep_copies() {
+  let a: imm (imm [i32], i32, Char, imm [Bool]) = to_imm_deep(mut (mut [1], 2, 'c', mut [True]));
+  let b: imm (i32, i32, i32, i32, i32, i32, i32, i32, i32, imm [i32]) =
+    to_imm_deep(mut (1, 2, 3, 4, 5, 6, 7, 8, 9, mut [10]));
+  let c: mut (mut [i32], i32) = to_mut_deep(([1], 2));
+  let d: mut (i32, i32, i32, i32, i32, i32, i32, i32, i32, mut [i32]) =
+    to_mut_deep((1, 2, 3, 4, 5, 6, 7, 8, 9, [10]));
+  c.0[0] = 5;
+  d.9[0] = 11;
+  assert(a.1 == 2 && b.9[0] == 10 && c.0[0] == 5 && d.9[0] == 11);
+}
