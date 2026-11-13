@@ -240,3 +240,17 @@ fn a_deep_copy_of_a_vec_that_can_t_be_changed_doesn_t_see_later_changes() {
   assert(w[0][0] == 4);
   assert(len(w) == 1);
 }
+
+#[test]
+#[should_panic(expected = "index out of bounds")]
+fn getting_past_the_end() {
+  let v = Vec.from_array([1, 2]);
+  v.get(2);
+}
+
+#[test]
+#[should_panic(expected = "index out of bounds")]
+fn indexing_past_the_end() {
+  let v = Vec.from_array([1]);
+  v[1];
+}
