@@ -1644,10 +1644,7 @@ impl<'db> Solver<'db> {
             // Overlapping impls, or one that may match: wait until the types
             // decide.
             ImplSearch::Unsure => return false,
-            // As for class constraints, only unknown types can still make an
-            // impl fit, not unknown mutabilities.
-            ImplSearch::Missing if goal.args.iter().any(has_type_vars) => return false,
-            ImplSearch::Missing if assumed_class(self, &goal) => return false,
+            ImplSearch::Missing if may_have_instance(self, &goal) => return false,
             // `C.Item` for a parameter `C` with `where Index[C]`.
             ImplSearch::Missing
                 if self.assumptions.iter().any(|a| assumption_fits(self.db, a, &goal)) =>
@@ -2214,11 +2211,7 @@ impl<'db> Solver<'db> {
                     .collect();
                 Step::Solved(subgoals, at_most, equalities, Some(imp))
             }
-            // Only a type that's still unknown can make an impl fit: one
-            // that depends on a mutability, like `IndexMut[mut [T]]`, would
-            // be unsure. So with only mutabilities left, there's none.
-            ImplSearch::Missing if goal.args.iter().any(has_type_vars) => Step::Wait,
-            ImplSearch::Missing if assumed_class(self, goal) => Step::Wait,
+            ImplSearch::Missing if may_have_instance(self, goal) => Step::Wait,
             ImplSearch::Missing => Step::NoInstance,
         }
     }
@@ -2643,10 +2636,15 @@ pub fn has_type_vars(ty: &Ty<'_>) -> bool {
     }
 }
 
-/// Whether a `where` clause of the class of `goal` could give it, once the
-/// variables in it are known.
-fn assumed_class<'db>(solver: &Solver<'db>, goal: &ClassConstraint<'db>) -> bool {
-    goal.args.iter().any(has_vars) && solver.assumptions.iter().any(|a| a.class == goal.class)
+/// Whether `goal`, which no impl gives yet, may still have an instance once
+/// its variables are known: through an impl, when a type in it is unknown,
+/// or through a `where` clause of its class. Only a type that's still
+/// unknown can make an impl fit: one that depends on a mutability, like
+/// `IndexMut[mut [T]]`, would be unsure, so with only mutabilities left,
+/// there's none.
+fn may_have_instance<'db>(solver: &Solver<'db>, goal: &ClassConstraint<'db>) -> bool {
+    let assumed = || solver.assumptions.iter().any(|a| a.class == goal.class);
+    goal.args.iter().any(has_type_vars) || (goal.args.iter().any(has_vars) && assumed())
 }
 
 /// The inference variables in a type, in order of appearance.
