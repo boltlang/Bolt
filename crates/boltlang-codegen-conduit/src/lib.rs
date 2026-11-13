@@ -1023,7 +1023,7 @@ fn declare_effect<'db>(
     let args: Vec<String> = key.1.iter().map(|t| t.display(db).to_string()).collect();
     let name = if args.is_empty() { name } else { format!("{name}[{}]", args.join(", ")) };
     let debug_name = Some(ident(&name).into());
-    module.effects.insert(id, conduit_ir::EffectDecl { ops: sigs, debug_name });
+    module.effects.insert(id, conduit_ir::EffectDecl { ops: sigs, debug_name, link: None });
     cx.effects.insert(key, (id, ops));
     Ok(())
 }
