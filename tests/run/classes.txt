@@ -175,7 +175,7 @@ print(show(greet(5) + greet(True)));
 
 ================================================================================
 Generic code with a bound over numbers
-:prelude
+:test-prelude
 ================================================================================
 fn twice[T: Add](x: T) -> T.Output = add(x, x);
 print(show(twice(21)));
@@ -198,7 +198,7 @@ print(show((n, b)));
 
 ================================================================================
 An impl with a bound uses the impl of its type's argument
-:prelude
+:test-prelude
 ================================================================================
 class Name[T] { fn name(x: T) -> String; }
 impl Name[i32] { fn name(x) = "i32"; }

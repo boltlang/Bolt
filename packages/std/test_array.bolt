@@ -1,7 +1,7 @@
 // The tests of `array.bolt`.
 
 import "./array" *;
-import "./mutability" (to_mut, to_imm, to_mut_deep);
+import "./mutability" (to_mut, to_imm, to_mut_deep, to_imm_deep);
 import "./ops" *;
 import "./io" (assert);
 
@@ -98,4 +98,29 @@ fn arrays_of_a_type_with_no_values_have_a_length() {
   let ys = mut [(); 4];
   ys[1] = ();
   assert(array_len(ys) == 4);
+}
+
+/// A copy of an array of any mutability, which the caller can change.
+fn poke(xs: 'm [i32]) -> mut [i32] {
+  let ys = to_mut(xs);
+  ys[0] = 9;
+  ys
+}
+
+#[test]
+fn a_generic_function_copies_what_it_s_given() {
+  let a = mut [1, 2];
+  let b = poke(a);
+  assert(a[0] == 1);
+  assert(b[0] == 9);
+  assert(poke([3])[0] == 9);
+}
+
+#[test]
+fn a_deep_copy_that_can_t_be_changed_doesn_t_see_later_changes() {
+  let xs = mut [mut [1, 2], mut [3]];
+  let ys = to_imm_deep(xs);
+  xs[0][0] = 9;
+  assert(ys[0][0] == 1);
+  assert(xs[0][0] == 9);
 }

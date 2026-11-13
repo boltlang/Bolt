@@ -119,3 +119,16 @@ fn compound_assignments_call_the_impls() {
   t.0 += Money { cents: 5 };
   assert(t.0.cents == 10);
 }
+
+#[test]
+fn tuples_are_compared_element_by_element() {
+  let a = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+  let b = (1, 2, 3, 4, 5, 6, 7, 8, 9, 11);
+  assert(a == a);
+  assert(a != b);
+  assert(a < b);
+  assert(cmp(b, a) == Ordering.Greater);
+  assert(cmp((1, 2, 3, 4, 5), (1, 2, 0, 4, 5)) == Ordering.Greater);
+  assert((1, 2, 3, 4, 5) <= (1, 2, 3, 4, 5));
+  assert((1, 2) < (1, 3));
+}

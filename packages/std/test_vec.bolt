@@ -1,7 +1,7 @@
 // The tests of `vec.bolt`.
 
 import "./vec" *;
-import "./mutability" (to_mut, to_imm, to_mut_deep);
+import "./mutability" (to_mut, to_imm, to_mut_deep, to_imm_deep);
 import "./option" (None, Some);
 import "./ops" *;
 import "./iter" (Iterable, Iterator);
@@ -229,4 +229,14 @@ fn a_vec_of_a_type_with_no_values() {
   v.push(());
   v.push(());
   assert(len(v) == 3);
+}
+
+#[test]
+fn a_deep_copy_of_a_vec_that_can_t_be_changed_doesn_t_see_later_changes() {
+  let v = Vec.new();
+  v.push(mut [4]);
+  let w = to_imm_deep(v);
+  v[0][0] = 8;
+  assert(w[0][0] == 4);
+  assert(len(w) == 1);
 }

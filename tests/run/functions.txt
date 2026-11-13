@@ -81,7 +81,7 @@ error: the program exited with code 3
 
 ================================================================================
 Operators on structs call the impls of std
-:prelude
+:test-prelude
 ================================================================================
 struct Money { cents: i32 }
 impl Add[Money] { type Output = Money; fn add(a, b) = Money { cents: a.cents + b.cents }; }

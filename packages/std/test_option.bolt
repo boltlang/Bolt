@@ -29,3 +29,11 @@ fn question_mark_gives_the_value_of_a_some_or_returns_none() {
   assert(sum_of_quotients(12, 0, 4) == None);
   assert(sum_of_quotients(12, 3, 0) == None);
 }
+
+#[test]
+fn options_are_equal_when_their_values_are() {
+  assert(Some(1) == Some(1));
+  assert(Some(1) != Some(2));
+  assert(Some(1) != None);
+  assert([Some(1)] == [Some(1)]);
+}
