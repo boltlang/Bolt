@@ -105,6 +105,19 @@ test math.bolt::doubling ... ok
 test result: ok. 1 passed; 0 failed
 ```
 
+A test that checks that something stops with an error has
+`#[should_panic]` too. It passes when it does stop with one, and with
+`expected`, only if that text is in what it wrote or in the error:
+
+```bolt
+#[test]
+#[should_panic(expected = "index out of bounds")]
+fn indexing_past_the_end() {
+  let v = Vec.from_array([1]);
+  v[1];
+}
+```
+
 A test can't take parameters, and a file with errors isn't run. To run
 only some tests, give `bolt test` files or directories, or a part of the
 tests' names with `--filter`. A test that runs too long can be stopped
