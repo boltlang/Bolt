@@ -80,7 +80,7 @@ fn counter() -> Html does Reactive {
     let doubled = count * 2;    // reads state: derived
     let mut total = 0;          // only used while drawing: a plain variable
     for x in [1, 2, 3] { total += x; }
-    <button on_click={|| { count += 1; }}>{count} × 2 = {doubled}</button>
+    button(on_click: || { count += 1; }) {[count, " × 2 = ", doubled]}
 }
 ```
 
@@ -132,7 +132,7 @@ Inference has limits:
    reading state are effects.
 3. **Fine-grained updates.** If reads are tracked per component, every change
    reruns the whole component, which is React with better types. To update
-   only the text of one `<h1>`, the compiler splits the markup into one small
+   only the text of one `h1`, the compiler splits the markup into one small
    computation per binding, each run under a tracking handler. Effects don't
    split code; this is the compile-time part of Svelte and Solid.
 4. **Rerunning by resuming.** Resuming a saved continuation more than once to
@@ -146,7 +146,7 @@ Inference has limits:
    `read` resume right away, and such operations compile to a hidden
    argument, almost for free, as in Koka. Only `Async` suspends ([more on that](./async.mdx#compiling-it)); in wasm,
    JSPI and stack switching can help there.
-6. **Effect polymorphism.** `list.map(|x| <Item ... />)` only type
+6. **Effect polymorphism.** `list.map(|x| item(x: x))` only type
    checks if `map` passes on the effects of its callback. Effect rows are the
    same idea as the rows of extensible records (`{ name: str, .. }`), so
    the type checker may be able to reuse that.
@@ -391,13 +391,17 @@ Open points:
 
 ## Still to design
 
-- Child components and children, like `<Layout>…</Layout>`.
+- Children beyond the trailing block: which parameter it fills, and more
+  than one slot, like a header and a body
+  ([#458](https://github.com/boltlang/Bolt/issues/458)).
 - Lists and their keys.
 - Effects with cleanup, like timers and subscriptions, and what happens when
   a component leaves the page.
 - Context, for values like the user that is logged in.
 - Mounting, and what this compiles to: JavaScript, or wasm.
-- Typed elements and attributes, so that `<img scr=...>` is a compile error.
+- Typed elements and attributes. With elements as functions, `img(scr: ..)`
+  is already an error, an unknown keyword argument. What's left is the many
+  attributes every element shares, and `data-*` and `aria-*`.
 - Rendering on the server, and hydration.
 
 ## A first step
