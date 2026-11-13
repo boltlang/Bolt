@@ -94,7 +94,7 @@ let a = Iter { data: mut [1], index: 0 };
 --------------------------------------------------------------------------------
 let a: imm Iter[mut]
 --------------------------------------------------------------------------------
-error at `Iter { data: mut [1], index: 0 }`: imm Iter[mut] holds Mut
+error at `Iter { data: mut [1], index: 0 }`: imm Iter[mut] holds mut
 
 ================================================================================
 A struct can bound what it takes
@@ -267,4 +267,4 @@ drain(a): ()
 --------------------------------------------------------------------------------
 error at `a.vec`: expected mut Vec[{integer}], found imm Vec[{integer}]
 error at `a`: expected mut VecIter[{integer}, mut], found mut VecIter[{integer}, imm]
-error at `VecIter { vec: growing, next: 0 }`: imm VecIter[i32, mut] holds Mut
+error at `VecIter { vec: growing, next: 0 }`: imm VecIter[i32, mut] holds mut

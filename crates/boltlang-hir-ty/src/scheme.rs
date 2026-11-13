@@ -315,7 +315,9 @@ pub fn generic_param_ids<'db>(
     defs.into_iter()
         .flat_map(|def| {
             let hidden = match def {
-                GenericDefId::Function(f) => fn_sig(db, f).hidden,
+                GenericDefId::Function(f) => {
+                    fn_sig(db, f).hidden + generic_predicates(db, def).hidden
+                }
                 GenericDefId::Impl(i) => impl_header(db, i).hidden,
                 _ => 0,
             };

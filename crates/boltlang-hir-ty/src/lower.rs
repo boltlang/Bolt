@@ -46,10 +46,12 @@ impl<'db> HiddenParams<'db> {
     }
 
     fn fill(&mut self, ty: &Ty<'db>) -> Ty<'db> {
-        ty.fill_unwritten(&mut || {
-            self.count += 1;
-            Ty::Param(GenericParamId { def: self.def, index: self.first + self.count - 1 })
-        })
+        ty.fill_unwritten(&mut || self.next())
+    }
+
+    fn next(&mut self) -> Ty<'db> {
+        self.count += 1;
+        Ty::Param(GenericParamId { def: self.def, index: self.first + self.count - 1 })
     }
 }
 
@@ -188,6 +190,10 @@ pub struct TyLoweringContext<'a, 'db> {
     /// by its variance. Not for the fields that variance is found from
     /// ([`raw_field_types`]).
     variance: bool,
+    /// The hidden mutability parameters of a function for the names a
+    /// bound leaves out of its class, like the `'v` of `Iterable[C, 'v]`
+    /// in `fn count[C: Iterable](c: C)` (#453).
+    bound_hidden: Option<HiddenParams<'db>>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -205,6 +211,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             allow_equalities: false,
             bounds_of: None,
             variance: true,
+            bound_hidden: None,
             diagnostics: Vec::new(),
         }
     }
@@ -237,11 +244,15 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             let index = def.generic_params(self.db).type_params.len() + index;
             Some(Ty::Param(GenericParamId { def, index: index as u32 }))
         };
-        of(def).or_else(|| match def {
-            GenericDefId::Function(f) => match f.container(self.db) {
-                ItemContainerId::Impl(imp) => of(GenericDefId::Impl(imp)),
-                _ => None,
-            },
+        let container = match def {
+            GenericDefId::Function(f) => Some(f.container(self.db)),
+            GenericDefId::TypeAlias(a) => Some(a.container(self.db)),
+            _ => None,
+        };
+        of(def).or_else(|| match container? {
+            ItemContainerId::Impl(imp) => of(GenericDefId::Impl(imp)),
+            // A class's names, like the `'v` of `class Iterable[C, 'v]` (#453).
+            ItemContainerId::Class(class) => of(GenericDefId::Class(class)),
             _ => None,
         })
     }
@@ -503,7 +514,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             // mutability decided by where it's written.
             // An `imm struct` is always `imm`, like an enum.
             TypeNs::Struct(s) => {
-                let mutabilities = self.mutability_args(id, s, args);
+                let mutabilities = self.mutability_args(id, GenericDefId::Struct(s), args);
                 let own = if s.item(self.db).is_imm { imm() } else { Ty::Unwritten };
                 let head = Ty::adt(AdtId::Struct(s), [], mutabilities, own);
                 (head, def_kind(self.db, GenericDefId::Struct(s)))
@@ -630,10 +641,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     fn mutability_args(
         &mut self,
         id: TypeRefId,
-        s: StructId<'db>,
+        def: GenericDefId<'db>,
         args: &[GenericArg],
     ) -> Vec<Ty<'db>> {
-        let expected = named_mutabilities(self.db, GenericDefId::Struct(s)).len();
+        let expected = named_mutabilities(self.db, def).len();
         let written: Vec<TypeRefId> = self
             .type_args(id, args)
             .into_iter()
@@ -906,7 +917,23 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             .iter()
             .cloned()
             .partition(|a| matches!(a, GenericArg::AssocType { .. }));
-        args.extend(self.lower_exact_args(id, &plain, explicit));
+        // The mutability arguments come after the types, like the `mut` of
+        // `Iterable[[i32], mut]` (#453).
+        let is_mutability = |a: &GenericArg| {
+            matches!(a, GenericArg::Type { type_ref, .. }
+                if matches!(self.store[*type_ref], TypeRef::Mutability(_)))
+        };
+        let types: Vec<GenericArg> = plain.iter().filter(|a| !is_mutability(a)).cloned().collect();
+        args.extend(self.lower_exact_args(id, &types, explicit));
+        // One that isn't written is decided as for a struct: a hidden
+        // parameter of a function whose bound it's in, and otherwise by
+        // where it's written.
+        for m in self.mutability_args(id, GenericDefId::Class(class), &plain) {
+            args.push(match (m, &mut self.bound_hidden) {
+                (Ty::Unwritten, Some(hidden)) => hidden.next(),
+                (m, _) => m,
+            });
+        }
         let constraint = ClassConstraint { class, args: args.into() };
         for binding in &bindings {
             self.lower_equality(id, &constraint, binding);
@@ -1042,21 +1069,33 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
     let store = match def {
         GenericDefId::Function(id) => Some(&function_signature(db, id).store),
         GenericDefId::Impl(id) => Some(&impl_signature(db, id).store),
-        GenericDefId::Struct(_) => None,
+        GenericDefId::Struct(_) | GenericDefId::Class(_) => None,
         _ => return Box::new([]),
     };
     let mut names: Vec<Name> = Vec::new();
     // A method of an impl has its class method's names first, in order,
     // which its type comes with (#459), and doesn't have its impl's,
-    // which are the impl's (#450).
+    // which are the impl's (#450). A method of a class doesn't have its
+    // class's either (#453).
     let mut impl_names: &[Name] = &[];
-    if let GenericDefId::Function(f) = def
-        && let ItemContainerId::Impl(imp) = f.container(db)
-    {
-        impl_names = named_mutabilities(db, GenericDefId::Impl(imp));
-        if let Some(method) = crate::scheme::class_method_of(db, f) {
-            names.extend(named_mutabilities(db, GenericDefId::Function(method)).iter().cloned());
+    let container = match def {
+        GenericDefId::Function(f) => Some(f.container(db)),
+        _ => None,
+    };
+    match container {
+        Some(ItemContainerId::Impl(imp)) => {
+            impl_names = named_mutabilities(db, GenericDefId::Impl(imp));
+            if let GenericDefId::Function(f) = def
+                && let Some(method) = crate::scheme::class_method_of(db, f)
+            {
+                names
+                    .extend(named_mutabilities(db, GenericDefId::Function(method)).iter().cloned());
+            }
         }
+        Some(ItemContainerId::Class(class)) => {
+            impl_names = named_mutabilities(db, GenericDefId::Class(class));
+        }
+        _ => {}
     }
     for param in def.generic_params(db).mutability_params.iter() {
         if !names.contains(&param.name) {
@@ -1168,6 +1207,7 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
             equalities: Box::new([]),
             at_most: Box::new([]),
             sources: Box::new([]),
+            hidden: 0,
             diagnostics: Vec::new(),
         };
     };
@@ -1195,6 +1235,7 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
         equalities: equalities.into(),
         at_most: Box::new([]),
         sources: sources.into(),
+        hidden: 0,
         diagnostics: ctx.diagnostics,
     }
 }
@@ -1316,7 +1357,13 @@ pub fn subst_params<'db>(ty: &Ty<'db>, def: GenericDefId<'db>, args: &[Ty<'db>])
 
 /// The type parameters of `def` as types, as seen from inside it.
 pub fn identity_args<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[Ty<'db>]> {
-    (0..def.generic_params(db).type_params.len())
+    // A class's arguments are its types, then its named mutabilities, like
+    // the `'v` of `class Iterable[C, 'v]` (#453).
+    let names = match def {
+        GenericDefId::Class(_) => named_mutabilities(db, def).len(),
+        _ => 0,
+    };
+    (0..def.generic_params(db).type_params.len() + names)
         .map(|index| Ty::Param(GenericParamId { def, index: index as u32 }))
         .collect()
 }
@@ -1366,6 +1413,10 @@ pub struct Predicates<'db> {
     /// Where each predicate is written: the class of a bound or a `where`
     /// clause, in the store of the item's signature.
     pub sources: Box<[TypeRefId]>,
+    /// How many hidden mutability parameters the bounds of a function
+    /// give it, for the names they leave out of their classes (#453). They
+    /// come before those of its signature.
+    pub hidden: u32,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -1406,6 +1457,9 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
     };
     let mut ctx = TyLoweringContext::new(db, &resolver, store).with_mutabilities(def);
     ctx.predicates_of = Some(def);
+    if let GenericDefId::Function(_) = def {
+        ctx.bound_hidden = Some(HiddenParams::new(db, def));
+    }
     // An array without `mut` or `imm` in a predicate, like the `[T]` of
     // `where Show[[T]]`, is `imm`: it can't be the same hidden parameter as
     // one in the signature.
@@ -1426,6 +1480,7 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         equalities: equalities.collect(),
         at_most: at_most.collect(),
         sources: sources.into(),
+        hidden: ctx.bound_hidden.map_or(0, |h| h.count),
         diagnostics: ctx.diagnostics,
     }
 }
@@ -1581,7 +1636,10 @@ pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let resolver = Resolver::for_generic_def(db, GenericDefId::Function(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store)
         .with_mutabilities(GenericDefId::Function(id));
-    let mut hidden = HiddenParams::new(db, GenericDefId::Function(id));
+    // After those of its bounds (#453), which don't depend on its type.
+    let def = GenericDefId::Function(id);
+    let first = first_hidden(db, def) + generic_predicates(db, def).hidden;
+    let mut hidden = HiddenParams { def, first, count: 0 };
     // A mutability that a parameter doesn't write is decided with the body,
     // like a type that isn't written. Only a function whose type can't come
     // from its body, because it has none or its class declares it, takes

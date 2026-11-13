@@ -1,0 +1,86 @@
+================================================================================
+A class with a mutability parameter, which its impls give (#453)
+:test-prelude
+================================================================================
+struct Walk[T, 'v] { items: 'v [T], at: i32 }
+class Each[C, 'v] {
+  type Iter;
+  fn each(c: 'v C) -> Iter;
+}
+impl[T] Each[[T], 'v] {
+  type Iter = mut Walk[T, 'v];
+  fn each(xs) = mut Walk { items: xs, at: 0 };
+}
+fn count[C: Each](c: C) -> i32 = 0;
+let a = each(mut [1]);
+let b = each([1]);
+let c = count(mut [1]);
+--------------------------------------------------------------------------------
+Each[[T], 'v].each: forall T. fn(xs: 'v [T]) -> mut Walk[T, 'v]
+count: forall C. Each[C, '_] => fn(c: C) -> i32
+let a: mut Walk[i32, mut]
+let b: mut Walk[i32, imm]
+let c: i32
+
+================================================================================
+Generic code with a class's mutability parameter (#453)
+:test-prelude
+================================================================================
+struct Walk[T, 'v] { items: 'v [T], at: i32 }
+class Each[C, 'v] {
+  type Iter;
+  fn each(c: 'v C) -> Iter;
+}
+impl[T] Each[[T], 'v] {
+  type Iter = mut Walk[T, 'v];
+  fn each(xs) = mut Walk { items: xs, at: 0 };
+}
+fn written[C](c: 'v C) -> C.Iter where Each[C, 'v] = each(c);
+fn left_out[C: Each](c: 'v C) -> i32 = { each(c); 0 };
+let a = written(mut [1]);
+let b = left_out(mut [1]);
+--------------------------------------------------------------------------------
+Each[[T], 'v].each: forall T. fn(xs: 'v [T]) -> mut Walk[T, 'v]
+written: forall C. Each[C, 'v] => fn(c: 'v C) -> Each[C, 'v].Iter
+left_out: forall C. Each[C, '_] => fn(c: 'v C) -> i32
+let a: mut Walk[i32, mut]
+let b: i32
+--------------------------------------------------------------------------------
+error at `each`: no instance Each[C, 'v]
+
+================================================================================
+Impls for one mutability, and a superclass with one (#453)
+:test-prelude
+================================================================================
+class Freeze[C, 'v] { fn freeze(c: 'v C) -> i32; }
+impl Freeze[[i32], imm] { fn freeze(c) = 1; }
+impl Freeze[[i32], mut] { fn freeze(c) = 2; }
+class Sub[C] where Freeze[C, mut] {}
+impl Sub[[i32]] {}
+let a = freeze([1]);
+let b = freeze(mut [1]);
+--------------------------------------------------------------------------------
+Freeze[[i32], imm].freeze: fn(c: imm [i32]) -> i32
+Freeze[[i32], mut].freeze: fn(c: mut [i32]) -> i32
+let a: i32
+let b: i32
+
+================================================================================
+Impls whose mutabilities overlap, and too many mutabilities (#453)
+:error
+:test-prelude
+================================================================================
+class Freeze[C, 'v] { fn freeze(c: 'v C) -> i32; }
+impl Freeze[[i32], imm] { fn freeze(c) = 1; }
+impl[T] Freeze[[T], 'v] { fn freeze(c) = 3; }
+impl Freeze[[Bool], imm, mut] { fn freeze(c) = 4; }
+class Sub[C] where Freeze[C, mut] {}
+impl Sub[[u8]] {}
+--------------------------------------------------------------------------------
+Freeze[[i32], imm].freeze: fn(c: imm [i32]) -> i32
+Freeze[[T], 'v].freeze: forall T. fn(c: 'v [T]) -> i32
+Freeze[[Bool], imm].freeze: fn(c: imm [Bool]) -> i32
+--------------------------------------------------------------------------------
+error at `Freeze[[T], 'v]`: overlaps the impl for Freeze[[i32], imm]
+error at `Freeze[[Bool], imm, mut]`: expected at most 1 mutability arguments, found 2
+error at `Freeze[[Bool], imm, mut]`: overlaps the impl for Freeze[[T], 'v]

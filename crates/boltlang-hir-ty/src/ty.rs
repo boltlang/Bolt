@@ -1378,10 +1378,10 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 self.write_mutability(f, mutability)?;
                 write!(f, "[{}]", show(elem))
             }
-            // Only inside an array, where it's shown by the array.
-            Ty::Mutability(Mutability::Mut) => f.write_str("Mut"),
-            Ty::Mutability(Mutability::Imm) => f.write_str("Imm"),
-            Ty::Mutability(Mutability::ReadOnly) => f.write_str("ReadOnly"),
+            // On its own, like the `mut` of `Iterable[[i32], mut]` (#453).
+            Ty::Mutability(Mutability::Mut) => f.write_str("mut"),
+            Ty::Mutability(Mutability::Imm) => f.write_str("imm"),
+            Ty::Mutability(Mutability::ReadOnly) => f.write_str("ro"),
             Ty::Unwritten => f.write_str("_"),
             Ty::ParamName(name) => f.write_str(name.as_ref().map_or("_", |n| n.as_str())),
             Ty::Fn(params, ret, mutability, effects) => {
@@ -1417,6 +1417,14 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 }
             }
             Ty::Row(..) => write!(f, "{}", self.shown_effects(self.ty).unwrap_or("Nothing".into())),
+            // A mutability parameter on its own, like the `'v` of
+            // `Iterable[[T], 'v]` (#453), is shown as a mutability.
+            Ty::Param(param)
+                if param.index as usize >= param.def.generic_params(db).type_params.len() =>
+            {
+                let m = self.shown_mutability(self.ty);
+                f.write_str(&m.unwrap_or_else(|| "'_".into()))
+            }
             Ty::Param(param) => write!(f, "{}", param_name(db, *param)),
             // `C.Item`, or `Convert[A, B].Item` for a class with several
             // parameters.
