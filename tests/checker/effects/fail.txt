@@ -1,12 +1,20 @@
 ================================================================================
 or_fail and attempt go between Result and Fail
-:prelude
+:test-prelude
 ================================================================================
+effect Fail[E] { fn fail[T](error: E) -> T; }
+fn or_fail[E, T](r: Result[E, T]) -> T does Fail[E] = match r { Ok(x) => x, Err(e) => fail(e) };
+fn attempt[E, T, R](body: fn() -> T does Fail[E] + R) -> Result[E, T] does R = match body() {
+  value => Ok(value),
+  effect fail(error), _ => Err(error),
+};
 fn parse(s: String) -> Result[String, i32] = if s == "42" { Ok(42) } else { Err("not a number") };
 fn twice(s: String) -> i32 does Fail[String] = parse(s).or_fail() * 2;
 fn both() = attempt(|| twice("42") + twice("x"));
 fn direct() = attempt(|| fail("no"));
 --------------------------------------------------------------------------------
+or_fail: forall E T. fn(r: Result[E, T]) -> T does Fail[E]
+attempt: forall E T R. fn(body: fn() -> T does Fail[E] + R) -> Result[E, T] does R
 parse: fn(s: String) -> Result[String, i32]
 twice: fn(s: String) -> i32 does Fail[String]
 both: fn() -> Result[String, i32]
@@ -14,24 +22,40 @@ direct: forall a. fn() -> Result[String, a]
 
 ================================================================================
 attempt leaves the other effects of what it runs
-:prelude
+:test-prelude
 ================================================================================
+effect Fail[E] { fn fail[T](error: E) -> T; }
+fn or_fail[E, T](r: Result[E, T]) -> T does Fail[E] = match r { Ok(x) => x, Err(e) => fail(e) };
+fn attempt[E, T, R](body: fn() -> T does Fail[E] + R) -> Result[E, T] does R = match body() {
+  value => Ok(value),
+  effect fail(error), _ => Err(error),
+};
 effect Log { fn log(m: String); }
 fn step() -> i32 does Log + Fail[String] { log("step"); fail("stop") }
 fn written() -> Result[String, i32] does Log = attempt(step);
 fn inferred() = attempt(|| { log("a"); step() });
 --------------------------------------------------------------------------------
-step: fn() -> i32 does Log + Fail[String]
+or_fail: forall E T. fn(r: Result[E, T]) -> T does Fail[E]
+attempt: forall E T R. fn(body: fn() -> T does Fail[E] + R) -> Result[E, T] does R
+step: fn() -> i32 does Fail[String] + Log
 written: fn() -> Result[String, i32] does Log
 inferred: fn() -> Result[String, i32] does Log
 
 ================================================================================
 Failing needs a handler
 :error
-:prelude
+:test-prelude
 ================================================================================
+effect Fail[E] { fn fail[T](error: E) -> T; }
+fn or_fail[E, T](r: Result[E, T]) -> T does Fail[E] = match r { Ok(x) => x, Err(e) => fail(e) };
+fn attempt[E, T, R](body: fn() -> T does Fail[E] + R) -> Result[E, T] does R = match body() {
+  value => Ok(value),
+  effect fail(error), _ => Err(error),
+};
 fn leaks() -> i32 = Err("no").or_fail();
 --------------------------------------------------------------------------------
+or_fail: forall E T. fn(r: Result[E, T]) -> T does Fail[E]
+attempt: forall E T R. fn(body: fn() -> T does Fail[E] + R) -> Result[E, T] does R
 leaks: fn() -> i32
 --------------------------------------------------------------------------------
 error at `Err("no").or_fail()`: does Fail[String], only Nothing allowed
