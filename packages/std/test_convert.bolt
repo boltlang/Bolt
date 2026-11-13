@@ -1,0 +1,32 @@
+// The tests of `convert.bolt`.
+
+import "./convert" *;
+import "./ops" *;
+import "./io" (assert);
+
+#[test]
+fn numbers_into_wider_ones() {
+  let a: u8 = 200;
+  let b: i32 = a.from();
+  assert(b == 200);
+  let c: i64 = from(b);
+  assert(c == 200);
+  let d: i8 = -5;
+  let e: i64 = from(d);
+  assert(e == -5);
+  let f: f64 = from(b);
+  assert(f == 200.0);
+}
+
+fn twice[S: From[i64]](x: S) -> i64 = {
+  let n: i64 = from(x);
+  n * 2
+};
+
+#[test]
+fn a_bound_on_the_source() {
+  let a: i32 = 21;
+  assert(twice(a) == 42);
+  let b: u8 = 4;
+  assert(twice(b) == 8);
+}

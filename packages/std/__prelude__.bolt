@@ -9,6 +9,7 @@ pub import "./mutability" *;
 pub import "./debug" *;
 pub import "./show" *;
 pub import "./default" *;
+pub import "./convert" *;
 
 // Types
 pub import "./array" *;

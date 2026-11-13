@@ -1,0 +1,41 @@
+// Converting a value of one type into another, without losing anything.
+
+/// Types `S` whose values convert into a `T`, of the mutability `'m`,
+/// without losing anything, like `u8` into `i32`. A conversion that can
+/// lose something, like `i64` into `i32`, is written with `as`. An impl
+/// that leaves `'m` out, like those below, is for any mutability.
+pub class From[S, T, 'm] {
+  /// `x` as a `T`.
+  fn from(x: ro S) -> 'm T;
+}
+
+// A number into a wider one, which holds all its values.
+impl From[u8, u16] { fn from(x) = x as u16; }
+impl From[u8, u32] { fn from(x) = x as u32; }
+impl From[u8, u64] { fn from(x) = x as u64; }
+impl From[u8, i16] { fn from(x) = x as i16; }
+impl From[u8, i32] { fn from(x) = x as i32; }
+impl From[u8, i64] { fn from(x) = x as i64; }
+impl From[u8, f32] { fn from(x) = x as f32; }
+impl From[u8, f64] { fn from(x) = x as f64; }
+impl From[u16, u32] { fn from(x) = x as u32; }
+impl From[u16, u64] { fn from(x) = x as u64; }
+impl From[u16, i32] { fn from(x) = x as i32; }
+impl From[u16, i64] { fn from(x) = x as i64; }
+impl From[u16, f32] { fn from(x) = x as f32; }
+impl From[u16, f64] { fn from(x) = x as f64; }
+impl From[u32, u64] { fn from(x) = x as u64; }
+impl From[u32, i64] { fn from(x) = x as i64; }
+impl From[u32, f64] { fn from(x) = x as f64; }
+impl From[i8, i16] { fn from(x) = x as i16; }
+impl From[i8, i32] { fn from(x) = x as i32; }
+impl From[i8, i64] { fn from(x) = x as i64; }
+impl From[i8, f32] { fn from(x) = x as f32; }
+impl From[i8, f64] { fn from(x) = x as f64; }
+impl From[i16, i32] { fn from(x) = x as i32; }
+impl From[i16, i64] { fn from(x) = x as i64; }
+impl From[i16, f32] { fn from(x) = x as f32; }
+impl From[i16, f64] { fn from(x) = x as f64; }
+impl From[i32, i64] { fn from(x) = x as i64; }
+impl From[i32, f64] { fn from(x) = x as f64; }
+impl From[f32, f64] { fn from(x) = x as f64; }
