@@ -1,0 +1,43 @@
+// A value to start from, like `0`, `False` or an empty array.
+
+import "./option" (Option, None);
+import "./string" (String);
+
+/// Types with a value to start from. `default` makes a new one, of the
+/// mutability the caller asks for, so `let xs: mut [i32] = default();` can
+/// be changed.
+pub class Default[T] {
+  /// A new value to start from.
+  fn default() -> 'm T;
+}
+
+/// The empty array.
+impl[T] Default[[T]] {
+  fn default() = 'm [];
+}
+
+/// `None`.
+impl[T] Default[Option[T]] {
+  fn default() = None;
+}
+
+impl Default[Bool] {
+  fn default() = False;
+}
+
+impl Default[i32] {
+  fn default() = 0;
+}
+
+impl Default[i64] {
+  fn default() = 0;
+}
+
+impl Default[f64] {
+  fn default() = 0.0;
+}
+
+/// The empty string.
+impl Default[String] {
+  fn default() = String.from_bytes([]);
+}

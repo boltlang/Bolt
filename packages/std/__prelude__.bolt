@@ -8,6 +8,7 @@ pub import "./iter" *;
 pub import "./mutability" *;
 pub import "./debug" *;
 pub import "./show" *;
+pub import "./default" *;
 
 // Types
 pub import "./array" *;

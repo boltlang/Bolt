@@ -1,0 +1,32 @@
+// The tests of `default.bolt`.
+
+import "./default" *;
+import "./array" (array_len);
+import "./option" (Option, Some, None);
+import "./string" (String);
+import "./ops" *;
+import "./io" (assert);
+
+#[test]
+fn an_empty_array_of_the_mutability_asked_for() {
+  let xs: [i32] = default();
+  assert(array_len(xs) == 0);
+  let ys: mut [i32] = default();
+  assert(array_len(ys) == 0);
+}
+
+#[test]
+fn values_to_start_from() {
+  let b: Bool = default();
+  assert(b == False);
+  let n: i32 = default();
+  assert(n == 0);
+  let m: i64 = default();
+  assert(m == 0);
+  let x: f64 = default();
+  assert(x == 0.0);
+  let o: Option[i32] = default();
+  assert(o == None);
+  let s: String = default();
+  assert(s == "");
+}
