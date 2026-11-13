@@ -579,6 +579,11 @@ impl<'db> Ty<'db> {
             Ty::Param(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) | Ty::Var(_) | Ty::Imm(_) => {
                 Ty::Ro(Box::new(self.clone()))
             }
+            // `'m T` seen as `ro` is `ro T`, unless `m` is written in a type
+            // written `ro`, where it's kept, and reported if it can't be held.
+            Ty::WithMut(_, inner) if !unwritten => {
+                Ty::with_outer(ro.clone(), (**inner).clone(), variances)
+            }
             _ => self.clone(),
         }
     }

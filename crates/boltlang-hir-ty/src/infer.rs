@@ -425,8 +425,14 @@ struct Expectation<'a, 'db> {
 /// `struct Handler[T] { f: fn(T) }` holds nothing `mut`, and a
 /// `mut VecIter[mut [i32], imm]` holds an `imm` array of `mut` ones.
 pub fn mut_inside<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<MutInside<'db>> {
+    /// Whether `ty` has the mutability `mutability`, as its own or as the
+    /// `m` of a `'m T`.
     fn has(ty: &Ty<'_>, mutability: Mutability) -> bool {
-        ty.held_mutability() == Some(&Ty::Mutability(mutability))
+        let own = match ty {
+            Ty::WithMut(m, _) => Some(&**m),
+            ty => ty.held_mutability(),
+        };
+        own == Some(&Ty::Mutability(mutability))
     }
     /// Something that a value of type `ty` is, or holds as a value does, in
     /// an enum, that a value of mutability `bound` can't hold. A struct,

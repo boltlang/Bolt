@@ -101,3 +101,23 @@ keep: fn(x: mut [i32]) -> imm [mut [i32]]
 --------------------------------------------------------------------------------
 error at `make`: imm [mut [i32]] isn't at most imm
 error at `make()`: imm [mut [i32]] holds mut [i32]
+
+================================================================================
+A ro or imm value can't hold a mut T, and a 'm T seen as ro is a ro T (#465)
+:error
+:test-prelude
+================================================================================
+struct W[T] { x: T }
+fn a[T](w: ro [mut T]) -> mut T = w[0];
+fn b[T](w: ro W[mut T]) -> mut T = w.x;
+fn c[T](w: imm [mut T]) -> mut T = w[0];
+fn d[T](w: ro W['m T]) -> ro T = w.x;
+--------------------------------------------------------------------------------
+a: forall T. fn(w: ro [mut T]) -> mut T
+b: forall T. fn(w: ro W[mut T]) -> mut T
+c: forall T. fn(w: imm [mut T]) -> mut T
+d: forall T. fn(w: ro W['m T]) -> ro T
+--------------------------------------------------------------------------------
+error at `w`: ro [mut T] holds mut T
+error at `w`: ro W[mut T] holds mut T
+error at `w`: imm [mut T] holds mut T
