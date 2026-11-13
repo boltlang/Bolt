@@ -88,6 +88,12 @@ impl ExprCollector {
     pub fn lower_type(&mut self, ty: ast::Type) -> TypeRefId {
         let node = ty.syntax().clone();
         let type_ref = match ty {
+            // Parentheses only group; the type inside stands for them.
+            ast::Type::Nest(ty) => {
+                let inner = self.lower_opt_type(ty.ty());
+                self.source_map.type_map.insert(SyntaxPtr::new(&node), inner);
+                return inner;
+            }
             ast::Type::Path(ty) => match ty.path().and_then(|p| self.lower_path(p)) {
                 Some(path) => TypeRef::Path(path),
                 None => TypeRef::Error,

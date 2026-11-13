@@ -106,6 +106,7 @@ ast_enum!(
     Type {
         Path(PathType) = PATH_TYPE,
         Tuple(TupleType) = TUPLE_TYPE,
+        Nest(NestType) = NEST_TYPE,
         Array(ArrayType) = ARRAY_TYPE,
         Mut(MutType) = MUT_TYPE,
         Never(NeverType) = NEVER_TYPE,
@@ -152,7 +153,18 @@ impl MutType {
     }
 }
 
-/// `(A, B)`, or `()` for the unit type.
+/// `(A)`: parentheses around a type, which only group.
+pub struct NestType(SyntaxNode);
+
+simple_node!(NestType, NEST_TYPE);
+
+impl NestType {
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// `(A, B)`, `(A,)`, or `()` for the unit type.
 pub struct TupleType(SyntaxNode);
 
 simple_node!(TupleType, TUPLE_TYPE);

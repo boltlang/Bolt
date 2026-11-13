@@ -311,6 +311,22 @@ fn a_named_field_alone_is_a_tuple() {
 }
 
 #[test]
+fn parentheses_around_a_type_only_group() {
+    use boltlang_syntax::ast::Type;
+    let (green, diags) = parse_file("type A = (i32); type B = (i32,); type C = (x: i32);");
+    assert!(diags.is_empty(), "{diags:?}");
+    let root = SyntaxNode::new_root(green);
+    let tys: Vec<_> = root
+        .descendants()
+        .filter_map(Type::cast)
+        .filter(|t| t.syntax().parent().is_some_and(|p| Type::cast(p).is_none()))
+        .collect();
+    assert!(matches!(&tys[0], Type::Nest(_)));
+    assert!(matches!(&tys[1], Type::Tuple(_)));
+    assert!(matches!(&tys[2], Type::Tuple(_)));
+}
+
+#[test]
 fn tuple_types_with_rests() {
     use boltlang_syntax::ast::{Spread, TupleTypeItem};
     let (green, diags) = parse_file("type A = (i32, *Ts); type B = (x: i32, **Ks);");

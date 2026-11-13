@@ -259,13 +259,17 @@ fn fn_type_param(p: &mut Parser, keyword: bool) {
     m.complete(p, PARAM);
 }
 
-/// `()`, `(A,)` or `(A, B)`. Like the grammar, `(A)` is a tuple type too.
-/// It has positional fields or named ones, not both, with a rest of its
-/// kind: `(A, *Ts)` or `(x: A, **Ks)`.
+/// `()`, `(A,)` or `(A, B)`, or `(A)`, which only groups, as `(a)` does
+/// for expressions (#468). A tuple type has positional fields or named
+/// ones, not both, with a rest of its kind: `(A, *Ts)` or `(x: A, **Ks)`.
 fn tuple_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(T!['(']);
     let mut kind = TupleKind::default();
+    // `(A)` has one type, with no comma, named field or rest.
+    let mut types = 0;
+    let mut saw_comma = false;
+    let mut saw_part = false;
     while !p.at(T![')']) && !p.at(EOF) {
         if at_named_field(p) {
             kind.next(p, TupleSide::Named);
@@ -274,7 +278,9 @@ fn tuple_type(p: &mut Parser) -> CompletedMarker {
             p.bump(T![:]);
             type_(p);
             field.complete(p, TUPLE_TYPE_FIELD);
+            saw_part = true;
         } else if at_spread(p) {
+            saw_part = true;
             let rest = p.start();
             kind.next(p, spread_side(p));
             spread(p);
@@ -283,16 +289,21 @@ fn tuple_type(p: &mut Parser) -> CompletedMarker {
         } else if p.at_ts(TYPE_FIRST) {
             kind.next(p, TupleSide::Positional);
             type_(p);
+            types += 1;
         } else {
             p.err_recover("expected a type", TYPE_RECOVERY_SET);
             break;
+        }
+        if p.at(T![,]) {
+            saw_comma = true;
         }
         if !p.at(T![')']) {
             p.expect(T![,]);
         }
     }
     p.expect(T![')']);
-    m.complete(p, TUPLE_TYPE)
+    let nest = types == 1 && !saw_comma && !saw_part;
+    m.complete(p, if nest { NEST_TYPE } else { TUPLE_TYPE })
 }
 
 /// `[T]` or `[T; N]`, maybe after `mut`, `imm` or `ro`: `mut [T]` can be

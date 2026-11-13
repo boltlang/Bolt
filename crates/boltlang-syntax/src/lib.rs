@@ -151,6 +151,8 @@ pub enum SyntaxKind {
     PATH_TYPE,
     /// `(A, B)`, or `()` for the unit type
     TUPLE_TYPE,
+    /// `(A)`: parentheses around a type, which only group
+    NEST_TYPE,
     /// `x: T` in a tuple type, a named field
     TUPLE_TYPE_FIELD,
     /// `*Ts` or `**Ks` in a tuple type: the other positional fields, or
@@ -508,6 +510,7 @@ impl SyntaxKind {
             POSITIONAL_MARKER => "a `/` after positional-only parameters",
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",
+            NEST_TYPE => "a nested type",
             TUPLE_TYPE_FIELD => "a named field of a tuple type",
             TUPLE_TYPE_REST => "the rest of a tuple type",
             ARRAY_TYPE => "an array type",
