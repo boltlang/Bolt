@@ -8,6 +8,7 @@ import "../semigroup" *;
 import "../option" (Option, Some, None);
 import "../vec" (Vec, push);
 import "../effect" (resume);
+import "../convert" (From, from);
 
 #[cfg(host = "wasm")]
 #[test]
@@ -143,4 +144,14 @@ fn an_option_of_a_js_string_goes_through_an_operation() {
     let kept = match same(b) { Some(s) => s.to_string() == "b", None => False };
     picked && none && kept
   }));
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn converting_with_from() {
+  let s: String = "héllo";
+  let j: JsString = from(s);
+  assert(j.len() == 5);
+  let back: String = from(j);
+  assert(back == s);
 }

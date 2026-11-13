@@ -12,6 +12,7 @@ import "../debug" (Debug, debug);
 import "../string" (String, StringBuilder, bytes);
 import "../array" (array_alloc, array_freeze);
 import "../io" (panic);
+import "../convert" (From);
 
 /// A string of JavaScript's. Like a `String`, it never changes.
 #[cfg(host = "wasm")]
@@ -135,6 +136,18 @@ pub fn substring(s: JsString, start: i32, end: i32) -> JsString {
   let clamp = |i: i32| if i < 0 { 0 } else if i > n { n } else { i };
   let (a, b) = (clamp(start), clamp(end));
   js_substring(s, a, if b < a { a } else { b })
+}
+
+/// A Bolt `String` as a JavaScript string, as `JsString.from` makes it.
+#[cfg(host = "wasm")]
+impl From[String, JsString] {
+  fn from(s) = JsString.from(s);
+}
+
+/// A JavaScript string as a Bolt `String`, as `to_string` makes it.
+#[cfg(host = "wasm")]
+impl From[JsString, String] {
+  fn from(s) = to_string(s);
 }
 
 /// `a <> b` is `b` after `a`.
