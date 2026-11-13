@@ -51,7 +51,7 @@ fn twice[C](c: 'm C) -> ('m C.Item, 'm C.Item) where Get[C, 'm] = (get(c), get(c
 let a = get(Box2 { x: [1] });
 --------------------------------------------------------------------------------
 Get[Box2, '_].get: fn(c: 'm Box2) -> 'm [i32]
-twice: forall C. Get[C, 'm] => fn(c: 'm C) -> imm ('m Get[C, 'm].Item, 'm Get[C, 'm].Item)
+twice: forall C. Get[C, 'm] => 'm: imm => fn(c: 'm C) -> imm ('m Get[C, 'm].Item, 'm Get[C, 'm].Item)
 let a: imm [i32]
 
 ================================================================================
@@ -121,3 +121,32 @@ d: forall T. fn(w: ro W['m T]) -> ro T
 error at `w`: ro [mut T] holds mut T
 error at `w`: ro W[mut T] holds mut T
 error at `w`: imm [mut T] holds mut T
+
+================================================================================
+What a 'm T holds is at most 'm, which its signature says (#466)
+:test-prelude
+================================================================================
+class Get[C, 'm] { type Item; fn get(c: 'm C) -> 'm Item; }
+fn once[C](c: 'm C) -> 'm C.Item where Get[C, 'm] = get(c);
+fn twice[C](c: 'm C) -> 'm ('m C.Item, 'm C.Item) where Get[C, 'm] = 'm (get(c), get(c));
+--------------------------------------------------------------------------------
+once: forall C. Get[C, 'm] => fn(c: 'm C) -> 'm Get[C, 'm].Item
+twice: forall C. Get[C, 'm] => fn(c: 'm C) -> 'm ('m Get[C, 'm].Item, 'm Get[C, 'm].Item)
+
+================================================================================
+A ro T or 'm T is at most a bound only when it can't change more (#466)
+:error
+:test-prelude
+================================================================================
+fn needs_imm[T: imm](x: T) -> i32 = 0;
+fn a[U](x: ro U) -> i32 = needs_imm(x);
+fn b[U](x: mut U) -> i32 = needs_imm(x);
+fn c[U](x: imm U) -> i32 = needs_imm(x);
+--------------------------------------------------------------------------------
+needs_imm: forall T. T: imm => fn(x: T) -> i32
+a: forall U. fn(x: ro U) -> i32
+b: forall U. fn(x: mut U) -> i32
+c: forall U. fn(x: imm U) -> i32
+--------------------------------------------------------------------------------
+error at `needs_imm`: ro U isn't at most imm
+error at `needs_imm`: mut U isn't at most imm

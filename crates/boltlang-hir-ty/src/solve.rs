@@ -16,7 +16,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    holds::struct_atoms_of,
+    holds::split,
     lower::{
         ClassConstraint, VariantDef, enum_field_types, field_types, field_visible,
         generic_predicates, impl_assoc_ty, impl_header, implied_by, implied_equalities,
@@ -1342,36 +1342,6 @@ impl<'db> Solver<'db> {
         };
         match &c.held {
             Held::Type(t) => match self.unifier.shallow_resolve(t) {
-                Ty::Array(m, elem) => {
-                    sub(self, Held::Mutability(*m.clone()), &bound);
-                    sub(self, Held::Type(*elem), &m);
-                    true
-                }
-                // What its fields hold, like `'v ⊑ m` and `T ⊑ 'v` for
-                // `VecIter[T, 'v]` (`crate::holds`).
-                Ty::Adt(AdtId::Struct(s), args, ms, m) => {
-                    sub(self, Held::Mutability(*m.clone()), &bound);
-                    for atom in struct_atoms_of(self.db, s, &args, &ms, &m) {
-                        sub(self, atom.held, &atom.bound);
-                    }
-                    true
-                }
-                // Like an array: what it holds is at most its own
-                // mutability.
-                Ty::Tuple(tys, m) => {
-                    sub(self, Held::Mutability(*m.clone()), &bound);
-                    for t in tys {
-                        sub(self, Held::Type(t), &m);
-                    }
-                    true
-                }
-                Ty::Record(tys, named, m) => {
-                    sub(self, Held::Mutability(*m.clone()), &bound);
-                    for t in tys.into_iter().chain(named.into_iter().map(|(_, t)| t)) {
-                        sub(self, Held::Type(t), &m);
-                    }
-                    true
-                }
                 // An associated type is split once an impl decides it, like
                 // `A.Iter` in a struct's field for an `A` that's known.
                 t @ Ty::Assoc(..) => {
@@ -1383,16 +1353,36 @@ impl<'db> Solver<'db> {
                     }
                     !has_vars(&t) && self.type_assumed(&t, &bound)
                 }
-                // An enum is a value, which holds its parts.
-                Ty::Adt(AdtId::Enum(_), args, _, _) | Ty::App(_, args) => {
+                // Like an enum, a value, which holds its parts, whatever
+                // the head is.
+                Ty::App(_, args) => {
                     for arg in args {
                         sub(self, Held::Type(arg), &bound);
                     }
                     true
                 }
-                Ty::Fn(_, _, m, _) => {
-                    sub(self, Held::Mutability(*m), &bound);
-                    true
+                // `'m T` of a `T` that isn't known: at most the bound when `m`
+                // is, and what `T` holds at most `m`, which is the atom
+                // `'m T ⊑ m` (`crate::holds::split`). That one is decided
+                // once `T` is known, or by an assumption, like the one a
+                // `'m T` in the function's signature implies.
+                t @ Ty::WithMut(..) => {
+                    let t = self.unifier.resolve(&t);
+                    let decided = normalize_assoc(self.db, self.file, &t);
+                    if decided != t {
+                        sub(self, Held::Type(decided), &bound);
+                        return true;
+                    }
+                    let Ty::WithMut(m, inner) = &t else {
+                        sub(self, Held::Type(t), &bound);
+                        return true;
+                    };
+                    if **m != self.unifier.resolve(&bound) {
+                        sub(self, Held::Mutability((**m).clone()), &bound);
+                        sub(self, Held::Type(t.clone()), m);
+                        return true;
+                    }
+                    !matches!(**inner, Ty::Var(_)) && !has_vars(&t) && self.type_assumed(&t, &bound)
                 }
                 // Decided once the type is known, or by an assumption about
                 // a type parameter.
@@ -1418,7 +1408,20 @@ impl<'db> Solver<'db> {
                         true
                     }
                 },
-                _ => true,
+                // A type that's known is split into what it holds, as for
+                // the fields of a struct (`crate::holds`): an array, struct,
+                // tuple or function is at most the bound, what it holds at
+                // most its own mutability, and `'m T` and `ro T` at most `m`
+                // and `ro`. What's left of each, like a type parameter, is
+                // one of the cases above.
+                t => {
+                    let mut atoms = Vec::new();
+                    split(self.db, &t, &bound, &mut atoms);
+                    for atom in atoms {
+                        sub(self, atom.held, &atom.bound);
+                    }
+                    true
+                }
             },
             Held::Mutability(m) => match (self.unifier.shallow_resolve(m), &bound) {
                 (Ty::Mutability(Mutability::Imm) | Ty::Error | Ty::Never, _) => true,
