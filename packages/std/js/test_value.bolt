@@ -1,0 +1,43 @@
+// The tests of `js/value.bolt`, which only Wasm has.
+
+import "./value" (JsValue);
+import "./string" (JsString);
+import "../io" (assert);
+import "../ops" *;
+import "../option" (Option, Some, None);
+
+// `equals` of the JS String Builtins takes two strings that may be `null`,
+// and gives 1 when both are `null`. So it tells what JavaScript got for a
+// `None`.
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "equals")]
+fn equals_values(a: Option[JsValue], b: Option[JsValue]) -> i32;
+
+#[cfg(host = "wasm")]
+#[link(wasm, module = "wasm:js-string", name = "equals")]
+fn equals_value_and_string(a: Option[JsValue], b: Option[JsString]) -> i32;
+
+#[cfg(host = "wasm")]
+#[test]
+fn none_is_null_in_javascript() {
+  let none: Option[JsValue] = None;
+  assert(equals_values(none, none) == 1);
+  assert(equals_values(None, None) == 1);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn none_is_not_a_string_in_javascript() {
+  let none: Option[JsValue] = None;
+  assert(equals_value_and_string(none, Some(JsString.from(""))) == 0);
+  assert(equals_value_and_string(none, Some(JsString.from("null"))) == 0);
+  assert(equals_value_and_string(none, None) == 1);
+}
+
+#[cfg(host = "wasm")]
+#[test]
+fn an_option_of_a_js_value_is_none() {
+  let none: Option[JsValue] = None;
+  assert(match none { Some(_) => False, None => True });
+}

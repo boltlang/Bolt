@@ -1,0 +1,11 @@
+// Any JavaScript value, as the JavaScript engine holds it.
+//
+// Only for Wasm: the evaluator has no JavaScript.
+
+/// A value of JavaScript's, of any type: a number, a string, an object, a
+/// function, `undefined`, and so on, but never `null`. A value that may be
+/// `null` is an `Option[JsValue]`, which is `None` when it is, so that
+/// JavaScript gets `null` for a `None` and Bolt gets `None` for a `null`.
+#[cfg(host = "wasm")]
+#[link(wasm)]
+pub type JsValue;
