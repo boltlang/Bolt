@@ -476,28 +476,14 @@ impl<'db> Unifier<'db> {
                     Ty::Array(Box::new(m), Box::new(cs[0].clone()))
                 })
             }
-            (Ty::Tuple(xs, m), Ty::Tuple(ys, n))
-                if xs.len() == ys.len() && !a.has_spread() && !b.has_spread() =>
-            {
-                let pairs: Vec<_> = xs.iter().cloned().zip(ys.iter().cloned()).collect();
-                self.lub_object(m, n, &pairs, ro, |m, cs| Ty::Tuple(cs.into(), Box::new(m)))
-            }
-            (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
-                if xs.len() == ys.len()
-                    && xn.len() == yn.len()
-                    && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b)
-                    && !a.has_spread()
-                    && !b.has_spread() =>
-            {
+            (x, y) if same_fields(x, y) && !a.has_spread() && !b.has_spread() => {
+                let ((xs, xn, m), (_, _, n)) = (x.fields().unwrap(), y.fields().unwrap());
                 let names: Vec<_> = xn.iter().map(|(name, _)| name.clone()).collect();
-                let named =
-                    xn.iter().map(|(_, t)| t.clone()).zip(yn.iter().map(|(_, t)| t.clone()));
-                let pairs: Vec<_> =
-                    xs.iter().cloned().zip(ys.iter().cloned()).chain(named).collect();
+                let pairs: Vec<_> = field_types(x).into_iter().zip(field_types(y)).collect();
                 let positional = xs.len();
                 self.lub_object(m, n, &pairs, ro, |m, cs| {
                     let named = names.iter().cloned().zip(cs[positional..].iter().cloned());
-                    Ty::Record(cs[..positional].into(), named.collect(), Box::new(m))
+                    Ty::record(cs[..positional].into(), named.collect(), m)
                 })
             }
             // A struct or enum with the same arguments, whose own mutability
@@ -957,31 +943,14 @@ impl<'db> Unifier<'db> {
                     self.unify_all(xs, &ys[split..])
                 }
             }
-            // The mutability first, so that it's known even when an element
+            // The mutability first, so that it's known even when a field
             // doesn't fit.
-            (Ty::Tuple(xs, m), Ty::Tuple(ys, n)) if xs.len() == ys.len() => {
+            (x, y) if same_fields(x, y) => {
+                let ((_, _, m), (_, _, n)) = (x.fields().unwrap(), y.fields().unwrap());
+                let (xs, ys) = (field_types(x), field_types(y));
                 self.unify(m, n)?;
-                self.under(m, n, |u| u.unify_all(xs, ys))?;
-                self.share_if_mut(m, xs, ys)
-            }
-            // The same names, which are in the same order in both.
-            (Ty::Record(xs, xn, m), Ty::Record(ys, yn, n))
-                if xs.len() == ys.len()
-                    && xn.len() == yn.len()
-                    && xn.iter().zip(yn.iter()).all(|((a, _), (b, _))| a == b) =>
-            {
-                self.unify(m, n)?;
-                self.under(m, n, |u| {
-                    u.unify_all(xs, ys)?;
-                    for ((_, x), (_, y)) in xn.iter().zip(yn.iter()) {
-                        u.unify(x, y)?;
-                    }
-                    Ok(())
-                })?;
-                let (xt, yt): (Vec<_>, Vec<_>) =
-                    xn.iter().zip(yn.iter()).map(|((_, x), (_, y))| (x.clone(), y.clone())).unzip();
-                self.share_if_mut(m, xs, ys)?;
-                self.share_if_mut(m, &xt, &yt)
+                self.under(m, n, |u| u.unify_all(&xs, &ys))?;
+                self.share_if_mut(m, &xs, &ys)
             }
             (Ty::Array(m, x), Ty::Array(n, y)) => {
                 self.under(m, n, |u| u.unify(x, y))?;
@@ -1410,6 +1379,25 @@ fn mutability_vars(ty: &Ty<'_>, out: &mut Vec<TyVar>) {
         _ => {}
     }
     ty.walk_children(|t| mutability_vars(t, out));
+}
+
+/// Whether `a` and `b` are tuples with as many positional fields and the
+/// same named ones, which are in the same order in both.
+fn same_fields(a: &Ty<'_>, b: &Ty<'_>) -> bool {
+    match (a.fields(), b.fields()) {
+        (Some((xs, xn, _)), Some((ys, yn, _))) => {
+            xs.len() == ys.len()
+                && xn.len() == yn.len()
+                && xn.iter().zip(yn).all(|((a, _), (b, _))| a == b)
+        }
+        _ => false,
+    }
+}
+
+/// The types of the fields of a tuple, positional ones first.
+fn field_types<'db>(ty: &Ty<'db>) -> Vec<Ty<'db>> {
+    let Some((tys, named, _)) = ty.fields() else { return Vec::new() };
+    tys.iter().chain(named.iter().map(|(_, t)| t)).cloned().collect()
 }
 
 /// Whether something in a value of type `ty` may change: something `mut`,

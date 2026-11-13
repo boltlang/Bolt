@@ -781,20 +781,27 @@ impl<'db> Ty<'db> {
         Ty::Record(positional.into(), named.into(), Box::new(mutability))
     }
 
+    /// The positional fields, the named fields and the mutability of a
+    /// tuple type, as they're stored. `None` for other types.
+    #[allow(clippy::type_complexity)]
+    pub fn fields(&self) -> Option<(&[Ty<'db>], &[(Name, Ty<'db>)], &Ty<'db>)> {
+        match self {
+            Ty::Tuple(tys, m) => Some((tys, &[], m)),
+            Ty::Record(tys, named, m) => Some((tys, named, m)),
+            _ => None,
+        }
+    }
+
     /// The parts of a tuple type: its positional fields, with the spreads
     /// of positional packs among them, its named fields, the named packs
     /// spread in it, and its mutability. `None` for other types.
     pub fn tuple_parts(&self) -> Option<TupleParts<'db>> {
-        let (tys, named, mutability): (&[Ty<'db>], &[(Name, Ty<'db>)], _) = match self {
-            Ty::Tuple(tys, m) => (tys, &[], m),
-            Ty::Record(tys, named, m) => (tys, named, m),
-            _ => return None,
-        };
+        let (tys, named, mutability) = self.fields()?;
         let mut parts = TupleParts {
             positional: Vec::new(),
             named: named.to_vec(),
             rests: Vec::new(),
-            mutability: (**mutability).clone(),
+            mutability: mutability.clone(),
         };
         for t in tys {
             match t {
