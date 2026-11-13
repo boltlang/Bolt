@@ -515,14 +515,22 @@ impl<'a, 'db> Cx<'a, 'db> {
         mutabilities.extend(free.iter().map(|&i| MonoMut::Param(i)));
         rows.extend(free_rows);
         // A mutability given `ro` makes an instance of its own, where it's
-        // `ro`, since Conduit doesn't take `ro` as an argument (#320).
-        let ro: Box<[u32]> = (0..mutabilities.len() as u32)
-            .filter(|&i| mutabilities[i as usize] == MonoMut::ReadOnly)
+        // `ro`, since Conduit doesn't take `ro` as an argument (#320). So
+        // does one that a class constraint of the callee has as a
+        // mutability argument, like the `'v` of `where Freeze[C, 'v]`,
+        // which can choose the impl (#453).
+        let chooses = choosing_mutabilities(callee);
+        let fixed: Box<[(u32, MonoMut)]> = (0..mutabilities.len() as u32)
+            .filter_map(|i| match mutabilities[i as usize] {
+                MonoMut::ReadOnly => Some((i, MonoMut::ReadOnly)),
+                m @ (MonoMut::Imm | MonoMut::Mut) if chooses.contains(&i) => Some((i, m)),
+                _ => None,
+            })
             .collect();
-        for &i in ro.iter() {
+        for &(i, _) in fixed.iter() {
             mutabilities[i as usize] = MonoMut::Imm;
         }
-        let instance = Instance::new(db, def, canonical(&args), self.instance.root(db), ro);
+        let instance = Instance::new(db, def, canonical(&args), self.instance.root(db), fixed);
         Ok(Use::Instance {
             instance,
             mutabilities: mutabilities.into(),
@@ -695,7 +703,14 @@ fn find_super<'db>(
 pub fn superclasses<'db>(db: &'db dyn Db, c: &MonoConstraint<'db>) -> Vec<MonoConstraint<'db>> {
     let def = GenericDefId::Class(c.class);
     let params = generic_param_ids(db, [def]);
-    let slots: Vec<Slot<'db>> = c.args.iter().cloned().map(Slot::Ty).collect();
+    let slots: Vec<Slot<'db>> = c
+        .args
+        .iter()
+        .map(|t| match t {
+            MonoTy::Mutability(m) => Slot::Mut(*m),
+            t => Slot::Ty(t.clone()),
+        })
+        .collect();
     // The root doesn't matter: a superclass is written in the class's
     // parameters, without associated types to normalize.
     let root = c.class.file(db);
@@ -841,7 +856,11 @@ pub(crate) fn bind<'db>(
     }
     if let Some(i) = slot_index(params, pattern) {
         if let Some(slot) = found.get_mut(i) {
-            slot.get_or_insert_with(|| Slot::Ty(ty.clone()));
+            slot.get_or_insert_with(|| match ty {
+                // A class's mutability argument (#453).
+                MonoTy::Mutability(m) => Slot::Mut(*m),
+                ty => Slot::Ty(ty.clone()),
+            });
         }
         return;
     }
@@ -1084,4 +1103,24 @@ fn erase<'db>(actual: &[Slot<'db>], erased: bool) -> Vec<Slot<'db>> {
 pub(crate) fn canonical<'db>(args: &[MonoTy<'db>]) -> Box<[MonoTy<'db>]> {
     let (mut map, mut next) = (Vec::new(), 0);
     args.iter().map(|t| t.renumber(&mut map, &mut next)).collect()
+}
+
+/// The mutability parameters of a scheme, by their index among its
+/// mutabilities, that its class constraints have as mutability arguments,
+/// like the `'v` of `where Freeze[C, 'v]` (#453).
+fn choosing_mutabilities(generics: &Generics<'_>) -> Vec<u32> {
+    let mut out = Vec::new();
+    for c in generics.predicates.iter() {
+        for arg in c.args.iter() {
+            let Some(at) = slot_index(&generics.params, arg) else { continue };
+            if generics.kinds.get(at) != Some(&Kind::Mut) {
+                continue;
+            }
+            let index = generics.kinds[..at].iter().filter(|k| **k == Kind::Mut).count() as u32;
+            if !out.contains(&index) {
+                out.push(index);
+            }
+        }
+    }
+    out
 }

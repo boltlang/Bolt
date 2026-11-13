@@ -176,6 +176,9 @@ pub enum MonoTy<'db> {
     Any(GenericParamId<'db>),
     /// A type of the host, like a JavaScript string: see [`Ty::Host`].
     Host(TypeAliasId<'db>),
+    /// A mutability argument of a class, like the `mut` of
+    /// `Iterable[[i32], mut]` (#453): only in a class constraint.
+    Mutability(MonoMut),
 }
 
 impl<'db> MonoTy<'db> {
@@ -204,7 +207,8 @@ impl<'db> MonoTy<'db> {
             | MonoTy::Never
             | MonoTy::Erased(_)
             | MonoTy::Any(_)
-            | MonoTy::Host(_) => false,
+            | MonoTy::Host(_)
+            | MonoTy::Mutability(_) => false,
             MonoTy::Adt(_, args, ..)
             | MonoTy::Tuple(args, _)
             | MonoTy::Record(args, ..)
@@ -225,7 +229,8 @@ impl<'db> MonoTy<'db> {
             MonoTy::Tuple(_, own)
             | MonoTy::Record(_, _, own)
             | MonoTy::Array(own, _)
-            | MonoTy::Fn(_, _, _, own, _) => (&[], Some(*own)),
+            | MonoTy::Fn(_, _, _, own, _)
+            | MonoTy::Mutability(own) => (&[], Some(*own)),
             MonoTy::Builtin(_)
             | MonoTy::Row(_)
             | MonoTy::Never
@@ -273,6 +278,7 @@ impl<'db> MonoTy<'db> {
                 MonoTy::Fn(params, names.clone(), ret, own, parts.row(row))
             }
             MonoTy::Row(row) => MonoTy::Row(parts.row(row)),
+            MonoTy::Mutability(m) => MonoTy::Mutability(parts.mutability(*m)),
             MonoTy::ErasedAssoc(alias, args) => {
                 MonoTy::ErasedAssoc(*alias, args.iter().map(|t| parts.ty(t)).collect())
             }
@@ -437,6 +443,7 @@ impl<'db> MonoTy<'db> {
                 Box::new(row_ty(r)?),
             ),
             MonoTy::Row(r) => row_ty(r)?,
+            MonoTy::Mutability(own) => m(own),
         })
     }
 
@@ -493,6 +500,7 @@ impl fmt::Display for DisplayMonoTy<'_, '_> {
                 write!(f, "])")
             }
             MonoTy::Never => write!(f, "!"),
+            MonoTy::Mutability(m) => write!(f, "{m}"),
             MonoTy::Builtin(b) => write!(f, "{b}"),
             MonoTy::Adt(adt, args, ms, own) => {
                 // An enum, and an `imm struct`, are always `imm`.
@@ -801,6 +809,8 @@ impl<'db> Subst<'_, 'db> {
         Ok(match ty {
             Ty::Param(_) | Ty::Bound(_) => match self.slot(ty) {
                 Some(Slot::Ty(t)) => t.clone(),
+                // A mutability argument of a class (#453).
+                Some(Slot::Mut(m)) => MonoTy::Mutability(*m),
                 // A row that's a type argument, like the `R` of
                 // `Cont[B, U, R]`.
                 Some(Slot::Row(r)) => MonoTy::Row(r.clone()),
@@ -885,7 +895,10 @@ impl<'db> Subst<'_, 'db> {
             Ty::Var(_) => MonoTy::unit(),
             // A row as a type argument, as for a parameter above.
             Ty::Row(..) => MonoTy::Row(self.row(ty)?),
-            Ty::Mutability(_) | Ty::Unwritten | Ty::ParamName(_) | Ty::Number(_) | Ty::Error => {
+            // A mutability argument of a class, like the `mut` of
+            // `Iterable[[i32], mut]` (#453).
+            Ty::Mutability(_) => MonoTy::Mutability(self.mutability(ty)?),
+            Ty::Unwritten | Ty::ParamName(_) | Ty::Number(_) | Ty::Error => {
                 return Err(TyError::Unknown);
             }
         })

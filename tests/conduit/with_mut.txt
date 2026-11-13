@@ -42,3 +42,122 @@ fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
 }
 --------------------------------------------------------------------------------
 log(9)
+
+================================================================================
+A class with a mutability parameter (#453)
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+struct Walk[T, 'v] { items: 'v [T], at: i32 }
+class Each[C, 'v] {
+  type Iter;
+  fn each(c: 'v C) -> Iter;
+}
+impl[T] Each[[T], 'v] {
+  type Iter = mut Walk[T, 'v];
+  fn each(xs) = mut Walk { items: xs, at: 0 };
+}
+fn first[C](c: 'v C) -> C.Iter where Each[C, 'v] = each(c);
+let xs = mut [1, 2];
+let w = first(xs);
+w.items[0] = 7;
+log(xs[0]);
+--------------------------------------------------------------------------------
+data Walk_i32['m1] {
+  ('m1 [i32], i32)
+}
+
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %xs: mut [i32] = array_new(1i32, 2i32)
+  let %w: mut Walk_i32[mut] = call first_mut_i32[imm](%xs)
+  let %2: mut [i32] = get Walk_i32.0.0(%w)
+  let = call IndexMut_mut_T_set_index_i32(%2, 0i32, 7i32)
+  let %3: i32 = call Index_T_index_i32[mut](%xs, 0i32)
+  let = call_extern log(%3)
+  jump ret()
+}
+
+fn first_mut_i32['m1](%c: mut [i32]) -> (mut Walk_i32[mut]) {
+  let %1: mut Walk_i32[mut] = call Each_T_v_each_i32[mut, mut](%c)
+  jump ret(%1)
+}
+
+fn IndexMut_mut_T_set_index_i32(%xs: mut [i32], %i: i32, %x: i32) -> () {
+  let = array_set(%xs, %i, %x)
+  jump ret()
+}
+
+fn Index_T_index_i32['m1](%xs: 'm1 [i32], %i: i32) -> (i32) {
+  let %2: i32 = array_get(%xs, %i)
+  jump ret(%2)
+}
+
+fn Each_T_v_each_i32['m1, 'm2](%xs: 'm1 [i32]) -> (mut Walk_i32['m1]) {
+  let %1: mut Walk_i32['m1] = new Walk_i32.0(%xs, 0i32)
+  jump ret(%1)
+}
+--------------------------------------------------------------------------------
+log(7)
+
+================================================================================
+A mutability that chooses an impl makes instances of its own (#453)
+:test-prelude
+================================================================================
+#[link(emu)]
+fn log(x: i32);
+class Freeze[C, 'v] { fn freeze(c: 'v C) -> i32; }
+impl Freeze[[i32], imm] { fn freeze(c) = 1; }
+impl Freeze[[i32], mut] { fn freeze(c) = 2; }
+fn twice[C](c: 'v C) -> i32 where Freeze[C, 'v] = freeze(c) * 10;
+log(twice([1]));
+log(twice(mut [1]));
+--------------------------------------------------------------------------------
+#[link(emu)]
+extern log(i32) -> ()
+
+fn file() -> () {
+  let %0: imm [i32] = array_new(1i32)
+  let %1: i32 = call twice_imm_i32[imm](%0)
+  let = call_extern log(%1)
+  let %2: mut [i32] = array_new(1i32)
+  let %3: i32 = call twice_mut_i32[imm](%2)
+  let = call_extern log(%3)
+  jump ret()
+}
+
+fn twice_imm_i32['m1](%c: imm [i32]) -> (i32) {
+  let %1: i32 = call Freeze_i32_imm_freeze[imm](%c)
+  let %2: i32 = call star_i32(%1, 10i32)
+  jump ret(%2)
+}
+
+fn twice_mut_i32['m1](%c: mut [i32]) -> (i32) {
+  let %1: i32 = call Freeze_i32_mut_freeze[mut](%c)
+  let %2: i32 = call star_i32(%1, 10i32)
+  jump ret(%2)
+}
+
+fn Freeze_i32_imm_freeze['m1](%c: imm [i32]) -> (i32) {
+  jump ret(1i32)
+}
+
+fn star_i32(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = call Mul_i32_mul(%a, %b)
+  jump ret(%2)
+}
+
+fn Freeze_i32_mut_freeze['m1](%c: mut [i32]) -> (i32) {
+  jump ret(2i32)
+}
+
+fn Mul_i32_mul(%a: i32, %b: i32) -> (i32) {
+  let %2: i32 = mul(%a, %b)
+  jump ret(%2)
+}
+--------------------------------------------------------------------------------
+log(10)
+log(20)

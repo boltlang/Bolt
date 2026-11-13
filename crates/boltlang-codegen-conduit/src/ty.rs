@@ -229,6 +229,8 @@ impl<'db> Types<'db> {
                 Ty::Fn(Box::new(self.fn_sig(db, root, params, ret, row)?), mutability(*m))
             }
             MonoTy::Row(_) => return Err(ErrorKind::unsupported("a row of effects as a value")),
+            // Only a class's argument, never a value's type (#453).
+            MonoTy::Mutability(_) => return Err(ErrorKind::unsupported("a mutability as a value")),
             MonoTy::Erased(_) | MonoTy::ErasedAssoc(..) => {
                 return Err(ErrorKind::unsupported("erased types"));
             }
@@ -445,7 +447,8 @@ fn abstract_muts<'db>(tys: &[MonoTy<'db>], first: u32) -> (Box<[MonoTy<'db>]>, V
             | MonoTy::Erased(_)
             | MonoTy::Any(_)
             | MonoTy::Host(_)
-            | MonoTy::Row(_) => t.clone(),
+            | MonoTy::Row(_)
+            | MonoTy::Mutability(_) => t.clone(),
         }
     }
     let out = tys.iter().map(|t| go(t, &mut next)).collect();

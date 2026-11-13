@@ -33,9 +33,11 @@ use crate::ty::{MonoMut, MonoRow, MonoTy, Slot, Subst, TyError};
 /// type is [`MonoTy::Erased`], the instance is erased there. The mutability
 /// parameters aren't in it, since instances aren't specialized on them:
 /// the `i`th one is [`MonoMut::Param`]`(i)` in the instance's types. Except
-/// those in `ro`, which a use gives `ro` (#320): Conduit doesn't take that
-/// as an argument, so they're [`MonoMut::ReadOnly`] in the instance's types,
-/// and the use gives them `imm`, which nothing in the instance uses.
+/// those in `fixed`, which are what it says in the instance's types, and
+/// which the use gives `imm`, which nothing in the instance uses: one a use
+/// gives `ro` (#320), since Conduit doesn't take that as an argument, and
+/// one that chooses an impl, like the `'v` of `where Freeze[C, 'v]`
+/// (#453), which the instance must know to call it.
 #[salsa::interned(debug)]
 pub struct Instance<'db> {
     #[returns(ref)]
@@ -46,9 +48,10 @@ pub struct Instance<'db> {
     /// class method in the instance can use (#182).
     #[returns(copy)]
     pub root: File,
-    /// The mutability parameters that are `ro` in this instance, in order.
+    /// The mutability parameters this instance is specialized on, in
+    /// order, with what they are.
     #[returns(ref)]
-    pub ro: Box<[u32]>,
+    pub fixed: Box<[(u32, MonoMut)]>,
 }
 
 /// What an instance is of: a body in the source, the default of a
@@ -133,9 +136,9 @@ impl<'db> Instance<'db> {
                 Kind::Ty => Slot::Ty(types.next().cloned().unwrap_or_else(MonoTy::unit)),
                 Kind::Mut => {
                     muts += 1;
-                    match self.ro(db).contains(&(muts - 1)) {
-                        true => Slot::Mut(MonoMut::ReadOnly),
-                        false => Slot::Mut(MonoMut::Param(muts - 1)),
+                    match self.fixed(db).iter().find(|(i, _)| *i == muts - 1) {
+                        Some(&(_, m)) => Slot::Mut(m),
+                        None => Slot::Mut(MonoMut::Param(muts - 1)),
                     }
                 }
                 Kind::Row => {
